@@ -173,13 +173,14 @@ async fn ping_protocol() {
         }
     };
 
-    tokio::task::spawn(Box::pin(peer1));
+
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
 
 /// Exercises a simple ping protocol where peers are not connected prior to request sending.
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn ping_protocol_explicit_address() {
     let ping = Ping("ping".to_string().into_bytes());
@@ -294,11 +295,11 @@ async fn ping_protocol_explicit_address() {
         }
     };
 
-    async_std::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
@@ -422,7 +423,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
 }
 
 /// Send multiple requests concurrently.
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn concurrent_ping_protocol() {
     use std::{collections::HashMap, num::NonZero};
@@ -538,7 +539,7 @@ async fn concurrent_ping_protocol() {
         assert_eq!(count, num_pings);
     };
 
-    async_std::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 

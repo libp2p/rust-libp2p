@@ -1,9 +1,8 @@
 use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
-use tokio::time::sleep;
 use async_trait::async_trait;
-use futures::prelude::*;
+use futures::{future::pending, prelude::*};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
@@ -465,9 +464,10 @@ impl Codec for TestCodec {
 
         match buf[0].try_into()? {
             Action::FailOnReadResponse => Err(io::Error::other("FailOnReadResponse")),
-            Action::TimeoutOnReadResponse => loop {
-                sleep(Duration::MAX).await;
-            },
+            Action::TimeoutOnReadResponse => {
+                pending::<()>().await;
+                Err(io::Error::other("FailOnReadResponse"))
+            }
             action => Ok(action),
         }
     }
@@ -502,9 +502,10 @@ impl Codec for TestCodec {
     {
         match res {
             Action::FailOnWriteResponse => Err(io::Error::other("FailOnWriteResponse")),
-            Action::TimeoutOnWriteResponse => loop {
-                sleep(Duration::MAX).await;
-            },
+            Action::TimeoutOnWriteResponse => {
+                pending::<()>().await;
+                Err(io::Error::other("FailOnWriteResponse"))
+            }
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;
