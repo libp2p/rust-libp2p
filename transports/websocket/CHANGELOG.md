@@ -1,8 +1,4 @@
 ## 0.45.1
-
-- Use `tokio` as `async-std` support has been removed.
-  See [PR 6054](https://github.com/libp2p/rust-libp2p/pull/6054).
-
 - Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
   See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).
 
