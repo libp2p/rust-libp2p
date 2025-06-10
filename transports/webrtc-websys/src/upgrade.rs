@@ -9,7 +9,7 @@ use crate::{connection::RtcPeerConnection, error::AuthenticationError, sdp, Conn
 
 /// Upgrades an outbound WebRTC connection by creating the data channel
 /// and conducting a Noise handshake
-pub async fn outbound(
+pub(crate) async fn outbound(
     sock_addr: SocketAddr,
     remote_fingerprint: Fingerprint,
     id_keys: Keypair,

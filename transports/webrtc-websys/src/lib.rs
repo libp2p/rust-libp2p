@@ -1,11 +1,12 @@
 #![doc = include_str!("../README.md")]
 
+pub mod browser;
 mod connection;
 mod error;
 mod sdp;
 mod stream;
 mod transport;
-pub mod upgrade;
+mod upgrade;
 
 
 pub use self::{
@@ -13,4 +14,5 @@ pub use self::{
     error::Error,
     stream::Stream,
     transport::{Config, Transport},
+    browser::{Transport as BrowserTransport, Config as BrowserConfig}
 };

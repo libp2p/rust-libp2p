@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>libp2p WebRTC Browser-to-Browser Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #e0e0e0;
+            border: none;
+            font-size: 16px;
+            margin-right: 5px;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom: 2px solid white;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+        }
+
+        .peer-info {
+            background: #e8f4f8;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .logs {
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+        }
+
+        .log-info { color: #0066cc; }
+        .log-success { color: #009900; }
+        .log-error { color: #cc0000; }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #555;
+        }
+
+        .instructions {
+            background: #fffbf0;
+            border: 1px solid #ffe0a0;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .instructions code {
+            background: #f0f0f0;
+            padding: 2px 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>libp2p WebRTC Browser-to-Browser Demo</h1>
+
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('listener')">Listener</button>
+        <button class="tab" onclick="showTab('dialer')">Dialer</button>
+    </div>
+
+    <!-- Listener Tab -->
+    <div id="listener-tab" class="tab-content active">
+        <div class="instructions">
+            <strong>Listener Instructions:</strong>
+            <ol>
+                <li>Initialize the listener</li>
+                <li>Enter relay address and click "Listen on Relay"</li>
+                <li>Copy your address and share it with the dialer</li>
+                <li>Wait for connection</li>
+            </ol>
+        </div>
+
+        <div class="peer-info">
+            <strong>Listener Peer ID:</strong> <span id="listener-peer-id">Not initialized</span>
+            <span class="status disconnected" id="listener-status">Disconnected</span>
+        </div>
+
+        <div class="section">
+            <h3>Initialize</h3>
+            <button onclick="initializeListener()">Initialize Listener</button>
+        </div>
+
+        <div class="section disabled" id="listener-step-2">
+            <h3>Listen on Relay</h3>
+            <input type="text" id="relay-address" placeholder="Relay multiaddr (e.g., /ip4/127.0.0.1/tcp/3000/ws/p2p/...)" />
+            <button onclick="listenOnRelay()">Listen on Relay</button>
+        </div>
+
+        <div class="section disabled" id="listener-step-3">
+            <h3>Your Address</h3>
+            <input type="text" id="listener-address" readonly value="Waiting for relay connection..." />
+            <button onclick="copyListenerAddress()">Copy Address</button>
+        </div>
+
+        <h3>Logs</h3>
+        <div class="logs" id="listener-logs"></div>
+    </div>
+
+    <!-- Dialer Tab -->
+    <div id="dialer-tab" class="tab-content">
+        <div class="instructions">
+            <strong>Dialer Instructions:</strong>
+            <ol>
+                <li>Initialize the dialer</li>
+                <li>Get the listener's address from the other tab</li>
+                <li>Paste the address and click "Dial Peer"</li>
+                <li>Start chatting once connected</li>
+            </ol>
+        </div>
+
+        <div class="peer-info">
+            <strong>Dialer Peer ID:</strong> <span id="dialer-peer-id">Not initialized</span>
+            <span class="status disconnected" id="dialer-status">Disconnected</span>
+        </div>
+
+        <div class="section">
+            <h3>Initialize</h3>
+            <button onclick="initializeDialer()">Initialize Dialer</button>
+        </div>
+
+        <div class="section disabled" id="dialer-step-2">
+            <h3>Dial Peer</h3>
+            <input type="text" id="peer-address" placeholder="Paste listener's address here" />
+            <button onclick="dialPeer()">Dial Peer</button>
+        </div>
+s
+        <h3>Logs</h3>
+        <div class="logs" id="dialer-logs"></div>
+    </div>
+
+    <script type="module">
+        import init, { BrowserTransport, initialize, generate_peer_id } from './browser_to_browser_webrtc_example.js';
+
+        let listenerTransport = null;
+        let dialerTransport = null;
+        let listenerPeerId = null;
+        let dialerPeerId = null;
+        let relayMultiaddr = null;
+
+        async function initWasm() {
+            await init();
+            initialize();
+            log('listener', 'WASM module initialized', 'success');
+            log('dialer', 'WASM module initialized', 'success');
+        }
+
+        window.showTab = function(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+            
+            if (tab === 'listener') {
+                document.querySelector('.tab:first-child').classList.add('active');
+                document.getElementById('listener-tab').classList.add('active');
+            } else {
+                document.querySelector('.tab:last-child').classList.add('active');
+                document.getElementById('dialer-tab').classList.add('active');
+            }
+        };
+
+ 
+        function log(context, message, type = 'info') {
+            const logsId = context === 'listener' ? 'listener-logs' : 'dialer-logs';
+            const logsContainer = document.getElementById(logsId);
+            
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsContainer.appendChild(entry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            console.log(`[${context.toUpperCase()}] ${message}`);
+        }
+
+        function enableSection(id) {
+            document.getElementById(id).classList.remove('disabled');
+        }
+
+        window.initializeListener = async function() {
+            try {
+                log('listener', 'Initializing listener...', 'info');
+                
+                listenerTransport = BrowserTransport.new();
+                listenerPeerId = listenerTransport.peer_id;
+                
+                document.getElementById('listener-peer-id').textContent = listenerPeerId;
+                log('listener', `Initialized with Peer ID: ${listenerPeerId}`, 'success');
+                
+                enableSection('listener-step-2');
+                
+                startEventHandler('listener', listenerTransport);
+                
+            } catch (error) {
+                log('listener', `Failed to initialize: ${error}`, 'error');
+            }
+        };
+
+        window.initializeDialer = async function() {
+            try {
+                log('dialer', 'Initializing dialer...', 'info');
+                
+                dialerTransport = BrowserTransport.new();
+                dialerPeerId = dialerTransport.peer_id;
+                
+                document.getElementById('dialer-peer-id').textContent = dialerPeerId;
+                log('dialer', `Initialized with Peer ID: ${dialerPeerId}`, 'success');
+                
+                enableSection('dialer-step-2');
+
+                startEventHandler('dialer', dialerTransport);
+                
+            } catch (error) {
+                log('dialer', `Failed to initialize: ${error}`, 'error');
+            }
+        };
+
+        window.listenOnRelay = async function() {
+            try {
+                relayMultiaddr = document.getElementById('relay-address').value;
+                if (!relayMultiaddr) {
+                    log('listener', 'Please enter a relay address', 'error');
+                    return;
+                }
+                
+                log('listener', `Creating reservation on relay...`, 'info');
+                await listenerTransport.listen_on_relay(relayMultiaddr);
+                
+            } catch (error) {
+                log('listener', `Failed to listen on relay: ${error}`, 'error');
+            }
+        };
+
+        window.dialPeer = async function() {
+            try {
+                const peerAddress = document.getElementById('peer-address').value;
+                if (!peerAddress) {
+                    log('dialer', 'Please enter the peer address', 'error');
+                    return;
+                }
+                
+                log('dialer', `Dialing peer...`, 'info');
+                await dialerTransport.dial(peerAddress);
+                
+            } catch (error) {
+                log('dialer', `Failed to dial peer: ${error}`, 'error');
+            }
+        };
+
+        window.copyListenerAddress = function() {
+            const address = document.getElementById('listener-address').value;
+            if (address && address !== 'Waiting for relay connection...') {
+                navigator.clipboard.writeText(address).then(() => {
+                    log('listener', 'Address copied to clipboard', 'success');
+                }).catch(() => {
+                    log('listener', 'Failed to copy to clipboard', 'error');
+                });
+            }
+        };
+
+        async function startEventHandler(context, transport) {
+            log(context, 'Event handler started', 'info');
+            
+            while (true) {
+                try {
+                    const event = await transport.next_event();
+                    handleTransportEvent(context, event);
+                } catch (error) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+        }
+
+        function handleTransportEvent(context, event) {
+            switch (event.type) {
+                case 'reservationCreated':
+                    if (context === 'listener') {
+                        log(context, 'Reservation created', 'success');
+                        enableSection('listener-step-3');
+                        
+                        const listenerAddr = `${relayMultiaddr}/p2p-circuit/webrtc/p2p/${listenerPeerId}`;
+                        document.getElementById('listener-address').value = listenerAddr;
+                        log(context, `Your address: ${listenerAddr}`, 'success');
+                    }
+                    break;
+                    
+                case 'connectionEstablished':
+                    log(context, `Connected to peer: ${event.peerId}`, 'success');
+                    
+                    const statusEl = document.getElementById(`${context}-status`);
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+        
+                    break;
+                    
+                case 'error':
+                    log(context, `Error: ${event.message}`, 'error');
+                    break;
+            }
+        }
+
+        window.addEventListener('load', initWasm);
+    </script>
+</body>
+</html>

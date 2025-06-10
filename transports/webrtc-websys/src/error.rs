@@ -5,7 +5,7 @@ use wasm_bindgen::{JsCast, JsValue};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Invalid multiaddr: {0}")]
-    InvalidMultiaddr(String),
+    InvalidMultiaddr(&'static str),
 
     #[error("JavaScript error: {0}")]
     Js(String),
@@ -24,6 +24,9 @@ pub enum Error {
 
     #[error("Serialization error: {0}")]
     ProtoSerialization(String),
+
+    #[error("Signaling error: {0}")]
+    Signaling(String),
 }
 
 /// New-type wrapper to hide `libp2p_noise` from the public API.

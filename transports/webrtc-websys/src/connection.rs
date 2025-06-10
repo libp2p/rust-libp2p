@@ -24,6 +24,7 @@ use crate::stream::DropListener;
 ///
 /// All connections need to be [`Send`] which is why some fields are wrapped in [`SendWrapper`].
 /// This is safe because WASM is single-threaded.
+#[derive(Debug)]
 pub struct Connection {
     /// The [RtcPeerConnection] that is used for the WebRTC Connection
     inner: SendWrapper<RtcPeerConnection>,
@@ -77,7 +78,7 @@ impl Connection {
         }
     }
 
-    pub fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
+    fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
         let (stream, drop_listener) = Stream::new(data_channel);
 
         self.drop_listeners.push(drop_listener);
@@ -85,20 +86,6 @@ impl Connection {
             waker.wake()
         }
         stream
-    }
-
-    /// Open a new stream over a [`RtcDataChannel`].
-    pub fn new_stream(&mut self, stream_id: &str) -> Result<Stream, Error> {
-        let data_channel = self.inner.inner.create_data_channel(stream_id);
-        data_channel.set_binary_type(RtcDataChannelType::Arraybuffer);
-
-        let stream = self.new_stream_from_data_channel(data_channel);
-
-        Ok(stream)
-    }
-
-    pub fn rtc_connection(&self) -> web_sys::RtcPeerConnection {
-        self.inner.inner.clone()
     }
 
     /// Closes the Peer Connection.
@@ -187,6 +174,7 @@ impl StreamMuxer for Connection {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RtcPeerConnection {
     inner: web_sys::RtcPeerConnection,
 }
@@ -213,6 +201,10 @@ impl RtcPeerConnection {
         let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 
         Ok(Self { inner })
+    }
+
+    pub(crate) fn inner(&self) -> &web_sys::RtcPeerConnection {
+        &self.inner
     }
 
     /// Creates the stream for the initial noise handshake.
