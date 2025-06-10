@@ -4,20 +4,6 @@ use libp2p_core::{multiaddr::Protocol, Multiaddr};
 
 use crate::fingerprint::Fingerprint;
 
-/// Checks if a [`Multiaddr`] is a valid WebRTC browser-to-browser address.
-/// The multiaddr should take the following format: <relayed-multiaddr>/webrtc/p2p/<peer-id>
-pub fn is_valid_browser_webrtc_addr(addr: &Multiaddr) -> bool {
-    let protocols: Vec<_> = addr.iter().collect();
-
-    for i in 0..protocols.len().saturating_sub(1) {
-        if protocols[i] == Protocol::WebRTC && matches!(protocols[i + 1], Protocol::P2p(_)) {
-            return true;
-        }
-    }
-
-    false
-}
-
 /// Parse the given [`Multiaddr`] into a [`SocketAddr`] and a [`Fingerprint`] for dialing.
 pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)> {
     let mut iter = addr.iter();
@@ -38,10 +24,7 @@ pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerpri
 
             (port, fingerprint)
         }
-        (Protocol::Udp(port), Protocol::WebRTC, Protocol::Certhash(cert_hash)) => {
-            let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
-            (port, fingerprint)
-        }
+
         _ => return None,
     };
 

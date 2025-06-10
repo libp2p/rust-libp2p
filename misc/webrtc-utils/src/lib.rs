@@ -12,4 +12,4 @@ mod transport;
 
 pub use fingerprint::{Fingerprint, SHA256};
 pub use stream::{DropListener, Stream, MAX_MSG_LEN};
-pub use transport::{is_valid_browser_webrtc_addr, parse_webrtc_dial_addr};
+pub use transport::parse_webrtc_dial_addr;
