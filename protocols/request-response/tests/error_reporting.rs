@@ -11,7 +11,6 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
