@@ -1,7 +1,4 @@
-## 0.13.0
-
-- use of `tokio` instead of `async-std` in tests.
-  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955)
+## 0.13.0 
 
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
