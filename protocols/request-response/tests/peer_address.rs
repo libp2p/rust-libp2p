@@ -34,7 +34,7 @@ async fn dial_succeeds_after_adding_peers_address() {
 
     swarm.dial(peer_id2).unwrap();
 
-    tokio::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let (connected_peer_id, connected_address) = swarm
         .wait(|event| match event {

@@ -76,8 +76,7 @@ use rw_stream_sink::RwStreamSink;
 /// # async fn main() {
 ///
 /// let mut transport = websocket::Config::new(
-///     dns::tokio::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
-///         .unwrap(),
+///     dns::tokio::Transport::system(tcp::tokio::Transport::new(tcp::Config::default())).unwrap(),
 /// );
 ///
 /// let rcgen::CertifiedKey {
@@ -117,8 +116,7 @@ use rw_stream_sink::RwStreamSink;
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let mut transport =
-///     websocket::Config::new(tcp::async_io::Transport::new(tcp::Config::default()));
+/// let mut transport = websocket::Config::new(tcp::tokio::Transport::new(tcp::Config::default()));
 ///
 /// let id = transport
 ///     .listen_on(
@@ -315,20 +313,20 @@ mod tests {
 
     use super::Config;
 
-    #[test]
-    fn dialer_connects_to_listener_ipv4() {
+    #[tokio::test]
+    async fn dialer_connects_to_listener_ipv4() {
         let a = "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap();
-        futures::executor::block_on(connect(a))
+        connect(a).await
     }
 
-    #[test]
-    fn dialer_connects_to_listener_ipv6() {
+    #[tokio::test]
+    async fn dialer_connects_to_listener_ipv6() {
         let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
-        futures::executor::block_on(connect(a))
+        connect(a).await
     }
 
-    fn new_ws_config() -> Config<tcp::async_io::Transport> {
-        Config::new(tcp::async_io::Transport::new(tcp::Config::default()))
+    fn new_ws_config() -> Config<tcp::tokio::Transport> {
+        Config::new(tcp::tokio::Transport::new(tcp::Config::default()))
     }
 
     async fn connect(listen_addr: Multiaddr) {

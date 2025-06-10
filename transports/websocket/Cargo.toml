@@ -26,7 +26,7 @@ url = "2.5"
 webpki-roots = "0.26"
 
 [dev-dependencies]
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-dns = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["rt", "macros", "io-std", "io-util"] }

@@ -173,7 +173,7 @@ async fn ping_protocol() {
         }
     };
 
-    tokio::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
@@ -293,7 +293,7 @@ async fn ping_protocol_explicit_address() {
         }
     };
 
-    tokio::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
@@ -537,7 +537,7 @@ async fn concurrent_ping_protocol() {
         assert_eq!(count, num_pings);
     };
 
-    tokio::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
