@@ -1,29 +1,35 @@
-use std::{collections::{HashMap, VecDeque}, task::Poll};
+use std::{task::Poll};
 
 use futures::FutureExt;
 use libp2p_core::{upgrade::ReadyUpgrade, Endpoint, PeerId};
 use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol};
 
 use crate::browser::{
-  Signaling, SignalingProtocol, SignalingStream, SIGNALING_STREAM_PROTOCOL,
+  Signaling, SignalingConfig, SignalingProtocol, SignalingStream, SIGNALING_STREAM_PROTOCOL
 };
 
+/// Events sent from the Handler to the Behaviour.
 #[derive(Debug)]
 pub enum ToBehaviourEvent {
     WebRTCConnectionSuccess(crate::Connection),
     WebRTCConnectionFailure(crate::Error),
+    SignalingRetry
 }
 
+/// Events sent from the Behaviour to the Handler.
 #[derive(Debug)]
 pub enum FromBehaviourEvent {
     OpenSignalingStream(PeerId)
 }
 
+/// The current status of the signaling process 
+/// for this handler.
 #[derive(Debug, PartialEq)]
 pub(crate) enum SignalingStatus {
     Idle,
     Negotiating,
     AwaitingInitiation,
+    Retrying,
     Complete,
     Fail
 }
@@ -31,6 +37,8 @@ pub(crate) enum SignalingStatus {
 pub struct SignalingHandler {
     _peer: PeerId,
     is_initiator: bool,
+    retry_count: u8,
+    signaling_config: SignalingConfig,
     signaling_status: SignalingStatus,
     signaling_result_receiver: Option<futures::channel::oneshot::Receiver<Result<crate::Connection, crate::Error>>>,
 }
@@ -38,11 +46,14 @@ pub struct SignalingHandler {
 impl SignalingHandler {
     pub fn new(
         peer: PeerId,
-        is_initiator: bool
+        is_initiator: bool,
+        config: SignalingConfig
     ) -> Self {
         Self {
             _peer: peer,
             is_initiator,
+            retry_count: 0,
+            signaling_config: config,
             signaling_status: SignalingStatus::Idle,
             signaling_result_receiver: None
         }
@@ -89,10 +100,21 @@ impl ConnectionHandler for SignalingHandler {
                 }
                 Poll::Ready(Ok(Err(err))) => {
                     tracing::error!("WebRTC signaling failed: {:?}", err);
-                    self.signaling_status = SignalingStatus::Fail;
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        ToBehaviourEvent::WebRTCConnectionFailure(err)
-                    ));
+                    // If the signaling attempt failed the initiator can retry the attempt up to
+                    // a configurable max retry count.
+                    if self.is_initiator {
+                        if self.retry_count < self.signaling_config.max_signaling_retries {
+                            self.signaling_status = SignalingStatus::Retrying;
+                            self.retry_count += 1;
+
+                            tracing::info!("Retrying signaling attempt {} of {}", self.retry_count, self.signaling_config.max_signaling_retries);
+                            
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(ToBehaviourEvent::SignalingRetry));
+                        } else {
+                            self.signaling_status = SignalingStatus::Fail;
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(ToBehaviourEvent::WebRTCConnectionFailure(err)));
+                        }
+                    }
                 }
                 Poll::Ready(Err(_)) => {
                     tracing::error!("Signaling result channel dropped");

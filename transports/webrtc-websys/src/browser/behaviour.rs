@@ -8,6 +8,11 @@ use libp2p_swarm::{NetworkBehaviour, NotifyHandler, ToSwarm};
 
 use crate::browser::handler::{FromBehaviourEvent, SignalingHandler, ToBehaviourEvent};
 
+#[derive(Clone)]
+pub struct SignalingConfig {
+    pub(crate) max_signaling_retries: u8
+}
+
 /// Signaling events returned to the swarm.
 #[derive(Debug)]
 pub enum SignalingEvent {
@@ -19,7 +24,8 @@ pub enum SignalingEvent {
 /// over a relay connection.
 pub struct Behaviour {
     // Queued events to send to the swarm
-    pub(crate) queued_events: VecDeque<ToSwarm<SignalingEvent, FromBehaviourEvent>>
+    pub(crate) queued_events: VecDeque<ToSwarm<SignalingEvent, FromBehaviourEvent>>,
+    pub(crate) signaling_config: SignalingConfig
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -35,7 +41,8 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(SignalingHandler::new(
             peer,
-            false
+            false,
+            self.signaling_config.clone()
         ))
     }
 
@@ -49,7 +56,8 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(SignalingHandler::new(
             peer,
-            true
+            true,
+            self.signaling_config.clone()
         ))
     }
 
@@ -78,18 +86,24 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_connection_handler_event(
         &mut self,
-        _peer_id: PeerId,
-        _connection_id: libp2p_swarm::ConnectionId,
+        peer_id: PeerId,
+        connection_id: libp2p_swarm::ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
         match event {
             ToBehaviourEvent::WebRTCConnectionSuccess(connection) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    SignalingEvent::NewWebRTCConnection(connection)
-                ));
-            }
+                tracing::info!("Successfully webrtc connection to peer {}", peer_id);
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            SignalingEvent::NewWebRTCConnection(connection)
+                        ));
+                    }
             ToBehaviourEvent::WebRTCConnectionFailure(error) => {
-                tracing::error!("WebRTC connection failed: {:?}", error);
+                        tracing::error!("WebRTC connection failed: {:?}", error);
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(SignalingEvent::WebRTCConnectionError(error)));
+                    }
+            ToBehaviourEvent::SignalingRetry => {
+                tracing::info!("Scheduling signaling retry for peer {}", peer_id);
+                self.queued_events.push_back(ToSwarm::NotifyHandler { peer_id, handler: libp2p_swarm::NotifyHandler::One(connection_id), event: FromBehaviourEvent::OpenSignalingStream(peer_id) });
             }
         }
     }

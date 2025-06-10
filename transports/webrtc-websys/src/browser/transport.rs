@@ -13,7 +13,7 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 
 use crate::{
-    browser::behaviour::Behaviour,
+    browser::{behaviour::Behaviour, SignalingConfig},
     Error,
 };
 
@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Config {
     pub keypair: Keypair,
+    pub max_signaling_retries: u8
 }
 
 /// A WebTransport [`Transport`](libp2p_core::Transport) that faciliates a WebRTC [`Connection`].
@@ -30,13 +31,14 @@ pub struct Transport {
 
 impl Transport {
     /// Constructs a new [`Transport`] with the given [`Config`] and [`Behaviour`] for Signaling.
-    pub fn new(config: Config) -> (Self, Behaviour) {
+    pub fn new(config: Config, signaling_config: SignalingConfig) -> (Self, Behaviour) {
         let transport = Self {
             config: config.clone(),
         };
 
         let behaviour = Behaviour {
-            queued_events: VecDeque::new()
+            queued_events: VecDeque::new(),
+            signaling_config
         };
 
         (transport, behaviour)
