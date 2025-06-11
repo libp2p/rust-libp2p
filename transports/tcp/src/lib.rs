@@ -402,8 +402,7 @@ where
                 (Err(err), _) => return Err(err),
             };
 
-            let stream = T::new_stream(socket.into()).await?;
-            Ok(stream)
+            T::new_stream(socket.into()).await
         }
         .boxed())
     }
