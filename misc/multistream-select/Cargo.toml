@@ -17,9 +17,10 @@ tracing = { workspace = true }
 pin-project = "1.1.5"
 smallvec = "1.13.2"
 unsigned-varint = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
 rw-stream-sink = { workspace = true }
