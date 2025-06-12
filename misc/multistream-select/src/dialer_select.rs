@@ -210,6 +210,7 @@ where
 mod tests {
 
     use std::time::Duration;
+
     use quickcheck::{Arbitrary, Gen, GenRange};
     use tokio::{
         net::{TcpListener, TcpStream},
@@ -219,6 +220,7 @@ mod tests {
     use tokio_util::compat::TokioAsyncReadCompatExt;
     use tracing::metadata::LevelFilter;
     use tracing_subscriber::EnvFilter;
+
     use super::*;
     use crate::listener_select_proto;
 
