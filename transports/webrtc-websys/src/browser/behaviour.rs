@@ -1,16 +1,48 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     task::Poll,
+    time::Duration
 };
 
+use wasm_timer::Instant;
+
 use libp2p_core::PeerId;
-use libp2p_swarm::{NetworkBehaviour, NotifyHandler, ToSwarm};
+use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 
 use crate::browser::handler::{FromBehaviourEvent, SignalingHandler, ToBehaviourEvent};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SignalingConfig {
-    pub(crate) max_signaling_retries: u8
+    /// Maximum number of times to retry the signaling process before giving up.
+    pub(crate) max_signaling_retries: u8,
+    /// Delay before initiating or retrying the signaling process.
+    pub(crate) signaling_delay: Duration,
+    /// Time to wait between each check for an established WebRTC connection.
+    pub(crate) connection_establishment_delay_in_millis: Duration,
+    /// Maximum number of checks to attempt for establishing the WebRTC connection.
+    pub(crate) max_connection_establishment_checks: u32
+}
+
+impl Default for SignalingConfig {
+    fn default() -> Self {
+        Self {
+            max_signaling_retries: 3,
+            signaling_delay: Duration::from_millis(100),
+            connection_establishment_delay_in_millis: Duration::from_millis(100),
+            max_connection_establishment_checks: 300
+        }
+    }
+}
+
+impl SignalingConfig {
+    pub fn new(max_retries: u8, signaling_delay: Duration, connection_establishment_delay_in_millis: Duration, max_connection_establishment_checks: u32) -> Self {
+        Self {
+            max_signaling_retries: max_retries,
+            signaling_delay,
+            connection_establishment_delay_in_millis,
+            max_connection_establishment_checks
+        }
+    }
 }
 
 /// Signaling events returned to the swarm.
@@ -20,12 +52,36 @@ pub enum SignalingEvent {
     WebRTCConnectionError(crate::Error),
 }
 
-/// A [`Behaviour`] used to cooordinate signaling between peers 
+/// State for tracking signaling with a specific peer
+#[derive(Debug)]
+struct PeerSignalingState {
+    /// The time at which this peer was discovered.
+    discovered_at: Instant,
+    /// Whether this peer initiated the signaling process.
+    initiated: bool,
+    // Connection ID for this peer
+    connection_id: ConnectionId,
+}
+
+/// A [`Behaviour`] used to cooordinate signaling between peers
 /// over a relay connection.
 pub struct Behaviour {
-    // Queued events to send to the swarm
-    pub(crate) queued_events: VecDeque<ToSwarm<SignalingEvent, FromBehaviourEvent>>,
-    pub(crate) signaling_config: SignalingConfig
+    /// Queued events to send to the swarm.
+    queued_events: VecDeque<ToSwarm<SignalingEvent, FromBehaviourEvent>>,
+    /// Configuration parameters for the signaling process.
+    signaling_config: SignalingConfig,
+    /// Tracking state of peers involved in signaling (to be signaled or already signaled).
+    peers: HashMap<PeerId, PeerSignalingState>,
+}
+
+impl Behaviour {
+    pub fn new(config: SignalingConfig) -> Self {
+        Self {
+            queued_events: VecDeque::new(),
+            signaling_config: config,
+            peers: HashMap::new(),
+        }
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -42,7 +98,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(SignalingHandler::new(
             peer,
             false,
-            self.signaling_config.clone()
+            self.signaling_config.clone(),
         ))
     }
 
@@ -57,28 +113,39 @@ impl NetworkBehaviour for Behaviour {
         Ok(SignalingHandler::new(
             peer,
             true,
-            self.signaling_config.clone()
+            self.signaling_config.clone(),
         ))
     }
 
     fn on_swarm_event(&mut self, event: libp2p_swarm::FromSwarm) {
         match event {
             libp2p_swarm::FromSwarm::ConnectionEstablished(connection_established) => {
-               let dst_peer = connection_established.peer_id;
-               let endpoint = connection_established.endpoint;
+                let dst_peer = connection_established.peer_id;
+                let connection_id = connection_established.connection_id;
+                let endpoint = connection_established.endpoint;
 
-               // Check to see if the connected was made over a relay. If so, we know this is
-               // the connection we need to initiate the signaling protocol. We assume the connection
-               // was established under a 'dialing' context so we can immediately request a substream over the conn. 
-               // For incoming connections we can wait until there is a fully negotiated incoming conn and 
-               // start signaling immediately as a non initiator.
-               if endpoint.is_relayed() {
-                self.queued_events.push_back(ToSwarm::NotifyHandler {
-                    peer_id: dst_peer,
-                    handler: NotifyHandler::One(connection_established.connection_id),
-                    event: FromBehaviourEvent::OpenSignalingStream(dst_peer),
-                });
-               }
+                // Check to see if the connected was made over a relay. If so, we know this is
+                // the connection we need to initiate the signaling protocol.
+                if endpoint.is_relayed() {
+                    self.peers.insert(
+                        dst_peer,
+                        PeerSignalingState {
+                            discovered_at: Instant::now(),
+                            initiated: false,
+                            connection_id,
+                        },
+                    );
+                }
+            }
+            libp2p_swarm::FromSwarm::ConnectionClosed(connection_closed) => {
+                if self
+                    .peers
+                    .get(&connection_closed.peer_id)
+                    .map(|state| state.connection_id == connection_closed.connection_id)
+                    .unwrap_or(false)
+                {
+                    self.peers.remove(&connection_closed.peer_id);
+                }
             }
             _ => {}
         }
@@ -87,23 +154,30 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_swarm::ConnectionId,
+        _connection_id: libp2p_swarm::ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
         match event {
             ToBehaviourEvent::WebRTCConnectionSuccess(connection) => {
                 tracing::info!("Successfully webrtc connection to peer {}", peer_id);
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            SignalingEvent::NewWebRTCConnection(connection)
-                        ));
-                    }
+                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                    SignalingEvent::NewWebRTCConnection(connection),
+                ));
+                self.peers.remove(&peer_id);
+            }
             ToBehaviourEvent::WebRTCConnectionFailure(error) => {
-                        tracing::error!("WebRTC connection failed: {:?}", error);
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(SignalingEvent::WebRTCConnectionError(error)));
-                    }
+                tracing::error!("WebRTC connection failed: {:?}", error);
+                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                    SignalingEvent::WebRTCConnectionError(error),
+                ));
+                self.peers.remove(&peer_id);
+            }
             ToBehaviourEvent::SignalingRetry => {
                 tracing::info!("Scheduling signaling retry for peer {}", peer_id);
-                self.queued_events.push_back(ToSwarm::NotifyHandler { peer_id, handler: libp2p_swarm::NotifyHandler::One(connection_id), event: FromBehaviourEvent::OpenSignalingStream(peer_id) });
+                if let Some(state) = self.peers.get_mut(&peer_id) {
+                    state.initiated = false;
+                    state.discovered_at = Instant::now();
+                }
             }
         }
     }
@@ -117,6 +191,22 @@ impl NetworkBehaviour for Behaviour {
         if !self.queued_events.is_empty() {
             if let Some(event) = self.queued_events.pop_front() {
                 return Poll::Ready(event);
+            }
+        }
+
+        let now = Instant::now();
+        let delay = self.signaling_config.signaling_delay;
+
+        for (peer_id, state) in self.peers.iter_mut() {
+            if !state.initiated && now.duration_since(state.discovered_at) >= delay {
+                tracing::info!("Initiated signaling with peer {}", peer_id);
+                state.initiated = true;
+
+                return Poll::Ready(ToSwarm::NotifyHandler {
+                    peer_id: peer_id.clone(),
+                    handler: NotifyHandler::One(state.connection_id),
+                    event: FromBehaviourEvent::InitiateSignaling,
+                });
             }
         }
 

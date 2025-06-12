@@ -3,6 +3,7 @@ use prost::Message;
 
 use crate::browser::protocol::pb::SignalingMessage;
 
+/// A wrapper over a async stream for reading and writing SignalingMesssages.
 pub struct SignalingStream<T> {
     inner: T,
 }
@@ -15,6 +16,7 @@ where
         Self { inner }
     }
 
+    /// Encodes and writes a signaling message to the stream.
     pub async fn write(&mut self, message: SignalingMessage) -> Result<(), std::io::Error> {
         let mut buf = Vec::new();
         message.encode(&mut buf)?;
@@ -26,6 +28,7 @@ where
         Ok(())
     }
 
+    /// Reads and decodes a signaling message from the stream.
     pub async fn read(&mut self) -> Result<SignalingMessage, std::io::Error> {
         let mut len_buf = [0u8; 4];
         self.inner.read_exact(&mut len_buf).await?;

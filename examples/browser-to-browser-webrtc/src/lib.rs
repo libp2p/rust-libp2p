@@ -23,7 +23,7 @@ pub fn start() {
 pub fn initialize() {
     tracing_wasm::set_as_global_default_with_config(
         tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(tracing::Level::INFO)
+            .set_max_level(tracing::Level::TRACE)
             .set_console_config(tracing_wasm::ConsoleConfig::ReportWithConsoleColor)
             .build(),
     );
@@ -64,6 +64,7 @@ impl BrowserTransport {
         let keypair = Keypair::generate_ed25519();
         let local_peer_id = keypair.public().to_peer_id();
 
+        // Create a relay transport and behaviour for the relay connection
         let (relay_transport, relay_behaviour) = libp2p_relay::client::new(local_peer_id);
 
         let relay_transport_upgraded = relay_transport
@@ -72,19 +73,24 @@ impl BrowserTransport {
             .multiplex(yamux::Config::default())
             .boxed();
 
+        // Create a websocket transport to faciliate connection to the relay server
         let ws_transport = libp2p_websocket_websys::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::Config::new(&keypair)?)
             .multiplex(yamux::Config::default())
             .boxed();
 
+
         let webrtc_config = libp2p_webrtc_websys::browser::Config {
             keypair: keypair.clone(),
         };
-        let (webrtc_transport, webrtc_behaviour) = BrowserWebrtcTransport::new(webrtc_config);
-
+        let signaling_config = libp2p_webrtc_websys::browser::SignalingConfig::default();
+        
+        let (webrtc_transport, webrtc_behaviour) =
+            BrowserWebrtcTransport::new(webrtc_config, signaling_config);
         let webrtc_transport_boxed = webrtc_transport.boxed();
 
+        // A WebRTC behaviour faciliating coordination between the relay connection and webrtc signaling
         let behaviour = WebRTCBehaviour {
             relay: relay_behaviour,
             webrtc: webrtc_behaviour,
@@ -95,23 +101,19 @@ impl BrowserTransport {
             ping: ping::Behaviour::new(ping::Config::default()),
         };
 
-        let final_transport =
-            webrtc_transport_boxed
-                .or_transport(relay_transport_upgraded)
-                .or_transport(ws_transport)
-                .map(|either_output, _| {
-                    match either_output {
-                        futures::future::Either::Left(futures::future::Either::Left((
-                            peer_id,
-                            connection,
-                        ))) => (peer_id, StreamMuxerBox::new(connection)),
-                        futures::future::Either::Left(futures::future::Either::Right(output)) => {
-                            output
-                        } 
-                        futures::future::Either::Right(output) => output, 
-                    }
-                })
-                .boxed();
+        // The final transport consisting of a webrtc, relay and websocket transport
+        let final_transport = webrtc_transport_boxed
+            .or_transport(relay_transport_upgraded)
+            .or_transport(ws_transport)
+            .map(|either_output, _| match either_output {
+                futures::future::Either::Left(futures::future::Either::Left((
+                    peer_id,
+                    connection,
+                ))) => (peer_id, StreamMuxerBox::new(connection)),
+                futures::future::Either::Left(futures::future::Either::Right(output)) => output,
+                futures::future::Either::Right(output) => output,
+            })
+            .boxed();
 
         let mut swarm = Swarm::new(
             final_transport,
@@ -162,12 +164,12 @@ impl BrowserTransport {
                     event = swarm.select_next_some() => {
                         match event {
                             SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
-                             
+
                                 let remote_addr = endpoint.get_remote_address().to_string();
 
                                 if remote_addr.contains("/webrtc") {
                                     tracing::info!(
-                                        "Connection established with: {} via {} (remote: WebRTC, connection_id: {})", 
+                                        "Connection established with: {} via {} (remote: WebRTC, connection_id: {})",
                                         peer_id, remote_addr, connection_id
                                     );
                                 }

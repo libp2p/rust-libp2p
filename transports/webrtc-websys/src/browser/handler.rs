@@ -1,11 +1,12 @@
-use std::{task::Poll};
+use std::task::Poll;
 
 use futures::FutureExt;
-use libp2p_core::{upgrade::ReadyUpgrade, Endpoint, PeerId};
+use libp2p_core::{upgrade::ReadyUpgrade, PeerId};
 use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol};
 
 use crate::browser::{
-  Signaling, SignalingConfig, SignalingProtocol, SignalingStream, SIGNALING_STREAM_PROTOCOL
+    protocol::signaling::ProtocolHandler, Signaling, SignalingConfig, SignalingStream,
+    SIGNALING_STREAM_PROTOCOL,
 };
 
 /// Events sent from the Handler to the Behaviour.
@@ -19,43 +20,62 @@ pub enum ToBehaviourEvent {
 /// Events sent from the Behaviour to the Handler.
 #[derive(Debug)]
 pub enum FromBehaviourEvent {
-    OpenSignalingStream(PeerId)
+    /// Start signaling with this peer
+    InitiateSignaling,
 }
 
-/// The current status of the signaling process 
+/// The current status of the signaling process
 /// for this handler.
 #[derive(Debug, PartialEq)]
 pub(crate) enum SignalingStatus {
+    /// Relay connection has been established but no signaling
+    /// attempts have been made
     Idle,
+    /// Currently signaling (either as initiator or responder)
     Negotiating,
+    /// Awaiting the initiator to start signaling
     AwaitingInitiation,
-    Retrying,
+    /// Waiting before signaling retry
+    WaitingForRetry,
+    /// Signaling completed
     Complete,
-    Fail
+    /// Signaling failed
+    Fail,
+}
+
+#[derive(PartialEq)]
+enum SignalingRole {
+    Initiator,
+    Responder,
 }
 
 pub struct SignalingHandler {
-    _peer: PeerId,
-    is_initiator: bool,
+    /// Whether we are the initiator of the signaling protocol
+    /// or responder
+    role: Option<SignalingRole>,
+    /// The peer we are signaling with
+    peer: PeerId,
+    is_dialer: bool,
+    /// Current number of retries signaling has been attempted
     retry_count: u8,
     signaling_config: SignalingConfig,
+    /// Current status of the signaling process
     signaling_status: SignalingStatus,
-    signaling_result_receiver: Option<futures::channel::oneshot::Receiver<Result<crate::Connection, crate::Error>>>,
+    /// Channel holding the signaling result
+    signaling_result_receiver:
+        Option<futures::channel::oneshot::Receiver<Result<crate::Connection, crate::Error>>>,
 }
 
 impl SignalingHandler {
-    pub fn new(
-        peer: PeerId,
-        is_initiator: bool,
-        config: SignalingConfig
-    ) -> Self {
+    pub fn new(peer: PeerId, is_dialer: bool, config: SignalingConfig) -> Self {
         Self {
-            _peer: peer,
-            is_initiator,
+            role: None,
+            peer,
+            is_dialer,
             retry_count: 0,
             signaling_config: config,
             signaling_status: SignalingStatus::Idle,
-            signaling_result_receiver: None
+            signaling_result_receiver: None,
         }
     }
 }
@@ -95,34 +115,44 @@ impl ConnectionHandler for SignalingHandler {
                     tracing::info!("WebRTC connection established");
                     self.signaling_status = SignalingStatus::Complete;
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        ToBehaviourEvent::WebRTCConnectionSuccess(connection)
+                        ToBehaviourEvent::WebRTCConnectionSuccess(connection),
                     ));
                 }
                 Poll::Ready(Ok(Err(err))) => {
                     tracing::error!("WebRTC signaling failed: {:?}", err);
                     // If the signaling attempt failed the initiator can retry the attempt up to
                     // a configurable max retry count.
-                    if self.is_initiator {
-                        if self.retry_count < self.signaling_config.max_signaling_retries {
-                            self.signaling_status = SignalingStatus::Retrying;
-                            self.retry_count += 1;
+                    if self.role == Some(SignalingRole::Initiator)
+                        && self.retry_count < self.signaling_config.max_signaling_retries
+                    {
+                        self.signaling_status = SignalingStatus::WaitingForRetry;
+                        self.retry_count += 1;
+                        self.role = None;
 
-                            tracing::info!("Retrying signaling attempt {} of {}", self.retry_count, self.signaling_config.max_signaling_retries);
-                            
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(ToBehaviourEvent::SignalingRetry));
-                        } else {
-                            self.signaling_status = SignalingStatus::Fail;
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(ToBehaviourEvent::WebRTCConnectionFailure(err)));
-                        }
+                        tracing::info!(
+                            "Retrying signaling attempt {} of {} with peer {}",
+                            self.retry_count,
+                            self.signaling_config.max_signaling_retries,
+                            self.peer
+                        );
+
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            ToBehaviourEvent::SignalingRetry,
+                        ));
+                    } else {
+                        self.signaling_status = SignalingStatus::Fail;
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            ToBehaviourEvent::WebRTCConnectionFailure(err),
+                        ));
                     }
                 }
                 Poll::Ready(Err(_)) => {
                     tracing::error!("Signaling result channel dropped");
                     self.signaling_status = SignalingStatus::Fail;
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        ToBehaviourEvent::WebRTCConnectionFailure(
-                            crate::Error::Signaling("Channel dropped".to_string())
-                        )
+                        ToBehaviourEvent::WebRTCConnectionFailure(crate::Error::Signaling(
+                            "Channel dropped".to_string(),
+                        )),
                     ));
                 }
                 Poll::Pending => {
@@ -131,31 +161,28 @@ impl ConnectionHandler for SignalingHandler {
                 }
             }
         }
-        
+
         // Check the signaling status for this handler for any pending outbound signaling
         // attempts
         if self.signaling_status == SignalingStatus::AwaitingInitiation {
-                tracing::info!("Requesting OutboundSubstream for signaling protocol");
-                self.signaling_status = SignalingStatus::Negotiating;
-                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(
-                        ReadyUpgrade::new(SIGNALING_STREAM_PROTOCOL),
-                        (),
-                    ),
-                });
+            tracing::info!("Requesting OutboundSubstream for signaling protocol");
+            self.signaling_status = SignalingStatus::Negotiating;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(SIGNALING_STREAM_PROTOCOL), ()),
+            });
         }
-
 
         Poll::Pending
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
-            FromBehaviourEvent::OpenSignalingStream(_) => {
-                if self.is_initiator {
+            FromBehaviourEvent::InitiateSignaling => {
+                if self.signaling_status == SignalingStatus::Idle
+                    || self.signaling_status == SignalingStatus::WaitingForRetry
+                {
                     self.signaling_status = SignalingStatus::AwaitingInitiation;
                 }
-
             }
         }
     }
@@ -172,18 +199,26 @@ impl ConnectionHandler for SignalingHandler {
         match event {
             libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedInbound(
                 fully_negotiated_inbound,
-) => {
+            ) => {
+                if self.role.is_some() {
+                    return;
+                }
+
                 tracing::info!("Negotiated full inbound substream for signaling");
+                self.role = Some(SignalingRole::Responder);
+                self.signaling_status = SignalingStatus::Negotiating;
+
+                let _ = self.on_behaviour_event(FromBehaviourEvent::InitiateSignaling);
+
                 let substream = fully_negotiated_inbound.protocol;
-                let signaling_protocol = SignalingProtocol::new();
-                let is_initiator = self.is_initiator; 
-    
+                let signaling_protocol = ProtocolHandler::new(self.signaling_config.clone());
+
                 let (tx, rx) = futures::channel::oneshot::channel();
                 self.signaling_result_receiver = Some(rx);
-    
+
                 wasm_bindgen_futures::spawn_local(async move {
                     let signaling_result = signaling_protocol
-                        .perform_signaling(SignalingStream::new(substream), is_initiator)
+                        .signaling_as_responder(SignalingStream::new(substream))
                         .await;
 
                     let _ = tx.send(signaling_result);
@@ -192,22 +227,36 @@ impl ConnectionHandler for SignalingHandler {
             libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedOutbound(
                 fully_negotiated_outbound,
             ) => {
+                if self.role.is_some() {
+                    return;
+                }
+
                 tracing::info!("Negotiated full outbound substream for signaling");
+                self.role = Some(SignalingRole::Initiator);
+
                 let substream = fully_negotiated_outbound.protocol;
-                let signaling_protocol = SignalingProtocol::new();
-                let is_initiator = self.is_initiator;
+                let signaling_protocol = ProtocolHandler::new(self.signaling_config.clone());
 
                 let (tx, rx) = futures::channel::oneshot::channel();
                 self.signaling_result_receiver = Some(rx);
 
                 wasm_bindgen_futures::spawn_local(async move {
                     let signaling_result = signaling_protocol
-                        .perform_signaling(SignalingStream::new(substream), is_initiator)
+                        .signaling_as_initiator(SignalingStream::new(substream))
                         .await;
-                   
+
                     let _ = tx.send(signaling_result);
-    
                 });
+            }
+            libp2p_swarm::handler::ConnectionEvent::DialUpgradeError(_) => {
+                if self.role == Some(SignalingRole::Initiator) {
+                    self.signaling_status = SignalingStatus::Fail;
+                }
+            }
+            libp2p_swarm::handler::ConnectionEvent::ListenUpgradeError(_) => {
+                if self.role == Some(SignalingRole::Responder) {
+                    self.signaling_status = SignalingStatus::Fail;
+                }
             }
             _ => {}
         }

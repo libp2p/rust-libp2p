@@ -34,8 +34,8 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
 };
-use tracing_subscriber::EnvFilter;
 use tracing;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
                     .with(Protocol::Tcp(port))
                     .with(Protocol::Ws(std::borrow::Cow::Borrowed("/")));
-    
+
                 tracing::info!(?address, "Listening on webSocket");
                 swarm.listen_on(address.clone())?;
             }
