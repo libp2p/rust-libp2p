@@ -372,12 +372,7 @@ mod tests {
         });
 
         match tokio::time::timeout(Duration::from_secs(10), client).await {
-            Ok(join_result) => match join_result {
-                Ok(_) => panic!("Expected the client task to be cancelled"),
-                Err(e) => {
-                    tracing::info!("Client task was cancelled: {e}");
-                }
-            },
+            Ok(join_result) => join_result.expect("Client task should complete successfully"),
             Err(_elapsed) => {
                 panic!("Expected the client task to complete before timeout");
             }
