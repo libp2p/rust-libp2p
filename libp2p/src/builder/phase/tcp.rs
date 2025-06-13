@@ -113,7 +113,6 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-// Shortcuts
 #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
 impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
     pub fn with_quic(

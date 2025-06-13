@@ -235,7 +235,7 @@ where
         let peer_id = PeerId::from(identity.public());
 
         let transport = MemoryTransport::default()
-            .or_transport(libp2p_tcp::tokio::Transport::default())
+            .or_transport(libp2p_tcp::async_io::Transport::default())
             .upgrade(Version::V1)
             .authenticate(libp2p_plaintext::Config::new(&identity))
             .multiplex(libp2p_yamux::Config::default())
