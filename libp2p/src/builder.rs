@@ -103,28 +103,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(
-        feature = "async-std",
-        feature = "tcp",
-        feature = "tls",
-        feature = "noise",
-        feature = "yamux",
-    ))]
-    fn async_std_tcp() {
-        let _ = SwarmBuilder::with_new_identity()
-            .with_async_std()
-            .with_tcp(
-                Default::default(),
-                libp2p_tls::Config::new,
-                libp2p_yamux::Config::default,
-            )
-            .unwrap()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
-            .unwrap()
-            .build();
-    }
-
-    #[test]
     #[cfg(all(feature = "tokio", feature = "quic"))]
     fn quic() {
         let _ = SwarmBuilder::with_new_identity()

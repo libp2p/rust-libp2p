@@ -3,6 +3,9 @@
 - Default to `tokio` runtime.
   See [PR 6024](https://github.com/libp2p/rust-libp2p/pull/6024).
 
+- Removed `async-std` support from TCP transport.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955).
+
 ## 0.5.0
 
 - Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.

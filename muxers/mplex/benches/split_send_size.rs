@@ -186,7 +186,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
+    libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext::Config::new(
             &identity::Keypair::generate_ed25519(),

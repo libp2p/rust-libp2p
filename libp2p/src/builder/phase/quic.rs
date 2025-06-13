@@ -73,7 +73,6 @@ impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
     }
 }
 
-// Shortcuts
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     /// See [`SwarmBuilder::with_relay_client`].
     #[cfg(feature = "relay")]
@@ -151,18 +150,18 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub fn with_dns(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            super::provider::AsyncStd,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-        >,
-        std::io::Error,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .with_dns()
+pub fn with_dns(
+    self,
+) -> Result<
+    SwarmBuilder<
+        super::provider::AsyncStd,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+    >,
+    std::io::Error,
+> {
+    self.without_quic()
+        .without_any_other_transports()
+        .with_dns()
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
@@ -267,7 +266,7 @@ impl_quic_phase_with_websocket!(
     "async-std",
     super::provider::AsyncStd,
     rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
+        libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>,
     >
 );
 impl_quic_phase_with_websocket!(
