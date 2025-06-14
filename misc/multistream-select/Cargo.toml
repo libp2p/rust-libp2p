@@ -17,14 +17,14 @@ tracing = { workspace = true }
 pin-project = "1.1.5"
 smallvec = "1.13.2"
 unsigned-varint = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tokio-util = { version = "0.7", features = ["compat"] }
 
 [dev-dependencies]
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
 rw-stream-sink = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
