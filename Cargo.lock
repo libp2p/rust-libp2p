@@ -3824,7 +3824,6 @@ dependencies = [
 name = "multistream-select"
 version = "0.13.0"
 dependencies = [
- "async-std",
  "bytes",
  "futures",
  "futures_ringbuf",
@@ -3832,6 +3831,8 @@ dependencies = [
  "quickcheck-ext",
  "rw-stream-sink",
  "smallvec",
+ "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "unsigned-varint",

@@ -388,6 +388,7 @@ mod tests {
 
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use crate::length_delimited::LengthDelimited;
 
@@ -491,9 +492,10 @@ mod tests {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
             let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
-            async_std::task::block_on(async move {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
                 let expected_frames = frames.clone();
-                let server = async_std::task::spawn(async move {
+                let server = tokio::task::spawn(async move {
                     let mut connec =
                         rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
 
@@ -510,15 +512,15 @@ mod tests {
                     }
                 });
 
-                let client = async_std::task::spawn(async move {
+                let client = tokio::task::spawn(async move {
                     let mut connec = LengthDelimited::new(client_connection);
                     for frame in frames {
                         connec.send(From::from(frame)).await.unwrap();
                     }
                 });
 
-                server.await;
-                client.await;
+                server.await.unwrap();
+                client.await.unwrap();
             });
 
             TestResult::passed()
