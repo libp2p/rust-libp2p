@@ -267,7 +267,7 @@ impl_quic_phase_with_websocket!(
     "async-std",
     super::provider::AsyncStd,
     rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
+        libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>,
     >
 );
 impl_quic_phase_with_websocket!(
