@@ -1018,7 +1018,6 @@ mod tests {
                 let rt = ::tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(dialer);
                 rt.block_on(listener).unwrap();
-
             }
 
             #[cfg(feature = "tokio")]
