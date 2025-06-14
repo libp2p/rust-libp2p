@@ -18,7 +18,7 @@ if-watch = { workspace = true }
 libc = "0.2.155"
 libp2p-core = { workspace = true }
 socket2 = { version = "0.5.7", features = ["all"] }
-tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
+tokio = { workspace = true, features = ["full"], optional = true}
 tracing = { workspace = true }
 
 [features]
@@ -27,7 +27,6 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
-tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

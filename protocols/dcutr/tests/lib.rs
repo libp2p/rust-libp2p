@@ -135,7 +135,7 @@ fn build_client() -> Swarm<Client> {
 
     let transport = relay_transport
         .or_transport(MemoryTransport::default())
-        .or_transport(libp2p_tcp::async_io::Transport::default())
+        .or_transport(libp2p_tcp::tokio::Transport::default())
         .upgrade(Version::V1)
         .authenticate(plaintext::Config::new(&local_key))
         .multiplex(libp2p_yamux::Config::default())
