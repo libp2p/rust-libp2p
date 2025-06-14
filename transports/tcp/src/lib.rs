@@ -703,6 +703,7 @@ mod tests {
         future::poll_fn,
     };
     use libp2p_core::{Endpoint, Transport as _};
+
     use super::*;
 
     #[test]
@@ -1082,7 +1083,6 @@ mod tests {
                 let listener = listen_twice::<tokio::Tcp>(addr.clone());
                 let rt = ::tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(listener);
-
             }
 
             #[cfg(feature = "tokio")]

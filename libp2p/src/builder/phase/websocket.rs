@@ -121,9 +121,7 @@ impl_websocket_builder!(
     libp2p_dns::async_std::Transport::system(libp2p_tcp::tokio::Transport::new(
         libp2p_tcp::Config::default(),
     )),
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>,
-    >
+    rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
 impl_websocket_builder!(
     "tokio",

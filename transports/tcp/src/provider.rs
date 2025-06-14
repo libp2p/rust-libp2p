@@ -20,7 +20,6 @@
 
 //! The interface for providers of non-blocking TCP implementations.
 
-
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
