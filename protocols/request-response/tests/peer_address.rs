@@ -18,11 +18,11 @@ async fn dial_succeeds_after_adding_peers_address() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let config = request_response::Config::default();
 
-    let mut swarm = Swarm::new_ephemeral(|_| {
+    let mut swarm = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), config.clone())
     });
 
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), config.clone())
     });
 

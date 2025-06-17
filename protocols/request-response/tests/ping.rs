@@ -41,7 +41,7 @@ async fn is_response_outbound() {
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(
             [(StreamProtocol::new("/ping/1"), ProtocolSupport::Full)],
             request_response::Config::default(),
@@ -90,11 +90,11 @@ async fn ping_protocol() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
     });
     let peer2_id = *swarm2.local_peer_id();
@@ -187,11 +187,11 @@ async fn ping_protocol_explicit_address() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
     });
     let peer2_id = *swarm2.local_peer_id();
@@ -305,11 +305,11 @@ async fn emits_inbound_connection_closed_failure() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
     });
     let peer2_id = *swarm2.local_peer_id();
@@ -371,11 +371,11 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
     });
     let peer2_id = *swarm2.local_peer_id();
@@ -432,11 +432,11 @@ async fn concurrent_ping_protocol() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
         request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
     });
     let peer2_id = *swarm2.local_peer_id();
