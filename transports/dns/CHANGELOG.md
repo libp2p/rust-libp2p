@@ -1,8 +1,10 @@
 ## 0.44.0
- 
-- Report all transport errors in a dial attempt instead of only returning the last error. 
+
+- Report all transport errors in a dial attempt instead of only returning the last error.
   See [PR 5899](https://github.com/libp2p/rust-libp2p/pull/5899).
-  
+- Upgrade `hickory-resolver` to version 0.25.2.
+  See [PR 6065](https://github.com/libp2p/rust-libp2p/pull/6065).
+
 ## 0.43.0
 
 - Upgrade `async-std-resolver` and `hickory-resolver`.
