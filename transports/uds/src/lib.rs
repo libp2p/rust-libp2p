@@ -31,11 +31,7 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(
-    unix,
-    not(target_os = "emscripten"),
-    any(feature = "tokio", feature = "async-std")
-))]
+#![cfg(all(unix, not(target_os = "emscripten"), feature = "tokio"))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use std::{
@@ -205,13 +201,6 @@ macro_rules! codegen {
     };
 }
 
-#[cfg(feature = "async-std")]
-codegen!(
-    "async-std",
-    UdsConfig,
-    |addr| async move { async_std::os::unix::net::UnixListener::bind(&addr).await },
-    async_std::os::unix::net::UnixStream,
-);
 #[cfg(feature = "tokio")]
 codegen!(
     "tokio",
