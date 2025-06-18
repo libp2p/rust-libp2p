@@ -29,7 +29,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 async-std = ["async-std-resolver"]
-tokio = ["hickory-resolver/tokio-runtime"]
+tokio = ["hickory-resolver/tokio"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

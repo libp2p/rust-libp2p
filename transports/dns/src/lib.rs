@@ -117,6 +117,7 @@ pub mod async_std {
 pub mod tokio {
     use std::sync::Arc;
 
+    use hickory_resolver::name_server::TokioConnectionProvider;
     use hickory_resolver::{system_conf, TokioResolver};
     use parking_lot::Mutex;
 
@@ -140,7 +141,12 @@ pub mod tokio {
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioResolver::tokio(cfg, opts),
+                resolver: TokioResolver::builder_with_config(
+                    cfg,
+                    TokioConnectionProvider::default(),
+                )
+                .with_options(opts)
+                .build(),
             }
         }
     }
