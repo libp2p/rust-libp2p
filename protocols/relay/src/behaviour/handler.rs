@@ -239,9 +239,10 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::ReservationReqAcceptFailed")
                 .field("error", error)
                 .finish(),
-            Event::ReservationReqDenied { status } => {
-                f.debug_struct("Event::ReservationReqDenied").field("status", status).finish()
-            }
+            Event::ReservationReqDenied { status } => f
+                .debug_struct("Event::ReservationReqDenied")
+                .field("status", status)
+                .finish(),
             Event::ReservationReqDenyFailed { error } => f
                 .debug_struct("Event::ReservationReqDenyFailed")
                 .field("error", error)
@@ -527,7 +528,11 @@ impl ConnectionHandler for Handler {
                 if self
                     .reservation_request_future
                     .replace(ReservationRequestFuture::Denying(
-                        inbound_reservation_req.deny(status).err_into().map(move |result| (status, result)).boxed(),
+                        inbound_reservation_req
+                            .deny(status)
+                            .err_into()
+                            .map(move |result| (status, result))
+                            .boxed(),
                     ))
                     .is_some()
                 {
