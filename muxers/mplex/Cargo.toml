@@ -24,7 +24,7 @@ tracing = { workspace = true }
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 
 [dev-dependencies]
-async-std = { version = "1.7.0", features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
 criterion = "0.5"
 futures = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }

@@ -64,5 +64,5 @@ pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, J
 }
 
 pub(crate) fn to_io_error(value: JsValue) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, Error::from_js_value(value))
+    io::Error::other(Error::from_js_value(value))
 }

@@ -32,8 +32,8 @@ async fn ping_pong() {
     fn prop(count: NonZeroU8) {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
-        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral_tokio(|_| ping::Behaviour::new(cfg.clone()));
 
         tokio::spawn(async move {
             swarm1.listen().with_memory_addr_external().await;
@@ -63,8 +63,8 @@ fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
 
 #[tokio::test]
 async fn unsupported_doesnt_fail() {
-    let mut swarm1 = Swarm::new_ephemeral(|_| dummy::Behaviour);
-    let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new()));
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| dummy::Behaviour);
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| ping::Behaviour::new(ping::Config::new()));
 
     let result = {
         swarm1.listen().with_memory_addr_external().await;

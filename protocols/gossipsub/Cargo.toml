@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
+metrics = ["prometheus-client"]
 
 [dependencies]
 async-channel = "2.3.1"
@@ -24,7 +25,7 @@ fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = "3.0.2"
 getrandom = { workspace = true }
-hashlink = { workspace = true}
+hashlink = { workspace = true }
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
@@ -39,7 +40,7 @@ sha2 = "0.10.8"
 tracing = { workspace = true }
 
 # Metrics dependencies
-prometheus-client = { workspace = true }
+prometheus-client = { workspace = true, optional = true }
 
 [dev-dependencies]
 libp2p-core = { workspace = true }
