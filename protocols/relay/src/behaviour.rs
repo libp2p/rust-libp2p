@@ -184,10 +184,7 @@ pub enum Event {
         error: inbound_hop::Error,
     },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied {
-        src_peer_id: PeerId,
-        status: proto::Status,
-    },
+    ReservationReqDenied { src_peer_id: PeerId, status: Status },
     /// Denying an inbound reservation request has failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
@@ -204,7 +201,7 @@ pub enum Event {
     CircuitReqDenied {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        status: proto::Status,
+        status: Status,
     },
     /// Denying an inbound circuit request failed.
     #[deprecated(
@@ -489,7 +486,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqDenied {
                         src_peer_id: event_source,
-                        status,
+                        status: status.into(),
                     },
                 ));
             }
@@ -607,7 +604,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(ToSwarm::GenerateEvent(Event::CircuitReqDenied {
                         src_peer_id: event_source,
                         dst_peer_id,
-                        status,
+                        status: status.into(),
                     }));
             }
             handler::Event::CircuitReqDenyFailed {
@@ -814,5 +811,32 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
+    }
+}
+
+#[derive(Debug)]
+pub enum Status {
+    OK,
+    ReservationRefused,
+    ResourceLimitExceeded,
+    PermissionDenied,
+    ConnectionFailed,
+    NoReservation,
+    MalformedMessage,
+    UnexpectedMessage,
+}
+
+impl From<proto::Status> for Status {
+    fn from(other: proto::Status) -> Self {
+        match other {
+            proto::Status::OK => Self::OK,
+            proto::Status::RESERVATION_REFUSED => Self::ReservationRefused,
+            proto::Status::RESOURCE_LIMIT_EXCEEDED => Self::ResourceLimitExceeded,
+            proto::Status::PERMISSION_DENIED => Self::PermissionDenied,
+            proto::Status::CONNECTION_FAILED => Self::ConnectionFailed,
+            proto::Status::NO_RESERVATION => Self::NoReservation,
+            proto::Status::MALFORMED_MESSAGE => Self::MalformedMessage,
+            proto::Status::UNEXPECTED_MESSAGE => Self::UnexpectedMessage,
+        }
     }
 }
