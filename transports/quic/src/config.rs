@@ -81,26 +81,51 @@ pub struct Config {
 #[expect(deprecated)]
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(keypair: &libp2p_identity::Keypair, webtransport_cert: Option<Certificate>) -> Self {
+    pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
         let client_tls_config = Arc::new(
             QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
                 .unwrap(),
         );
-        let server_config = match &webtransport_cert {
-            None => libp2p_tls::make_server_config(keypair).unwrap(),
-            Some(c) => libp2p_tls::make_webtransport_server_config(
-                c.get_certificate_der(),
-                c.get_private_key_der(),
-                alpn_protocols(),
-            ),
-        };
+        let server_config = libp2p_tls::make_server_config(keypair).unwrap();
         let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
+        let webtransport_certhashes: Vec<Multihash<64>> = vec![];
 
-        let webtransport_certhashes: Vec<Multihash<64>> = match webtransport_cert {
-            Some(c) => vec![c.cert_hash()],
-            None => vec![],
-        };
+        Self::new_config(
+            keypair.clone(),
+            client_tls_config,
+            server_tls_config,
+            webtransport_certhashes
+        )
+    }
 
+    /// Creates a new configuration object with web a transport certificate and default values.
+    pub fn new_with_webtransport(keypair: &libp2p_identity::Keypair, webtransport_cert: Certificate) -> Self {
+        let client_tls_config = Arc::new(
+            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+                .unwrap(),
+        );
+        let server_config = libp2p_tls::make_webtransport_server_config(
+            webtransport_cert.get_certificate_der(),
+            webtransport_cert.get_private_key_der(),
+            alpn_protocols(),
+        );
+        let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
+        let webtransport_certhashes: Vec<Multihash<64>> = vec![webtransport_cert.cert_hash()];
+
+        Self::new_config(
+            keypair.clone(),
+            client_tls_config,
+            server_tls_config,
+            webtransport_certhashes
+        )
+    }
+
+    fn new_config(
+        keypair: libp2p_identity::Keypair,
+        client_tls_config: Arc<QuicClientConfig>,
+        server_tls_config: Arc<QuicServerConfig>,
+        webtransport_certhashes: Vec<Multihash<64>>,
+    ) -> Self {
         Self {
             client_tls_config,
             server_tls_config,
@@ -110,10 +135,9 @@ impl Config {
             max_concurrent_stream_limit: 256,
             keep_alive_interval: Duration::from_secs(5),
             max_connection_data: 15_000_000,
-
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
-            keypair: keypair.clone(),
+            keypair,
             mtu_discovery_config: Some(Default::default()),
             webtransport_certhashes,
         }

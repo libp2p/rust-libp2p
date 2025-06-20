@@ -43,7 +43,7 @@ macro_rules! impl_quic_builder {
                             .transport
                             .or_transport(
                                 libp2p_quic::$quic::Transport::new(constructor(
-                                    libp2p_quic::Config::new(&self.keypair, None),
+                                    libp2p_quic::Config::new(&self.keypair),
                                 ))
                                 .map(|(peer_id, muxer), _| {
                                     (peer_id, libp2p_core::muxing::StreamMuxerBox::new(muxer))

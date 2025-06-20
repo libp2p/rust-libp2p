@@ -94,7 +94,7 @@ fn create_transport(
     certificate: Certificate,
 ) -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let peer_id = keypair.public().to_peer_id();
-    let config = quic::Config::new(&keypair, Some(certificate));
+    let config = quic::Config::new_with_webtransport(&keypair, certificate);
     let transport = quic::GenTransport::<quic::tokio::Provider>::new(config)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
