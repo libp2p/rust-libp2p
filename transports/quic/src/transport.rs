@@ -232,15 +232,17 @@ impl<P: Provider> Transport for GenTransport<P> {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        let noise_config = libp2p_noise::Config::new(&self.quinn_config.keypair)
-            .expect("Getting a noise configuration from the node keypair");
+        let opt_noise_config = if wt {
+            Some(libp2p_noise::Config::new(&self.quinn_config.keypair)
+                .expect("Getting a noise configuration from the node keypair"))
+        } else { None };
 
         if let Some(listener) = self
             .listeners
             .iter_mut()
             .find(|l| !l.is_closed && l.socket_addr() == socket_addr)
         {
-            listener.update(wt, &self.quinn_config.webtransport_certhashes, noise_config);
+            listener.update(&self.quinn_config.webtransport_certhashes, opt_noise_config);
         } else {
             let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
             let socket_c = socket.try_clone().map_err(Self::Error::from)?;
@@ -248,7 +250,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             let server_config = self.quinn_config.server_config.clone();
             let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
 
-            let mode = if wt {
+            let mode = if let Some(noise_config) = opt_noise_config {
                 ConnectingMode::WebTransport(
                     self.quinn_config.webtransport_certhashes.clone(),
                     noise_config,
@@ -616,24 +618,23 @@ impl<P: Provider> Listener<P> {
 
     fn update(
         &mut self,
-        is_webtransport: bool,
         cert_hashes: &Vec<Multihash<64>>,
-        noise_cfg: libp2p_noise::Config,
+        opt_noise_cfg: Option<libp2p_noise::Config>,
     ) {
         let cur_mode = &self.mode;
         match cur_mode {
             ConnectingMode::QUIC => {
-                if is_webtransport {
-                    self.mode = ConnectingMode::Mixed(cert_hashes.clone(), noise_cfg)
+                if let Some(cfg) = opt_noise_cfg {
+                    self.mode = ConnectingMode::Mixed(cert_hashes.clone(), cfg)
                 }
             }
             ConnectingMode::WebTransport(certs, cfg) => {
-                if !is_webtransport {
+                if let None = opt_noise_cfg {
                     self.mode = ConnectingMode::Mixed(certs.clone(), cfg.clone())
                 }
             }
             ConnectingMode::Mixed(_, _) => {
-                self.mode = ConnectingMode::Mixed(cert_hashes.clone(), noise_cfg)
+                // There is no need for updating the current mode
             }
         }
     }
@@ -674,8 +675,10 @@ impl<P: Provider> Stream for Listener<P> {
                     ));
                     let remote_addr = connecting.remote_address();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
-
                     let mode = self.mode.clone();
+
+                    tracing::debug!("Got the incoming connecting from {remote_addr}, mode={:?}", mode);
+
                     let event = TransportEvent::Incoming {
                         upgrade: Connecting::new(connecting, mode, self.handshake_timeout),
                         local_addr,
@@ -731,24 +734,22 @@ pub(crate) enum ConnectingMode {
 
 impl ConnectingMode {
     pub(crate) fn update_multiaddr(&self, addr: Multiaddr) -> Multiaddr {
-        fn add_web_transport_protocol(v: &Vec<Multihash<64>>, addr: Multiaddr) -> Multiaddr {
-            let mut vec = v.clone();
-            let mut res = addr.with(Protocol::WebTransport).with(Protocol::Certhash(
-                vec.pop().expect("Gets the last element"),
-            ));
-            if !vec.is_empty() {
-                res = res.with(Protocol::Certhash(
-                    vec.pop().expect("Gets the last element"),
-                ));
-            };
-
-            res
-        }
-
         match self {
             ConnectingMode::QUIC => addr,
-            ConnectingMode::WebTransport(hashes, _) => add_web_transport_protocol(hashes, addr),
-            ConnectingMode::Mixed(hashes, _) => add_web_transport_protocol(hashes, addr),
+            ConnectingMode::WebTransport(hashes, _) |
+            ConnectingMode::Mixed(hashes, _) => {
+                let mut vec = hashes.clone();
+                let mut res = addr.with(Protocol::WebTransport).with(Protocol::Certhash(
+                    vec.pop().expect("Gets the last element"),
+                ));
+                if !vec.is_empty() {
+                    res = res.with(Protocol::Certhash(
+                        vec.pop().expect("Gets the last element"),
+                    ));
+                };
+
+                res
+            }
         }
     }
 }

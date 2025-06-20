@@ -120,7 +120,7 @@ pub fn make_webtransport_client_config(
             verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
         ))
         .with_no_client_auth();
-
+    config.enable_early_data = true;
     config.alpn_protocols = protocols;
 
     config

@@ -27,25 +27,21 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
+use bytes::Bytes;
 use futures::{
     future::{select, BoxFuture, Either, FutureExt, Select},
     prelude::*,
 };
 use futures_timer::Delay;
-use h3::{error::ErrorLevel, ext::Protocol};
+use h3::ext::Protocol;
 use h3_webtransport::server::WebTransportSession;
 use http::Method;
 use libp2p_core::{
-    multihash::Multihash, muxing::StreamMuxerBox, upgrade::InboundConnectionUpgrade,
+    muxing::StreamMuxerBox, upgrade::InboundConnectionUpgrade,
 };
 use libp2p_identity::PeerId;
 use quinn::rustls::pki_types::CertificateDer;
-
-use crate::{
-    transport::ConnectingMode, webtransport, webtransport::WebtransportConnectingError, Connection,
-    ConnectionError, Error,
-};
+use crate::{transport::ConnectingMode, webtransport, webtransport::WebtransportConnectingError, Connection, ConnectionError, Error, CertHash};
 
 /// A QUIC connection currently being negotiated.
 pub struct Connecting {
@@ -88,21 +84,21 @@ async fn handshake(
 ) -> Result<(PeerId, StreamMuxerBox), Error> {
     match connecting.await {
         Ok(connection) => {
-            let peer_id = Connecting::remote_peer_id(&connection);
+            tracing::debug!("Got the incoming connection {:?}", connection);
             match mode {
                 ConnectingMode::QUIC => {
+                    let peer_id = Connecting::remote_peer_id(&connection);
                     let muxer = Connection::new(connection);
                     return Ok((peer_id, StreamMuxerBox::new(muxer)));
                 }
                 ConnectingMode::WebTransport(certhashes, noise_config) => {
                     let (peer_id, muxer) =
-                        webtransport_connecting(peer_id, connection, certhashes, noise_config)
+                        webtransport_connecting(connection, certhashes, noise_config)
                             .await?;
                     Ok((peer_id, StreamMuxerBox::new(muxer)))
                 }
                 ConnectingMode::Mixed(certhashes, noise_config) => {
                     let res = webtransport_connecting(
-                        peer_id,
                         connection.clone(),
                         certhashes,
                         noise_config,
@@ -110,11 +106,12 @@ async fn handshake(
                     .await;
                     match res {
                         Ok((peer_id, muxer)) => Ok((peer_id, StreamMuxerBox::new(muxer))),
-                        Err(WebtransportConnectingError::UnexpectedProtocol(_)) => {
+                        Err(_) => {
+                            // todo What is the marker that it's should be regular quic connection?
+                            let peer_id = Connecting::remote_peer_id(&connection);
                             let muxer = Connection::new(connection);
                             Ok((peer_id, StreamMuxerBox::new(muxer)))
-                        }
-                        Err(e) => Err(e.into()),
+                        },
                     }
                 }
             }
@@ -126,71 +123,71 @@ async fn handshake(
 }
 
 async fn webtransport_connecting(
-    peer_id: PeerId,
     connection: quinn::Connection,
-    certhashes: Vec<Multihash<64>>,
+    certhashes: Vec<CertHash>,
     noise_config: libp2p_noise::Config,
 ) -> Result<(PeerId, StreamMuxerBox), WebtransportConnectingError> {
+    let c_conn = connection.clone();
+    let mut h3_conn: h3::server::Connection<h3_quinn::Connection, Bytes> = h3::server::builder()
+        .enable_webtransport(true)
+        .enable_extended_connect(true)
+        .enable_datagram(true)
+        .max_webtransport_sessions(5)
+        .send_grease(true)
+        .build(h3_quinn::Connection::new(c_conn))
+        .await?;
     loop {
-        let c_conn = connection.clone();
-        let mut h3_conn = h3::server::builder()
-            .enable_webtransport(true)
-            .enable_extended_connect(true)
-            .enable_datagram(false)
-            .max_webtransport_sessions(1)
-            .send_grease(true)
-            .build(h3_quinn::Connection::new(c_conn))
-            .await?;
-
+        tracing::debug!("Accepting an incoming request");
         match h3_conn.accept().await {
-            Ok(Some((request, stream))) => {
-                let ext = request.extensions();
-                let proto = ext.get::<Protocol>();
-                if Some(&Protocol::WEB_TRANSPORT) == proto {
-                    let method = request.method();
-                    if method != &Method::CONNECT {
-                        return Err(WebtransportConnectingError::UnexpectedMethod(
-                            method.clone(),
-                        ));
+            Ok(Some(resolver)) => {
+                tracing::debug!("Got the resolver");
+                let (req, stream) = match resolver.resolve_request().await {
+                    Ok(request) => request,
+                    Err(err) => {
+                        tracing::error!("Error resolving request: {err:?}");
+                        continue;
                     }
-                    if request.uri().path() != webtransport::WEBTRANSPORT_PATH {
-                        return Err(WebtransportConnectingError::UnexpectedPath(String::from(
-                            request.uri().path(),
-                        )));
+                };
+                tracing::debug!("New request: {:#?}", req);
+                let ext = req.extensions();
+                match req.method() {
+                    &Method::CONNECT if ext.get::<Protocol>() == Some(&Protocol::WEB_TRANSPORT) => {
+                        tracing::debug!("Peer wants to initiate a webtransport session");
+                        tracing::debug!("Handing over connection to WebTransport");
+                        let session = WebTransportSession::accept(req, stream, h3_conn)
+                            .await?;
+                        tracing::debug!("Established webtransport session");
+                        // 4. Get datagrams, bidirectional streams, and unidirectional streams and wait for client requests here.
+                        // h3_conn needs to hand over the datagrams, bidirectional streams, and unidirectional streams to the webtransport session.
+                        // handle_session_and_echo_all_inbound_messages(session).await?;
+                        let arc_session = Arc::new(session);
+                        let web_transport_stream =
+                            webtransport::accept_webtransport_stream(&arc_session).await?;
+
+                        let certs = certhashes.iter().cloned().collect::<HashSet<_>>();
+                        let t_noise = noise_config.with_webtransport_certhashes(certs);
+                        let (peer_id, _) = t_noise.upgrade_inbound(web_transport_stream, "").await?;
+
+                        let muxer = webtransport::Connection::new(arc_session, connection);
+
+                        return Ok((peer_id, StreamMuxerBox::new(muxer)));
                     }
-                    if request.uri().query() == Some(webtransport::NOISE_QUERY) {
-                        return Err(WebtransportConnectingError::UnexpectedQuery(String::from(
-                            request.uri().path(),
-                        )));
+                    _ => {
+                        tracing::info!(?req, "Received request");
                     }
-                    let session = WebTransportSession::accept(request, stream, h3_conn).await?;
-                    let arc_session = Arc::new(session);
-                    let webtr_stream =
-                        webtransport::accept_webtransport_stream(&arc_session).await?;
-
-                    let certs = certhashes.iter().cloned().collect::<HashSet<_>>();
-                    let t_noise = noise_config.with_webtransport_certhashes(certs);
-                    t_noise.upgrade_inbound(webtr_stream, "").await?;
-
-                    let muxer = webtransport::Connection::new(arc_session, connection);
-
-                    return Ok((peer_id, StreamMuxerBox::new(muxer)));
-                } else {
-                    return Err(WebtransportConnectingError::UnexpectedProtocol(
-                        proto.cloned(),
-                    ));
                 }
             }
+            // indicating no more streams to be received
             Ok(None) => {
+                tracing::error!("Indicating no more streams to be received");
                 // indicating no more streams to be received
                 return Err(WebtransportConnectingError::NoMoreStreams);
             }
-            Err(err) => match err.get_error_level() {
-                ErrorLevel::ConnectionError => {
-                    return Err(WebtransportConnectingError::Http3Error(err))
-                }
-                ErrorLevel::StreamError => continue,
-            },
+            Err(err) => {
+                tracing::error!("Connection errored with {}", err);
+
+                return return Err(WebtransportConnectingError::Http3ConnectionError(err));
+            }
         }
     }
 }

@@ -3,10 +3,11 @@ use std::{
     io,
     io::ErrorKind,
 };
-
 pub use certificate::{CertHash, Certificate};
 pub(crate) use connection::{accept_webtransport_stream, Connection};
 use h3::ext::Protocol;
+use h3::error::StreamError;
+use h3::error::ConnectionError as H3ConnectionError;
 use http::Method;
 
 use crate::Error;
@@ -25,7 +26,8 @@ pub enum WebtransportConnectingError {
     UnexpectedQuery(String),
 
     ConnectionError(quinn::ConnectionError),
-    Http3Error(h3::Error),
+    Http3ConnectionError(H3ConnectionError),
+    Http3Error(StreamError),
     NoiseError(libp2p_noise::Error),
     NoMoreStreams,
     CrateError(Error),
@@ -47,6 +49,7 @@ impl Display for WebtransportConnectingError {
                 write!(f, "Unexpected initial request query {}", q)
             }
             WebtransportConnectingError::ConnectionError(e) => write!(f, "Connection error: {}", e),
+            WebtransportConnectingError::Http3ConnectionError(e) => write!(f, "Http3 connection error: {}", e),
             WebtransportConnectingError::Http3Error(e) => write!(f, "Http3 error: {}", e),
             WebtransportConnectingError::NoiseError(e) => write!(f, "Noise error: {}", e),
             WebtransportConnectingError::NoMoreStreams => write!(f, "No more streams"),
@@ -79,8 +82,8 @@ impl From<libp2p_noise::Error> for WebtransportConnectingError {
     }
 }
 
-impl From<h3::Error> for WebtransportConnectingError {
-    fn from(e: h3::Error) -> Self {
+impl From<StreamError> for WebtransportConnectingError {
+    fn from(e: StreamError) -> Self {
         WebtransportConnectingError::Http3Error(e)
     }
 }
@@ -88,5 +91,11 @@ impl From<h3::Error> for WebtransportConnectingError {
 impl From<quinn::ConnectionError> for WebtransportConnectingError {
     fn from(e: quinn::ConnectionError) -> Self {
         WebtransportConnectingError::ConnectionError(e)
+    }
+}
+
+impl From<H3ConnectionError> for WebtransportConnectingError {
+    fn from(e: H3ConnectionError) -> Self {
+        WebtransportConnectingError::Http3ConnectionError(e)
     }
 }
