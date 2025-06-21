@@ -41,6 +41,7 @@ full = [
     "secp256k1",
     "serde",
     "tcp",
+    "unix-stream",
     "tls",
     "tokio",
     "uds",
@@ -53,7 +54,7 @@ full = [
     "upnp",
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
+async-std = ["libp2p-swarm/async-std", "libp2p-tcp?/async-io", "libp2p-unix-stream?/async-io", "libp2p-dns?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
@@ -82,8 +83,9 @@ rsa = ["libp2p-identity/rsa"]
 secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
+unix-stream = ["dep:libp2p-unix-stream"]
 tls = ["dep:libp2p-tls"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-unix-stream?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 webrtc-websys = ['dep:libp2p-webrtc-websys']
@@ -137,6 +139,7 @@ libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }
 libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
+libp2p-unix-stream = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
 libp2p-upnp = { workspace = true, optional = true }
