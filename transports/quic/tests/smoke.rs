@@ -228,7 +228,7 @@ async fn wrong_peerid() {
 fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let mut config = quic::Config::new(&keypair);
+    let mut config = quic::Config::new(&keypair, None);
     config.handshake_timeout = Duration::from_secs(1);
 
     let quic_transport = quic::tokio::Transport::new(config);
@@ -371,7 +371,7 @@ async fn backpressure() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
-    let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
+    let max_stream_data = quic::Config::new(&generate_tls_keypair(), None).max_stream_data;
 
     let (mut stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
 
@@ -562,7 +562,7 @@ fn create_transport<P: Provider>(
 ) -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let mut config = quic::Config::new(&keypair);
+    let mut config = quic::Config::new(&keypair, None);
     with_config(&mut config);
     let transport = quic::GenTransport::<P>::new(config)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))

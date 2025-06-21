@@ -20,10 +20,13 @@
 
 use std::{sync::Arc, time::Duration};
 
+use libp2p_core::multihash::Multihash;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
 };
+
+use crate::webtransport::Certificate;
 
 /// Config for the transport.
 #[derive(Clone)]
@@ -71,6 +74,8 @@ pub struct Config {
 
     /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
     mtu_discovery_config: Option<MtuDiscoveryConfig>,
+
+    webtransport_certhashes: Vec<Multihash<64>>,
 }
 
 #[expect(deprecated)]
@@ -81,9 +86,46 @@ impl Config {
             QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
                 .unwrap(),
         );
-        let server_tls_config = Arc::new(
-            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+        let server_config = libp2p_tls::make_server_config(keypair).unwrap();
+        let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
+        let webtransport_certhashes: Vec<Multihash<64>> = vec![];
+
+        Self::new_config(
+            keypair.clone(),
+            client_tls_config,
+            server_tls_config,
+            webtransport_certhashes
+        )
+    }
+
+    /// Creates a new configuration object with web a transport certificate and default values.
+    pub fn new_with_webtransport(keypair: &libp2p_identity::Keypair, webtransport_cert: Certificate) -> Self {
+        let client_tls_config = Arc::new(
+            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+                .unwrap(),
         );
+        let server_config = libp2p_tls::make_webtransport_server_config(
+            webtransport_cert.get_certificate_der(),
+            webtransport_cert.get_private_key_der(),
+            alpn_protocols(),
+        );
+        let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
+        let webtransport_certhashes: Vec<Multihash<64>> = vec![webtransport_cert.cert_hash()];
+
+        Self::new_config(
+            keypair.clone(),
+            client_tls_config,
+            server_tls_config,
+            webtransport_certhashes
+        )
+    }
+
+    fn new_config(
+        keypair: libp2p_identity::Keypair,
+        client_tls_config: Arc<QuicClientConfig>,
+        server_tls_config: Arc<QuicServerConfig>,
+        webtransport_certhashes: Vec<Multihash<64>>,
+    ) -> Self {
         Self {
             client_tls_config,
             server_tls_config,
@@ -93,11 +135,11 @@ impl Config {
             max_concurrent_stream_limit: 256,
             keep_alive_interval: Duration::from_secs(5),
             max_connection_data: 15_000_000,
-
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
-            keypair: keypair.clone(),
+            keypair,
             mtu_discovery_config: Some(Default::default()),
+            webtransport_certhashes,
         }
     }
 
@@ -116,12 +158,18 @@ impl Config {
     }
 }
 
+fn alpn_protocols() -> Vec<Vec<u8>> {
+    vec![libp2p_tls::P2P_ALPN.to_vec(), b"h3".to_vec()]
+}
+
 /// Represents the inner configuration for [`quinn`].
 #[derive(Debug, Clone)]
 pub(crate) struct QuinnConfig {
     pub(crate) client_config: quinn::ClientConfig,
     pub(crate) server_config: quinn::ServerConfig,
     pub(crate) endpoint_config: quinn::EndpointConfig,
+    pub(crate) keypair: libp2p_identity::Keypair,
+    pub(crate) webtransport_certhashes: Vec<Multihash<64>>,
 }
 
 #[expect(deprecated)]
@@ -139,6 +187,7 @@ impl From<Config> for QuinnConfig {
             handshake_timeout: _,
             keypair,
             mtu_discovery_config,
+            webtransport_certhashes,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -180,6 +229,8 @@ impl From<Config> for QuinnConfig {
             client_config,
             server_config,
             endpoint_config,
+            keypair,
+            webtransport_certhashes,
         }
     }
 }

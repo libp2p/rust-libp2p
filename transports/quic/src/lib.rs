@@ -65,6 +65,7 @@ mod connection;
 mod hole_punching;
 mod provider;
 mod transport;
+mod webtransport;
 
 use std::net::SocketAddr;
 
@@ -74,6 +75,8 @@ pub use connection::{Connecting, Connection, Stream};
 pub use provider::tokio;
 pub use provider::Provider;
 pub use transport::GenTransport;
+
+pub use crate::webtransport::{CertHash, Certificate};
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]
