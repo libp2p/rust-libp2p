@@ -1,6 +1,8 @@
-## 0.47.1
+## 0.48.0
 
-- Downgrade `hickory-proto` from `0.25.0-alpha` to `0.24` stable.
+- Remove `async_std` dependency [PR 5958](https://github.com/libp2p/rust-libp2p/pull/5958)
+
+- Upgrade `hickory-proto` from `0.25.0-alpha` to `0.25` stable.
   See [PR 5968](https://github.com/libp2p/rust-libp2p/pull/5968)
 
 ## 0.47.0

@@ -713,8 +713,7 @@ where
                 substream=%id,
                 "Received unexpected `Open` frame for open substream",
             );
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
+            return self.on_error(io::Error::other(
                 "Protocol error: Received `Open` frame for open substream.",
             ));
         }
@@ -890,7 +889,7 @@ where
     /// i.e. is not closed and did not encounter a fatal error.
     fn guard_open(&self) -> io::Result<()> {
         match &self.status {
-            Status::Closed => Err(io::Error::new(io::ErrorKind::Other, "Connection is closed")),
+            Status::Closed => Err(io::Error::other("Connection is closed")),
             Status::Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
             Status::Open => Ok(()),
         }
@@ -900,10 +899,7 @@ where
     /// has not been reached.
     fn check_max_pending_frames(&mut self) -> io::Result<()> {
         if self.pending_frames.len() >= self.config.max_substreams + EXTRA_PENDING_FRAMES {
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
-                "Too many pending frames.",
-            ));
+            return self.on_error(io::Error::other("Too many pending frames."));
         }
         Ok(())
     }
@@ -1154,10 +1150,10 @@ const EXTRA_PENDING_FRAMES: usize = 1000;
 mod tests {
     use std::{collections::HashSet, num::NonZeroU8, ops::DerefMut, pin::Pin};
 
-    use async_std::task;
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -1269,7 +1265,8 @@ mod tests {
             };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Receive all inbound streams.
                 for i in 0..cfg.max_substreams {
                     match m.poll_next_stream(cx) {
@@ -1387,7 +1384,8 @@ mod tests {
 
             // Run the test.
             let mut opened = HashSet::new();
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Open a number of streams.
                 for _ in 0..num_streams {
                     let id = ready!(m.poll_open_stream(cx)).unwrap();

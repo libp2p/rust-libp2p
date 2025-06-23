@@ -13,8 +13,8 @@ async fn server_gets_added_to_routing_table_by_client() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut client = Swarm::new_ephemeral(MyBehaviour::new);
-    let mut server = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut client = Swarm::new_ephemeral_tokio(MyBehaviour::new);
+    let mut server = Swarm::new_ephemeral_tokio(MyBehaviour::new);
 
     server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
@@ -45,8 +45,8 @@ async fn two_servers_add_each_other_to_routing_table() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
-    let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut server1 = Swarm::new_ephemeral_tokio(MyBehaviour::new);
+    let mut server2 = Swarm::new_ephemeral_tokio(MyBehaviour::new);
 
     server2.listen().with_memory_addr_external().await;
     server1.connect(&mut server2).await;
@@ -86,8 +86,8 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut client = Swarm::new_ephemeral(MyBehaviour::new);
-    let mut server = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut client = Swarm::new_ephemeral_tokio(MyBehaviour::new);
+    let mut server = Swarm::new_ephemeral_tokio(MyBehaviour::new);
     let server_peer_id = *server.local_peer_id();
 
     let (memory_addr, _) = server.listen().await;
@@ -124,10 +124,10 @@ async fn set_client_to_server_mode() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut client = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut client = Swarm::new_ephemeral_tokio(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));
 
-    let mut server = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut server = Swarm::new_ephemeral_tokio(MyBehaviour::new);
 
     server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;

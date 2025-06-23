@@ -21,9 +21,8 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
-//! for use with `async-std` and `tokio`,
-//! respectively.
+//! This crate provides the type [`tokio::Transport`]
+//! for use with `tokio`.
 //!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
@@ -31,11 +30,10 @@
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the [`async_std::Transport`] are
-//! enabled by default. Tokio users can furthermore opt-in
-//! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
-//! features. For more information about these features, please
-//! refer to the documentation of [trust-dns-resolver].
+//! The [`tokio::Transport`] is enabled under `tokio` feature.
+//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls`
+//! and `tokio-dns-over-https-rustls` features. For more information
+//! about these features, please refer to the documentation of [trust-dns-resolver].
 //!
 //! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
@@ -56,73 +54,16 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(feature = "async-std")]
-pub mod async_std {
-    use std::{io, sync::Arc};
-
-    use async_std_resolver::AsyncStdResolver;
-    use futures::FutureExt;
-    use hickory_resolver::{
-        config::{ResolverConfig, ResolverOpts},
-        system_conf,
-    };
-    use parking_lot::Mutex;
-
-    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-    /// using `async-std` for all async I/O.
-    pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
-
-    impl<T> Transport<T> {
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
-        pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
-            let (cfg, opts) = system_conf::read_system_conf()?;
-            Ok(Self::custom(inner, cfg, opts).await)
-        }
-
-        /// Creates a [`Transport`] with a custom resolver configuration and options.
-        pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
-            Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver(cfg, opts).await,
-            }
-        }
-
-        // TODO: Replace `system` implementation with this
-        #[doc(hidden)]
-        pub fn system2(inner: T) -> Result<Transport<T>, io::Error> {
-            Ok(Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver_from_system_conf()
-                    .now_or_never()
-                    .expect(
-                        "async_std_resolver::resolver_from_system_conf did not resolve immediately",
-                    )?,
-            })
-        }
-
-        // TODO: Replace `custom` implementation with this
-        #[doc(hidden)]
-        pub fn custom2(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
-            Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver(cfg, opts)
-                    .now_or_never()
-                    .expect("async_std_resolver::resolver did not resolve immediately"),
-            }
-        }
-    }
-}
-
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{system_conf, TokioAsyncResolver};
+    use hickory_resolver::{name_server::TokioConnectionProvider, system_conf, TokioResolver};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
-    pub type Transport<T> = crate::Transport<T, TokioAsyncResolver>;
+    pub type Transport<T> = crate::Transport<T, TokioResolver>;
 
     impl<T> Transport<T> {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
@@ -140,7 +81,12 @@ pub mod tokio {
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioAsyncResolver::tokio(cfg, opts),
+                resolver: TokioResolver::builder_with_config(
+                    cfg,
+                    TokioConnectionProvider::default(),
+                )
+                .with_options(opts)
+                .build(),
             }
         }
     }
@@ -160,13 +106,13 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
-    error::{ResolveError, ResolveErrorKind},
+    ResolveError, ResolveErrorKind,
 };
 use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
     lookup_ip::LookupIp,
     name_server::ConnectionProvider,
-    AsyncResolver,
+    Resolver as HickoryResolver,
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -194,8 +140,7 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or
-/// [`async_std::Transport`] instead.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`].
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -273,7 +218,7 @@ where
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         async move {
-            let mut last_err = None;
+            let mut dial_errors: Vec<Error<T::Error>> = Vec::new();
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
             // We optimise for the common case of a single DNS component
@@ -296,7 +241,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
-                        last_err = Some(Error::TooManyLookups);
+                        dial_errors.push(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -304,12 +249,8 @@ where
                     dns_lookups += 1;
                     match resolve(&name, &resolver).await {
                         Err(e) => {
-                            if unresolved.is_empty() {
-                                return Err(e);
-                            }
-                            // If there are still unresolved addresses, there is
-                            // a chance of success, but we track the last error.
-                            last_err = Some(e);
+                            // Record the resolution error.
+                            dial_errors.push(e);
                         }
                         Ok(Resolved::One(ip)) => {
                             tracing::trace!(protocol=%name, resolved=%ip);
@@ -370,29 +311,34 @@ where
                         Ok(out) => return Ok(out),
                         Err(err) => {
                             tracing::debug!("Dial error: {:?}.", err);
+                            dial_errors.push(err);
+
                             if unresolved.is_empty() {
-                                return Err(err);
+                                break;
                             }
+
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
                                 tracing::debug!(
                                     "Aborting dialing after {} attempts.",
                                     MAX_DIAL_ATTEMPTS
                                 );
-                                return Err(err);
+                                break;
                             }
-                            last_err = Some(err);
                         }
                     }
                 }
             }
 
-            // At this point, if there was at least one failed dialing
-            // attempt, return that error. Otherwise there were no valid DNS records
-            // for the given address to begin with (i.e. DNS lookups succeeded but
-            // produced no records relevant for the given `addr`).
-            Err(last_err.unwrap_or_else(|| {
-                Error::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
-            }))
+            // If we have any dial errors, aggregate them.
+            // Otherwise there were no valid DNS records for the given address to begin with
+            // (i.e. DNS lookups succeeded but produced no records relevant for the given `addr`).
+            if !dial_errors.is_empty() {
+                Err(Error::Dial(dial_errors))
+            } else {
+                Err(Error::ResolveError(
+                    ResolveErrorKind::Message("No Matching Records Found").into(),
+                ))
+            }
         }
         .boxed()
         .right_future()
@@ -417,6 +363,8 @@ pub enum Error<TErr> {
     /// is returned and the DNS records for the domain(s) being dialed
     /// should be investigated.
     TooManyLookups,
+    /// Multiple dial errors were encountered.
+    Dial(Vec<Error<TErr>>),
 }
 
 impl<TErr> fmt::Display for Error<TErr>
@@ -429,6 +377,13 @@ where
             Error::ResolveError(err) => write!(f, "{err}"),
             Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             Error::TooManyLookups => write!(f, "Too many DNS lookups"),
+            Error::Dial(errs) => {
+                write!(f, "Multiple dial errors occurred:")?;
+                for err in errs {
+                    write!(f, "\n - {err}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -443,6 +398,7 @@ where
             Error::ResolveError(err) => Some(err),
             Error::MultiaddrNotSupported(_) => None,
             Error::TooManyLookups => None,
+            Error::Dial(errs) => errs.last().and_then(|e| e.source()),
         }
     }
 }
@@ -594,7 +550,7 @@ pub trait Resolver {
 }
 
 #[async_trait]
-impl<C> Resolver for AsyncResolver<C>
+impl<C> Resolver for HickoryResolver<C>
 where
     C: ConnectionProvider,
 {
@@ -615,9 +571,10 @@ where
     }
 }
 
-#[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
+    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
@@ -626,6 +583,21 @@ mod tests {
     use libp2p_identity::PeerId;
 
     use super::*;
+
+    fn test_tokio<T, F: Future<Output = ()>>(
+        transport: T,
+        test_fn: impl FnOnce(tokio::Transport<T>) -> F,
+    ) {
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+        let transport = tokio::Transport::custom(transport, config, opts);
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+        rt.block_on(test_fn(transport));
+    }
 
     #[test]
     fn basic_resolve() {
@@ -686,6 +658,7 @@ mod tests {
                 role: Endpoint::Dialer,
                 port_use: PortUse::Reuse,
             };
+
             // Success due to existing A record for example.com.
             let _ = transport
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
@@ -749,39 +722,127 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(Error::ResolveError(e)) => match e.kind() {
-                    ResolveErrorKind::NoRecordsFound { .. } => {}
-                    _ => panic!("Unexpected DNS error: {e:?}"),
-                },
+                Err(Error::Dial(dial_errs)) => {
+                    assert_eq!(
+                        dial_errs.len(),
+                        1,
+                        "Expected exactly 1 error for 'no records' scenario, got {dial_errs:?}"
+                    );
+
+                    match &dial_errs[0] {
+                        Error::ResolveError(e) => match e.kind() {
+                            ResolveErrorKind::Proto(ProtoError { kind, .. })
+                                if matches!(
+                                    kind.as_ref(),
+                                    ProtoErrorKind::NoRecordsFound { .. }
+                                ) => {}
+                            _ => panic!("Unexpected DNS error: {e:?}"),
+                        },
+                        other => {
+                            panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
+                        }
+                    }
+                }
+
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
         }
 
-        #[cfg(feature = "async-std")]
-        {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            async_std_crate::task::block_on(
-                async_std::Transport::custom(CustomTransport, config, opts).then(run),
-            );
+        test_tokio(CustomTransport, run);
+    }
+
+    #[test]
+    fn aggregated_dial_errors() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+
+        #[derive(Clone)]
+        struct AlwaysFailTransport;
+
+        impl libp2p_core::Transport for AlwaysFailTransport {
+            type Output = ();
+            type Error = std::io::Error;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(
+                &mut self,
+                _id: ListenerId,
+                _addr: Multiaddr,
+            ) -> Result<(), TransportError<Self::Error>> {
+                unimplemented!()
+            }
+
+            fn remove_listener(&mut self, _id: ListenerId) -> bool {
+                false
+            }
+
+            fn dial(
+                &mut self,
+                addr: Multiaddr,
+                _: DialOpts,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                // Every dial attempt fails with an error that includes the address.
+                Ok(Box::pin(future::ready(Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!("No support for dialing {addr}"),
+                )))))
+            }
+
+            fn poll(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                unimplemented!()
+            }
         }
 
-        #[cfg(feature = "tokio")]
+        async fn run_test<T, R>(mut transport: super::Transport<T, R>)
+        where
+            T: Transport<Error = std::io::Error> + Clone + Send + Unpin + 'static,
+            T::Error: Send,
+            T::Dial: Send,
+            R: Clone + Send + Sync + Resolver + 'static,
         {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-                .unwrap();
+            let dial_opts = DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            };
 
-            rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
+            // This address requires DNS resolution, yielding two IP addresses,
+            // forcing two dial attempts. Both fail.
+            let addr: Multiaddr = "/dnsaddr/bootstrap.libp2p.io".parse().unwrap();
+            let dial_future = transport.dial(addr, dial_opts).unwrap();
+            let result = dial_future.await;
+
+            match result {
+                Err(Error::Dial(errs)) => {
+                    // We expect at least 2 errors, one per resolved IP.
+                    assert!(
+                        errs.len() >= 2,
+                        "Expected multiple dial errors, but got {}",
+                        errs.len()
+                    );
+                    for e in errs {
+                        match e {
+                            Error::Transport(io_err) => {
+                                assert_eq!(
+                                    io_err.kind(),
+                                    io::ErrorKind::Unsupported,
+                                    "Expected Unsupported dial error, got: {io_err:?}"
+                                );
+                            }
+                            _ => panic!("Expected Error::Transport(Unsupported), got: {e:?}"),
+                        }
+                    }
+                }
+                Err(e) => panic!("Expected aggregated dial errors, got {e:?}"),
+                Ok(_) => panic!("Dial unexpectedly succeeded"),
+            }
         }
+
+        test_tokio(AlwaysFailTransport, run_test);
     }
 }
