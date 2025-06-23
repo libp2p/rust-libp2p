@@ -69,17 +69,19 @@
 //! For a dialer:
 //!
 //! ```no_run
-//! use async_std::net::TcpStream;
 //! use futures::prelude::*;
 //! use multistream_select::{dialer_select_proto, Version};
+//! use tokio::{net::TcpStream, runtime::Runtime};
+//! use tokio_util::compat::TokioAsyncReadCompatExt;
 //!
-//! async_std::task::block_on(async move {
+//! let rt = Runtime::new().unwrap();
+//! rt.block_on(async move {
 //!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
+//!     let compat_socket = socket.compat();
 //!
 //!     let protos = vec!["/echo/1.0.0", "/echo/2.5.0"];
-//!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1)
-//!         .await
-//!         .unwrap();
+//!     let result = dialer_select_proto(compat_socket, protos, Version::V1).await;
+//!     let (protocol, _io) = result.unwrap();
 //!
 //!     println!("Negotiated protocol: {:?}", protocol);
 //!     // You can now use `_io` to communicate with the remote.
