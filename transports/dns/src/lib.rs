@@ -746,10 +746,7 @@ mod tests {
             }
         }
 
-        #[cfg(feature = "tokio")]
-        {
-            test_tokio(CustomTransport, run);
-        }
+        test_tokio(CustomTransport, run);
     }
 
     #[test]
@@ -843,7 +840,6 @@ mod tests {
             }
         }
 
-        #[cfg(feature = "tokio")]
         test_tokio(AlwaysFailTransport, run_test);
     }
 }
