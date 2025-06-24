@@ -80,9 +80,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(()),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(());
         };
 
         inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
@@ -97,9 +96,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(ToggleConnectionHandler { inner: None }),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(ToggleConnectionHandler { inner: None });
         };
 
         let handler = inner.handle_established_inbound_connection(
@@ -121,9 +119,8 @@ where
         addresses: &[Multiaddr],
         effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(vec![]),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(vec![]);
         };
 
         let addresses = inner.handle_pending_outbound_connection(
@@ -144,9 +141,8 @@ where
         role_override: Endpoint,
         port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(ToggleConnectionHandler { inner: None }),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(ToggleConnectionHandler { inner: None });
         };
 
         let handler = inner.handle_established_outbound_connection(

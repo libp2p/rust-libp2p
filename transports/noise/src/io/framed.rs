@@ -126,11 +126,11 @@ impl Decoder for Codec<snow::HandshakeState> {
     type Item = proto::NoiseHandshakePayload;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let cleartext = match decrypt(src, |ciphertext, decrypt_buffer| {
+        let Some(cleartext) = decrypt(src, |ciphertext, decrypt_buffer| {
             self.session.read_message(ciphertext, decrypt_buffer)
-        })? {
-            None => return Ok(None),
-            Some(cleartext) => cleartext,
+        })?
+        else {
+            return Ok(None);
         };
 
         let mut reader = BytesReader::from_bytes(&cleartext[..]);

@@ -520,7 +520,7 @@ fn new_swarm_with_config(
 ) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
     let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
 
-    let swarm = Swarm::new_ephemeral(|_| {
+    let swarm = Swarm::new_ephemeral_tokio(|_| {
         request_response::Behaviour::<TestCodec>::new(protocols, cfg)
     });
     let peed_id = *swarm.local_peer_id();

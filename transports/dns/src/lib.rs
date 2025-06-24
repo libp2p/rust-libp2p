@@ -21,9 +21,7 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
-//! for use with `async-std` and `tokio`,
-//! respectively.
+//! This crate provides the type [`tokio::Transport`] based on [`hickory_resolver::TokioResolver`].
 //!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
@@ -31,11 +29,12 @@
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the [`async_std::Transport`] are
-//! enabled by default. Tokio users can furthermore opt-in
-//! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
-//! features. For more information about these features, please
-//! refer to the documentation of [trust-dns-resolver].
+//! The `tokio` feature and hence the [`tokio::Transport`] are enabled by default.
+//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
+//! `tokio-dns-over-https-rustls` features.
+//! For more information about these features, please refer to the documentation
+//! of [trust-dns-resolver].
+//! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
 //!
 //! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
@@ -55,63 +54,6 @@
 //! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-
-#[cfg(feature = "async-std")]
-pub mod async_std {
-    use std::{io, sync::Arc};
-
-    use async_std_resolver::AsyncStdResolver;
-    use futures::FutureExt;
-    use hickory_resolver::{
-        config::{ResolverConfig, ResolverOpts},
-        system_conf,
-    };
-    use parking_lot::Mutex;
-
-    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-    /// using `async-std` for all async I/O.
-    pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
-
-    impl<T> Transport<T> {
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
-        pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
-            let (cfg, opts) = system_conf::read_system_conf()?;
-            Ok(Self::custom(inner, cfg, opts).await)
-        }
-
-        /// Creates a [`Transport`] with a custom resolver configuration and options.
-        pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
-            Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver(cfg, opts).await,
-            }
-        }
-
-        // TODO: Replace `system` implementation with this
-        #[doc(hidden)]
-        pub fn system2(inner: T) -> Result<Transport<T>, io::Error> {
-            Ok(Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver_from_system_conf()
-                    .now_or_never()
-                    .expect(
-                        "async_std_resolver::resolver_from_system_conf did not resolve immediately",
-                    )?,
-            })
-        }
-
-        // TODO: Replace `custom` implementation with this
-        #[doc(hidden)]
-        pub fn custom2(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
-            Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: async_std_resolver::resolver(cfg, opts)
-                    .now_or_never()
-                    .expect("async_std_resolver::resolver did not resolve immediately"),
-            }
-        }
-    }
-}
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
@@ -193,8 +135,7 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or
-/// [`async_std::Transport`] instead.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -625,7 +566,7 @@ where
     }
 }
 
-#[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
@@ -640,19 +581,6 @@ mod tests {
 
     // These helpers will be compiled conditionally, depending on the async runtime in use.
 
-    #[cfg(feature = "async-std")]
-    fn test_async_std<T, F: Future<Output = ()>>(
-        transport: T,
-        test_fn: impl FnOnce(async_std::Transport<T>) -> F,
-    ) {
-        let config = ResolverConfig::quad9();
-        let opts = ResolverOpts::default();
-        let transport =
-            async_std_crate::task::block_on(async_std::Transport::custom(transport, config, opts));
-        async_std_crate::task::block_on(test_fn(transport));
-    }
-
-    #[cfg(feature = "tokio")]
     fn test_tokio<T, F: Future<Output = ()>>(
         transport: T,
         test_fn: impl FnOnce(tokio::Transport<T>) -> F,
@@ -818,15 +746,7 @@ mod tests {
             }
         }
 
-        #[cfg(feature = "async-std")]
-        {
-            test_async_std(CustomTransport, run);
-        }
-
-        #[cfg(feature = "tokio")]
-        {
-            test_tokio(CustomTransport, run);
-        }
+        test_tokio(CustomTransport, run);
     }
 
     #[test]
@@ -920,10 +840,6 @@ mod tests {
             }
         }
 
-        #[cfg(feature = "async-std")]
-        test_async_std(AlwaysFailTransport, run_test);
-
-        #[cfg(feature = "tokio")]
         test_tokio(AlwaysFailTransport, run_test);
     }
 }

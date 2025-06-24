@@ -229,9 +229,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer_id = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self
