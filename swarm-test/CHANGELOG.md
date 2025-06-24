@@ -6,9 +6,6 @@
   Use `Swarm::new_ephemeral_tokio` instead.
   See [PR 6064](https://github.com/libp2p/rust-libp2p/pull/6064)
 
-- Removed `async-std` support from TCP transport.
-  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955).
-
 ## 0.5.0
 
 - Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.
