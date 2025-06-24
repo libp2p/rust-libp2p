@@ -21,7 +21,6 @@ tokio = { workspace = true, default-features = false, features = ["net"], option
 tracing = { workspace = true }
 
 [features]
-default = ["tokio"]
 tokio = ["dep:tokio", "if-watch/tokio"]
 
 [dev-dependencies]
