@@ -21,7 +21,7 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`tokio::Transport`] based on [`hickory_resolver::Tokioresolver`].
+//! This crate provides the type [`tokio::Transport`] based on [`hickory_resolver::TokioResolver`].
 //!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
