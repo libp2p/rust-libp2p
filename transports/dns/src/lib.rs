@@ -21,8 +21,7 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`tokio::Transport`]
-//! for use with `tokio`.
+//! This crate provides the type [`tokio::Transport`] based on [`hickory_resolver::TokioResolver`].
 //!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
@@ -30,10 +29,12 @@
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The [`tokio::Transport`] is enabled under `tokio` feature.
-//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls`
-//! and `tokio-dns-over-https-rustls` features. For more information
-//! about these features, please refer to the documentation of [trust-dns-resolver].
+//! The the [`tokio::Transport`] is enabled under the `tokio` feature.
+//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
+//! `tokio-dns-over-https-rustls` features.
+//! For more information about these features, please refer to the documentation
+//! of [trust-dns-resolver].
+//! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
 //!
 //! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
@@ -112,7 +113,6 @@ use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
     lookup_ip::LookupIp,
     name_server::ConnectionProvider,
-    Resolver as HickoryResolver,
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -140,7 +140,7 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`].
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -550,7 +550,7 @@ pub trait Resolver {
 }
 
 #[async_trait]
-impl<C> Resolver for HickoryResolver<C>
+impl<C> Resolver for hickory_resolver::Resolver<C>
 where
     C: ConnectionProvider,
 {
