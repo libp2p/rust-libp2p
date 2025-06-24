@@ -13,6 +13,9 @@
 - Make the `*-websys` variants (`libp2p-webrtc-websys`, `libp2p-websocket-websys`, `libp2p-webtransport-websys`) only available on wasm32 target architecture.
   See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).
 
+- Remove TCP from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-tcp` transport.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955)
+
 - Remove QUIC from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-quic` transport.
   See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
 

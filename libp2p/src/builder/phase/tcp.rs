@@ -97,7 +97,6 @@ macro_rules! impl_tcp_builder {
     };
 }
 
-impl_tcp_builder!("async-std", super::provider::AsyncStd, async_io);
 impl_tcp_builder!("tokio", super::provider::Tokio, tokio);
 
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {

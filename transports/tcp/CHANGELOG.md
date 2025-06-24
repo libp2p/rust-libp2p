@@ -1,3 +1,8 @@
+## 0.44.0
+
+- Remove `async-std` support.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955)
+
 ## 0.43.0
 
 - Fix the disabling of Nagle's algorithm, which requires setting `TCP_NODELAY` to _true_.
