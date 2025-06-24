@@ -404,7 +404,6 @@ dependencies = [
  "async-global-executor",
  "async-io",
  "async-lock",
- "async-process",
  "crossbeam-utils",
  "futures-channel",
  "futures-core",
@@ -419,21 +418,6 @@ dependencies = [
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
-]
-
-[[package]]
-name = "async-std-resolver"
-version = "0.25.0-alpha.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4abef525d07400182ad6d48b3097d8e88a40aed1f3a6e80f221b2b002cfad608"
-dependencies = [
- "async-std",
- "async-trait",
- "futures-io",
- "futures-util",
- "hickory-resolver",
- "pin-utils",
- "socket2",
 ]
 
 [[package]]
@@ -2813,8 +2797,6 @@ dependencies = [
 name = "libp2p-dns"
 version = "0.44.0"
 dependencies = [
- "async-std",
- "async-std-resolver",
  "async-trait",
  "futures",
  "hickory-resolver",

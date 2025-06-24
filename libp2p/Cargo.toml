@@ -53,7 +53,7 @@ full = [
     "upnp",
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
+async-std = ["libp2p-swarm/async-std", "libp2p-tcp?/async-io"]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
