@@ -112,6 +112,11 @@ pub use libp2p_swarm as swarm;
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
+#[cfg(feature = "unix-stream")]
+#[cfg(unix)]
+#[cfg_attr(docsrs, doc(cfg(feature = "unix-stream")))]
+#[doc(inline)]
+pub use libp2p_unix_stream as unix_stream;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[cfg(not(target_arch = "wasm32"))]
