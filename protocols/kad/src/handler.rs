@@ -820,14 +820,11 @@ fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
 ) -> ProtocolStatus {
-    let current_status = match current_status {
-        None => {
-            return ProtocolStatus {
-                supported: now_supported,
-                reported: false,
-            }
-        }
-        Some(current) => current,
+    let Some(current_status) = current_status else {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: false,
+        };
     };
 
     if now_supported == current_status.supported {
