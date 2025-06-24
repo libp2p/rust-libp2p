@@ -232,13 +232,7 @@ macro_rules! impl_quic_phase_with_websocket {
         }
     }
 }
-impl_quic_phase_with_websocket!(
-    "async-std",
-    super::provider::AsyncStd,
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
+
 impl_quic_phase_with_websocket!(
     "tokio",
     super::provider::Tokio,
