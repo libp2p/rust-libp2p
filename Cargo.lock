@@ -3236,7 +3236,6 @@ name = "libp2p-request-response"
 version = "0.28.1"
 dependencies = [
  "anyhow",
- "async-std",
  "async-trait",
  "cbor4ii",
  "futures",
@@ -3250,6 +3249,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -3806,7 +3806,6 @@ dependencies = [
 name = "multistream-select"
 version = "0.13.0"
 dependencies = [
- "async-std",
  "bytes",
  "futures",
  "futures_ringbuf",
@@ -3814,6 +3813,8 @@ dependencies = [
  "quickcheck-ext",
  "rw-stream-sink",
  "smallvec",
+ "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "unsigned-varint",
