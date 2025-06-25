@@ -107,7 +107,7 @@ libp2p-swarm-derive = { version = "=0.35.1", path = "swarm-derive" } # `libp2p-s
 libp2p-swarm-test = { version = "0.6.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.44.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.6.2", path = "transports/tls" }
-libp2p-uds = { version = "0.42.0", path = "transports/uds" }
+libp2p-uds = { version = "0.43.0", path = "transports/uds" }
 libp2p-upnp = { version = "0.4.1", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.9.0-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.4.0", path = "misc/webrtc-utils" }
