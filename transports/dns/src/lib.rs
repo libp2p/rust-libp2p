@@ -29,7 +29,7 @@
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The the [`tokio::Transport`] is enabled under the `tokio` feature.
+//! The [`tokio::Transport`] is enabled by default under the `tokio` feature.
 //! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
 //! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
