@@ -4,9 +4,6 @@
 
 - Report all transport errors in a dial attempt instead of only returning the last error.
   See [PR 5899](https://github.com/libp2p/rust-libp2p/pull/5899).
-  
-- Upgrade `hickory-resolver` from `0.25.0-alpha` to `0.25` stable.
-  See [PR 5968](https://github.com/libp2p/rust-libp2p/pull/5968)
 
 ## 0.43.0
 
