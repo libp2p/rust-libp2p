@@ -3137,6 +3137,7 @@ dependencies = [
  "rand 0.8.5",
  "static_assertions",
  "thiserror 2.0.12",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
