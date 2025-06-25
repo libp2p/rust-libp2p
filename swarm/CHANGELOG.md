@@ -1,4 +1,8 @@
 ## 0.47.0
+
+- Remove `async-std` support.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
 

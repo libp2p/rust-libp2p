@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 full = [
-    "async-std",
     "autonat",
     "cbor",
     "dcutr",
@@ -53,7 +52,6 @@ full = [
     "upnp",
 ]
 
-async-std = ["libp2p-swarm/async-std"]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
