@@ -29,7 +29,7 @@
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `tokio` feature and hence the [`tokio::Transport`] are enabled by default.
+//! The [`tokio::Transport`] is enabled by default under the `tokio` feature.
 //! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
 //! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
@@ -59,7 +59,7 @@
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{system_conf, TokioResolver};
+    use hickory_resolver::{name_server::TokioConnectionProvider, system_conf, TokioResolver};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
@@ -82,7 +82,12 @@ pub mod tokio {
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioResolver::tokio(cfg, opts),
+                resolver: TokioResolver::builder_with_config(
+                    cfg,
+                    TokioConnectionProvider::default(),
+                )
+                .with_options(opts)
+                .build(),
             }
         }
     }
@@ -578,8 +583,6 @@ mod tests {
     use libp2p_identity::PeerId;
 
     use super::*;
-
-    // These helpers will be compiled conditionally, depending on the async runtime in use.
 
     fn test_tokio<T, F: Future<Output = ()>>(
         transport: T,

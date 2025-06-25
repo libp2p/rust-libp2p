@@ -26,7 +26,7 @@ tokio = { workspace = true, features = ["rt", "time"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
-tokio = ["hickory-resolver/tokio-runtime"]
+tokio = ["hickory-resolver/tokio"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
