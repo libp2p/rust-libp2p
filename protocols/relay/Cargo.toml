@@ -32,11 +32,12 @@ tracing = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
