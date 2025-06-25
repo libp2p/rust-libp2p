@@ -22,8 +22,8 @@
 //!
 //! # Usage
 //!
-//! This crate provides a [`tokio::Transport`] and [`tokio::Transport`], depending on
-//! the enabled features, which implement the [`libp2p_core::Transport`] trait for use as a
+//! This crate provides [`tokio::Transport`]
+//! which implement the [`libp2p_core::Transport`] trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
@@ -222,7 +222,6 @@ impl Default for Config {
 ///
 /// You shouldn't need to use this type directly. Use one of the following instead:
 ///
-/// - [`tokio::Transport`]
 /// - [`tokio::Transport`]
 pub struct Transport<T>
 where
@@ -696,7 +695,7 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
     Multiaddr::empty().with(ip.into()).with(Protocol::Tcp(port))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::{
         channel::{mpsc, oneshot},
@@ -806,33 +805,17 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                use ::tokio::{runtime::Runtime, task};
-
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let listener = task::spawn(listener);
-                let rt = Runtime::new().unwrap();
-                rt.block_on(dialer);
-                rt.block_on(listener).unwrap();
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr, ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let listener = listener::<tokio::Tcp>(addr, ready_tx);
+            let dialer = dialer::<tokio::Tcp>(ready_rx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -889,32 +872,17 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let listener = ::tokio::task::spawn(listener);
-
-                let rt = ::tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(dialer);
-                rt.block_on(listener).unwrap();
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr, ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let listener = listener::<tokio::Tcp>(addr, ready_tx);
+            let dialer = dialer::<tokio::Tcp>(ready_rx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/0.0.0.0/tcp/0".parse().unwrap());
@@ -1008,34 +976,18 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
-                let dialer = dialer::<tokio::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
-                let listener = ::tokio::task::spawn(listener);
-
-                let rt = ::tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(dialer);
-                rt.block_on(listener).unwrap();
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
-                let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
+            let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
+            let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -1078,22 +1030,12 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let listener = listen_twice::<tokio::Tcp>(addr.clone());
-                let rt = ::tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(listener);
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let listener = listen_twice::<tokio::Tcp>(addr);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                rt.block_on(listener);
-            }
+            let listener = listen_twice::<tokio::Tcp>(addr);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            rt.block_on(listener);
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -1115,22 +1057,12 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let rt = ::tokio::runtime::Runtime::new().unwrap();
-                let new_addr = rt.block_on(listen::<tokio::Tcp>(addr.clone()));
-                assert!(!new_addr.to_string().contains("tcp/0"));
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let new_addr = rt.block_on(listen::<tokio::Tcp>(addr));
-                assert!(!new_addr.to_string().contains("tcp/0"));
-            }
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let new_addr = rt.block_on(listen::<tokio::Tcp>(addr));
+            assert!(!new_addr.to_string().contains("tcp/0"));
         }
 
         test("/ip6/::1/tcp/0".parse().unwrap());
@@ -1144,17 +1076,8 @@ mod tests {
             .try_init();
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let mut tcp = tokio::Transport::default();
-                assert!(tcp.listen_on(ListenerId::next(), addr.clone()).is_err());
-            }
-
-            #[cfg(feature = "tokio")]
-            {
-                let mut tcp = tokio::Transport::default();
-                assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
-            }
+            let mut tcp = tokio::Transport::default();
+            assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
         }
 
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
@@ -1172,12 +1095,6 @@ mod tests {
             tcp.listen_on(listener_id, "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
             tcp.remove_listener(listener_id)
-        }
-
-        #[cfg(feature = "tokio")]
-        {
-            let rt = ::tokio::runtime::Runtime::new().unwrap();
-            assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
         }
 
         #[cfg(feature = "tokio")]
@@ -1209,13 +1126,6 @@ mod tests {
                 format!("/ip6/::/tcp/{port}").parse().unwrap(),
             )
             .unwrap();
-        }
-        #[cfg(feature = "async-io")]
-        {
-            let rt = ::tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                test::<tokio::Tcp>();
-            })
         }
         #[cfg(feature = "tokio")]
         {
