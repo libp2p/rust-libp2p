@@ -3,7 +3,7 @@ name = "libp2p-uds"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Unix domain sockets transport for libp2p"
-version = "0.42.0"
+version = "0.43.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,7 +11,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
