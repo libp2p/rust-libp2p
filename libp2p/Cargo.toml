@@ -141,7 +141,6 @@ libp2p-upnp = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
 tokio = { workspace = true, features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
