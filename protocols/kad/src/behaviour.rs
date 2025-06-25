@@ -1885,6 +1885,8 @@ where
         // first place.
 
         if !record.is_expired(now) {
+            let record_key = record.key.clone();
+
             // The record is cloned because of the weird libp2p protocol
             // requirement to send back the value in the response, although this
             // is a waste of resources.
@@ -1901,6 +1903,7 @@ where
                                 request: InboundRequest::PutRecord {
                                     source,
                                     connection,
+                                    record_key,
                                     record: None,
                                 },
                             },
@@ -1923,6 +1926,7 @@ where
                             request: InboundRequest::PutRecord {
                                 source,
                                 connection,
+                                record_key,
                                 record: Some(record.clone()),
                             },
                         }));
@@ -1952,7 +1956,7 @@ where
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
-                key,
+                key: key.clone(),
                 provider: provider.node_id,
                 expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
                 addresses: provider.multiaddrs,
@@ -1966,13 +1970,17 @@ where
 
                     self.queued_events
                         .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                            request: InboundRequest::AddProvider { record: None },
+                            request: InboundRequest::AddProvider {
+                                record_key: key,
+                                record: None,
+                            },
                         }));
                 }
                 StoreInserts::FilterBoth => {
                     self.queued_events
                         .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
                             request: InboundRequest::AddProvider {
+                                record_key: key,
                                 record: Some(record),
                             },
                         }));
@@ -2877,7 +2885,10 @@ pub enum InboundRequest {
     /// included.
     ///
     /// See [`StoreInserts`] and [`Config::set_record_filtering`] for details..
-    AddProvider { record: Option<ProviderRecord> },
+    AddProvider {
+        record_key: record::Key,
+        record: Option<ProviderRecord>,
+    },
     /// Request to retrieve a record.
     GetRecord {
         num_closer_peers: usize,
@@ -2890,6 +2901,7 @@ pub enum InboundRequest {
     PutRecord {
         source: PeerId,
         connection: ConnectionId,
+        record_key: record::Key,
         record: Option<Record>,
     },
 }
