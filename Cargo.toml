@@ -118,7 +118,6 @@ libp2p-webtransport-websys = { version = "0.5.1", path = "transports/webtranspor
 libp2p-yamux = { version = "0.47.0", path = "muxers/yamux" }
 
 # External dependencies
-async-std-resolver = { version = "0.25.0-alpha.4", default-features = false }
 asynchronous-codec = { version = "0.7.0" }
 env_logger = "0.11"
 futures = "0.3.30"
@@ -126,8 +125,8 @@ futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
 getrandom = "0.2"
 if-watch = "3.2.1"
-hickory-proto = { version = "0.25.0-alpha.4", default-features = false }
-hickory-resolver = { version = "0.25.0-alpha.4", default-features = false }
+hickory-proto = { version = "0.25.2", default-features = false }
+hickory-resolver = { version = "0.25.2", default-features = false }
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
