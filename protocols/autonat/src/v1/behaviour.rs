@@ -291,7 +291,7 @@ impl Behaviour {
         self.as_client().on_new_address();
     }
 
-    fn as_client(&mut self) -> AsClient {
+    fn as_client(&mut self) -> AsClient<'_> {
         AsClient {
             inner: &mut self.inner,
             local_peer_id: self.local_peer_id,
@@ -310,7 +310,7 @@ impl Behaviour {
         }
     }
 
-    fn as_server(&mut self) -> AsServer {
+    fn as_server(&mut self) -> AsServer<'_> {
         AsServer {
             inner: &mut self.inner,
             config: &self.config,

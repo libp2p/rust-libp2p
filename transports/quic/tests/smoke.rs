@@ -1,4 +1,4 @@
-#![cfg(any(feature = "async-std", feature = "tokio"))]
+#![cfg(feature = "tokio")]
 
 use std::{
     future::Future,
@@ -265,19 +265,6 @@ async fn tcp_and_quic() {
         connect(&mut a_transport, &mut b_transport, tcp_addr).await;
     assert_eq!(a_connected, b_peer_id);
     assert_eq!(b_connected, a_peer_id);
-}
-
-// Note: This test should likely be ported to the muxer compliance test suite.
-#[cfg(feature = "async-std")]
-#[test]
-fn concurrent_connections_and_streams_async_std() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
-    quickcheck::QuickCheck::new()
-        .min_tests_passed(1)
-        .quickcheck(prop::<quic::async_std::Provider> as fn(_, _) -> _);
 }
 
 // Note: This test should likely be ported to the muxer compliance test suite.
@@ -816,13 +803,6 @@ trait BlockOn {
     fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R;
 }
 
-#[cfg(feature = "async-std")]
-impl BlockOn for libp2p_quic::async_std::Provider {
-    fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R {
-        async_std::task::block_on(async_std::future::timeout(timeout, future)).unwrap()
-    }
-}
-
 #[cfg(feature = "tokio")]
 impl BlockOn for libp2p_quic::tokio::Provider {
     fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R {
@@ -835,13 +815,6 @@ impl BlockOn for libp2p_quic::tokio::Provider {
 trait Spawn {
     /// Run the given future in the background until it ends.
     fn spawn(future: impl Future<Output = ()> + Send + 'static);
-}
-
-#[cfg(feature = "async-std")]
-impl Spawn for libp2p_quic::async_std::Provider {
-    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-        async_std::task::spawn(future);
-    }
 }
 
 #[cfg(feature = "tokio")]

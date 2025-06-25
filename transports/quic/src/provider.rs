@@ -28,16 +28,12 @@ use std::{
 use futures::future::BoxFuture;
 use if_watch::IfEvent;
 
-#[cfg(feature = "async-std")]
-pub mod async_std;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
 pub enum Runtime {
     #[cfg(feature = "tokio")]
     Tokio,
-    #[cfg(feature = "async-std")]
-    AsyncStd,
     Dummy,
 }
 
