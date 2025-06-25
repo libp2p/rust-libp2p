@@ -184,8 +184,11 @@ impl SecretKey {
     /// Generate a new Ed25519 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        let signing = ed25519::SigningKey::generate(&mut rand::rngs::OsRng);
-        SecretKey(signing.to_bytes())
+        use rand::RngCore as _;
+
+        let mut secret = [0; ed25519::SECRET_KEY_LENGTH];
+        rand::rngs::OsRng.fill_bytes(&mut secret);
+        SecretKey(secret)
     }
 
     /// Try to parse an Ed25519 secret key from a byte slice
