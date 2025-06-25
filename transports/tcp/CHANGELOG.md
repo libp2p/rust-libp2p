@@ -29,7 +29,7 @@
 
 ## 0.40.1
 
-- Expose `tokio::TcpStream`.
+- Expose `async_io::TcpStream`.
   See [PR 4683](https://github.com/libp2p/rust-libp2p/pull/4683).
 
 ## 0.40.0
