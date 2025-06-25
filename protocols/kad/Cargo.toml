@@ -37,7 +37,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 futures-timer = "3.0"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { workspace = true }
-libp2p-swarm = { path = "../../swarm", features = ["macros", "async-std"] }
+libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
