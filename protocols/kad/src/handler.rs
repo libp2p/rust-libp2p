@@ -453,7 +453,7 @@ impl Handler {
             }
         }
 
-        let outbound_substreams_timeout = protocol_config.outbound_substreams_timeout_s();
+        let substreams_timeout = protocol_config.substreams_timeout_s();
 
         Handler {
             protocol_config,
@@ -463,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                outbound_substreams_timeout,
+                substreams_timeout,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),

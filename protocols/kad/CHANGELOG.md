@@ -2,7 +2,8 @@
 
 - Configurable outbound_substreams_timeout.
   See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
-
+- Rename `outbound_substreams_timeout` to `substreams_timeout` for future-proofness. 
+  See [PR 6076](https://github.com/libp2p/rust-libp2p/pull/6076).
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamically.
