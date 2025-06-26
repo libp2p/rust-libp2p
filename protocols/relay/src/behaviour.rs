@@ -184,7 +184,10 @@ pub enum Event {
         error: inbound_hop::Error,
     },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied { src_peer_id: PeerId },
+    ReservationReqDenied {
+        src_peer_id: PeerId,
+        status: StatusCode,
+    },
     /// Denying an inbound reservation request has failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
@@ -201,6 +204,7 @@ pub enum Event {
     CircuitReqDenied {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
+        status: StatusCode,
     },
     /// Denying an inbound circuit request failed.
     #[deprecated(
@@ -481,10 +485,11 @@ impl NetworkBehaviour for Behaviour {
                     },
                 ));
             }
-            handler::Event::ReservationReqDenied {} => {
+            handler::Event::ReservationReqDenied { status } => {
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqDenied {
                         src_peer_id: event_source,
+                        status: status.into(),
                     },
                 ));
             }
@@ -592,6 +597,7 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::CircuitReqDenied {
                 circuit_id,
                 dst_peer_id,
+                status,
             } => {
                 if let Some(circuit_id) = circuit_id {
                     self.circuits.remove(circuit_id);
@@ -601,6 +607,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(ToSwarm::GenerateEvent(Event::CircuitReqDenied {
                         src_peer_id: event_source,
                         dst_peer_id,
+                        status: status.into(),
                     }));
             }
             handler::Event::CircuitReqDenyFailed {
@@ -807,5 +814,33 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
+    }
+}
+
+/// Status code for a relay reservation request that was denied.
+#[derive(Debug)]
+pub enum StatusCode {
+    OK,
+    ReservationRefused,
+    ResourceLimitExceeded,
+    PermissionDenied,
+    ConnectionFailed,
+    NoReservation,
+    MalformedMessage,
+    UnexpectedMessage,
+}
+
+impl From<proto::Status> for StatusCode {
+    fn from(other: proto::Status) -> Self {
+        match other {
+            proto::Status::OK => Self::OK,
+            proto::Status::RESERVATION_REFUSED => Self::ReservationRefused,
+            proto::Status::RESOURCE_LIMIT_EXCEEDED => Self::ResourceLimitExceeded,
+            proto::Status::PERMISSION_DENIED => Self::PermissionDenied,
+            proto::Status::CONNECTION_FAILED => Self::ConnectionFailed,
+            proto::Status::NO_RESERVATION => Self::NoReservation,
+            proto::Status::MALFORMED_MESSAGE => Self::MalformedMessage,
+            proto::Status::UNEXPECTED_MESSAGE => Self::UnexpectedMessage,
+        }
     }
 }
