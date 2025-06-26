@@ -184,7 +184,10 @@ pub enum Event {
         error: inbound_hop::Error,
     },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied { src_peer_id: PeerId, status: Status },
+    ReservationReqDenied {
+        src_peer_id: PeerId,
+        status: StatusCode,
+    },
     /// Denying an inbound reservation request has failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
@@ -201,7 +204,7 @@ pub enum Event {
     CircuitReqDenied {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        status: Status,
+        status: StatusCode,
     },
     /// Denying an inbound circuit request failed.
     #[deprecated(
@@ -814,8 +817,9 @@ impl Add<u64> for CircuitId {
     }
 }
 
+/// Status code for a relay reservation request that was denied.
 #[derive(Debug)]
-pub enum Status {
+pub enum StatusCode {
     OK,
     ReservationRefused,
     ResourceLimitExceeded,
@@ -826,7 +830,7 @@ pub enum Status {
     UnexpectedMessage,
 }
 
-impl From<proto::Status> for Status {
+impl From<proto::Status> for StatusCode {
     fn from(other: proto::Status) -> Self {
         match other {
             proto::Status::OK => Self::OK,
