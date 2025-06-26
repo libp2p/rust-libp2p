@@ -188,7 +188,6 @@ jobs:
       matrix:
         include:
           - features: "mdns tcp dns tokio"
-          - features: "mdns tcp dns async-std"
     steps:
       - uses: actions/checkout@v4
 

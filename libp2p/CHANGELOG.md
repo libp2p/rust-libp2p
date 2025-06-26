@@ -1,5 +1,7 @@
 ## 0.56.0
 
+- Remove `async-std` support.
+  See [PR 6074](https://github.com/libp2p/rust-libp2p/pull/6074)
 - Remove deprecated `Transport::with_bandwidth_logging`,
   `SwarmBuilder::with_bandwidth_logging` and `TransportExt`. 
   See [PR 5766](https://github.com/libp2p/rust-libp2p/pull/5766).
