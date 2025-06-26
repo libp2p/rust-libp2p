@@ -1,6 +1,6 @@
 ## 0.47.1
 
-- Configurable substreams_timeout.
+- Configurable substreams_timeout for outbound substreams.
   See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
 
 ## 0.47.0
