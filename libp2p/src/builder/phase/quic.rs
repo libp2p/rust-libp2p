@@ -149,22 +149,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
             .with_behaviour(constructor)
     }
 }
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub fn with_dns(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            super::provider::AsyncStd,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-        >,
-        std::io::Error,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .with_dns()
-    }
-}
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, QuicPhase<T>> {
     pub fn with_dns(
@@ -179,21 +163,6 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
-    }
-}
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub fn with_dns_config(
-        self,
-        cfg: libp2p_dns::ResolverConfig,
-        opts: libp2p_dns::ResolverOpts,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .with_dns_config(cfg, opts)
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
@@ -263,13 +232,7 @@ macro_rules! impl_quic_phase_with_websocket {
         }
     }
 }
-impl_quic_phase_with_websocket!(
-    "async-std",
-    super::provider::AsyncStd,
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
+
 impl_quic_phase_with_websocket!(
     "tokio",
     super::provider::Tokio,

@@ -113,9 +113,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let p = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(p) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))

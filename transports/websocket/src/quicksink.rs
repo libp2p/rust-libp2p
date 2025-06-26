@@ -17,8 +17,8 @@
 // # Examples
 //
 // ```no_run
-// use async_std::io;
 // use futures::prelude::*;
+// use tokio::io;
 //
 // use crate::quicksink::Action;
 //

@@ -20,9 +20,6 @@
 
 //! The interface for providers of non-blocking TCP implementations.
 
-#[cfg(feature = "async-io")]
-pub mod async_io;
-
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
