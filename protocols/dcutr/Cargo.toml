@@ -3,7 +3,7 @@ name = "libp2p-dcutr"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Direct connection upgrade through relay"
-version = "0.13.0"
+version = "0.14.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

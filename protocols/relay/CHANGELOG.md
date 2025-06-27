@@ -1,3 +1,7 @@
+## 0.21.0
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.20.0
 
 - Remove duplicated forwarding of pending events to connection handler.

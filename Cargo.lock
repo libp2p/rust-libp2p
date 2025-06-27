@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identity",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -2533,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -2575,7 +2575,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -2619,7 +2619,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.46.1"
+version = "0.47.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2722,7 +2722,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.47.1"
+version = "0.48.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -2908,7 +2908,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.46.0"
+version = "0.47.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3018,7 +3018,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -3042,7 +3042,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.28.1"
+version = "0.29.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3083,7 +3083,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.3.0-alpha.1"
+version = "0.4.0-alpha"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3202,7 +3202,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "futures",
  "futures-timer",

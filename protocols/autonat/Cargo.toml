@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.14.1"
+version = "0.15.0"
 authors = [
     "David Craven <david@craven.ch>",
     "Elena Frank <elena.frank@protonmail.com>",
