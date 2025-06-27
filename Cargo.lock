@@ -2466,7 +2466,6 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-mplex",
  "libp2p-noise",
- "libp2p-peer-store",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
