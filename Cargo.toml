@@ -127,8 +127,8 @@ getrandom = "0.2"
 if-watch = "3.2.1"
 # hickory-proto = { version = "0.25.2", default-features = false }
 # hickory-resolver = { version = "0.25.2", default-features = false }
-hickory-proto = { version = "^0.25.0-alpha.4", default-features = false }
-hickory-resolver = { version = "^0.25.0-alpha.4", features = ["tokio"] }
+hickory-proto = { version = "0.25.0", default-features = false }
+hickory-resolver = { version = "0.25.0", features = ["tokio"] }
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
