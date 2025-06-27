@@ -1,4 +1,4 @@
-## 0.6.9
+## 0.6.0
 
 - Allow setting Peer IDs for bypassing limit check.
   Connections to the specified peers won't be counted toward limits.
