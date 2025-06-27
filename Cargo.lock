@@ -3215,7 +3215,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.9.0-alpha"
+version = "0.9.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
