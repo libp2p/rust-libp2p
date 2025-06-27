@@ -1,4 +1,5 @@
 ## 0.49.0
+
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
 - Send IDONTWANT before Publishing a new message.
@@ -37,6 +38,8 @@
 
 - Allow customizing max transmit size and mesh-n-* parameters per topic.
   See [PR 5868](https://github.com/libp2p/rust-libp2p/pull/5868)
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.48.0
 
