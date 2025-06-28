@@ -2832,7 +2832,7 @@ pub enum Event {
 }
 
 /// Information about progress events.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ProgressStep {
     /// The index into the event
     pub count: NonZeroUsize,
