@@ -71,13 +71,17 @@ impl State {
 
         match (current, flag) {
             (Self::Open, Flag::FIN) => {
-                *self = Self::ReadClosedNeedFinAck { write_closed: false };
+                *self = Self::ReadClosedNeedFinAck {
+                    write_closed: false,
+                };
             }
             (Self::WriteClosed, Flag::FIN) => {
                 *self = Self::ReadClosedNeedFinAck { write_closed: true };
             }
             (Self::WriteSentFinWaitingForAck { read_closed: false }, Flag::FIN) => {
-                *self = Self::ReadClosedNeedFinAck { write_closed: false };
+                *self = Self::ReadClosedNeedFinAck {
+                    write_closed: false,
+                };
             }
             (Self::WriteSentFinWaitingForAck { read_closed: true }, Flag::FIN) => {
                 *self = Self::BothClosed { reset: false };
@@ -88,7 +92,12 @@ impl State {
             (Self::ReadClosed, Flag::STOP_SENDING) => {
                 *self = Self::BothClosed { reset: false };
             }
-            (Self::ReadClosedNeedFinAck { write_closed: false }, Flag::STOP_SENDING) => {
+            (
+                Self::ReadClosedNeedFinAck {
+                    write_closed: false,
+                },
+                Flag::STOP_SENDING,
+            ) => {
                 *self = Self::ReadClosedNeedFinAck { write_closed: true };
             }
             (Self::ReadClosedNeedFinAck { write_closed: true }, Flag::STOP_SENDING) => {
@@ -103,7 +112,13 @@ impl State {
             (Self::WriteSentFinWaitingForAck { read_closed: true }, Flag::FIN_ACK) => {
                 *self = Self::BothClosed { reset: false };
             }
-            (Self::ClosingWrite { read_closed, inner: Closing::MessageSent }, Flag::FIN_ACK) => {
+            (
+                Self::ClosingWrite {
+                    read_closed,
+                    inner: Closing::MessageSent,
+                },
+                Flag::FIN_ACK,
+            ) => {
                 *self = if read_closed {
                     Self::BothClosed { reset: false }
                 } else {
@@ -246,7 +261,12 @@ impl State {
     /// This is necessary for read-closed streams because we would otherwise
     /// not read any more flags from the socket.
     pub(crate) fn read_flags_in_async_write(&self) -> bool {
-        matches!(self, Self::ReadClosed | Self::ReadClosedNeedFinAck { .. } | Self::WriteSentFinWaitingForAck { .. })
+        matches!(
+            self,
+            Self::ReadClosed
+                | Self::ReadClosedNeedFinAck { .. }
+                | Self::WriteSentFinWaitingForAck { .. }
+        )
     }
 
     /// Acts as a "barrier" for [`futures::AsyncRead::poll_read`].
@@ -281,7 +301,9 @@ impl State {
         let kind = match self {
             Open
             | ReadClosed
-            | ReadClosedNeedFinAck { write_closed: false }
+            | ReadClosedNeedFinAck {
+                write_closed: false,
+            }
             | ClosingRead {
                 write_closed: false,
                 ..
@@ -324,7 +346,9 @@ impl State {
                         inner: Closing::Requested,
                     };
                 }
-                State::ReadClosedNeedFinAck { write_closed: false } => {
+                State::ReadClosedNeedFinAck {
+                    write_closed: false,
+                } => {
                     *self = Self::ClosingWrite {
                         read_closed: true,
                         inner: Closing::Requested,
@@ -421,7 +445,9 @@ impl State {
     /// This transitions from ReadClosedNeedFinAck to ReadClosed.
     pub(crate) fn fin_ack_sent(&mut self) {
         match self {
-            State::ReadClosedNeedFinAck { write_closed: false } => {
+            State::ReadClosedNeedFinAck {
+                write_closed: false,
+            } => {
                 *self = State::ReadClosed;
             }
             State::ReadClosedNeedFinAck { write_closed: true } => {
@@ -445,7 +471,8 @@ mod tests {
         let mut open = State::Open;
 
         open.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
-        // After receiving FIN, we're in ReadClosedNeedFinAck state but read barrier should still prevent reading
+        // After receiving FIN, we're in ReadClosedNeedFinAck state but read barrier should still
+        // prevent reading
         let error = open.read_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -592,10 +619,14 @@ mod tests {
         open.close_write_message_sent();
         open.write_closed();
 
-        // After write_closed(), we're waiting for FIN_ACK, so close_write_barrier should return error
+        // After write_closed(), we're waiting for FIN_ACK, so close_write_barrier should return
+        // error
         let result = open.close_write_barrier();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "waiting for FIN_ACK before closing");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "waiting for FIN_ACK before closing"
+        );
 
         // After receiving FIN_ACK, we should be in WriteClosed state
         open.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
@@ -633,12 +664,19 @@ mod tests {
         open.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
 
         assert!(open.needs_fin_ack());
-        assert!(matches!(open, State::ReadClosedNeedFinAck { write_closed: false }));
+        assert!(matches!(
+            open,
+            State::ReadClosedNeedFinAck {
+                write_closed: false
+            }
+        ));
     }
 
     #[test]
     fn fin_ack_sent_transitions_to_read_closed() {
-        let mut state = State::ReadClosedNeedFinAck { write_closed: false };
+        let mut state = State::ReadClosedNeedFinAck {
+            write_closed: false,
+        };
 
         state.fin_ack_sent();
 
@@ -682,9 +720,14 @@ mod tests {
         state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
 
         assert!(state.needs_fin_ack());
-        assert!(matches!(state, State::ReadClosedNeedFinAck { write_closed: false }));
+        assert!(matches!(
+            state,
+            State::ReadClosedNeedFinAck {
+                write_closed: false
+            }
+        ));
 
-        // Send FIN_ACK 
+        // Send FIN_ACK
         state.fin_ack_sent();
 
         assert!(matches!(state, State::ReadClosed));
@@ -697,12 +740,17 @@ mod tests {
         let result = state.close_write_barrier();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "waiting for FIN_ACK before closing");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "waiting for FIN_ACK before closing"
+        );
     }
 
     #[test]
     fn read_flags_in_async_write_with_fin_ack_states() {
-        let state_need_ack = State::ReadClosedNeedFinAck { write_closed: false };
+        let state_need_ack = State::ReadClosedNeedFinAck {
+            write_closed: false,
+        };
         let state_waiting_ack = State::WriteSentFinWaitingForAck { read_closed: false };
 
         assert!(state_need_ack.read_flags_in_async_write());
@@ -722,16 +770,24 @@ mod tests {
         node_a.close_write_barrier().unwrap();
         node_a.close_write_message_sent();
         node_a.write_closed();
-        
+
         // NodeA is now waiting for FIN_ACK
-        assert!(matches!(node_a, State::WriteSentFinWaitingForAck { read_closed: false }));
+        assert!(matches!(
+            node_a,
+            State::WriteSentFinWaitingForAck { read_closed: false }
+        ));
 
         // NodeB receives the FIN from NodeA
         node_b.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
-        
+
         // NodeB should now need to send a FIN_ACK
         assert!(node_b.needs_fin_ack());
-        assert!(matches!(node_b, State::ReadClosedNeedFinAck { write_closed: false }));
+        assert!(matches!(
+            node_b,
+            State::ReadClosedNeedFinAck {
+                write_closed: false
+            }
+        ));
 
         // NodeB sends FIN_ACK (simulated by calling fin_ack_sent)
         node_b.fin_ack_sent();
@@ -739,32 +795,38 @@ mod tests {
 
         // NodeA receives the FIN_ACK
         node_a.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
-        
+
         // NodeA's write side is now closed
         assert!(matches!(node_a, State::WriteClosed));
 
         // NodeB also wants to close for writing
         node_b.close_write_barrier().unwrap();
-        node_b.close_write_message_sent(); 
+        node_b.close_write_message_sent();
         node_b.write_closed();
 
-        // NodeB is now waiting for FIN_ACK 
-        assert!(matches!(node_b, State::WriteSentFinWaitingForAck { read_closed: true }));
+        // NodeB is now waiting for FIN_ACK
+        assert!(matches!(
+            node_b,
+            State::WriteSentFinWaitingForAck { read_closed: true }
+        ));
 
         // NodeA receives the FIN from NodeB
         node_a.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
-        
+
         // NodeA should now need to send a FIN_ACK
         assert!(node_a.needs_fin_ack());
-        assert!(matches!(node_a, State::ReadClosedNeedFinAck { write_closed: true }));
+        assert!(matches!(
+            node_a,
+            State::ReadClosedNeedFinAck { write_closed: true }
+        ));
 
-        // NodeA sends FIN_ACK 
+        // NodeA sends FIN_ACK
         node_a.fin_ack_sent();
         assert!(matches!(node_a, State::BothClosed { reset: false }));
 
         // NodeB receives the FIN_ACK
         node_b.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
-        
+
         // NodeB is now fully closed
         assert!(matches!(node_b, State::BothClosed { reset: false }));
 
