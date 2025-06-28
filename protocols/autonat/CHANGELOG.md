@@ -1,7 +1,9 @@
-## 0.14.1
+## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.
   See [PR 5848](https://github.com/libp2p/rust-libp2p/pull/5848).
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.14.0
 

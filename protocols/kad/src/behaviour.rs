@@ -382,13 +382,12 @@ impl Config {
         self
     }
 
-    /// Modifies the timeout duration of outbount_substreams.
+    /// Modifies the timeout duration of outbound substreams.
     ///
     /// * Default to `10` seconds.
     /// * May need to increase this value when sending large records with poor connection.
-    pub fn set_outbound_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.protocol_config
-            .set_outbound_substreams_timeout(timeout);
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.protocol_config.set_substreams_timeout(timeout);
         self
     }
 
@@ -2251,9 +2250,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer_id = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         // We should order addresses from decreasing likelihood of connectivity, so start with

@@ -60,13 +60,12 @@ impl ExternalAddresses {
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
                 addr: expired_addr, ..
             }) => {
-                let pos = match self
+                let Some(pos) = self
                     .addresses
                     .iter()
                     .position(|candidate| candidate == *expired_addr)
-                {
-                    None => return false,
-                    Some(p) => p,
+                else {
+                    return false;
                 };
 
                 self.addresses.remove(pos);

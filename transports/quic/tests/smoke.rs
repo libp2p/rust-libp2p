@@ -43,12 +43,6 @@ async fn tokio_smoke() {
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
-async fn async_std_smoke() {
-    smoke::<quic::tokio::Provider>().await
-}
-
-#[cfg(feature = "tokio")]
-#[tokio::test]
 async fn endpoint_reuse() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())

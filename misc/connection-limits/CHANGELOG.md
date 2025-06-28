@@ -1,8 +1,10 @@
-## 0.5.1
+## 0.6.0
 
 - Allow setting Peer IDs for bypassing limit check.
   Connections to the specified peers won't be counted toward limits.
   See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.5.0
 

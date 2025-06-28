@@ -2,6 +2,8 @@
 
 - Remove `async_std` dependency [PR 5958](https://github.com/libp2p/rust-libp2p/pull/5958)
 
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.47.0
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.

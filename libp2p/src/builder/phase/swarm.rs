@@ -44,13 +44,6 @@ macro_rules! impl_with_swarm_config {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl_with_swarm_config!(
-    "async-std",
-    super::provider::AsyncStd,
-    libp2p_swarm::Config::with_async_std_executor()
-);
-
-#[cfg(not(target_arch = "wasm32"))]
-impl_with_swarm_config!(
     "tokio",
     super::provider::Tokio,
     libp2p_swarm::Config::with_tokio_executor()

@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 full = [
-    "async-std",
     "autonat",
     "cbor",
     "dcutr",
@@ -29,7 +28,6 @@ full = [
     "memory-connection-limits",
     "metrics",
     "noise",
-    "peer-store",
     "ping",
     "plaintext",
     "pnet",
@@ -53,7 +51,6 @@ full = [
     "upnp",
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
@@ -70,7 +67,6 @@ mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
-peer-store = ["dep:libp2p-peer-store"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -113,7 +109,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
-libp2p-peer-store = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
 libp2p-pnet = { workspace = true, optional = true }
@@ -143,7 +138,6 @@ libp2p-upnp = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
 tokio = { workspace = true, features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
