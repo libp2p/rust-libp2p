@@ -2768,7 +2768,7 @@ pub enum Event {
         result: QueryResult,
         /// Execution statistics from the query.
         stats: QueryStats,
-        /// Indicates which event this is, if therer are multiple responses for a single query.
+        /// Indicates which event this is, if there are multiple responses for a single query.
         step: ProgressStep,
     },
 
