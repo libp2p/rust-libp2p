@@ -110,7 +110,7 @@ where
             std::any::type_name::<A>()
         );
         let addr = match self.0.dial(addr, opts) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(connect) => return Ok(EitherFuture::First(connect)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 tracing::debug!(
                     address=%addr,
@@ -130,7 +130,7 @@ where
             std::any::type_name::<A>()
         );
         let addr = match self.1.dial(addr, opts) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(connect) => return Ok(EitherFuture::Second(connect)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 tracing::debug!(
                     address=%addr,
