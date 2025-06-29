@@ -496,7 +496,7 @@ mod tests {
             rt.block_on(async move {
                 let expected_frames = frames.clone();
                 let server = tokio::task::spawn(async move {
-                    let mut connec =
+                    let mut connect =
                         rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
 
                     let mut buf = vec![0u8; 0];
@@ -507,15 +507,15 @@ mod tests {
                         if buf.len() < expected.len() {
                             buf.resize(expected.len(), 0);
                         }
-                        let n = connec.read(&mut buf).await.unwrap();
+                        let n = connect.read(&mut buf).await.unwrap();
                         assert_eq!(&buf[..n], &expected[..]);
                     }
                 });
 
                 let client = tokio::task::spawn(async move {
-                    let mut connec = LengthDelimited::new(client_connection);
+                    let mut connect = LengthDelimited::new(client_connection);
                     for frame in frames {
-                        connec.send(From::from(frame)).await.unwrap();
+                        connect.send(From::from(frame)).await.unwrap();
                     }
                 });
 
