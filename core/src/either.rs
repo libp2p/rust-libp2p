@@ -184,12 +184,12 @@ where
         use TransportError::*;
         match self {
             Either::Left(a) => match a.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Ok(connect) => Ok(EitherFuture::First(connect)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
             Either::Right(b) => match b.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Ok(connect) => Ok(EitherFuture::Second(connect)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
             },
