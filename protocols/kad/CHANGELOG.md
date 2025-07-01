@@ -1,3 +1,8 @@
+## 0.48.1
+
+- Implement `Copy` for `QueryStats` and `ProgressStep`
+  See [PR 6083](https://github.com/libp2p/rust-libp2p/pull/6083)
+
 ## 0.48.0
 
 - Configurable outbound_substreams_timeout.
