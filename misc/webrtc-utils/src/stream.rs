@@ -135,6 +135,17 @@ where
                 return Poll::Ready(Ok(n));
             }
 
+            // Check if we need to send a FIN_ACK
+            if self.state.needs_fin_ack() {
+                ready!(self.io.poll_ready_unpin(cx))?;
+                self.io.start_send_unpin(Message {
+                    flag: Some(Flag::FIN_ACK),
+                    message: None,
+                })?;
+                ready!(self.io.poll_flush_unpin(cx))?;
+                self.state.fin_ack_sent();
+            }
+
             let Self {
                 read_buffer,
                 io,
@@ -177,6 +188,17 @@ where
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        // Check if we need to send a FIN_ACK first
+        if self.state.needs_fin_ack() {
+            ready!(self.io.poll_ready_unpin(cx))?;
+            self.io.start_send_unpin(Message {
+                flag: Some(Flag::FIN_ACK),
+                message: None,
+            })?;
+            ready!(self.io.poll_flush_unpin(cx))?;
+            self.state.fin_ack_sent();
+        }
+
         while self.state.read_flags_in_async_write() {
             // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we
             // will poll the underlying I/O resource once more. Is that allowed? How
@@ -193,7 +215,7 @@ where
                 Poll::Ready(Some((Some(flag), message))) => {
                     // Read side is closed. Discard any incoming messages.
                     drop(message);
-                    // But still handle flags, e.g. a `Flag::StopSending`.
+                    // But still handle flags, e.g. a `Flag::StopSending` or `Flag::FIN_ACK`.
                     state.handle_inbound_flag(flag, read_buffer)
                 }
                 Poll::Ready(Some((None, message))) => drop(message),
@@ -216,10 +238,32 @@ where
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        // Check if we need to send a FIN_ACK first
+        if self.state.needs_fin_ack() {
+            ready!(self.io.poll_ready_unpin(cx))?;
+            self.io.start_send_unpin(Message {
+                flag: Some(Flag::FIN_ACK),
+                message: None,
+            })?;
+            ready!(self.io.poll_flush_unpin(cx))?;
+            self.state.fin_ack_sent();
+        }
+
         self.io.poll_flush_unpin(cx).map_err(Into::into)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        // Check if we need to send a FIN_ACK first
+        if self.state.needs_fin_ack() {
+            ready!(self.io.poll_ready_unpin(cx))?;
+            self.io.start_send_unpin(Message {
+                flag: Some(Flag::FIN_ACK),
+                message: None,
+            })?;
+            ready!(self.io.poll_flush_unpin(cx))?;
+            self.state.fin_ack_sent();
+        }
+
         loop {
             match self.state.close_write_barrier()? {
                 Some(Closing::Requested) => {
