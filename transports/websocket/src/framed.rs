@@ -53,7 +53,7 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 /// frame payloads which does not implement [`AsyncRead`] or
 /// [`AsyncWrite`]. See [`crate::Config`] if you require the latter.
 #[deprecated = "Use `Config` instead"]
-pub type WsConfig<T> = Config<T>;
+pub type Config<T> = Config<T>;
 
 #[derive(Debug)]
 pub struct Config<T> {
