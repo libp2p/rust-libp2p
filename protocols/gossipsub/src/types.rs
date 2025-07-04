@@ -472,7 +472,7 @@ impl From<RpcOut> for proto::RPC {
     }
 }
 
-/// An RPC received/sent.
+/// A Gossipsub RPC message received.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct RpcIn {
     /// List of messages that were part of this RPC query.
