@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[cfg(feature = "gossipsub")]
+use libp2p_gossipsub::GOSSIPSUB_PROTOCOL_ID;
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -37,9 +40,8 @@ use crate::protocol_stack;
 const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
-    // #[cfg(feature = "gossipsub")]
-    // TODO: Add Gossipsub protocol name
-    libp2p_identify::PROTOCOL_NAME,
+    #[cfg(feature = "gossipsub")]
+    GOSSIPSUB_PROTOCOL_ID,
     libp2p_identify::PUSH_PROTOCOL_NAME,
     #[cfg(feature = "kad")]
     libp2p_kad::PROTOCOL_NAME,
