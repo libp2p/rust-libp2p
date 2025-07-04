@@ -2542,7 +2542,7 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.9.0",
  "tokio",
 ]
 
@@ -2563,7 +2563,7 @@ dependencies = [
  "parking_lot",
  "pin-project",
  "quick-protobuf",
- "rand 0.8.5",
+ "rand 0.9.0",
  "rw-stream-sink",
  "thiserror 2.0.12",
  "tokio",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "asn1_der",
  "bs58",
@@ -2707,7 +2707,7 @@ dependencies = [
  "p256",
  "quick-protobuf",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.9.0",
  "ring",
  "rmp-serde",
  "sec1",
@@ -6662,7 +6662,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

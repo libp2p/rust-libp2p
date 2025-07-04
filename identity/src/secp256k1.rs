@@ -94,7 +94,25 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::thread_rng()))
+        use k256::elliptic_curve::PrimeField as _;
+        use rand::RngCore as _;
+
+        let mut rng = rand::rng();
+        let non_zero_scalar = loop {
+            let scalar: k256::Scalar = {
+                let mut bytes = k256::FieldBytes::default();
+                loop {
+                    rng.fill_bytes(&mut bytes);
+                    if let Some(scalar) = k256::Scalar::from_repr(bytes).into() {
+                        break scalar;
+                    }
+                }
+            };
+            if let Some(non_zero_scalar) = k256::NonZeroScalar::new(scalar).into_option() {
+                break non_zero_scalar;
+            }
+        };
+        SecretKey(non_zero_scalar.into())
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.

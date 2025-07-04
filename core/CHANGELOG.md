@@ -1,3 +1,7 @@
+## 0.43.2
+- Upgrade `rand` to `0.9`.
+  See [PR 6092](https://github.com/libp2p/rust-libp2p/pull/6092)
+
 ## 0.43.1
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)

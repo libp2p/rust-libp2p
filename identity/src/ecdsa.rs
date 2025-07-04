@@ -96,7 +96,25 @@ impl SecretKey {
     /// Generate a new random ECDSA secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(SigningKey::random(&mut rand::thread_rng()))
+        use k256::elliptic_curve::PrimeField as _;
+        use rand::RngCore as _;
+
+        let mut rng = rand::rng();
+        let non_zero_scalar = loop {
+            let scalar: p256::Scalar = {
+                let mut bytes = k256::FieldBytes::default();
+                loop {
+                    rng.fill_bytes(&mut bytes);
+                    if let Some(scalar) = p256::Scalar::from_repr(bytes).into() {
+                        break scalar;
+                    }
+                }
+            };
+            if let Some(non_zero_scalar) = p256::NonZeroScalar::new(scalar).into_option() {
+                break non_zero_scalar;
+            }
+        };
+        SecretKey(non_zero_scalar.into())
     }
 
     /// Sign a message with this secret key, producing a DER-encoded ECDSA signature.
