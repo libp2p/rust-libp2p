@@ -1,3 +1,7 @@
+## 0.14.0
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.13.0
 
 - Deprecate `void` crate.
