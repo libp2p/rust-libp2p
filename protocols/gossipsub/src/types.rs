@@ -472,9 +472,9 @@ impl From<RpcOut> for proto::RPC {
     }
 }
 
-/// An RPC received/sent.
+/// A Gossipsub RPC message received.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Rpc {
+pub struct RpcIn {
     /// List of messages that were part of this RPC query.
     pub messages: Vec<RawMessage>,
     /// List of subscriptions.
@@ -483,120 +483,7 @@ pub struct Rpc {
     pub control_msgs: Vec<ControlAction>,
 }
 
-impl Rpc {
-    /// Converts the GossipsubRPC into its protobuf format.
-    // A convenience function to avoid explicitly specifying types.
-    pub fn into_protobuf(self) -> proto::RPC {
-        self.into()
-    }
-}
-
-impl From<Rpc> for proto::RPC {
-    /// Converts the RPC into protobuf format.
-    fn from(rpc: Rpc) -> Self {
-        // Messages
-        let mut publish = Vec::new();
-
-        for message in rpc.messages.into_iter() {
-            let message = proto::Message {
-                from: message.source.map(|m| m.to_bytes()),
-                data: Some(message.data),
-                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-                topic: TopicHash::into_string(message.topic),
-                signature: message.signature,
-                key: message.key,
-            };
-
-            publish.push(message);
-        }
-
-        // subscriptions
-        let subscriptions = rpc
-            .subscriptions
-            .into_iter()
-            .map(|sub| proto::SubOpts {
-                subscribe: Some(sub.action == SubscriptionAction::Subscribe),
-                topic_id: Some(sub.topic_hash.into_string()),
-            })
-            .collect::<Vec<_>>();
-
-        // control messages
-        let mut control = proto::ControlMessage {
-            ihave: Vec::new(),
-            iwant: Vec::new(),
-            graft: Vec::new(),
-            prune: Vec::new(),
-            idontwant: Vec::new(),
-        };
-
-        let empty_control_msg = rpc.control_msgs.is_empty();
-
-        for action in rpc.control_msgs {
-            match action {
-                // collect all ihave messages
-                ControlAction::IHave(IHave {
-                    topic_hash,
-                    message_ids,
-                }) => {
-                    let rpc_ihave = proto::ControlIHave {
-                        topic_id: Some(topic_hash.into_string()),
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.ihave.push(rpc_ihave);
-                }
-                ControlAction::IWant(IWant { message_ids }) => {
-                    let rpc_iwant = proto::ControlIWant {
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.iwant.push(rpc_iwant);
-                }
-                ControlAction::Graft(Graft { topic_hash }) => {
-                    let rpc_graft = proto::ControlGraft {
-                        topic_id: Some(topic_hash.into_string()),
-                    };
-                    control.graft.push(rpc_graft);
-                }
-                ControlAction::Prune(Prune {
-                    topic_hash,
-                    peers,
-                    backoff,
-                }) => {
-                    let rpc_prune = proto::ControlPrune {
-                        topic_id: Some(topic_hash.into_string()),
-                        peers: peers
-                            .into_iter()
-                            .map(|info| proto::PeerInfo {
-                                peer_id: info.peer_id.map(|id| id.to_bytes()),
-                                // TODO, see https://github.com/libp2p/specs/pull/217
-                                signed_peer_record: None,
-                            })
-                            .collect(),
-                        backoff,
-                    };
-                    control.prune.push(rpc_prune);
-                }
-                ControlAction::IDontWant(IDontWant { message_ids }) => {
-                    let rpc_idontwant = proto::ControlIDontWant {
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.idontwant.push(rpc_idontwant);
-                }
-            }
-        }
-
-        proto::RPC {
-            subscriptions,
-            publish,
-            control: if empty_control_msg {
-                None
-            } else {
-                Some(control)
-            },
-        }
-    }
-}
-
-impl fmt::Debug for Rpc {
+impl fmt::Debug for RpcIn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut b = f.debug_struct("GossipsubRpc");
         if !self.messages.is_empty() {
