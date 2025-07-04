@@ -1,3 +1,8 @@
+## 0.2.13
+
+- Upgrade `rand` to `0.9`.
+  See [PR 6092](https://github.com/libp2p/rust-libp2p/pull/6092)
+
 ## 0.2.12
 
 - Avoid depending on the `rand_core` feature in `ed25519-dalek` crate.
