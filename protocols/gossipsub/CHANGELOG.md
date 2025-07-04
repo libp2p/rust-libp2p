@@ -1,3 +1,8 @@
+## 0.50.0
+
+- Remove `Rpc` from the public API.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 ## 0.49.0
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
