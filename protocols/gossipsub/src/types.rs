@@ -30,7 +30,11 @@ use quick_protobuf::MessageWrite;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
-use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
+use crate::{
+    rpc::Sender,
+    rpc_proto::proto::{self},
+    TopicHash,
+};
 
 /// Messages that have expired while attempting to be sent to a peer.
 #[derive(Clone, Debug, Default)]
@@ -105,6 +109,8 @@ impl std::fmt::Debug for MessageId {
 pub(crate) struct PeerDetails {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
+    /// The Extensions supported by the peer if any.
+    pub(crate) extensions: Option<Extensions>,
     /// If the peer is an outbound connection.
     pub(crate) outbound: bool,
     /// Its current connections.
@@ -124,6 +130,8 @@ pub(crate) struct PeerDetails {
     derive(prometheus_client::encoding::EncodeLabelValue)
 )]
 pub enum PeerKind {
+    /// A gossipsub 1.3 peer.
+    Gossipsubv1_3,
     /// A gossipsub 1.2 peer.
     Gossipsubv1_2,
     /// A gossipsub 1.1 peer.
@@ -271,6 +279,8 @@ pub enum ControlAction {
     /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant
     /// control message.
     IDontWant(IDontWant),
+    /// The Node has sent us its supported extensions.
+    Extensions(Option<Extensions>),
 }
 
 /// Node broadcasts known messages per topic - IHave control message.
@@ -314,10 +324,14 @@ pub struct IDontWant {
     pub(crate) message_ids: Vec<MessageId>,
 }
 
+/// The node has sent us the supported Gossipsub Extensions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Extensions {}
+
 /// A Gossipsub RPC message sent.
 #[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.`timeout` limits the duration the message
+    /// PublishV a Gossipsub message on network.`timeout` limits the duration the message
     /// can wait to be sent before it is abandoned.
     Publish { message: RawMessage, timeout: Delay },
     /// Forward a Gossipsub message on network. `timeout` limits the duration the message
@@ -338,6 +352,8 @@ pub enum RpcOut {
     /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant
     /// control message.
     IDontWant(IDontWant),
+    /// Send a Extensions control message.
+    Extensions(Extensions),
 }
 
 impl RpcOut {
@@ -399,6 +415,7 @@ impl From<RpcOut> for proto::RPC {
                     graft: vec![],
                     prune: vec![],
                     idontwant: vec![],
+                    extensions: None,
                 }),
             },
             RpcOut::IWant(IWant { message_ids }) => proto::RPC {
@@ -412,6 +429,7 @@ impl From<RpcOut> for proto::RPC {
                     graft: vec![],
                     prune: vec![],
                     idontwant: vec![],
+                    extensions: None,
                 }),
             },
             RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
@@ -425,6 +443,7 @@ impl From<RpcOut> for proto::RPC {
                     }],
                     prune: vec![],
                     idontwant: vec![],
+                    extensions: None,
                 }),
             },
             RpcOut::Prune(Prune {
@@ -452,6 +471,7 @@ impl From<RpcOut> for proto::RPC {
                             backoff,
                         }],
                         idontwant: vec![],
+                        extensions: None,
                     }),
                 }
             }
@@ -466,6 +486,19 @@ impl From<RpcOut> for proto::RPC {
                     idontwant: vec![proto::ControlIDontWant {
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     }],
+                    extensions: None,
+                }),
+            },
+            RpcOut::Extensions(Extensions {}) => proto::RPC {
+                publish: Vec::new(),
+                subscriptions: Vec::new(),
+                control: Some(proto::ControlMessage {
+                    ihave: vec![],
+                    iwant: vec![],
+                    graft: vec![],
+                    prune: vec![],
+                    idontwant: vec![],
+                    extensions: Some(proto::ControlExtensions {}),
                 }),
             },
         }
@@ -507,6 +540,7 @@ impl PeerKind {
             Self::Gossipsub => "Gossipsub v1.0",
             Self::Gossipsubv1_1 => "Gossipsub v1.1",
             Self::Gossipsubv1_2 => "Gossipsub v1.2",
+            Self::Gossipsubv1_3 => "Gossipsub v1.3",
         }
     }
 }

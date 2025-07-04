@@ -12,6 +12,12 @@ message RPC {
 	}
 
 	optional ControlMessage control = 3;
+
+    // Canonical Extensions should register their messages here.
+
+	// Experimental Extensions should register their messages here. They
+	// must use field numbers larger than 0x200000 to be encoded with at least 4
+	// bytes
 }
 
 message Message {
@@ -29,6 +35,7 @@ message ControlMessage {
 	repeated ControlGraft graft = 3;
 	repeated ControlPrune prune = 4;
 	repeated ControlIDontWant idontwant = 5;
+    optional ControlExtensions extensions = 6;
 }
 
 message ControlIHave {
@@ -52,6 +59,11 @@ message ControlPrune {
 
 message ControlIDontWant {
 	repeated bytes message_ids = 1;
+}
+
+message ControlExtensions {
+    // Initially empty. Future extensions will be added here along with a
+    // reference to their specification.
 }
 
 message PeerInfo {

@@ -87,6 +87,7 @@ impl Sender {
             RpcOut::Publish { .. }
             | RpcOut::Graft(_)
             | RpcOut::Prune(_)
+            | RpcOut::Extensions(_)
             | RpcOut::Subscribe(_)
             | RpcOut::Unsubscribe(_) => &self.priority_sender,
             RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) | RpcOut::IDontWant(_) => {

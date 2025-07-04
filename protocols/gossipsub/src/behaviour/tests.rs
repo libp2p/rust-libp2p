@@ -33,8 +33,9 @@ use crate::{
     config::{ConfigBuilder, TopicMeshConfig},
     protocol::GossipsubCodec,
     rpc::Receiver,
+    rpc_proto::proto,
     subscription_filter::WhitelistSubscriptionFilter,
-    types::RpcIn,
+    types::{ControlAction, Extensions, RpcIn, RpcOut},
     IdentTopic as Topic,
 };
 
@@ -248,6 +249,7 @@ where
             topics: Default::default(),
             sender,
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -644,6 +646,7 @@ fn test_join() {
                 topics: Default::default(),
                 sender,
                 dont_send: LinkedHashMap::new(),
+                extensions: None,
             },
         );
         receivers.insert(random_peer, receiver);
@@ -1041,6 +1044,7 @@ fn test_get_random_peers() {
                 topics: topics.clone(),
                 sender: Sender::new(gs.config.connection_handler_queue_len()),
                 dont_send: LinkedHashMap::new(),
+                extensions: None,
             },
         );
     }
@@ -5595,6 +5599,7 @@ fn test_all_queues_full() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5631,6 +5636,7 @@ fn test_slow_peer_returns_failed_publish() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     let peer_id = PeerId::random();
@@ -5644,6 +5650,7 @@ fn test_slow_peer_returns_failed_publish() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5705,6 +5712,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5722,6 +5730,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5819,6 +5828,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5836,6 +5846,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5913,6 +5924,7 @@ fn test_slow_peer_returns_failed_forward() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5930,6 +5942,7 @@ fn test_slow_peer_returns_failed_forward() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -6012,6 +6025,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     gs.as_peer_score_mut().add_peer(slow_peer_id);
@@ -6026,6 +6040,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -6786,4 +6801,77 @@ fn test_validation_message_size_within_topic_specific() {
         }
         _ => panic!("Unexpected event"),
     }
+}
+
+#[test]
+fn test_extensions_message_creation() {
+    let extensions_rpc = RpcOut::Extensions(Extensions {});
+    let proto_rpc: proto::RPC = extensions_rpc.into();
+
+    assert!(proto_rpc.control.is_some());
+    let control = proto_rpc.control.unwrap();
+    assert!(control.extensions.is_some());
+    assert!(control.ihave.is_empty());
+    assert!(control.iwant.is_empty());
+    assert!(control.graft.is_empty());
+    assert!(control.prune.is_empty());
+    assert!(control.idontwant.is_empty());
+}
+
+#[test]
+fn test_handle_extensions_message() {
+    let mut gs: Behaviour = Behaviour::new(
+        MessageAuthenticity::Anonymous,
+        ConfigBuilder::default()
+            .validation_mode(ValidationMode::None)
+            .build()
+            .unwrap(),
+    )
+    .unwrap();
+
+    let peer_id = PeerId::random();
+    let sender = Sender::new(gs.config.connection_handler_queue_len());
+
+    // Add peer without extensions
+    gs.connected_peers.insert(
+        peer_id,
+        PeerDetails {
+            kind: PeerKind::Gossipsubv1_3,
+            connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
+            topics: BTreeSet::new(),
+            sender,
+            dont_send: LinkedHashMap::new(),
+            extensions: None,
+        },
+    );
+
+    // Simulate receiving extensions message
+    let extensions = Extensions {};
+    gs.handle_extensions(&peer_id, extensions);
+
+    // Verify extensions were stored
+    let peer_details = gs.connected_peers.get(&peer_id).unwrap();
+    assert!(peer_details.extensions.is_some());
+
+    // Simulate receiving duplicate extensions message from another peer
+    // TODO: when more extensions are added, we should test that they are not overridden.
+    let duplicate_rpc = RpcIn {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::Extensions(None)],
+    };
+
+    gs.on_connection_handler_event(
+        peer_id,
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc: duplicate_rpc,
+            invalid_messages: vec![],
+        },
+    );
+
+    // Extensions should still be present (not cleared or changed)
+    let peer_details = gs.connected_peers.get(&peer_id).unwrap();
+    assert!(peer_details.extensions.is_some());
 }

@@ -155,6 +155,7 @@ pub struct ControlMessage {
     pub graft: Vec<gossipsub::pb::ControlGraft>,
     pub prune: Vec<gossipsub::pb::ControlPrune>,
     pub idontwant: Vec<gossipsub::pb::ControlIDontWant>,
+    pub extensions: Option<gossipsub::pb::ControlExtensions>,
 }
 
 impl<'a> MessageRead<'a> for ControlMessage {
@@ -167,6 +168,7 @@ impl<'a> MessageRead<'a> for ControlMessage {
                 Ok(26) => msg.graft.push(r.read_message::<gossipsub::pb::ControlGraft>(bytes)?),
                 Ok(34) => msg.prune.push(r.read_message::<gossipsub::pb::ControlPrune>(bytes)?),
                 Ok(42) => msg.idontwant.push(r.read_message::<gossipsub::pb::ControlIDontWant>(bytes)?),
+                Ok(50) => msg.extensions = Some(r.read_message::<gossipsub::pb::ControlExtensions>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -183,6 +185,7 @@ impl MessageWrite for ControlMessage {
         + self.graft.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.prune.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.idontwant.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.extensions.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -191,6 +194,7 @@ impl MessageWrite for ControlMessage {
         for s in &self.graft { w.write_with_tag(26, |w| w.write_message(s))?; }
         for s in &self.prune { w.write_with_tag(34, |w| w.write_message(s))?; }
         for s in &self.idontwant { w.write_with_tag(42, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.extensions { w.write_with_tag(50, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -366,6 +370,19 @@ impl MessageWrite for ControlIDontWant {
         Ok(())
     }
 }
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct ControlExtensions { }
+
+impl<'a> MessageRead<'a> for ControlExtensions {
+    fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
+        r.read_to_end();
+        Ok(Self::default())
+    }
+}
+
+impl MessageWrite for ControlExtensions { }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
