@@ -194,9 +194,9 @@ impl Config {
             socket.set_only_v6(true)?;
         }
         if let Some(ttl) = self.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
-        socket.set_nodelay(self.nodelay)?;
+        socket.set_tcp_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {
