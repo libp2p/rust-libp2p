@@ -76,6 +76,9 @@ impl MessageCache {
     ///
     /// Returns true if the message didn't already exist in the cache.
     pub(crate) fn put(&mut self, message_id: &MessageId, msg: RawMessage) -> bool {
+        if self.history.is_empty() {
+            return true;
+        }
         match self.msgs.entry(message_id.clone()) {
             Entry::Occupied(_) => {
                 // Don't add duplicate entries to the cache.
@@ -187,6 +190,10 @@ impl MessageCache {
     /// Shift the history array down one and delete messages associated with the
     /// last entry.
     pub(crate) fn shift(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+
         for entry in self.history.pop().expect("history is always > 1") {
             if let Some((msg, _)) = self.msgs.remove(&entry.mid) {
                 if !msg.validated {
