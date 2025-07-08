@@ -134,8 +134,5 @@ pub use self::{
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
 
-#[deprecated(note = "Will be removed from the public API.")]
-pub type Rpc = self::types::Rpc;
-
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
