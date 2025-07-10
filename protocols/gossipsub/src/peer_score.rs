@@ -315,18 +315,23 @@ impl PeerScore {
                     let deficit = topic_params.mesh_message_deliveries_threshold
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
-                    topic_score += p3 * topic_params.mesh_message_deliveries_weight;
-                    #[cfg(feature = "metrics")]
-                    report
-                        .penalties
-                        .push(crate::metrics::Penalty::MessageDeficit);
-                    tracing::debug!(
-                        peer=%peer_id,
-                        %topic,
-                        %deficit,
-                        penalty=%topic_score,
-                        "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
-                    );
+                    let penalty = p3 * topic_params.mesh_message_deliveries_weight;
+
+                    // Only apply penalty and log/record metrics if it actually affects the score
+                    if penalty != 0.0 {
+                        topic_score += penalty;
+                        #[cfg(feature = "metrics")]
+                        report
+                            .penalties
+                            .push(crate::metrics::Penalty::MessageDeficit);
+                        tracing::debug!(
+                            peer=%peer_id,
+                            %topic,
+                            %deficit,
+                            penalty=%penalty,
+                            "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
+                        );
+                    }
                 }
 
                 // P3b:
