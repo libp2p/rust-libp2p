@@ -33,7 +33,7 @@ use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol, Protocol::Sni},
+    multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
@@ -542,7 +542,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         match protocols.pop() {
             p @ Some(Protocol::P2p(_)) => p2p = p,
             Some(Protocol::Ws(path)) => match protocols.pop() {
-                Some(Sni(domain)) => match protocols.pop() {
+                Some(Protocol::Sni(domain)) => match protocols.pop() {
                     Some(Protocol::Tls) => {
                         sni_override = Some(tls::dns_name_ref(&domain)?);
                         break (true, path.into_owned());
