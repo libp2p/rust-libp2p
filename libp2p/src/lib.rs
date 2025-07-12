@@ -81,9 +81,6 @@ pub use libp2p_metrics as metrics;
 #[cfg(feature = "noise")]
 #[doc(inline)]
 pub use libp2p_noise as noise;
-#[cfg(feature = "peer-store")]
-#[doc(inline)]
-pub use libp2p_peer_store as peer_store;
 #[cfg(feature = "ping")]
 #[doc(inline)]
 pub use libp2p_ping as ping;

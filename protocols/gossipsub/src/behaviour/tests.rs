@@ -34,7 +34,7 @@ use crate::{
     protocol::GossipsubCodec,
     rpc::Receiver,
     subscription_filter::WhitelistSubscriptionFilter,
-    types::Rpc,
+    types::RpcIn,
     IdentTopic as Topic,
 };
 
@@ -313,7 +313,7 @@ where
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &proto::RPC) -> Rpc {
+fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
@@ -403,7 +403,7 @@ fn proto_to_message(rpc: &proto::RPC) -> Rpc {
         control_msgs.extend(prune_msgs);
     }
 
-    Rpc {
+    RpcIn {
         messages,
         subscriptions: rpc
             .subscriptions
@@ -1243,7 +1243,7 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
     gs.mcache.put(&msg_id, raw_message);
 
     // Receive IDONTWANT from Peer 1.
-    let rpc = Rpc {
+    let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
@@ -3137,7 +3137,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         p1,
         ConnectionId::new_unchecked(0),
         HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
@@ -3163,7 +3163,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         p2,
         ConnectionId::new_unchecked(0),
         HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
@@ -3773,7 +3773,7 @@ fn test_scoring_p4_invalid_signature() {
         peers[0],
         ConnectionId::new_unchecked(0),
         HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
@@ -5530,7 +5530,7 @@ fn parses_idontwant() {
         .create_network();
 
     let message_id = MessageId::new(&[0, 1, 2, 3]);
-    let rpc = Rpc {
+    let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
@@ -6619,7 +6619,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         peers[0],
         ConnectionId::new_unchecked(0),
         HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
@@ -6723,7 +6723,7 @@ fn test_validation_message_size_within_topic_specific() {
         peers[0],
         ConnectionId::new_unchecked(0),
         HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],

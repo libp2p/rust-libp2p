@@ -382,13 +382,12 @@ impl Config {
         self
     }
 
-    /// Modifies the timeout duration of outbount_substreams.
+    /// Modifies the timeout duration of outbound substreams.
     ///
     /// * Default to `10` seconds.
     /// * May need to increase this value when sending large records with poor connection.
-    pub fn set_outbound_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.protocol_config
-            .set_outbound_substreams_timeout(timeout);
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.protocol_config.set_substreams_timeout(timeout);
         self
     }
 
@@ -824,7 +823,7 @@ where
         } else {
             QueryInfo::GetRecord {
                 key,
-                step: step.clone(),
+                step,
                 found_a_record: false,
                 cache_candidates: BTreeMap::new(),
             }
@@ -1080,7 +1079,7 @@ where
             key: key.clone(),
             providers_found: providers.len(),
             step: if providers.is_empty() {
-                step.clone()
+                step
             } else {
                 step.next()
             },
@@ -2368,7 +2367,7 @@ where
                 let peers = closer_peers.iter().chain(provider_peers.iter());
                 self.discovered(&query_id, &source, peers);
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetProviders {
                         ref key,
                         ref mut providers_found,
@@ -2388,7 +2387,7 @@ where
                                         providers,
                                     },
                                 )),
-                                step: step.clone(),
+                                step: *step,
                                 stats,
                             },
                         ));
@@ -2462,7 +2461,7 @@ where
                 query_id,
             } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
                         ref mut step,
@@ -2483,7 +2482,7 @@ where
                                     result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
                                         record,
                                     ))),
-                                    step: step.clone(),
+                                    step: *step,
                                     stats,
                                 },
                             ));
@@ -2831,7 +2830,7 @@ pub enum Event {
 }
 
 /// Information about progress events.
-#[derive(Debug, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct ProgressStep {
     /// The index into the event
     pub count: NonZeroUsize,

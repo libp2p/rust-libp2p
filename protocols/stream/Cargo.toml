@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-stream"
-version = "0.3.0-alpha.1"
+version = "0.4.0-alpha"
 edition.workspace = true
 rust-version.workspace = true
 description = "Generic stream protocols for libp2p"

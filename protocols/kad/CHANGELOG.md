@@ -1,7 +1,16 @@
-## 0.47.1
+## 0.48.1
+
+- Implement `Copy` for `QueryStats` and `ProgressStep`
+  See [PR 6083](https://github.com/libp2p/rust-libp2p/pull/6083)
+
+## 0.48.0
 
 - Configurable outbound_substreams_timeout.
   See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
+- Rename `outbound_substreams_timeout` to `substreams_timeout` for future-proofness.
+  See [PR 6076](https://github.com/libp2p/rust-libp2p/pull/6076).
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.47.0
 
