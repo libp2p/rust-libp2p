@@ -1,0 +1,13 @@
+FROM rust:1.88-bullseye AS builder
+WORKDIR /usr/src/libp2p
+
+RUN apt-get update
+
+COPY . .
+
+RUN cd ./gossipsub-tests && cargo build --release
+
+FROM debian:bullseye-slim
+COPY --from=builder /usr/src/libp2p/target/release/gossipsub-tests /usr/local/bin/gossipsub-tests
+
+ENTRYPOINT ["gossipsub-tests"]

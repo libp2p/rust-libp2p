@@ -1,0 +1,12 @@
+[package]
+name = "gossipsub-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+if-addrs = "0.14"
+libp2p = { path = "../libp2p", default-features = false, features = ["dns", "tcp", "tokio", "gossipsub", "ed25519", "noise", "yamux"] }
+redis = { version = "0.32", features = ["tokio-comp"] }
+tokio = { version = "1.46", features = [ "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

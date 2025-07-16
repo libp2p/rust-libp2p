@@ -1,0 +1,5 @@
+test_name: subscribe
+log_level: debug
+participants:
+  - image: gossipsub-tests:latest
+    count: 21
