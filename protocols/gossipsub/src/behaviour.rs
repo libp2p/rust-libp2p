@@ -519,7 +519,6 @@ where
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        tracing::debug!(%topic, "Subscribing to topic");
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
@@ -548,7 +547,6 @@ where
     ///
     /// Returns `true` if we were subscribed to this topic.
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> bool {
-        tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
 
         if !self.mesh.contains_key(&topic_hash) {
@@ -978,14 +976,15 @@ where
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
-        tracing::debug!(topic=%topic_hash, "Running JOIN for topic");
-
         let mut added_peers = HashSet::new();
         let mesh_n = self.config.mesh_n_for_topic(topic_hash);
         #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
         }
+
+        // Always construct a mesh regardless if we find peers or not.
+        self.mesh.entry(topic_hash.clone()).or_default();
 
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
@@ -1907,7 +1906,7 @@ where
         subscriptions: &[Subscription],
         propagation_source: &PeerId,
     ) {
-        tracing::debug!(
+        tracing::trace!(
             source=%propagation_source,
             "Handling subscriptions: {:?}",
             subscriptions,
@@ -2087,7 +2086,6 @@ where
 
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
-        tracing::debug!("Starting heartbeat");
         #[cfg(feature = "metrics")]
         let start = Instant::now();
 
@@ -2533,7 +2531,6 @@ where
             }
         }
 
-        tracing::debug!("Completed Heartbeat");
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
