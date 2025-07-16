@@ -2,13 +2,17 @@
 
 - Remove `Rpc` from the public API.
   See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
+
 - Fix applying P3 and P6 Score penalties when their weight is zero
   See [PR 6097](https://github.com/libp2p/rust-libp2p/pull/6097)
 
-## 0.49.0
-
 - Fix fanout logic to include correctly scored peers and prevent panics when memcache is set to 0.
   See [PR 6095](https://github.com/libp2p/rust-libp2p/pull/6095)
+
+- Fix mesh not being constructed even when not adding any peer.
+  See [PR 6100](https://github.com/libp2p/rust-libp2p/pull/6100)
+
+## 0.49.0
 
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
