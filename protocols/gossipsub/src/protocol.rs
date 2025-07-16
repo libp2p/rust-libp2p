@@ -36,7 +36,7 @@ use crate::{
     topic::TopicHash,
     types::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
-        RawMessage, Rpc, Subscription, SubscriptionAction,
+        RawMessage, RpcIn, Subscription, SubscriptionAction,
     },
     ValidationError,
 };
@@ -564,7 +564,7 @@ impl Decoder for GossipsubCodec {
         }
 
         Ok(Some(HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages,
                 subscriptions: rpc
                     .subscriptions
@@ -587,12 +587,16 @@ impl Decoder for GossipsubCodec {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use futures_timer::Delay;
     use libp2p_identity::Keypair;
     use quickcheck::*;
 
     use super::*;
     use crate::{
-        config::Config, Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
+        config::Config, types::RpcOut, Behaviour, ConfigBuilder, IdentTopic as Topic,
+        MessageAuthenticity, Version,
     };
 
     #[derive(Clone, Debug)]
@@ -652,10 +656,9 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = Rpc {
-                messages: vec![message.clone()],
-                subscriptions: vec![],
-                control_msgs: vec![],
+            let rpc = RpcOut::Publish {
+                message: message.clone(),
+                timeout: Delay::new(Duration::from_secs(1)),
             };
 
             let mut codec =

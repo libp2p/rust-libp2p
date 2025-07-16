@@ -311,11 +311,14 @@ impl PeerScore {
                 if topic_stats.mesh_message_deliveries_active
                     && topic_stats.mesh_message_deliveries
                         < topic_params.mesh_message_deliveries_threshold
+                    && topic_params.mesh_message_deliveries_weight != 0.0
                 {
                     let deficit = topic_params.mesh_message_deliveries_threshold
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
-                    topic_score += p3 * topic_params.mesh_message_deliveries_weight;
+                    let penalty = p3 * topic_params.mesh_message_deliveries_weight;
+
+                    topic_score += penalty;
                     #[cfg(feature = "metrics")]
                     report
                         .penalties
@@ -324,7 +327,7 @@ impl PeerScore {
                         peer=%peer_id,
                         %topic,
                         %deficit,
-                        penalty=%topic_score,
+                        penalty=%penalty,
                         "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
                     );
                 }
@@ -367,7 +370,9 @@ impl PeerScore {
             // addr. It is quadratic, and the weight is negative (validated by
             // peer_score_params.validate()).
             if let Some(peers_in_ip) = self.peer_ips.get(ip).map(|peers| peers.len()) {
-                if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
+                if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold
+                    && self.params.ip_colocation_factor_weight != 0.0
+                {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
                     #[cfg(feature = "metrics")]
