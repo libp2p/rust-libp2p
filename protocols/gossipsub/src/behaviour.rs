@@ -2473,8 +2473,10 @@ where
                     get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
-                            && scores.get(peer_id).map(|r| r.score).unwrap_or_default()
-                                < publish_threshold
+                            && !self
+                                .peer_score
+                                .below_threshold(peer_id, |ts| ts.publish_threshold)
+                                .0
                     });
                 peers.extend(new_peers);
             }

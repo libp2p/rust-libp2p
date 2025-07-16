@@ -7,6 +7,9 @@
 
 ## 0.49.0
 
+- Fix fanout logic to include correctly scored peers and prevent panics when memcache is set to 0.
+  See [PR 6095](https://github.com/libp2p/rust-libp2p/pull/6095)
+
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
 - Send IDONTWANT before Publishing a new message.
