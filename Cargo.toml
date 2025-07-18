@@ -143,8 +143,8 @@ tokio = { version = "1.38", default-features = false }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 unsigned-varint = { version = "0.8.0" }
-web-time = "1.1.0"
 wasm-bindgen-futures = "0.4"
+web-time = "1.1.0"
 
 [patch.crates-io]
 
