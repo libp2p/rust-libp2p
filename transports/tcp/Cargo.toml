@@ -16,7 +16,7 @@ futures-timer = "3.0"
 if-watch = { workspace = true }
 libc = "0.2.155"
 libp2p-core = { workspace = true }
-socket2 = { version = "0.5.7", features = ["all"] }
+socket2 = { version = "0.6.0", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 
