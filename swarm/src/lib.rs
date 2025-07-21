@@ -1767,6 +1767,8 @@ impl NetworkInfo {
 
 #[cfg(test)]
 mod tests {
+    use std::io::ErrorKind;
+
     use libp2p_core::{
         multiaddr,
         multiaddr::multiaddr,
@@ -2162,10 +2164,13 @@ mod tests {
         .await;
         assert_eq!(peer_id.unwrap(), other_id);
         match error {
-            DialError::WrongPeerId { obtained, address } => {
-                assert_eq!(obtained, *swarm1.local_peer_id());
-                assert_eq!(address, other_addr);
-            }
+            DialError::Transport(e) => match &e.get(0).unwrap().1 {
+                TransportError::Other(e) => match e.kind() {
+                    ErrorKind::PermissionDenied => {}
+                    _ => panic!("wrong error {e:?}"),
+                },
+                _ => panic!("wrong error {e:?}"),
+            },
             x => panic!("wrong error {x:?}"),
         }
     }

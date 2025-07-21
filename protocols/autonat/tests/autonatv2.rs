@@ -324,7 +324,6 @@ async fn dial_back_to_not_supporting() {
     let (bob_done_tx, bob_done_rx) = oneshot::channel();
 
     let hannes = new_dummy().await;
-    let hannes_peer_id = *hannes.local_peer_id();
     let unreachable_address = hannes.external_addresses().next().unwrap().clone();
     let bob_unreachable_address = unreachable_address.clone();
     bob.behaviour_mut()
@@ -338,7 +337,7 @@ async fn dial_back_to_not_supporting() {
     let handler = tokio::spawn(async { hannes.loop_on_next().await });
 
     let alice_task = async {
-        let (alice_dialing_peer, alice_conn_id) = alice
+        let (alice_dialing_peer, _) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
                     peer_id,
@@ -350,15 +349,9 @@ async fn dial_back_to_not_supporting() {
         alice
             .wait(|event| match event {
                 SwarmEvent::OutgoingConnectionError {
-                    connection_id,
-                    peer_id: Some(peer_id),
-                    error: DialError::WrongPeerId { obtained, .. },
-                } if connection_id == alice_conn_id
-                    && peer_id == alice_dialing_peer
-                    && obtained == hannes_peer_id =>
-                {
-                    Some(())
-                }
+                    error: DialError::Transport(_),
+                    ..
+                } => Some(()),
                 _ => None,
             })
             .await;

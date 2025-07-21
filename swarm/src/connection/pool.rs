@@ -438,7 +438,7 @@ where
         self.executor.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
-                ConcurrentDial::new(dials, concurrency_factor),
+                ConcurrentDial::new(peer, dials, concurrency_factor),
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
