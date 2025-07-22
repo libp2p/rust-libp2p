@@ -2951,12 +2951,6 @@ pub enum GetRecordError {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
-    #[error("the quorum failed; needed {quorum} peers")]
-    QuorumFailed {
-        key: record::Key,
-        records: Vec<PeerRecord>,
-        quorum: NonZeroUsize,
-    },
     #[error("the request timed out")]
     Timeout { key: record::Key },
 }
@@ -2965,7 +2959,6 @@ impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
     pub fn key(&self) -> &record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
@@ -2975,7 +2968,6 @@ impl GetRecordError {
     /// consuming the error.
     pub fn into_key(self) -> record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }

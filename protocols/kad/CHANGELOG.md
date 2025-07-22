@@ -1,3 +1,8 @@
+## 0.49.0
+
+- Remove no longer constructed GetRecordError::QuorumFailed.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 ## 0.48.1
 
 - Implement `Copy` for `QueryStats` and `ProgressStep`
