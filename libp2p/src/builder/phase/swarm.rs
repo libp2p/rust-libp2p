@@ -10,9 +10,9 @@ pub struct SwarmPhase<T, B> {
     pub(crate) transport: T,
 }
 
+#[cfg(any(target_arch = "wasm32", feature = "tokio"))]
 macro_rules! impl_with_swarm_config {
-    ($providerKebabCase:literal, $providerPascalCase:ty, $config:expr) => {
-        #[cfg(feature = $providerKebabCase)]
+    ($providerPascalCase:ty, $config:expr) => {
         impl<T, B> SwarmBuilder<$providerPascalCase, SwarmPhase<T, B>> {
             pub fn with_swarm_config(
                 self,
@@ -42,16 +42,14 @@ macro_rules! impl_with_swarm_config {
     };
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
 impl_with_swarm_config!(
-    "tokio",
     super::provider::Tokio,
     libp2p_swarm::Config::with_tokio_executor()
 );
 
 #[cfg(target_arch = "wasm32")]
 impl_with_swarm_config!(
-    "wasm-bindgen",
     super::provider::WasmBindgen,
     libp2p_swarm::Config::with_wasm_executor()
 );
