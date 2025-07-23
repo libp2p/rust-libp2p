@@ -43,6 +43,7 @@ type Dial = BoxFuture<
 >;
 
 pub(crate) struct ConcurrentDial {
+    peer_id: Option<PeerId>,
     dials: FuturesUnordered<Dial>,
     pending_dials: Box<dyn Iterator<Item = Dial> + Send>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
@@ -51,7 +52,11 @@ pub(crate) struct ConcurrentDial {
 impl Unpin for ConcurrentDial {}
 
 impl ConcurrentDial {
-    pub(crate) fn new(pending_dials: Vec<Dial>, concurrency_factor: NonZeroU8) -> Self {
+    pub(crate) fn new(
+        peer_id: Option<PeerId>,
+        pending_dials: Vec<Dial>,
+        concurrency_factor: NonZeroU8,
+    ) -> Self {
         let mut pending_dials = pending_dials.into_iter();
 
         let dials = FuturesUnordered::new();
@@ -63,6 +68,7 @@ impl ConcurrentDial {
         }
 
         Self {
+            peer_id,
             dials,
             errors: Default::default(),
             pending_dials: Box::new(pending_dials),
@@ -86,9 +92,13 @@ impl Future for ConcurrentDial {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match ready!(self.dials.poll_next_unpin(cx)) {
-                Some((addr, Ok(output))) => {
+                Some((addr, Ok(output))) if self.peer_id.is_none_or(|id| output.0 == id) => {
                     let errors = std::mem::take(&mut self.errors);
                     return Poll::Ready(Ok((addr, output, errors)));
+                }
+                Some((addr, Ok(_))) => {
+                    let e = TransportError::Other(std::io::ErrorKind::PermissionDenied.into());
+                    self.errors.push((addr, e));
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, e));
