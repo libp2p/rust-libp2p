@@ -2,6 +2,8 @@
 
 ### Changed
 
+- Replace the zero-second TTL hack with proper record filtering in Kademlia.
+  See [PR 5987](https://github.com/libp2p/rust-libp2p/pull/5987)
 - Deprecated #[clap] attributes with #[arg] and #[command].
   See [PR 5932](https://github.com/libp2p/rust-libp2p/pull/5932)
 
