@@ -1,3 +1,8 @@
+## 0.4.1
+
+- FIN_ACK support for WebRTC streams.
+  See [PR 6084](https://github.com/libp2p/rust-libp2p/pull/6084).
+
 ## 0.4.0
 
 <!-- Update to libp2p-core v0.43.0 -->
