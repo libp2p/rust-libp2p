@@ -27,12 +27,17 @@ async fn main() {
         info!("    [{i}]: {participant}");
     }
 
+    // Execute the specified test scenario
     match context.test_name.as_str() {
         "subscribe" => subscribe(context).await,
         test_name => unreachable!("Unknown test name: {test_name}"),
     };
 }
 
+/// Test execution context containing configuration and coordination resources.
+///
+/// Holds all necessary information for a test node including Redis connection
+/// for inter-node coordination, network addresses, and test parameters.
 struct Context {
     test_name: String,
     redis: RedisClient,

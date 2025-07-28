@@ -4,12 +4,13 @@ use libp2p::futures::{FutureExt, StreamExt};
 use libp2p::gossipsub::{
     AllowAllSubscriptionFilter, Behaviour, Config, Event, IdentityTransform, MessageAuthenticity,
 };
-use libp2p::identity::Keypair;
+use libp2p::identity::{Keypair, PeerId};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, Swarm, Transport};
 use std::time::Duration;
 use tracing::{debug, info};
 
+/// Creates a gossipsub behavior for testing.
 pub(crate) fn gossipsub(keypair: Keypair) -> Result<Behaviour, &'static str> {
     Behaviour::new_with_subscription_filter_and_transform(
         MessageAuthenticity::Signed(keypair),
@@ -19,9 +20,10 @@ pub(crate) fn gossipsub(keypair: Keypair) -> Result<Behaviour, &'static str> {
     )
 }
 
+/// Creates a configured libp2p transport stack for gossipsub testing.
 pub(crate) fn transport(
     keypair: &Keypair,
-) -> libp2p::core::transport::Boxed<(libp2p::identity::PeerId, StreamMuxerBox)> {
+) -> libp2p::core::transport::Boxed<(PeerId, StreamMuxerBox)> {
     let tcp = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::default().nodelay(true));
     let transport = libp2p::dns::tokio::Transport::system(tcp)
         .expect("DNS")
@@ -38,6 +40,19 @@ pub(crate) fn transport(
         .boxed()
 }
 
+/// Synchronizes test nodes and drives the swarm until all nodes reach a barrier.
+///
+/// This function processes swarm events while waiting for all test nodes to signal
+/// completion of a specific test phase using Redis coordination.
+///
+/// # Arguments
+/// * `key` - Redis key for this synchronization barrier
+/// * `swarm` - The libp2p swarm to drive
+/// * `redis` - Redis client for inter-node coordination
+/// * `target` - Number of nodes that must signal before proceeding
+///
+/// # Returns
+/// All swarm events that occurred during the synchronization period
 pub(crate) async fn barrier_and_drive_swarm(
     key: &str,
     swarm: &mut Swarm<Behaviour>,
@@ -53,21 +68,25 @@ pub(crate) async fn barrier_and_drive_swarm(
     swarm_events
 }
 
+/// Collects addresses from all test nodes for network setup.
+///
+/// Each node adds its address to a shared Redis list and waits until
+/// all participating nodes have registered their addresses.
 pub(crate) async fn collect_addr(
     redis: &mut RedisClient,
     local_addr: Multiaddr,
     target: usize,
 ) -> Vec<Multiaddr> {
-    const KEY: &str = "collect_addr";
-    redis.push(KEY, local_addr.to_string()).await;
+    let key = "collect_addr";
+    redis.push(key, local_addr.to_string()).await;
 
-    let mut list = redis.list(KEY).await;
+    let mut list = redis.list(key).await;
     loop {
         if list.len() >= target {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
-        list = redis.list(KEY).await;
+        list = redis.list(key).await;
     }
 
     list.iter()

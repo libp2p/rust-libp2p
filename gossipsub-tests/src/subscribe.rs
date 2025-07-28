@@ -7,6 +7,10 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::SwarmBuilder;
 use tracing::{debug, info, warn};
 
+/// Tests the gossipsub subscription mechanism across multiple nodes.
+/// 
+/// Verifies that nodes can successfully connect to each other, subscribe to a topic,
+/// and form a proper mesh network for gossipsub message distribution.
 pub(crate) async fn subscribe(mut context: Context) {
     let mut swarm_events = vec![];
     let is_primary_node = context.node_index == 0;
