@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures::{AsyncRead, AsyncWrite};
-use futures_bounded::FuturesSet;
+use futures_bounded::{Delay, FuturesSet};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
@@ -33,7 +33,7 @@ impl Handler {
         Self {
             pending_nonce: Some(cmd),
             requested_substream_nonce: None,
-            outbound: FuturesSet::new(Duration::from_secs(10), 5),
+            outbound: FuturesSet::new(|| Delay::futures_timer(Duration::from_secs(10)), 5),
         }
     }
 }

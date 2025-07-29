@@ -28,6 +28,7 @@ use std::{
 
 use either::Either;
 use futures::{channel::oneshot, prelude::*, stream::SelectAll};
+use futures_bounded::Delay;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -463,7 +464,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                substreams_timeout,
+                move || Delay::futures_timer(substreams_timeout),
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
