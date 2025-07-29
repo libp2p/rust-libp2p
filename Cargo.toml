@@ -121,7 +121,8 @@ libp2p-yamux = { version = "0.47.0", path = "muxers/yamux" }
 asynchronous-codec = { version = "0.7.0" }
 env_logger = "0.11"
 futures = "0.3.30"
-futures-bounded = { version = "0.3.0", features = ["futures-timer"] }
+# TODO: replace with version = "0.3.1" once released upstream
+futures-bounded = { git = "https://github.com/thomaseizinger/rust-futures-bounded", rev = "012803d343b5c604e65d3c238a8cd7a145616447", features = ["futures-timer"] }
 futures-rustls = { version = "0.26.0", default-features = false }
 getrandom = "0.2"
 if-watch = "3.2.1"
