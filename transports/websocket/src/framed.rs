@@ -531,7 +531,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         }
     };
 
-    // Will hold a value if the multiaddr carries `/tls/sni/<host>`
+    // Will hold a value if the multiaddr carries `/tls/sni/<host>`.
     let mut sni_override: Option<ServerName<'static>> = None;
     // Now consume the `Ws` / `Wss` protocol from the end of the address,
     // preserving the trailing `P2p` protocol that identifies the remote,
