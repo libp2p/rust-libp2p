@@ -1,6 +1,6 @@
-## Unreleased
+## 0.45.2
 
-- feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport  
+- feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport
   See [PR 6041](https://github.com/your-username/rust-libp2p/pull/6041)
 
 ## 0.45.1
