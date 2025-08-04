@@ -1,4 +1,6 @@
 ## 0.50.0
+- Remove peer penalty for duplicate messages.
+  See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
 
 - Remove `Rpc` from the public API.
   See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
