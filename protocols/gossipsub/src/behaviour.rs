@@ -322,10 +322,6 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
 
-    /// Short term cache for published message ids. This is used for penalizing peers sending
-    /// our own messages back if the messages are anonymous or use a random author.
-    published_message_ids: DuplicateCache<MessageId>,
-
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
@@ -449,7 +445,6 @@ where
             count_received_ihave: HashMap::new(),
             count_sent_iwant: HashMap::new(),
             connected_peers: HashMap::new(),
-            published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
             subscription_filter,
             data_transform,
@@ -735,14 +730,6 @@ where
 
         // Consider the message as delivered for gossip promises.
         self.gossip_promises.message_delivered(&msg_id);
-
-        // If the message is anonymous or has a random author add it to the published message ids
-        // cache.
-        if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
-            if !self.config.allow_self_origin() {
-                self.published_message_ids.insert(msg_id.clone());
-            }
-        }
 
         // Send to peers we know are subscribed to the topic.
         let mut publish_failed = true;
@@ -1719,7 +1706,7 @@ where
                 own_id != propagation_source
                     && raw_message.source.as_ref().is_some_and(|s| s == own_id)
             } else {
-                self.published_message_ids.contains(msg_id)
+                false
             };
 
         if self_published {
