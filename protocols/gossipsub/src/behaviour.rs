@@ -360,18 +360,6 @@ where
             D::default(),
         )
     }
-
-    /// Allow the [`Behaviour`] to also record metrics.
-    /// Metrics can be evaluated by passing a reference to a [`Registry`].
-    #[cfg(feature = "metrics")]
-    pub fn with_metrics(
-        mut self,
-        metrics_registry: &mut Registry,
-        metrics_config: MetricsConfig,
-    ) -> Self {
-        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
-        self
-    }
 }
 
 impl<D, F> Behaviour<D, F>
@@ -468,6 +456,18 @@ where
             failed_messages: Default::default(),
             gossip_promises: Default::default(),
         })
+    }
+
+    /// Allow the [`Behaviour`] to also record metrics.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    #[cfg(feature = "metrics")]
+    pub fn with_metrics(
+        mut self,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
+    ) -> Self {
+        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
+        self
     }
 }
 
