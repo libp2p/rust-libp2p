@@ -76,13 +76,12 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
 
     let mut iter = addr.iter();
 
-    let first = match iter.next() {
-        None => return false,
-        Some(p) => p,
+    let Some(first) = iter.next() else {
+        return false;
     };
-    let second = match iter.next() {
-        None => return false,
-        Some(p) => p,
+
+    let Some(second) = iter.next() else {
+        return false;
     };
 
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
@@ -120,9 +119,9 @@ pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     protocol_version: String,
-    /// The key of the local node. Only the public key will be report on the wire.  
+    /// The key of the local node. Only the public key will be report on the wire.
     /// The behaviour will send signed [`PeerRecord`](libp2p_core::PeerRecord) in
-    /// its identify message only when supplied with a keypair.  
+    /// its identify message only when supplied with a keypair.
     local_key: Arc<KeyType>,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
@@ -161,7 +160,7 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
-    /// advertises the given protocol version and public key.  
+    /// advertises the given protocol version and public key.
     /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
     /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
@@ -169,7 +168,7 @@ impl Config {
     }
 
     /// Creates a new configuration for the identify [`Behaviour`] that
-    /// advertises the given protocol version and public key.  
+    /// advertises the given protocol version and public key.
     /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
     /// for verifiable address advertisement.
     pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
@@ -532,9 +531,8 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self.discovered_peers.get(&peer))

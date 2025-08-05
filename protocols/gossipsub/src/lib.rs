@@ -101,6 +101,7 @@ mod error;
 mod gossip_promises;
 mod handler;
 mod mcache;
+#[cfg(feature = "metrics")]
 mod metrics;
 mod peer_score;
 mod protocol;
@@ -112,11 +113,13 @@ mod topic;
 mod transform;
 mod types;
 
+#[cfg(feature = "metrics")]
+pub use metrics::Config as MetricsConfig;
+
 pub use self::{
     behaviour::{Behaviour, Event, MessageAuthenticity},
     config::{Config, ConfigBuilder, ValidationMode, Version},
     error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError},
-    metrics::Config as MetricsConfig,
     peer_score::{
         score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams,
         PeerScoreThresholds, TopicScoreParams,
@@ -130,9 +133,6 @@ pub use self::{
     transform::{DataTransform, IdentityTransform},
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
-
-#[deprecated(note = "Will be removed from the public API.")]
-pub type Rpc = self::types::Rpc;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

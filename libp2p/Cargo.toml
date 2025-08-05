@@ -3,7 +3,7 @@ name = "libp2p"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.55.1"
+version = "0.56.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 full = [
-    "async-std",
     "autonat",
     "cbor",
     "dcutr",
@@ -29,7 +28,6 @@ full = [
     "memory-connection-limits",
     "metrics",
     "noise",
-    "peer-store",
     "ping",
     "plaintext",
     "pnet",
@@ -53,7 +51,6 @@ full = [
     "upnp",
 ]
 
-async-std = [ "libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std",]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
@@ -70,7 +67,6 @@ mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
-peer-store = ["dep:libp2p-peer-store"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -83,9 +79,9 @@ secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
-tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = [ "futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 webrtc-websys = ['dep:libp2p-webrtc-websys']
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
@@ -113,7 +109,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
-libp2p-peer-store = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
 libp2p-pnet = { workspace = true, optional = true }
@@ -143,8 +138,7 @@ libp2p-upnp = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
-tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }

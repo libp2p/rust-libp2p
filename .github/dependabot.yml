@@ -12,7 +12,6 @@ updates:
       hickory-dns:
         patterns:
           - "hickory-*"
-          - "async-std-resolver"
       opentelemetry:
         patterns:
           - "opentelemetry*"

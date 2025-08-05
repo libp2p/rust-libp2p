@@ -208,13 +208,16 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use std::time::Duration;
 
-    use async_std::{
-        future::timeout,
-        net::{TcpListener, TcpStream},
-    };
     use quickcheck::{Arbitrary, Gen, GenRange};
+    use tokio::{
+        net::{TcpListener, TcpStream},
+        runtime::Runtime,
+        time::timeout,
+    };
+    use tokio_util::compat::TokioAsyncReadCompatExt;
     use tracing::metadata::LevelFilter;
     use tracing_subscriber::EnvFilter;
 
@@ -226,7 +229,7 @@ mod tests {
         async fn run(version: Version) {
             let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
-            let server = async_std::task::spawn(async move {
+            let server = tokio::task::spawn(async move {
                 let protos = vec!["/proto1", "/proto2"];
                 let (proto, mut io) = listener_select_proto(server_connection, protos)
                     .await
@@ -242,7 +245,7 @@ mod tests {
                 io.flush().await.unwrap();
             });
 
-            let client = async_std::task::spawn(async move {
+            let client = tokio::task::spawn(async move {
                 let protos = vec!["/proto3", "/proto2"];
                 let (proto, mut io) = dialer_select_proto(client_connection, protos, version)
                     .await
@@ -258,12 +261,13 @@ mod tests {
                 assert_eq!(out, b"pong");
             });
 
-            server.await;
-            client.await;
+            server.await.unwrap();
+            client.await.unwrap();
         }
 
-        async_std::task::block_on(run(Version::V1));
-        async_std::task::block_on(run(Version::V1Lazy));
+        let rt = Runtime::new().unwrap();
+        rt.block_on(run(Version::V1));
+        rt.block_on(run(Version::V1Lazy));
     }
 
     /// Tests the expected behaviour of failed negotiations.
@@ -283,12 +287,13 @@ mod tests {
                 )
                 .try_init();
 
-            async_std::task::block_on(async move {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
 
-                let server = async_std::task::spawn(async move {
-                    let server_connection = listener.accept().await.unwrap().0;
+                let server = tokio::task::spawn(async move {
+                    let server_connection = listener.accept().await.unwrap().0.compat();
 
                     let io = match timeout(
                         Duration::from_secs(2),
@@ -309,8 +314,8 @@ mod tests {
                     }
                 });
 
-                let client = async_std::task::spawn(async move {
-                    let client_connection = TcpStream::connect(addr).await.unwrap();
+                let client = tokio::task::spawn(async move {
+                    let client_connection = TcpStream::connect(addr).await.unwrap().compat();
 
                     let mut io = match timeout(
                         Duration::from_secs(2),
@@ -336,8 +341,8 @@ mod tests {
                     }
                 });
 
-                server.await;
-                client.await;
+                server.await.unwrap();
+                client.await.unwrap();
 
                 tracing::info!("---------------------------------------")
             });
@@ -348,12 +353,12 @@ mod tests {
             .quickcheck(prop as fn(_, _, _, _));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
         let (client_connection, _server_connection) =
             futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
 
-        let client = async_std::task::spawn(async move {
+        let client = tokio::task::spawn(async move {
             // Single protocol to allow for lazy (or optimistic) protocol negotiation.
             let protos = vec!["/proto1"];
             let (proto, mut io) = dialer_select_proto(client_connection, protos, Version::V1Lazy)
@@ -366,9 +371,12 @@ mod tests {
             io.close().await.unwrap();
         });
 
-        async_std::future::timeout(Duration::from_secs(10), client)
-            .await
-            .unwrap();
+        match tokio::time::timeout(Duration::from_secs(10), client).await {
+            Ok(join_result) => join_result.expect("Client task should complete successfully"),
+            Err(_elapsed) => {
+                panic!("Expected the client task to complete before timeout");
+            }
+        }
     }
 
     #[derive(Clone, Debug)]

@@ -24,7 +24,6 @@ use std::{
     marker::PhantomData,
     pin::Pin,
     task::{Context, Poll, Waker},
-    time::Duration,
 };
 
 use either::Either;
@@ -454,6 +453,8 @@ impl Handler {
             }
         }
 
+        let substreams_timeout = protocol_config.substreams_timeout_s();
+
         Handler {
             protocol_config,
             mode,
@@ -462,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                Duration::from_secs(10),
+                substreams_timeout,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
@@ -819,14 +820,11 @@ fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
 ) -> ProtocolStatus {
-    let current_status = match current_status {
-        None => {
-            return ProtocolStatus {
-                supported: now_supported,
-                reported: false,
-            }
-        }
-        Some(current) => current,
+    let Some(current_status) = current_status else {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: false,
+        };
     };
 
     if now_supported == current_status.supported {

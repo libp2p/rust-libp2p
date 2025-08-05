@@ -91,11 +91,11 @@ fn test_score_time_in_mesh() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
 
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     assert!(
         score == 0.0,
         "expected score to start at zero. Score found: {score}"
@@ -107,7 +107,7 @@ fn test_score_time_in_mesh() {
     std::thread::sleep(elapsed);
     peer_score.refresh_scores();
 
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     let expected = topic_params.topic_weight
         * topic_params.time_in_mesh_weight
         * (elapsed.as_millis() / topic_params.time_in_mesh_quantum.as_millis()) as f64;
@@ -136,11 +136,11 @@ fn test_score_time_in_mesh_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
 
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     assert!(
         score == 0.0,
         "expected score to start at zero. Score found: {score}"
@@ -152,7 +152,7 @@ fn test_score_time_in_mesh_cap() {
     std::thread::sleep(elapsed);
     peer_score.refresh_scores();
 
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     let expected = topic_params.topic_weight
         * topic_params.time_in_mesh_weight
         * topic_params.time_in_mesh_cap;
@@ -186,7 +186,7 @@ fn test_score_first_message_deliveries() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
@@ -201,7 +201,7 @@ fn test_score_first_message_deliveries() {
 
     peer_score.refresh_scores();
 
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     let expected =
         topic_params.topic_weight * topic_params.first_message_deliveries_weight * messages as f64;
     assert!(score == expected, "The score: {score} should be {expected}");
@@ -227,7 +227,7 @@ fn test_score_first_message_deliveries_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
@@ -241,7 +241,7 @@ fn test_score_first_message_deliveries_cap() {
     }
 
     peer_score.refresh_scores();
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     let expected = topic_params.topic_weight
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_cap;
@@ -266,7 +266,7 @@ fn test_score_first_message_deliveries_decay() {
 
     params.topics.insert(topic_hash, topic_params.clone());
     let peer_id = PeerId::random();
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
 
@@ -279,7 +279,7 @@ fn test_score_first_message_deliveries_decay() {
     }
 
     peer_score.refresh_scores();
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     let mut expected = topic_params.topic_weight
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_decay
@@ -292,7 +292,7 @@ fn test_score_first_message_deliveries_decay() {
         peer_score.refresh_scores();
         expected *= topic_params.first_message_deliveries_decay;
     }
-    let score = peer_score.score(&peer_id);
+    let score = peer_score.score_report(&peer_id).score;
     assert!(score == expected, "The score: {score} should be {expected}");
 }
 
@@ -318,7 +318,7 @@ fn test_score_mesh_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     // peer A always delivers the message first.
     // peer B delivers next (within the delivery window).
@@ -339,7 +339,7 @@ fn test_score_mesh_message_deliveries() {
     // assert that nobody has been penalized yet for not delivering messages before activation time
     peer_score.refresh_scores();
     for peer_id in &peers {
-        let score = peer_score.score(peer_id);
+        let score = peer_score.score_report(peer_id).score;
         assert!(
             score >= 0.0,
             "expected no mesh delivery penalty before activation time, got score {score}"
@@ -369,9 +369,9 @@ fn test_score_mesh_message_deliveries() {
     }
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
-    let score_c = peer_score.score(&peer_id_c);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
+    let score_c = peer_score.score_report(&peer_id_c).score;
 
     assert!(
         score_a >= 0.0,
@@ -415,7 +415,7 @@ fn test_score_mesh_message_deliveries_decay() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -432,7 +432,7 @@ fn test_score_mesh_message_deliveries_decay() {
     // we should have a positive score, since we delivered more messages than the threshold
     peer_score.refresh_scores();
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert!(
         score_a >= 0.0,
         "expected non-negative score for Peer A, got score {score_a}"
@@ -444,7 +444,7 @@ fn test_score_mesh_message_deliveries_decay() {
         decayed_delivery_count *= topic_params.mesh_message_deliveries_decay;
     }
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     // the penalty is the difference between the threshold and the (decayed)
     // mesh deliveries, squared.
     let deficit = topic_params.mesh_message_deliveries_threshold - decayed_delivery_count;
@@ -484,7 +484,7 @@ fn test_score_mesh_failure_penalty() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -507,8 +507,8 @@ fn test_score_mesh_failure_penalty() {
 
     // peers A and B should both have zero scores, since the failure penalty hasn't been applied yet
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
     assert!(
         score_a >= 0.0,
         "expected non-negative score for Peer A, got score {score_a}"
@@ -521,7 +521,7 @@ fn test_score_mesh_failure_penalty() {
     // prune peer B to apply the penalty
     peer_score.prune(&peer_id_b, topic.hash());
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
 
     assert_eq!(score_a, 0.0, "expected Peer A to have a 0");
 
@@ -532,7 +532,7 @@ fn test_score_mesh_failure_penalty() {
         * topic_params.mesh_message_deliveries_threshold;
     let expected = topic_params.topic_weight * topic_params.mesh_failure_penalty_weight * penalty;
 
-    let score_b = peer_score.score(&peer_id_b);
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_b, expected, "Peer B should have expected score",);
 }
@@ -561,7 +561,7 @@ fn test_score_invalid_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -575,7 +575,7 @@ fn test_score_invalid_message_deliveries() {
     }
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
 
     let expected = topic_params.topic_weight
         * topic_params.invalid_message_deliveries_weight
@@ -608,7 +608,7 @@ fn test_score_invalid_message_deliveris_decay() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -628,7 +628,7 @@ fn test_score_invalid_message_deliveris_decay() {
     let mut expected =
         topic_params.topic_weight * topic_params.invalid_message_deliveries_weight * decay * decay;
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, expected, "Peer has unexpected score");
 
     // refresh scores a few times to apply decay
@@ -638,7 +638,7 @@ fn test_score_invalid_message_deliveris_decay() {
             * topic_params.invalid_message_deliveries_decay;
     }
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, expected, "Peer has unexpected score");
 }
 
@@ -664,7 +664,7 @@ fn test_score_reject_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -683,8 +683,8 @@ fn test_score_reject_message_deliveries() {
     peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_a, 0.0, "Should have no effect on the score");
     assert_eq!(score_b, 0.0, "Should have no effect on the score");
@@ -698,8 +698,8 @@ fn test_score_reject_message_deliveries() {
     peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_a, 0.0, "Should have no effect on the score");
     assert_eq!(score_b, 0.0, "Should have no effect on the score");
@@ -716,8 +716,8 @@ fn test_score_reject_message_deliveries() {
     peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_a, 0.0, "Should have no effect on the score");
     assert_eq!(score_b, 0.0, "Should have no effect on the score");
@@ -733,8 +733,8 @@ fn test_score_reject_message_deliveries() {
     peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_a, -1.0, "Score should be effected");
     assert_eq!(score_b, -1.0, "Score should be effected");
@@ -750,8 +750,8 @@ fn test_score_reject_message_deliveries() {
     peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationFailed);
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
 
     assert_eq!(score_a, -4.0, "Score should be effected");
     assert_eq!(score_b, -4.0, "Score should be effected");
@@ -781,7 +781,7 @@ fn test_application_score() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -792,7 +792,7 @@ fn test_application_score() {
         let app_score_value = i as f64;
         peer_score.set_application_score(&peer_id_a, app_score_value);
         peer_score.refresh_scores();
-        let score_a = peer_score.score(&peer_id_a);
+        let score_a = peer_score.score_report(&peer_id_a).score;
         let expected = (i as f64) * app_specific_weight;
         assert_eq!(score_a, expected, "Peer has unexpected score");
     }
@@ -823,7 +823,7 @@ fn test_score_ip_colocation() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -844,10 +844,10 @@ fn test_score_ip_colocation() {
     peer_score.add_ip(&peer_id_d, "2.3.4.5".parse().unwrap());
 
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
-    let score_b = peer_score.score(&peer_id_b);
-    let score_c = peer_score.score(&peer_id_c);
-    let score_d = peer_score.score(&peer_id_d);
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
+    let score_c = peer_score.score_report(&peer_id_c).score;
+    let score_d = peer_score.score_report(&peer_id_d).score;
 
     assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
@@ -887,14 +887,14 @@ fn test_score_behaviour_penalty() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
 
     // add a penalty to a non-existent peer.
     peer_score.add_penalty(&peer_id_a, 1);
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
     // add the peer and test penalties
@@ -903,16 +903,16 @@ fn test_score_behaviour_penalty() {
 
     peer_score.add_penalty(&peer_id_a, 1);
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, -1.0, "Peer A should have been penalized");
 
     peer_score.add_penalty(&peer_id_a, 1);
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, -4.0, "Peer A should have been penalized");
 
     peer_score.refresh_scores();
 
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(score_a, -3.9204, "Peer A should have been penalized");
 }
 
@@ -940,7 +940,7 @@ fn test_score_retention() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -950,7 +950,7 @@ fn test_score_retention() {
 
     // score should equal -1000 (app specific score)
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(
         score_a, app_score_value,
         "Score should be the application specific score"
@@ -960,7 +960,7 @@ fn test_score_retention() {
     peer_score.remove_peer(&peer_id_a);
     std::thread::sleep(retain_score / 2);
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(
         score_a, app_score_value,
         "Score should be the application specific score"
@@ -969,7 +969,7 @@ fn test_score_retention() {
     // wait remaining time (plus a little slop) and the score should reset to zero
     std::thread::sleep(retain_score / 2 + Duration::from_millis(50));
     peer_score.refresh_scores();
-    let score_a = peer_score.score(&peer_id_a);
+    let score_a = peer_score.score_report(&peer_id_a).score;
     assert_eq!(
         score_a, 0.0,
         "Score should be the application specific score"

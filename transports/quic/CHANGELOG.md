@@ -1,4 +1,7 @@
-## 0.12.1
+## 0.13.0
+
+- Remove `async-std` support.
+  See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
 
 - Deprecate `Config::support_draft_29`.
   See [PR 5786](https://github.com/libp2p/rust-libp2p/pull/5786).
