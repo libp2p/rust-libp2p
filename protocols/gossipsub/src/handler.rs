@@ -39,7 +39,7 @@ use crate::{
     protocol::{GossipsubCodec, ProtocolConfig},
     rpc::Receiver,
     rpc_proto::proto,
-    types::{PeerKind, RawMessage, RpcIn, RpcOut},
+    types::{PeerKind, RawMessage, Rpc, RpcOut},
     ValidationError,
 };
 
@@ -51,7 +51,7 @@ pub enum HandlerEvent {
     /// any) that were received.
     Message {
         /// The GossipsubRPC message excluding any invalid messages.
-        rpc: RpcIn,
+        rpc: Rpc,
         /// Any invalid messages that were received in the RPC, along with the associated
         /// validation error.
         invalid_messages: Vec<(RawMessage, ValidationError)>,
