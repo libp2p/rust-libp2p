@@ -420,6 +420,7 @@ fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
             })
             .collect(),
         control_msgs,
+        test_extension: None,
     }
 }
 
@@ -1253,6 +1254,7 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![msg_id.clone()],
         })],
+        test_extension: None,
     };
     gs.on_connection_handler_event(
         peers[1],
@@ -3145,6 +3147,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
+                test_extension: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -3171,6 +3174,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
+                test_extension: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -3781,6 +3785,7 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![(m, ValidationError::InvalidSignature)],
         },
@@ -5540,6 +5545,7 @@ fn parses_idontwant() {
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![message_id.clone()],
         })],
+        test_extension: None,
     };
     gs.on_connection_handler_event(
         peers[1],
@@ -6638,6 +6644,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![],
         },
@@ -6682,6 +6689,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        testExtension: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -6742,6 +6750,7 @@ fn test_validation_message_size_within_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![],
         },
@@ -6786,6 +6795,7 @@ fn test_validation_message_size_within_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        testExtension: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -6805,12 +6815,16 @@ fn test_validation_message_size_within_topic_specific() {
 
 #[test]
 fn test_extensions_message_creation() {
-    let extensions_rpc = RpcOut::Extensions(Extensions {});
+    let extensions_rpc = RpcOut::Extensions(Extensions {
+        test_extension: Some(true),
+    });
     let proto_rpc: proto::RPC = extensions_rpc.into();
 
     assert!(proto_rpc.control.is_some());
     let control = proto_rpc.control.unwrap();
     assert!(control.extensions.is_some());
+    let test_extension = control.extensions.unwrap().testExtension.unwrap();
+    assert!(test_extension);
     assert!(control.ihave.is_empty());
     assert!(control.iwant.is_empty());
     assert!(control.graft.is_empty());
@@ -6847,7 +6861,9 @@ fn test_handle_extensions_message() {
     );
 
     // Simulate receiving extensions message
-    let extensions = Extensions {};
+    let extensions = Extensions {
+        test_extension: Some(false),
+    };
     gs.handle_extensions(&peer_id, extensions);
 
     // Verify extensions were stored
@@ -6855,11 +6871,13 @@ fn test_handle_extensions_message() {
     assert!(peer_details.extensions.is_some());
 
     // Simulate receiving duplicate extensions message from another peer
-    // TODO: when more extensions are added, we should test that they are not overridden.
     let duplicate_rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        control_msgs: vec![ControlAction::Extensions(None)],
+        control_msgs: vec![ControlAction::Extensions(Some(Extensions {
+            test_extension: Some(true),
+        }))],
+        test_extension: None,
     };
 
     gs.on_connection_handler_event(
@@ -6873,5 +6891,6 @@ fn test_handle_extensions_message() {
 
     // Extensions should still be present (not cleared or changed)
     let peer_details = gs.connected_peers.get(&peer_id).unwrap();
-    assert!(peer_details.extensions.is_some());
+    let test_extension = peer_details.extensions.unwrap().test_extension.unwrap();
+    assert!(!test_extension);
 }

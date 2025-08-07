@@ -1539,6 +1539,12 @@ where
         }
 
         peer.extensions = Some(extensions);
+
+        if extensions.test_extension.unwrap_or(false)
+            && matches!(peer.kind, PeerKind::Gossipsubv1_3)
+        {
+            self.send_message(*peer_id, RpcOut::TestExtension);
+        }
     }
 
     /// Removes the specified peer from the mesh, returning true if it was present.
@@ -2919,7 +2925,8 @@ where
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
                     | RpcOut::Unsubscribe(_)
-                    | RpcOut::Extensions(_) => {
+                    | RpcOut::Extensions(_)
+                    | RpcOut::TestExtension => {
                         unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
                     }
                 }
@@ -3161,7 +3168,12 @@ where
 
         if connected_peer.connections.len() <= 1 {
             // If this is the first connection send extensions message.
-            self.send_message(peer_id, RpcOut::Extensions(Extensions {}));
+            self.send_message(
+                peer_id,
+                RpcOut::Extensions(Extensions {
+                    test_extension: Some(true),
+                }),
+            );
         }
 
         Ok(Handler::new(self.config.protocol_config(), receiver))
@@ -3192,7 +3204,12 @@ where
 
         if connected_peer.connections.len() <= 1 {
             // If this is the first connection send extensions message.
-            self.send_message(peer_id, RpcOut::Extensions(Extensions {}));
+            self.send_message(
+                peer_id,
+                RpcOut::Extensions(Extensions {
+                    test_extension: Some(true),
+                }),
+            );
         }
 
         Ok(Handler::new(self.config.protocol_config(), receiver))
@@ -3395,6 +3412,10 @@ where
                 }
                 if !prune_msgs.is_empty() {
                     self.handle_prune(&propagation_source, prune_msgs);
+                }
+
+                if let Some(_extension) = rpc.test_extension {
+                    tracing::debug!("Received Test Extension");
                 }
             }
         }

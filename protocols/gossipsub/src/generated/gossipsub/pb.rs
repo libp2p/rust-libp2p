@@ -19,6 +19,7 @@ pub struct RPC {
     pub subscriptions: Vec<gossipsub::pb::mod_RPC::SubOpts>,
     pub publish: Vec<gossipsub::pb::Message>,
     pub control: Option<gossipsub::pb::ControlMessage>,
+    pub testExtension: Option<gossipsub::pb::TestExtension>,
 }
 
 impl<'a> MessageRead<'a> for RPC {
@@ -29,6 +30,7 @@ impl<'a> MessageRead<'a> for RPC {
                 Ok(10) => msg.subscriptions.push(r.read_message::<gossipsub::pb::mod_RPC::SubOpts>(bytes)?),
                 Ok(18) => msg.publish.push(r.read_message::<gossipsub::pb::Message>(bytes)?),
                 Ok(26) => msg.control = Some(r.read_message::<gossipsub::pb::ControlMessage>(bytes)?),
+                Ok(51939474) => msg.testExtension = Some(r.read_message::<gossipsub::pb::TestExtension>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -43,12 +45,14 @@ impl MessageWrite for RPC {
         + self.subscriptions.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.publish.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.control.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.testExtension.as_ref().map_or(0, |m| 4 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.subscriptions { w.write_with_tag(10, |w| w.write_message(s))?; }
         for s in &self.publish { w.write_with_tag(18, |w| w.write_message(s))?; }
         if let Some(ref s) = self.control { w.write_with_tag(26, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.testExtension { w.write_with_tag(51939474, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -373,16 +377,48 @@ impl MessageWrite for ControlIDontWant {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct ControlExtensions { }
+pub struct ControlExtensions {
+    pub testExtension: Option<bool>,
+}
 
 impl<'a> MessageRead<'a> for ControlExtensions {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        while !r.is_eof() {
+            match r.next_tag(bytes) {
+                Ok(51939472) => msg.testExtension = Some(r.read_bool(bytes)?),
+                Ok(t) => { r.read_unknown(bytes, t)?; }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(msg)
+    }
+}
+
+impl MessageWrite for ControlExtensions {
+    fn get_size(&self) -> usize {
+        0
+        + self.testExtension.as_ref().map_or(0, |m| 4 + sizeof_varint(*(m) as u64))
+    }
+
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.testExtension { w.write_with_tag(51939472, |w| w.write_bool(*s))?; }
+        Ok(())
+    }
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct TestExtension { }
+
+impl<'a> MessageRead<'a> for TestExtension {
     fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
         r.read_to_end();
         Ok(Self::default())
     }
 }
 
-impl MessageWrite for ControlExtensions { }
+impl MessageWrite for TestExtension { }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]

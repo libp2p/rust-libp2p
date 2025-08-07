@@ -12,12 +12,12 @@ message RPC {
 	}
 
 	optional ControlMessage control = 3;
-
     // Canonical Extensions should register their messages here.
 
 	// Experimental Extensions should register their messages here. They
 	// must use field numbers larger than 0x200000 to be encoded with at least 4
 	// bytes
+    optional TestExtension testExtension = 6492434;
 }
 
 message Message {
@@ -64,7 +64,13 @@ message ControlIDontWant {
 message ControlExtensions {
     // Initially empty. Future extensions will be added here along with a
     // reference to their specification.
+
+    // Experimental extensions must use field numbers larger than 0x200000 to be
+    // encoded with at least 4 bytes
+    optional bool testExtension = 6492434;
 }
+
+message TestExtension {}
 
 message PeerInfo {
 	optional bytes peer_id = 1;

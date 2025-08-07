@@ -36,7 +36,7 @@ use crate::{
     topic::TopicHash,
     types::{
         ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
-        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction,
+        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, TestExtension,
     },
     ValidationError,
 };
@@ -562,7 +562,9 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let extension_msg = rpc_control.extensions.map(|_extension| Extensions {});
+            let extension_msg = rpc_control.extensions.map(|extensions| Extensions {
+                test_extension: extensions.testExtension,
+            });
 
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
@@ -588,6 +590,7 @@ impl Decoder for GossipsubCodec {
                     })
                     .collect(),
                 control_msgs,
+                test_extension: rpc.testExtension.map(|_extension| TestExtension {}),
             },
             invalid_messages,
         }))
