@@ -322,10 +322,6 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
 
-    /// Short term cache for published message ids. This is used for penalizing peers sending
-    /// our own messages back if the messages are anonymous or use a random author.
-    published_message_ids: DuplicateCache<MessageId>,
-
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
@@ -359,18 +355,6 @@ where
             F::default(),
             D::default(),
         )
-    }
-
-    /// Allow the [`Behaviour`] to also record metrics.
-    /// Metrics can be evaluated by passing a reference to a [`Registry`].
-    #[cfg(feature = "metrics")]
-    pub fn with_metrics(
-        mut self,
-        metrics_registry: &mut Registry,
-        metrics_config: MetricsConfig,
-    ) -> Self {
-        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
-        self
     }
 }
 
@@ -461,13 +445,24 @@ where
             count_received_ihave: HashMap::new(),
             count_sent_iwant: HashMap::new(),
             connected_peers: HashMap::new(),
-            published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
             subscription_filter,
             data_transform,
             failed_messages: Default::default(),
             gossip_promises: Default::default(),
         })
+    }
+
+    /// Allow the [`Behaviour`] to also record metrics.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    #[cfg(feature = "metrics")]
+    pub fn with_metrics(
+        mut self,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
+    ) -> Self {
+        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
+        self
     }
 }
 
@@ -519,7 +514,6 @@ where
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        tracing::debug!(%topic, "Subscribing to topic");
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
@@ -548,7 +542,6 @@ where
     ///
     /// Returns `true` if we were subscribed to this topic.
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> bool {
-        tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
 
         if !self.mesh.contains_key(&topic_hash) {
@@ -737,14 +730,6 @@ where
 
         // Consider the message as delivered for gossip promises.
         self.gossip_promises.message_delivered(&msg_id);
-
-        // If the message is anonymous or has a random author add it to the published message ids
-        // cache.
-        if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
-            if !self.config.allow_self_origin() {
-                self.published_message_ids.insert(msg_id.clone());
-            }
-        }
 
         // Send to peers we know are subscribed to the topic.
         let mut publish_failed = true;
@@ -978,14 +963,15 @@ where
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
-        tracing::debug!(topic=%topic_hash, "Running JOIN for topic");
-
         let mut added_peers = HashSet::new();
         let mesh_n = self.config.mesh_n_for_topic(topic_hash);
         #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
         }
+
+        // Always construct a mesh regardless if we find peers or not.
+        self.mesh.entry(topic_hash.clone()).or_default();
 
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
@@ -1720,7 +1706,7 @@ where
                 own_id != propagation_source
                     && raw_message.source.as_ref().is_some_and(|s| s == own_id)
             } else {
-                self.published_message_ids.contains(msg_id)
+                false
             };
 
         if self_published {
@@ -1907,7 +1893,7 @@ where
         subscriptions: &[Subscription],
         propagation_source: &PeerId,
     ) {
-        tracing::debug!(
+        tracing::trace!(
             source=%propagation_source,
             "Handling subscriptions: {:?}",
             subscriptions,
@@ -2087,7 +2073,6 @@ where
 
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
-        tracing::debug!("Starting heartbeat");
         #[cfg(feature = "metrics")]
         let start = Instant::now();
 
@@ -2473,8 +2458,10 @@ where
                     get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
-                            && scores.get(peer_id).map(|r| r.score).unwrap_or_default()
-                                < publish_threshold
+                            && !self
+                                .peer_score
+                                .below_threshold(peer_id, |ts| ts.publish_threshold)
+                                .0
                     });
                 peers.extend(new_peers);
             }
@@ -2531,7 +2518,6 @@ where
             }
         }
 
-        tracing::debug!("Completed Heartbeat");
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);

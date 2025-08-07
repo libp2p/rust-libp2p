@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub(crate) mod proto {
-    #![allow(unreachable_pub)]
+    #![allow(unreachable_pub, dead_code)]
     include!("generated/mod.rs");
     pub use self::gossipsub::pb::{mod_RPC::SubOpts, *};
 }

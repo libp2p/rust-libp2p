@@ -1,4 +1,4 @@
-## 0.28.1
+## 0.29.0
 
 - fix: public cbor/json codec module
   See [PR 5830](https://github.com/libp2p/rust-libp2p/pull/5830).
@@ -8,6 +8,8 @@
 
 - fix: don't fail outbound request on `DialError::DialPeerConditionFalse`.
   See [PR 6000](https://github.com/libp2p/rust-libp2p/pull/6000)
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.28.0
 

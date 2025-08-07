@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.43.0"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,22 +11,19 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-io = { version = "2.3.3", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0"
 if-watch = { workspace = true }
 libc = "0.2.155"
 libp2p-core = { workspace = true }
-socket2 = { version = "0.5.7", features = ["all"] }
+socket2 = { version = "0.6.0", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
-async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
-async-std = { version = "1.6.5", features = ["attributes"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

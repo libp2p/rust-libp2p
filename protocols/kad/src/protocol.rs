@@ -50,7 +50,7 @@ pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs
 /// The default maximum size for a varint length-delimited packet.
 pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// The default timeout of outbound_substreams to be 10 (seconds).
-const DEFAULT_OUTBOUND_SUBSTREAMS_TIMEOUT_S: Duration = Duration::from_secs(10);
+const DEFAULT_SUBSTREAMS_TIMEOUT_S: Duration = Duration::from_secs(10);
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ConnectionType {
@@ -148,7 +148,7 @@ pub struct ProtocolConfig {
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
     /// Specifies the outbound_substreams timeout in seconds
-    outbound_substreams_timeout_s: Duration,
+    substreams_timeout_s: Duration,
 }
 
 impl ProtocolConfig {
@@ -157,7 +157,7 @@ impl ProtocolConfig {
         ProtocolConfig {
             protocol_names: vec![protocol_name],
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
-            outbound_substreams_timeout_s: DEFAULT_OUTBOUND_SUBSTREAMS_TIMEOUT_S,
+            substreams_timeout_s: DEFAULT_SUBSTREAMS_TIMEOUT_S,
         }
     }
 
@@ -171,14 +171,14 @@ impl ProtocolConfig {
         self.max_packet_size = size;
     }
 
-    /// Modifies outbount_substreams timeout.
-    pub fn set_outbound_substreams_timeout(&mut self, timeout: Duration) {
-        self.outbound_substreams_timeout_s = timeout;
+    /// Modifies the outbound substreams timeout.
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) {
+        self.substreams_timeout_s = timeout;
     }
 
-    /// Getter of outbount_substreams_timeout_s.
-    pub fn outbound_substreams_timeout_s(&self) -> Duration {
-        self.outbound_substreams_timeout_s
+    /// Getter of substreams_timeout_s.
+    pub fn substreams_timeout_s(&self) -> Duration {
+        self.substreams_timeout_s
     }
 }
 

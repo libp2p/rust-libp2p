@@ -5,6 +5,8 @@
 - Fix `Identify::discovered_peers` to remove peers on `DialError::{WrongPeerId, LocalPeerId}` events.
   See [PR 5890](https://github.com/libp2p/rust-libp2p/pull/5890).
 
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.46.0
 
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
