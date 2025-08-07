@@ -12,6 +12,9 @@
 - Fix mesh not being constructed even when not adding any peer.
   See [PR 6100](https://github.com/libp2p/rust-libp2p/pull/6100)
 
+- Fix incorrect default values in ConfigBuilder
+  See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
+
 ## 0.49.0
 
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
