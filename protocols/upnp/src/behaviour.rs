@@ -158,9 +158,19 @@ enum GatewayState {
 #[derive(Debug)]
 pub enum Event {
     /// The multiaddress is reachable externally.
-    NewExternalAddr(Multiaddr),
+    NewExternalAddr {
+        /// The local listen address that was mapped.
+        local_addr: Multiaddr,
+        /// The external address that is reachable.
+        external_addr: Multiaddr,
+    },
     /// The renewal of the multiaddress on the gateway failed.
-    ExpiredExternalAddr(Multiaddr),
+    ExpiredExternalAddr {
+        /// The local listen address that failed to renew.
+        local_addr: Multiaddr,
+        /// The external address that is no longer reachable.
+        external_addr: Multiaddr,
+    },
     /// The IGD gateway was not found.
     GatewayNotFound,
     /// The Gateway is not exposed directly to the public network.
@@ -475,9 +485,10 @@ impl NetworkBehaviour for Behaviour {
                                     MappingState::Pending { .. } => {
                                         let external_multiaddr =
                                             mapping.external_addr(gateway.external_addr);
-                                        self.pending_events.push_back(Event::NewExternalAddr(
-                                            external_multiaddr.clone(),
-                                        ));
+                                        self.pending_events.push_back(Event::NewExternalAddr {
+                                            local_addr: mapping.multiaddr,
+                                            external_addr: external_multiaddr.clone(),
+                                        });
                                         tracing::debug!(
                                             address=%mapping.internal_addr,
                                             protocol=%mapping.protocol,
@@ -543,9 +554,10 @@ impl NetworkBehaviour for Behaviour {
                                     );
                                     let external_multiaddr =
                                         mapping.external_addr(gateway.external_addr);
-                                    self.pending_events.push_back(Event::ExpiredExternalAddr(
-                                        external_multiaddr.clone(),
-                                    ));
+                                    self.pending_events.push_back(Event::ExpiredExternalAddr {
+                                        local_addr: mapping.multiaddr,
+                                        external_addr: external_multiaddr.clone(),
+                                    });
                                     return Poll::Ready(ToSwarm::ExternalAddrExpired(
                                         external_multiaddr,
                                     ));
