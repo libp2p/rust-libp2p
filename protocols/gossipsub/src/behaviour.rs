@@ -68,8 +68,8 @@ use crate::{
     topic::{Hasher, Topic, TopicHash},
     transform::{DataTransform, IdentityTransform},
     types::{
-        ControlAction, Graft, IDontWant, IHave, IWant, Message, MessageAcceptance, MessageId,
-        PeerDetails, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
+        ControlAction, Extensions, Graft, IDontWant, IHave, IWant, Message, MessageAcceptance,
+        MessageId, PeerDetails, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
         SubscriptionAction,
     },
     FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
@@ -1521,6 +1521,32 @@ where
         tracing::debug!(peer=%peer_id, "Completed GRAFT handling for peer");
     }
 
+    fn handle_extensions(&mut self, peer_id: &PeerId, extensions: Extensions) {
+        let Some(peer) = self.connected_peers.get_mut(peer_id) else {
+            tracing::error!(
+                peer=%peer_id,
+                "Extensions by unknown peer"
+            );
+            return;
+        };
+
+        if peer.extensions.is_some() {
+            tracing::debug!(
+                peer=%peer_id,
+                "Peer had already sent us extensions message"
+            );
+            return;
+        }
+
+        peer.extensions = Some(extensions);
+
+        if extensions.test_extension.unwrap_or(false)
+            && matches!(peer.kind, PeerKind::Gossipsubv1_3)
+        {
+            self.send_message(*peer_id, RpcOut::TestExtension);
+        }
+    }
+
     /// Removes the specified peer from the mesh, returning true if it was present.
     fn remove_peer_from_mesh(
         &mut self,
@@ -2898,7 +2924,9 @@ where
                     RpcOut::Graft(_)
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
-                    | RpcOut::Unsubscribe(_) => {
+                    | RpcOut::Unsubscribe(_)
+                    | RpcOut::Extensions(_)
+                    | RpcOut::TestExtension => {
                         unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
                     }
                 }
@@ -3132,14 +3160,23 @@ where
             sender: Sender::new(self.config.connection_handler_queue_len()),
             topics: Default::default(),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         });
         // Add the new connection
         connected_peer.connections.push(connection_id);
+        let receiver = connected_peer.sender.new_receiver();
 
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            connected_peer.sender.new_receiver(),
-        ))
+        if connected_peer.connections.len() <= 1 {
+            // If this is the first connection send extensions message.
+            self.send_message(
+                peer_id,
+                RpcOut::Extensions(Extensions {
+                    test_extension: Some(true),
+                }),
+            );
+        }
+
+        Ok(Handler::new(self.config.protocol_config(), receiver))
     }
 
     fn handle_established_outbound_connection(
@@ -3159,14 +3196,23 @@ where
             sender: Sender::new(self.config.connection_handler_queue_len()),
             topics: Default::default(),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         });
         // Add the new connection
         connected_peer.connections.push(connection_id);
+        let receiver = connected_peer.sender.new_receiver();
 
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            connected_peer.sender.new_receiver(),
-        ))
+        if connected_peer.connections.len() <= 1 {
+            // If this is the first connection send extensions message.
+            self.send_message(
+                peer_id,
+                RpcOut::Extensions(Extensions {
+                    test_extension: Some(true),
+                }),
+            );
+        }
+
+        Ok(Handler::new(self.config.protocol_config(), receiver))
     }
 
     fn on_connection_handler_event(
@@ -3351,6 +3397,11 @@ where
                                 }
                             }
                         }
+                        ControlAction::Extensions(extensions) => {
+                            if let Some(extensions) = extensions {
+                                self.handle_extensions(&propagation_source, extensions);
+                            }
+                        }
                     }
                 }
                 if !ihave_msgs.is_empty() {
@@ -3361,6 +3412,10 @@ where
                 }
                 if !prune_msgs.is_empty() {
                     self.handle_prune(&propagation_source, prune_msgs);
+                }
+
+                if let Some(_extension) = rpc.test_extension {
+                    tracing::debug!("Received Test Extension");
                 }
             }
         }

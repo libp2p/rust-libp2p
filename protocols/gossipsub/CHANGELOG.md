@@ -1,4 +1,8 @@
 ## 0.50.0
+
+- Implement gossipsub 1.3 extensions control message.
+  See [PR 6119](https://github.com/libp2p/rust-libp2p/pull/6119)
+
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
 
