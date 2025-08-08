@@ -53,6 +53,15 @@ const MAPPING_DURATION: u32 = 3600;
 /// Renew the Mapping every half of `MAPPING_DURATION` to avoid the port being unmapped.
 const MAPPING_TIMEOUT: u64 = MAPPING_DURATION as u64 / 2;
 
+/// Maximum number of retry attempts for failed mappings.
+const MAX_RETRY_ATTEMPTS: u32 = 5;
+
+/// Base delay in seconds for exponential backoff (will be multiplied by 2^retry_count).
+const BASE_RETRY_DELAY_SECS: u64 = 30;
+
+/// Maximum delay in seconds between retry attempts.
+const MAX_RETRY_DELAY_SECS: u64 = 1800;
+
 /// A [`Gateway`] Request.
 #[derive(Debug)]
 pub(crate) enum GatewayRequest {
@@ -94,6 +103,24 @@ impl Mapping {
             .replace(0, |_| Some(addr))
             .expect("multiaddr should be valid")
     }
+
+    /// The internal address of the mapping.
+    fn local_addr(&self) -> Multiaddr {
+        let ipv4 = match self.internal_addr {
+            SocketAddr::V4(addr) => *addr.ip(),
+            SocketAddr::V6(_) => panic!("Idg only supports IPv4"),
+        };
+        let mut multi_addr = Multiaddr::empty().with(multiaddr::Protocol::Ip4(ipv4));
+        match self.protocol {
+            PortMappingProtocol::TCP => {
+                multi_addr.push(multiaddr::Protocol::Tcp(self.internal_addr.port()));
+            }
+            PortMappingProtocol::UDP => {
+                multi_addr.push(multiaddr::Protocol::Udp(self.internal_addr.port()));
+            }
+        }
+        multi_addr
+    }
 }
 
 impl Hash for Mapping {
@@ -125,8 +152,13 @@ enum MappingState {
     Pending,
     /// Port mapping is active with the inner timeout.
     Active(Delay),
-    /// Port mapping failed, we will try again.
-    Failed,
+    /// Port mapping failed with retry information.
+    Failed {
+        /// Number of times we've tried to map this port.
+        retry_count: u32,
+        /// When we should try again (None means no more retries).
+        next_retry: Option<Delay>,
+    },
 }
 
 /// Current state of the UPnP [`Gateway`].
@@ -141,9 +173,19 @@ enum GatewayState {
 #[derive(Debug)]
 pub enum Event {
     /// The multiaddress is reachable externally.
-    NewExternalAddr(Multiaddr),
+    NewExternalAddr {
+        /// The local listen address that was mapped.
+        local_addr: Multiaddr,
+        /// The external address that is reachable.
+        external_addr: Multiaddr,
+    },
     /// The renewal of the multiaddress on the gateway failed.
-    ExpiredExternalAddr(Multiaddr),
+    ExpiredExternalAddr {
+        /// The local listen address that failed to renew.
+        local_addr: Multiaddr,
+        /// The external address that is no longer reachable.
+        external_addr: Multiaddr,
+    },
     /// The IGD gateway was not found.
     GatewayNotFound,
     /// The Gateway is not exposed directly to the public network.
@@ -174,7 +216,7 @@ impl MappingList {
     fn renew(&mut self, gateway: &mut Gateway, cx: &mut Context<'_>) {
         for (mapping, state) in self.iter_mut() {
             match state {
-                MappingState::Inactive | MappingState::Failed => {
+                MappingState::Inactive => {
                     let duration = MAPPING_DURATION;
                     if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                         mapping: mapping.clone(),
@@ -185,8 +227,32 @@ impl MappingList {
                             "could not request port mapping for multiaddress on the gateway: {}",
                             err
                         );
+                    } else {
+                        *state = MappingState::Pending;
                     }
-                    *state = MappingState::Pending;
+                }
+                MappingState::Failed {
+                    retry_count,
+                    next_retry,
+                } => {
+                    if let Some(delay) = next_retry {
+                        if Pin::new(delay).poll(cx).is_ready() {
+                            let duration = MAPPING_DURATION;
+                            if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
+                                mapping: mapping.clone(),
+                                duration,
+                            }) {
+                                tracing::debug!(
+                                    multiaddress=%mapping.multiaddr,
+                                    retry_count=%retry_count,
+                                    "could not retry port mapping for multiaddress on the gateway: {}",
+                                    err
+                                );
+                            } else {
+                                *state = MappingState::Pending;
+                            }
+                        }
+                    }
                 }
                 MappingState::Active(timeout) => {
                     if Pin::new(timeout).poll(cx).is_ready() {
@@ -270,15 +336,14 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                if let Some((mapping, _state)) = self
-                    .mappings
-                    .iter()
-                    .find(|(mapping, _state)| mapping.internal_addr.port() == addr.port())
-                {
+                if let Some((mapping, _state)) = self.mappings.iter().find(|(mapping, state)| {
+                    matches!(state, MappingState::Active(_))
+                        && mapping.internal_addr.port() == addr.port()
+                }) {
                     tracing::debug!(
                         multiaddress=%multiaddr,
                         mapped_multiaddress=%mapping.multiaddr,
-                        "port from multiaddress is already being mapped"
+                        "port from multiaddress is already mapped on the gateway"
                     );
                     return;
                 }
@@ -431,9 +496,10 @@ impl NetworkBehaviour for Behaviour {
                                     MappingState::Pending => {
                                         let external_multiaddr =
                                             mapping.external_addr(gateway.external_addr);
-                                        self.pending_events.push_back(Event::NewExternalAddr(
-                                            external_multiaddr.clone(),
-                                        ));
+                                        self.pending_events.push_back(Event::NewExternalAddr {
+                                            local_addr: mapping.local_addr(),
+                                            external_addr: external_multiaddr.clone(),
+                                        });
                                         tracing::debug!(
                                             address=%mapping.internal_addr,
                                             protocol=%mapping.protocol,
@@ -454,36 +520,65 @@ impl NetworkBehaviour for Behaviour {
                                 }
                             }
                             GatewayEvent::MapFailure(mapping, err) => {
-                                match self
-                                    .mappings
-                                    .insert(mapping.clone(), MappingState::Failed)
-                                    .expect("mapping should exist")
-                                {
-                                    MappingState::Active(_) => {
-                                        tracing::debug!(
-                                            address=%mapping.internal_addr,
-                                            protocol=%mapping.protocol,
-                                            "failed to remap UPnP mapped for protocol: {err}"
-                                        );
-                                        let external_multiaddr =
-                                            mapping.external_addr(gateway.external_addr);
-                                        self.pending_events.push_back(Event::ExpiredExternalAddr(
-                                            external_multiaddr.clone(),
-                                        ));
-                                        return Poll::Ready(ToSwarm::ExternalAddrExpired(
-                                            external_multiaddr,
-                                        ));
+                                let prev_state =
+                                    self.mappings.get(&mapping).expect("mapping should exist");
+
+                                let (retry_count, was_active) = match prev_state {
+                                    MappingState::Active(_) => (0, true),
+                                    MappingState::Pending => (0, false),
+                                    MappingState::Failed { retry_count, .. } => {
+                                        (*retry_count, false)
                                     }
-                                    MappingState::Pending => {
-                                        tracing::debug!(
-                                            address=%mapping.internal_addr,
-                                            protocol=%mapping.protocol,
-                                            "failed to map UPnP mapped for protocol: {err}"
-                                        );
-                                    }
-                                    _ => {
-                                        unreachable!()
-                                    }
+                                    _ => unreachable!(),
+                                };
+
+                                let new_retry_count = retry_count + 1;
+                                let next_retry = if new_retry_count < MAX_RETRY_ATTEMPTS {
+                                    let delay_secs = std::cmp::min(
+                                        BASE_RETRY_DELAY_SECS
+                                            .saturating_mul(2_u64.pow(retry_count)),
+                                        MAX_RETRY_DELAY_SECS,
+                                    );
+                                    Some(Delay::new(Duration::from_secs(delay_secs)))
+                                } else {
+                                    tracing::warn!(
+                                        address=%mapping.internal_addr,
+                                        protocol=%mapping.protocol,
+                                        "giving up on UPnP mapping after {new_retry_count} attempts"
+                                    );
+                                    None
+                                };
+
+                                self.mappings.insert(
+                                    mapping.clone(),
+                                    MappingState::Failed {
+                                        retry_count: new_retry_count,
+                                        next_retry,
+                                    },
+                                );
+
+                                if was_active {
+                                    tracing::debug!(
+                                        address=%mapping.internal_addr,
+                                        protocol=%mapping.protocol,
+                                        "failed to remap UPnP mapped for protocol: {err}"
+                                    );
+                                    let external_multiaddr =
+                                        mapping.external_addr(gateway.external_addr);
+                                    self.pending_events.push_back(Event::ExpiredExternalAddr {
+                                        local_addr: mapping.local_addr(),
+                                        external_addr: external_multiaddr.clone(),
+                                    });
+                                    return Poll::Ready(ToSwarm::ExternalAddrExpired(
+                                        external_multiaddr,
+                                    ));
+                                } else {
+                                    tracing::debug!(
+                                        address=%mapping.internal_addr,
+                                        protocol=%mapping.protocol,
+                                        retry_count=%new_retry_count,
+                                        "failed to map UPnP mapped for protocol: {err}"
+                                    );
                                 }
                             }
                             GatewayEvent::Removed(mapping) => {
