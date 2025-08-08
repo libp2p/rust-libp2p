@@ -165,8 +165,8 @@ impl Config {
     ///
     /// # Deprecation Notice
     ///
-    /// The new implementation works on a per-connaction basis, defined by the behaviour. This
-    /// removes the necessaity to configure the transport for port reuse, instead the behaviour
+    /// The new implementation works on a per-connection basis, defined by the behaviour. This
+    /// removes the necessity to configure the transport for port reuse, instead the behaviour
     /// requiring this behaviour can decide whether to use port reuse or not.
     ///
     /// The API to configure port reuse is part of [`Transport`] and the option can be found in
@@ -175,7 +175,7 @@ impl Config {
     /// If [`PortUse::Reuse`] is enabled, the transport will try to reuse the local port of the
     /// listener. If that's not possible, i.e. there is no listener or the transport doesn't allow
     /// a direct control over ports, a new port (or the default behaviour) is used. If port reuse
-    /// is enabled for a connection, this option will be treated on a best-effor basis.
+    /// is enabled for a connection, this option will be treated on a best-effort basis.
     #[deprecated(
         since = "0.42.0",
         note = "This option does nothing now, since the port reuse policy is now decided on a per-connection basis by the behaviour. The function will be removed in a future release."
