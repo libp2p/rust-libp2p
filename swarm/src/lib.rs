@@ -353,7 +353,7 @@ where
         local_peer_id: PeerId,
         config: Config,
     ) -> Self {
-        tracing::info!(%local_peer_id);
+        tracing::debug!(%local_peer_id);
 
         Swarm {
             local_peer_id,
