@@ -62,15 +62,19 @@ impl ReservationReq {
             )
         }
 
+        // Safe calculation of reservation expiration time
+        let now_secs = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let expire_secs = now_secs.saturating_add(self.reservation_duration.as_secs());
+        
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: Some(proto::Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: (SystemTime::now() + self.reservation_duration)
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                expire: expire_secs,
                 voucher: None,
             }),
             limit: Some(proto::Limit {
