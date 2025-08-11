@@ -770,10 +770,12 @@ impl ConfigBuilder {
 
     /// The maximum byte size for each gossip (default is 65536 bytes).
     ///
-    /// ```
+    /// ```rust
     /// use libp2p_gossipsub::ConfigBuilder;
     /// let mut config = ConfigBuilder::default();
     /// assert_eq!(config.build().unwrap().max_transmit_size(), 65536);
+    /// config.max_transmit_size(1 << 20);
+    /// assert_eq!(config.build().unwrap().max_transmit_size(), 1 << 20);
     /// ```
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.protocol.default_max_transmit_size = max_transmit_size;
