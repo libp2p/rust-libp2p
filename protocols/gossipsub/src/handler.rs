@@ -39,7 +39,7 @@ use crate::{
     protocol::{GossipsubCodec, ProtocolConfig},
     rpc::Receiver,
     rpc_proto::proto,
-    types::{PeerKind, RawMessage, RpcIn, RpcOut},
+    types::{Extensions, PeerKind, RawMessage, RpcIn, RpcOut},
     ValidationError,
 };
 
@@ -211,7 +211,23 @@ impl EnabledHandler {
             self.outbound_substream.is_none(),
             "Established an outbound substream with one already available"
         );
-        self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
+
+        // For gossipsub 1.3 peers, immediately send Extensions message.
+        if matches!(peer_kind, PeerKind::Gossipsubv1_3) {
+            let test_extension = if cfg!(feature = "test-extension") {
+                Some(true)
+            } else {
+                None
+            };
+
+            let extensions_rpc = RpcOut::Extensions(Extensions { test_extension });
+            self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
+                substream,
+                extensions_rpc.into_protobuf(),
+            ));
+        } else {
+            self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
+        }
     }
 
     fn poll(

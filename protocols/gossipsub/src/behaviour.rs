@@ -1540,6 +1540,7 @@ where
 
         peer.extensions = Some(extensions);
 
+        #[cfg(feature = "test-extension")]
         if extensions.test_extension.unwrap_or(false)
             && matches!(peer.kind, PeerKind::Gossipsubv1_3)
         {
@@ -3164,19 +3165,11 @@ where
         });
         // Add the new connection
         connected_peer.connections.push(connection_id);
-        let receiver = connected_peer.sender.new_receiver();
 
-        if connected_peer.connections.len() <= 1 {
-            // If this is the first connection send extensions message.
-            self.send_message(
-                peer_id,
-                RpcOut::Extensions(Extensions {
-                    test_extension: Some(true),
-                }),
-            );
-        }
-
-        Ok(Handler::new(self.config.protocol_config(), receiver))
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            connected_peer.sender.new_receiver(),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -3200,19 +3193,11 @@ where
         });
         // Add the new connection
         connected_peer.connections.push(connection_id);
-        let receiver = connected_peer.sender.new_receiver();
 
-        if connected_peer.connections.len() <= 1 {
-            // If this is the first connection send extensions message.
-            self.send_message(
-                peer_id,
-                RpcOut::Extensions(Extensions {
-                    test_extension: Some(true),
-                }),
-            );
-        }
-
-        Ok(Handler::new(self.config.protocol_config(), receiver))
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            connected_peer.sender.new_receiver(),
+        ))
     }
 
     fn on_connection_handler_event(
