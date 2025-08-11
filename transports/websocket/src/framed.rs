@@ -508,7 +508,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let mut protocols = addr.iter();
     let mut ip = protocols.next();
     let mut tcp = protocols.next();
-    let (host_port, server_name) = loop {
+    let (host_port, mut server_name) = loop {
         match (ip, tcp) {
             (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
                 let server_name = ServerName::IpAddress(IpAddr::V4(ip).into());
@@ -531,6 +531,8 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         }
     };
 
+    // Will hold a value if the multiaddr carries `/tls/sni/<host>`.
+    let mut sni_override: Option<ServerName<'static>> = None;
     // Now consume the `Ws` / `Wss` protocol from the end of the address,
     // preserving the trailing `P2p` protocol that identifies the remote,
     // if any.
@@ -540,6 +542,13 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         match protocols.pop() {
             p @ Some(Protocol::P2p(_)) => p2p = p,
             Some(Protocol::Ws(path)) => match protocols.pop() {
+                Some(Protocol::Sni(domain)) => match protocols.pop() {
+                    Some(Protocol::Tls) => {
+                        sni_override = Some(tls::dns_name_ref(&domain)?);
+                        break (true, path.into_owned());
+                    }
+                    _ => return Err(Error::InvalidMultiaddr(addr)),
+                },
                 Some(Protocol::Tls) => break (true, path.into_owned()),
                 Some(p) => {
                     protocols.push(p);
@@ -559,6 +568,9 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         None => protocols,
     };
 
+    if let Some(name) = sni_override {
+        server_name = name;
+    }
     Ok(WsAddress {
         host_port,
         server_name,
@@ -1013,5 +1025,49 @@ mod tests {
         // Check non-ws address
         let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
         parse_ws_dial_addr::<io::Error>(addr).unwrap_err();
+
+        // Check `/tls/sni/.../ws` with `/dns4`
+        let addr = "/dns4/example.com/tcp/2222/tls/sni/example.com/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
+
+        // Check `/tls/sni/.../ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/sni/example.test/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "127.0.0.1:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.test".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
+
+        // Check `/tls/sni/.../ws` with trailing `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/tls/sni/example.com/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(
+            info.tcp_addr,
+            format!("/dns4/example.com/tcp/2222/p2p/{peer_id}")
+                .parse()
+                .unwrap()
+        );
+
+        // Negative: `/tls/sni/...` *without* `/ws` → error
+        let bad = "/dns4/example.com/tcp/2222/tls/sni/example.com"
+            .parse::<Multiaddr>()
+            .unwrap();
+        parse_ws_dial_addr::<io::Error>(bad).unwrap_err();
     }
 }
