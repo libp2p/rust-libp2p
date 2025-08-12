@@ -115,7 +115,7 @@ impl Behaviour {
     fn check_limit(&mut self) -> Result<(), ConnectionDenied> {
         self.refresh_memory_stats_if_needed();
 
-        if self.process_physical_memory_bytes >= self.max_allowed_bytes {
+        if self.process_physical_memory_bytes > self.max_allowed_bytes {
             return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
                 process_physical_memory_bytes: self.process_physical_memory_bytes,
                 max_allowed_bytes: self.max_allowed_bytes,
