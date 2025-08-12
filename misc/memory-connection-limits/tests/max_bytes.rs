@@ -32,7 +32,7 @@ use util::*;
 #[tokio::test]
 async fn max_bytes() {
     const CONNECTION_LIMIT: usize = 20;
-    let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
+    let max_allowed_bytes = (CONNECTION_LIMIT - 1) * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral_tokio(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
