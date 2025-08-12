@@ -34,8 +34,14 @@ use crate::{
     Negotiated,
 };
 
-// TODO: Still needed?
-/// Applies an upgrade to the inbound and outbound direction of a connection or substream.
+/// Applies a connection/substream upgrade selecting inbound or outbound based on the
+/// `ConnectedPoint`.
+///
+/// This helper is required to correctly handle role overrides during simultaneous
+/// open / NAT hole punching (see `ConnectedPoint::Dialer::role_override`). When a dial
+/// is performed with `role_override` set to `Endpoint::Listener`, the upgrade must
+/// run as inbound even though the `ConnectedPoint` is `Dialer`. Otherwise the
+/// upgrade runs as outbound.
 pub(crate) fn apply<C, U>(
     conn: C,
     up: U,
