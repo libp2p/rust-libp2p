@@ -1,7 +1,3 @@
-## 0.5.1
-
-- fix limit checking according to documentation, limit should be reached not exceeded.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 ## 0.5.0
 
 <!-- Update to libp2p-swarm v0.47.0 -->

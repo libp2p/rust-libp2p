@@ -82,7 +82,7 @@ const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
         Self {
             max_allowed_bytes,
@@ -95,7 +95,7 @@ impl Behaviour {
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_percentage(percentage: f64) -> Self {
         use sysinfo::{RefreshKind, System};
 
