@@ -1,4 +1,4 @@
-## 0.9.1-alpha
+## 0.9.0-alpha.2
 
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
   See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
