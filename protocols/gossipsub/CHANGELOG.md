@@ -5,6 +5,9 @@
 - Remove `Rpc` from the public API.
   See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
 
+- Bump `hashlink` to `v0.10`.
+  See [PR 6135](https://github.com/libp2p/rust-libp2p/pull/6135)
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
