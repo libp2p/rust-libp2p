@@ -31,6 +31,9 @@ zeroize = { version = "1.8", optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
+[target.wasm32-unknown-unknown.dependencies]
+ring = { workspace = true, features = ["alloc", "std", "wasm32_unknown_unknown_js"], optional = true }
+
 [features]
 secp256k1 = ["dep:k256", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
 ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
