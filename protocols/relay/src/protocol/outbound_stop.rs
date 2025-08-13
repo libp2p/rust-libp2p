@@ -41,6 +41,8 @@ pub enum Error {
     Io(#[source] io::Error),
     #[error("Protocol error")]
     Protocol(#[from] ProtocolViolation),
+    #[error("max_circuit_duration exceeds u32::MAX seconds")]
+    MaxCircuitDurationTooLarge,
 }
 
 impl Error {
@@ -54,6 +56,7 @@ impl Error {
                 ProtocolViolation::UnexpectedStatus(_) | ProtocolViolation::UnexpectedTypeConnect,
             ) => proto::Status::UNEXPECTED_MESSAGE,
             Error::Protocol(_) => proto::Status::MALFORMED_MESSAGE,
+            Error::MaxCircuitDurationTooLarge => proto::Status::CONNECTION_FAILED,
         }
     }
 }
@@ -95,7 +98,7 @@ pub(crate) async fn connect(
                 max_duration
                     .as_secs()
                     .try_into()
-                    .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                    .map_err(|_| Error::MaxCircuitDurationTooLarge)?,
             ),
             data: Some(max_bytes),
         }),
