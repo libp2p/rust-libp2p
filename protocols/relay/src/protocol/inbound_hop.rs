@@ -44,6 +44,8 @@ pub enum Error {
     MissingPeer,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
+     #[error("max_circuit_duration exceeds u32::MAX seconds")]
+    MaxCircuitDurationTooLarge,
 }
 
 pub struct ReservationReq {
@@ -78,7 +80,7 @@ impl ReservationReq {
                     self.max_circuit_duration
                         .as_secs()
                         .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                        .map_err(|_| Error::MaxCircuitDurationTooLarge)?,
                 ),
                 data: Some(self.max_circuit_bytes),
             }),
