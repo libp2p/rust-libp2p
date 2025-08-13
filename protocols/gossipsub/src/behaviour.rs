@@ -3159,8 +3159,8 @@ where
             .or_insert_with(|| PeerDetails {
                 kind: PeerKind::Floodsub,
                 connections: vec![],
-                // Diverging from the go implementation we only want to consider a peer as outbound peer
-                // if its first connection is outbound.
+                // Diverging from the go implementation we only want to consider a peer as outbound
+                // peer if its first connection is outbound.
                 outbound: !self.px_peers.contains(&peer_id),
                 sender: Sender::new(self.config.connection_handler_queue_len()),
                 topics: Default::default(),
