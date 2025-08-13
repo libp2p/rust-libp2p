@@ -1,3 +1,8 @@
+## 0.2.13
+
+- Enable rsa for wasm32-unknown-unknown targets.
+  See [PR 6137](https://github.com/libp2p/rust-libp2p/pull/6137)
+
 ## 0.2.12
 
 - Avoid depending on the `rand_core` feature in `ed25519-dalek` crate.
