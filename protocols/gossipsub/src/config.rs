@@ -858,8 +858,8 @@ impl ConfigBuilder {
     /// This is how long to wait before resubscribing to the topic. A short backoff period in case
     /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
     /// is 10 seconds.
-    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
-        self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: Duration) -> &mut Self {
+        self.config.unsubscribe_backoff = unsubscribe_backoff;
         self
     }
 
