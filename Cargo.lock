@@ -62,12 +62,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "anes"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1666,8 +1660,6 @@ version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash",
 ]
 
@@ -2560,6 +2552,7 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
+ "hashlink",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2569,7 +2562,6 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
- "lru",
  "quick-protobuf",
  "quick-protobuf-codec",
  "thiserror 2.0.12",
@@ -2848,12 +2840,12 @@ dependencies = [
 name = "libp2p-peer-store"
 version = "0.1.0"
 dependencies = [
+ "hashlink",
  "libp2p",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "lru",
  "serde_json",
  "tokio",
 ]
@@ -3084,6 +3076,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.15",
+ "hashlink",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -3093,7 +3086,6 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "libp2p-yamux",
- "lru",
  "multistream-select",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -3389,15 +3381,6 @@ dependencies = [
  "scoped-tls",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "lru"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
-dependencies = [
- "hashbrown 0.15.2",
 ]
 
 [[package]]
