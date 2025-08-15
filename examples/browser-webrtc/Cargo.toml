@@ -35,11 +35,11 @@ mime_guess = "2.0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.69"
-libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "wasm-bindgen"] }
+libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping"] }
 libp2p-webrtc-websys = { workspace = true }
 tracing-wasm = "0.2.1"
 wasm-bindgen = "0.2.90"
-wasm-bindgen-futures = "0.4.42"
+wasm-bindgen-futures = { workspace = true}
 web-sys = { version = "0.3", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window'] }
 
 [lints]
