@@ -5,6 +5,9 @@
 - Remove `Rpc` from the public API.
   See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
 
+- Fix `unsubscribe_backoff` expecting number of seconds instead of `Duration`
+  See [PR 6124](https://github.com/libp2p/rust-libp2p/pull/6124)
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
