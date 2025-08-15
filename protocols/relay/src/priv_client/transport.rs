@@ -297,12 +297,12 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
                 if before_circuit {
                     relayed_multiaddr
                         .relay_addr
-                        .get_or_insert(Multiaddr::empty())
+                        .get_or_insert_with(Multiaddr::empty)
                         .push(p);
                 } else {
                     relayed_multiaddr
                         .dst_addr
-                        .get_or_insert(Multiaddr::empty())
+                        .get_or_insert_with(Multiaddr::empty)
                         .push(p);
                 }
             }

@@ -5,6 +5,9 @@
 - Remove `Rpc` from the public API.
   See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
 
+- reduce allocations by replacing `or_insert` with `or_insert_with`
+  See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
+
 - Fix `unsubscribe_backoff` expecting number of seconds instead of `Duration`
   See [PR 6124](https://github.com/libp2p/rust-libp2p/pull/6124)
 

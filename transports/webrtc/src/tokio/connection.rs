@@ -203,27 +203,29 @@ impl StreamMuxer for Connection {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let peer_conn = self.peer_conn.clone();
-        let fut = self.outbound_fut.get_or_insert(Box::pin(async move {
-            let peer_conn = peer_conn.lock().await;
+        let fut = self.outbound_fut.get_or_insert_with(|| {
+            Box::pin(async move {
+                let peer_conn = peer_conn.lock().await;
 
-            let data_channel = peer_conn.create_data_channel("", None).await?;
+                let data_channel = peer_conn.create_data_channel("", None).await?;
 
-            // No need to hold the lock during the DTLS handshake.
-            drop(peer_conn);
+                // No need to hold the lock during the DTLS handshake.
+                drop(peer_conn);
 
-            tracing::trace!(channel=%data_channel.id(), "Opening data channel");
+                tracing::trace!(channel=%data_channel.id(), "Opening data channel");
 
-            let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
+                let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
-            // Wait until the data channel is opened and detach it.
-            register_data_channel_open_handler(data_channel, tx).await;
+                // Wait until the data channel is opened and detach it.
+                register_data_channel_open_handler(data_channel, tx).await;
 
-            // Wait until data channel is opened and ready to use
-            match rx.await {
-                Ok(detached) => Ok(detached),
-                Err(e) => Err(Error::Internal(e.to_string())),
-            }
-        }));
+                // Wait until data channel is opened and ready to use
+                match rx.await {
+                    Ok(detached) => Ok(detached),
+                    Err(e) => Err(Error::Internal(e.to_string())),
+                }
+            })
+        });
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
@@ -250,12 +252,14 @@ impl StreamMuxer for Connection {
         tracing::debug!("Closing connection");
 
         let peer_conn = self.peer_conn.clone();
-        let fut = self.close_fut.get_or_insert(Box::pin(async move {
-            let peer_conn = peer_conn.lock().await;
-            peer_conn.close().await?;
+        let fut = self.close_fut.get_or_insert_with(|| {
+            Box::pin(async move {
+                let peer_conn = peer_conn.lock().await;
+                peer_conn.close().await?;
 
-            Ok(())
-        }));
+                Ok(())
+            })
+        });
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(()) => {
