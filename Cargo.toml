@@ -85,7 +85,7 @@ libp2p-floodsub = { version = "0.47.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.50.0", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.47.0", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.12" }
-libp2p-kad = { version = "0.48.1", path = "protocols/kad" }
+libp2p-kad = { version = "0.49.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.48.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.5.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.17.0", path = "misc/metrics" }
@@ -112,7 +112,7 @@ libp2p-upnp = { version = "0.5.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.9.0-alpha.1", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.4.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.4.1", path = "transports/webrtc-websys" }
-libp2p-websocket = { version = "0.45.1", path = "transports/websocket" }
+libp2p-websocket = { version = "0.45.2", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.5.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.5.1", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.47.0", path = "muxers/yamux" }
@@ -125,7 +125,7 @@ futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
 futures-timer = { version = "3" }
 getrandom = { version = "0.2", features = ["js"] }
-hashlink = "0.9.0"
+hashlink = "0.10.0"
 hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
 if-watch = "3.2.1"

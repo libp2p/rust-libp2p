@@ -2185,7 +2185,7 @@ fn test_unsubscribe_backoff() {
         .backoff_slack(1)
         // ensure a prune_backoff > unsubscribe_backoff
         .prune_backoff(Duration::from_secs(5))
-        .unsubscribe_backoff(1)
+        .unsubscribe_backoff(Duration::from_secs(1))
         .heartbeat_interval(HEARTBEAT_INTERVAL)
         .build()
         .unwrap();

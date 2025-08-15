@@ -318,7 +318,6 @@ struct GetRecordResult {
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum GetRecordError {
     NotFound,
-    QuorumFailed,
     Timeout,
 }
 
@@ -327,9 +326,6 @@ impl From<&libp2p_kad::GetRecordError> for GetRecordResult {
         match error {
             libp2p_kad::GetRecordError::NotFound { .. } => GetRecordResult {
                 error: GetRecordError::NotFound,
-            },
-            libp2p_kad::GetRecordError::QuorumFailed { .. } => GetRecordResult {
-                error: GetRecordError::QuorumFailed,
             },
             libp2p_kad::GetRecordError::Timeout { .. } => GetRecordResult {
                 error: GetRecordError::Timeout,
