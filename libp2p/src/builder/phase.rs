@@ -35,7 +35,7 @@ use super::{
     select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,
 };
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub, dead_code)]
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -77,7 +77,7 @@ where
     }
 }
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub, dead_code)]
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 

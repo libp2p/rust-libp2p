@@ -127,7 +127,6 @@ pub struct Config {
     max_ihave_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
-    published_message_ids_cache_time: Duration,
     connection_handler_queue_len: usize,
     connection_handler_publish_duration: Duration,
     connection_handler_forward_duration: Duration,
@@ -444,11 +443,6 @@ impl Config {
         self.protocol.protocol_ids.contains(&FLOODSUB_PROTOCOL)
     }
 
-    /// Published message ids time cache duration. The default is 10 seconds.
-    pub fn published_message_ids_cache_time(&self) -> Duration {
-        self.published_message_ids_cache_time
-    }
-
     /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&self) -> usize {
         self.connection_handler_queue_len
@@ -546,7 +540,6 @@ impl Default for ConfigBuilder {
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
-                published_message_ids_cache_time: Duration::from_secs(10),
                 connection_handler_queue_len: 5000,
                 connection_handler_publish_duration: Duration::from_secs(5),
                 connection_handler_forward_duration: Duration::from_secs(1),
@@ -865,8 +858,8 @@ impl ConfigBuilder {
     /// This is how long to wait before resubscribing to the topic. A short backoff period in case
     /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
     /// is 10 seconds.
-    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
-        self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: Duration) -> &mut Self {
+        self.config.unsubscribe_backoff = unsubscribe_backoff;
         self
     }
 
@@ -1005,15 +998,6 @@ impl ConfigBuilder {
         }
 
         self.config.protocol.protocol_ids.push(FLOODSUB_PROTOCOL);
-        self
-    }
-
-    /// Published message ids time cache duration. The default is 10 seconds.
-    pub fn published_message_ids_cache_time(
-        &mut self,
-        published_message_ids_cache_time: Duration,
-    ) -> &mut Self {
-        self.config.published_message_ids_cache_time = published_message_ids_cache_time;
         self
     }
 
@@ -1177,10 +1161,6 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
-        let _ = builder.field(
-            "published_message_ids_cache_time",
-            &self.published_message_ids_cache_time,
-        );
         let _ = builder.field(
             "idontwant_message_size_threshold",
             &self.idontwant_message_size_threshold,
