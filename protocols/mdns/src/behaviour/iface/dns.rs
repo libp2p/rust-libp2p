@@ -82,7 +82,7 @@ pub(crate) fn build_query() -> MdnsPacket {
     // Number of questions.
     append_u16(&mut out, 0x1);
 
-    // Number of answers, authorities, and additionals.
+    // Number of answers, authorities, and additional records.
     append_u16(&mut out, 0x0);
     append_u16(&mut out, 0x0);
     append_u16(&mut out, 0x0);
@@ -176,7 +176,7 @@ pub(crate) fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPa
     append_u16(&mut out, id);
     // 0x84 flag for an answer.
     append_u16(&mut out, 0x8400);
-    // Number of questions, answers, authorities, additionals.
+    // Number of questions, answers, authorities, and additional records.
     append_u16(&mut out, 0x0);
     append_u16(&mut out, 0x1);
     append_u16(&mut out, 0x0);
@@ -214,7 +214,7 @@ fn query_response_packet(id: u16, peer_id: &[u8], records: &[Vec<u8>], ttl: u32)
     append_u16(&mut out, id);
     // 0x84 flag for an answer.
     append_u16(&mut out, 0x8400);
-    // Number of questions, answers, authorities, additionals.
+    // Number of questions, answers, authorities, and additional records.
     append_u16(&mut out, 0x0);
     append_u16(&mut out, 0x1);
     append_u16(&mut out, 0x0);

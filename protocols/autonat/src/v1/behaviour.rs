@@ -64,7 +64,7 @@ pub struct Config {
     /// Interval in which the NAT status should be re-tried if it is currently unknown
     /// or max confidence was not reached yet.
     pub retry_interval: Duration,
-    /// Throttle period for re-using a peer as server for a dial-request.
+    /// Throttle period for reusing a peer as server for a dial-request.
     pub throttle_server_period: Duration,
     /// Use connected peers as servers for probes.
     pub use_connected: bool,
