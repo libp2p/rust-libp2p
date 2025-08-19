@@ -118,7 +118,7 @@ pub enum Version {
     ///
     /// This strategy is only applicable for the node with the role of "dialer"
     /// in the negotiation and only if the dialer supports just a single
-    /// application protocol. In that case the dialer immedidately "settles"
+    /// application protocol. In that case the dialer immediately "settles"
     /// on that protocol, buffering the negotiation messages to be sent
     /// with the first round of application protocol data (or an attempt
     /// is made to read from the `Negotiated` I/O stream).
