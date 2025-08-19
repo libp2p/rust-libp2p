@@ -105,3 +105,4 @@ used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Swarm NL](https://github.com/algorealmInc/SwarmNL) - A library that makes it easy to configure the networking requirements for any distributed application.
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
 - [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.
+- [Fungi](https://github.com/enbop/fungi) - A platform built for seamless multi-device integration.
