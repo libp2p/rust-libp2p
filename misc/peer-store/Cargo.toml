@@ -9,9 +9,9 @@ publish = false
 rust-version.workspace = true
 
 [dependencies]
+hashlink = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-lru = "0.12.3"
 libp2p-identity = { workspace = true, optional = true }
 
 [dev-dependencies]

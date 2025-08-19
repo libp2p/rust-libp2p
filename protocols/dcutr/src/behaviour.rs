@@ -23,11 +23,11 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     convert::Infallible,
-    num::NonZeroUsize,
     task::{Context, Poll},
 };
 
 use either::Either;
+use hashlink::LruCache;
 use libp2p_core::{
     connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr,
 };
@@ -38,7 +38,6 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour,
     NewExternalAddrCandidate, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use lru::LruCache;
 use thiserror::Error;
 
 use crate::{handler, protocol};
@@ -361,7 +360,7 @@ struct Candidates {
 impl Candidates {
     fn new(me: PeerId) -> Self {
         Self {
-            inner: LruCache::new(NonZeroUsize::new(20).expect("20 > 0")),
+            inner: LruCache::new(20),
             me,
         }
     }
@@ -375,7 +374,7 @@ impl Candidates {
             address.push(Protocol::P2p(self.me));
         }
 
-        self.inner.push(address, ());
+        self.inner.insert(address, ());
     }
 
     fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
