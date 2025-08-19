@@ -23,7 +23,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-lru = "0.12.3"
+hashlink = { workspace = true }
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
