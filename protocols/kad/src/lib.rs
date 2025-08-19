@@ -74,6 +74,33 @@ pub use protocol::{ConnectionType, KadPeer};
 pub use query::QueryId;
 pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 
+#[cfg(all(
+    feature = "k-4",
+    not(any(feature = "k-8", feature = "k-12", feature = "k-16"))
+))]
+const K: usize = 4;
+#[cfg(all(
+    feature = "k-8",
+    not(any(feature = "k-4", feature = "k-12", feature = "k-16"))
+))]
+const K: usize = 8;
+#[cfg(all(
+    feature = "k-12",
+    not(any(feature = "k-4", feature = "k-8", feature = "k-16"))
+))]
+const K: usize = 12;
+#[cfg(all(
+    feature = "k-16",
+    not(any(feature = "k-4", feature = "k-8", feature = "k-12"))
+))]
+const K: usize = 16;
+// Enable if none of the k-n features are enabled or if all the k-n features are enabled.
+#[cfg(any(
+    not(any(feature = "k-4", feature = "k-8", feature = "k-12", feature = "k-16")),
+    all(feature = "k-4", feature = "k-8", feature = "k-12", feature = "k-16")
+))]
+const K: usize = 20;
+
 /// The `k` parameter of the Kademlia specification.
 ///
 /// This parameter determines:
@@ -86,9 +113,7 @@ pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 /// The choice of (1) is fixed to this constant. The replication factor is configurable
 /// but should generally be no greater than `K_VALUE`. All nodes in a Kademlia
 /// DHT should agree on the choices made for (1) and (2).
-///
-/// The current value is `20`.
-pub const K_VALUE: NonZeroUsize = NonZeroUsize::new(20).unwrap();
+pub const K_VALUE: NonZeroUsize = NonZeroUsize::new(K).unwrap();
 
 /// The `α` parameter of the Kademlia specification.
 ///
