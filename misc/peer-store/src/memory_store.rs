@@ -14,9 +14,9 @@ use std::{
     task::{Poll, Waker},
 };
 
+use hashlink::LruCache;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{behaviour::ConnectionEstablished, DialError, FromSwarm};
-use lru::LruCache;
 
 use super::Store;
 
@@ -317,7 +317,7 @@ pub struct PeerRecord<T> {
 impl<T> PeerRecord<T> {
     pub(crate) fn new(cap: NonZeroUsize) -> Self {
         Self {
-            addresses: LruCache::new(cap),
+            addresses: LruCache::new(cap.get()),
             custom_data: None,
         }
     }
@@ -325,7 +325,7 @@ impl<T> PeerRecord<T> {
     /// Iterate over all addresses. More recently-used address comes first.
     /// Does not change the order.
     pub fn addresses(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.addresses.iter().map(|(addr, _)| addr)
+        self.addresses.iter().rev().map(|(addr, _)| addr)
     }
 
     /// Update the address in the LRU cache, promote it to the front if it exists,
@@ -335,14 +335,13 @@ impl<T> PeerRecord<T> {
     pub fn add_address(&mut self, address: &Multiaddr, is_permanent: bool) -> bool {
         if let Some(was_permanent) = self.addresses.get(address) {
             if !*was_permanent && is_permanent {
-                self.addresses
-                    .get_or_insert(address.clone(), || is_permanent);
+                self.addresses.insert(address.clone(), is_permanent);
             }
-            return false;
+            false
+        } else {
+            self.addresses.insert(address.clone(), is_permanent);
+            true
         }
-        self.addresses
-            .get_or_insert(address.clone(), || is_permanent);
-        true
     }
 
     /// Remove the address in the LRU cache regardless of its position.
@@ -353,7 +352,7 @@ impl<T> PeerRecord<T> {
         if !force && self.addresses.peek(address) == Some(&true) {
             return false;
         }
-        self.addresses.pop(address).is_some()
+        self.addresses.remove(address).is_some()
     }
 
     pub fn get_custom_data(&self) -> Option<&T> {
@@ -399,14 +398,14 @@ mod test {
         store.add_address(&peer, &addr1);
         store.add_address(&peer, &addr2);
         store.add_address(&peer, &addr3);
-        assert!(
+        assert_eq!(
             store
                 .records
                 .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
-                .collect::<Vec<_>>()
-                == vec![&addr3, &addr2, &addr1]
+                .collect::<Vec<_>>(),
+            vec![&addr3, &addr2, &addr1]
         );
         store.add_address(&peer, &addr1);
         assert!(

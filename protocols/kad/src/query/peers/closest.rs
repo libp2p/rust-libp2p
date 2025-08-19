@@ -713,7 +713,7 @@ mod tests {
                 _ => panic!("No peer."),
             };
             iter.on_success(&peer1, closer.clone());
-            // Duplicate result from te same peer.
+            // Duplicate result from the same peer.
             iter.on_success(&peer1, closer.clone());
 
             // If there is a second peer, let it also report the same "closer" peer.

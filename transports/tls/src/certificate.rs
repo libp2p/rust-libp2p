@@ -185,7 +185,7 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate<'_>, webpki::Erro
         }
 
         if oid == &p2p_ext_oid {
-            // The public host key and the signature are ANS.1-encoded
+            // The public host key and the signature are ASN.1-encoded
             // into the SignedKey data structure, which is carried
             // in the libp2p Public Key Extension.
             // SignedKey ::= SEQUENCE {
@@ -254,7 +254,7 @@ fn make_libp2p_extension(
             .map_err(|_| rcgen::Error::RingUnspecified)?
     };
 
-    // The public host key and the signature are ANS.1-encoded
+    // The public host key and the signature are ASN.1-encoded
     // into the SignedKey data structure, which is carried
     // in the libp2p Public Key Extension.
     // SignedKey ::= SEQUENCE {
