@@ -14,6 +14,9 @@
 - Fix incorrect default values in ConfigBuilder
   See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
 
+- Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
+  with an internal priority queue. See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
@@ -34,6 +37,7 @@
 
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
+
 - Send IDONTWANT before Publishing a new message.
   See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
 
