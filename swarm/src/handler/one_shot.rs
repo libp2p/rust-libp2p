@@ -114,7 +114,7 @@ where
 
 impl<TInbound, TOutbound, TEvent> std::fmt::Debug for OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: std::fmt::Debug + OutboundUpgradeSend,
+    TOutbound: OutboundUpgradeSend,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OneShotHandler")
