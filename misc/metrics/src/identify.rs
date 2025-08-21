@@ -37,8 +37,14 @@ use crate::protocol_stack;
 const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
-    // #[cfg(feature = "gossipsub")]
-    // TODO: Add Gossipsub protocol name
+    #[cfg(feature = "gossipsub")]
+    libp2p_swarm::StreamProtocol::new("/meshsub/1.2.0"),
+    #[cfg(feature = "gossipsub")]
+    libp2p_swarm::StreamProtocol::new("/meshsub/1.1.0"),
+    #[cfg(feature = "gossipsub")]
+    libp2p_swarm::StreamProtocol::new("/meshsub/1.0.0"),
+    #[cfg(feature = "gossipsub")]
+    libp2p_swarm::StreamProtocol::new("/floodsub/1.0.0"),
     libp2p_identify::PROTOCOL_NAME,
     libp2p_identify::PUSH_PROTOCOL_NAME,
     #[cfg(feature = "kad")]
