@@ -22,7 +22,20 @@
 //!
 //! The connection setup includes all protocol upgrades applied on the
 //! underlying `Transport`.
-// TODO: add example
+//!
+//! # Example
+//!
+//! ```no_run
+//! use libp2p_core::{transport::MemoryTransport, Transport as _};
+//! use libp2p_core::transport::{timeout::TransportTimeout, ListenerId};
+//! use std::time::Duration;
+//!
+//! let base = MemoryTransport::default();
+//! let mut timeout = TransportTimeout::new(base, Duration::from_secs(1));
+//!
+//! // Listen and dial as usual; the setup will be subject to timeouts.
+//! let _ = timeout.listen_on(ListenerId::next(), "/memory/0".parse().unwrap());
+//! ```
 
 use std::{
     error, fmt, io,
