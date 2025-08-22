@@ -112,18 +112,7 @@ where
     }
 }
 
-impl<TInbound, TOutbound, TEvent> std::fmt::Debug for OneShotHandler<TInbound, TOutbound, TEvent>
-where
-    TOutbound: OutboundUpgradeSend,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OneShotHandler")
-            .field("pending_requests", &self.pending_requests())
-            .field("dial_negotiated", &self.dial_negotiated)
-            .field("dial_queue_len", &self.dial_queue.len())
-            .finish()
-    }
-}
+// Debug intentionally not implemented to keep handler lean at runtime.
 
 impl<TInbound, TOutbound, TEvent> ConnectionHandler for OneShotHandler<TInbound, TOutbound, TEvent>
 where
