@@ -761,13 +761,22 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum byte size for each gossip (default is 2048 bytes).
+    /// The maximum byte size for each gossip (default is 65536 bytes).
+    ///
+    /// ```rust
+    /// use libp2p_gossipsub::ConfigBuilder;
+    /// let mut config = ConfigBuilder::default();
+    /// assert_eq!(config.build().unwrap().max_transmit_size(), 65536);
+    /// config.max_transmit_size(1 << 20);
+    /// assert_eq!(config.build().unwrap().max_transmit_size(), 1 << 20);
+    /// ```
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.protocol.default_max_transmit_size = max_transmit_size;
         self
     }
 
-    /// The maximum byte size for each gossip for a given topic. (default is 2048 bytes).
+    /// The maximum byte size for each gossip for a given topic. (default is
+    /// [`Self::max_transmit_size`]).
     pub fn max_transmit_size_for_topic(
         &mut self,
         max_transmit_size: usize,
@@ -858,8 +867,8 @@ impl ConfigBuilder {
     /// This is how long to wait before resubscribing to the topic. A short backoff period in case
     /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
     /// is 10 seconds.
-    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
-        self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: Duration) -> &mut Self {
+        self.config.unsubscribe_backoff = unsubscribe_backoff;
         self
     }
 
