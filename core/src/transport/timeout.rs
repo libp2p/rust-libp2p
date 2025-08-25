@@ -26,9 +26,12 @@
 //! # Example
 //!
 //! ```no_run
-//! use libp2p_core::{transport::MemoryTransport, Transport as _};
-//! use libp2p_core::transport::{timeout::TransportTimeout, ListenerId};
 //! use std::time::Duration;
+//!
+//! use libp2p_core::{
+//!     transport::{timeout::TransportTimeout, ListenerId, MemoryTransport},
+//!     Transport as _,
+//! };
 //!
 //! let base = MemoryTransport::default();
 //! let mut timeout = TransportTimeout::new(base, Duration::from_secs(1));
