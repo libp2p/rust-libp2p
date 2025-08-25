@@ -112,8 +112,6 @@ where
     }
 }
 
-// Debug intentionally not implemented to keep handler lean at runtime.
-
 impl<TInbound, TOutbound, TEvent> ConnectionHandler for OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TInbound: InboundUpgradeSend + Send + 'static,
