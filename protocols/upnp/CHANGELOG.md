@@ -1,3 +1,11 @@
+## 0.5.1
+
+- Skip port mapping when an active port mapping is present.
+  Previously, the behavior would skip creating new mappings if any mapping 
+  (active or inactive or pending) existed for the same port. Now it correctly only 
+  checks active mappings on the gateway.
+  See [PR 6127](https://github.com/libp2p/rust-libp2p/pull/6127).
+
 ## 0.5.0
 
 - update igd-next to 0.16.1

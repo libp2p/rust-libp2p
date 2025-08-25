@@ -270,15 +270,14 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                if let Some((mapping, _state)) = self
-                    .mappings
-                    .iter()
-                    .find(|(mapping, _state)| mapping.internal_addr.port() == addr.port())
-                {
+                if let Some((mapping, _state)) = self.mappings.iter().find(|(mapping, state)| {
+                    matches!(state, MappingState::Active(_))
+                        && mapping.internal_addr.port() == addr.port()
+                }) {
                     tracing::debug!(
                         multiaddress=%multiaddr,
                         mapped_multiaddress=%mapping.multiaddr,
-                        "port from multiaddress is already being mapped"
+                        "port from multiaddress is already mapped on the gateway"
                     );
                     return;
                 }
