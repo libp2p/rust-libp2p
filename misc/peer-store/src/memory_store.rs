@@ -9,7 +9,7 @@
 //! ```
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     num::NonZeroUsize,
     task::{Poll, Waker},
 };
@@ -49,10 +49,9 @@ pub enum Event {
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
 /// and a frequency-based ordering of addresses.
-#[derive(Default)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
-    records: HashMap<PeerId, PeerRecord<T>>,
+    records: LruCache<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm).
     pending_events: VecDeque<Event>,
     /// Config of the store.
@@ -65,8 +64,8 @@ impl<T> MemoryStore<T> {
     /// Create a new [`MemoryStore`] with the given config.
     pub fn new(config: Config) -> Self {
         Self {
+            records: LruCache::new(config.peer_capacity().get()),
             config,
-            records: HashMap::new(),
             pending_events: VecDeque::default(),
             waker: None,
         }
@@ -137,7 +136,7 @@ impl<T> MemoryStore<T> {
 
     /// Get a reference to a peer's custom data.
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
-        self.records.get(peer).and_then(|r| r.get_custom_data())
+        self.records.peek(peer).and_then(|r| r.get_custom_data())
     }
 
     /// Take ownership of the internal data, leaving `None` in its place.
@@ -240,7 +239,7 @@ impl<T> Store for MemoryStore<T> {
     }
 
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
-        self.records.get(peer).map(|record| record.addresses())
+        self.records.peek(peer).map(|record| record.addresses())
     }
 
     fn poll(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Self::Event> {
@@ -257,6 +256,7 @@ impl<T> Store for MemoryStore<T> {
 /// Config for [`MemoryStore`]. The available options are documented via their setters.
 #[derive(Debug, Clone)]
 pub struct Config {
+    peer_capacity: NonZeroUsize,
     record_capacity: NonZeroUsize,
     remove_addr_on_dial_error: bool,
 }
@@ -264,6 +264,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            peer_capacity: NonZeroUsize::try_from(1000).expect("1000 > 0"),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
             remove_addr_on_dial_error: true,
         }
@@ -271,12 +272,24 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn peer_capacity(&self) -> &NonZeroUsize {
+        &self.peer_capacity
+    }
+    /// The capacity of the address store per peer.
+    ///
+    /// The least recently updated peer will be discarded to make room for a new peer.
+    ///
+    /// `1000` by default.
+    pub fn set_peer_capacity(mut self, capacity: NonZeroUsize) -> Self {
+        self.peer_capacity = capacity;
+        self
+    }
     pub fn record_capacity(&self) -> &NonZeroUsize {
         &self.record_capacity
     }
-    /// The capacity of an address store.
+    /// The capacity of the address store per peer.
     ///
-    /// The least active address will be discarded to make room for new address.
+    /// The least active address will be discarded to make room for a new address.
     ///
     /// `8` by default.
     pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
