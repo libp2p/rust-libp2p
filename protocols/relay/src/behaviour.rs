@@ -286,8 +286,8 @@ impl Behaviour {
             circuits: Default::default(),
             queued_actions: Default::default(),
             external_addresses: Default::default(),
-            status: Status::Enable,
-            auto_status_change: false,
+            status: Status::Disable,
+            auto_status_change: true,
             waker: None,
         }
     }
