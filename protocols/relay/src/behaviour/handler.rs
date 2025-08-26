@@ -33,7 +33,10 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use futures_timer::Delay;
-use libp2p_core::{upgrade::ReadyUpgrade, ConnectedPoint, Multiaddr};
+use libp2p_core::{
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    ConnectedPoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
@@ -43,7 +46,7 @@ use libp2p_swarm::{
 use web_time::Instant;
 
 use crate::{
-    behaviour::CircuitId,
+    behaviour::{self, CircuitId},
     copy_future::CopyFuture,
     proto,
     protocol::{inbound_hop, outbound_stop},
@@ -86,6 +89,9 @@ pub enum In {
         inbound_circuit_req: inbound_hop::CircuitReq,
         dst_stream: Stream,
         dst_pending_data: Bytes,
+    },
+    SetStatus {
+        status: behaviour::Status,
     },
 }
 
@@ -136,6 +142,10 @@ impl fmt::Debug for In {
                 .debug_struct("In::AcceptAndDriveCircuit")
                 .field("circuit_id", circuit_id)
                 .field("dst_peer_id", dst_peer_id)
+                .finish(),
+            In::SetStatus { status } => f
+                .debug_struct("In::SetStatus")
+                .field("status", status)
                 .finish(),
         }
     }
@@ -385,10 +395,12 @@ pub struct Handler {
         CircuitId,
         Result<outbound_stop::Circuit, outbound_stop::Error>,
     >,
+
+    status: behaviour::Status,
 }
 
 impl Handler {
-    pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+    pub fn new(config: Config, endpoint: ConnectedPoint, status: behaviour::Status) -> Handler {
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
@@ -409,6 +421,7 @@ impl Handler {
             active_reservation: Default::default(),
             pending_connect_requests: Default::default(),
             active_connect_requests: Default::default(),
+            status,
         }
     }
 
@@ -496,13 +509,18 @@ type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ())
+        match self.status {
+            behaviour::Status::Enable => {
+                SubstreamProtocol::new(Either::Left(ReadyUpgrade::new(HOP_PROTOCOL_NAME)), ())
+            }
+            behaviour::Status::Disable => SubstreamProtocol::new(Either::Right(DeniedUpgrade), ()),
+        }
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
@@ -594,6 +612,7 @@ impl ConnectionHandler for Handler {
                         .boxed(),
                 );
             }
+            In::SetStatus { status } => self.status = status,
         }
     }
 
@@ -890,7 +909,7 @@ impl ConnectionHandler for Handler {
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
+                protocol: futures::future::Either::Left(stream),
                 ..
             }) => {
                 self.on_fully_negotiated_inbound(stream);
