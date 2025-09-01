@@ -6,6 +6,11 @@
   checks active mappings on the gateway.
   See [PR 6127](https://github.com/libp2p/rust-libp2p/pull/6127).
 
+- Fix excessive retry attempts for failed port mappings by implementing exponential backoff.
+  Failed mappings now retry up to 5 times with increasing delays (30s to 480s) before giving up.
+  This prevents continuous retry loops.
+  See [PR 6128](https://github.com/libp2p/rust-libp2p/pull/6128).
+
 ## 0.5.0
 
 - update igd-next to 0.16.1
