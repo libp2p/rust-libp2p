@@ -402,9 +402,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
-            return;
-        };
+        let connection = self.connections.get_mut(&(peer_id, connection_id)).expect("valid connection");
 
         match event {
             Out::Supported => {
