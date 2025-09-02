@@ -102,7 +102,8 @@ impl Behaviour {
 
     fn select_connection_for_reservation(
         &mut self,
-        peer_id: PeerId, connection_id: ConnectionId
+        peer_id: PeerId,
+        connection_id: ConnectionId,
     ) -> bool {
         if self.pending_target.contains(&(peer_id, connection_id)) {
             return false;
