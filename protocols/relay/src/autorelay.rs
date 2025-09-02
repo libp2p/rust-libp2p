@@ -39,7 +39,7 @@ struct Connection {
 
 impl Connection {
     /// Mark relayed connection as not supported
-    pub fn disqualify_connection(&mut self) -> bool {
+    pub(crate) fn disqualify_connection_if_relayed(&mut self) -> bool {
         match self.address.is_relayed() {
             true => {
                 self.relay_status = RelayStatus::NotSupported;
@@ -310,7 +310,7 @@ impl NetworkBehaviour for Behaviour {
                     relay_status: RelayStatus::Pending,
                 };
 
-                connection.disqualify_connection();
+                connection.disqualify_connection_if_relayed();
 
                 self.connections
                     .insert((peer_id, connection_id), connection);
