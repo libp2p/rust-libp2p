@@ -7,8 +7,8 @@ use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
 use libp2p_swarm::derive_prelude::{
     AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-    DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
-    NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr, NetworkBehaviour,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm::{dummy, ExternalAddresses, ListenOpts, NewListenAddr};
 use std::collections::{HashMap, HashSet, VecDeque};
