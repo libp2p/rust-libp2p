@@ -25,7 +25,7 @@ pub struct Behaviour {
 
     connections: HashMap<(PeerId, ConnectionId), Connection>,
 
-    pending_reservation: HashMap<ListenerId, (PeerId, ConnectionId)>,
+    reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
     pending_target: HashSet<(PeerId, ConnectionId)>,
 
     waker: Option<Waker>,
@@ -93,7 +93,6 @@ impl Config {
 pub enum Event {}
 
 impl Behaviour {
-
     pub fn new_with_config(config: Config) -> Self {
         Self {
             config,
@@ -103,7 +102,7 @@ impl Behaviour {
 
     fn select_connection_for_reservation(
         &mut self,
-        (peer_id, connection_id): (PeerId, ConnectionId),
+        peer_id: PeerId, connection_id: ConnectionId
     ) -> bool {
         if self.pending_target.contains(&(peer_id, connection_id)) {
             return false;
@@ -131,12 +130,73 @@ impl Behaviour {
         info.relay_status = RelayStatus::Supported {
             status: ReservationStatus::Pending { id },
         };
-        self.pending_reservation
-            .insert(id, (peer_id, connection_id));
+        self.reservations.insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
         self.pending_target.insert((peer_id, connection_id));
 
         true
+    }
+
+    fn remove_all_reservations(&mut self) {
+        let relay_listeners = self
+            .reservations
+            .iter()
+            .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
+            .collect::<Vec<_>>();
+
+        for (listener_id, peer_id, connection_id) in relay_listeners {
+            let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+                continue;
+            };
+
+            assert!(matches!(
+                connection.relay_status,
+                RelayStatus::Supported {
+                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
+                } if id == listener_id
+            ));
+
+            connection.relay_status = RelayStatus::Supported {
+                status: ReservationStatus::Idle,
+            };
+
+            self.events
+                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        }
+    }
+
+    fn disable_reservation(&mut self, id: ListenerId) {
+        let Some((peer_id, connection_id)) = self.reservations.remove(&id) else {
+            return;
+        };
+
+        let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+            return;
+        };
+
+        match connection.relay_status {
+            RelayStatus::Supported {
+                status: ReservationStatus::Active { .. },
+            } => {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
+            }
+            RelayStatus::Supported {
+                status: ReservationStatus::Pending { .. },
+            } => {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
+            }
+            RelayStatus::Pending => {
+                self.pending_target.remove(&(peer_id, connection_id));
+            }
+            RelayStatus::Supported {
+                status: ReservationStatus::Idle,
+            }
+            | RelayStatus::NotSupported => {}
+        }
     }
 
     fn meet_reservation_target(&mut self) {
@@ -218,7 +278,7 @@ impl Behaviour {
             .copied()
             .take(remaining_targets_needed)
         {
-            if !self.select_connection_for_reservation((peer_id, connection_id)) {
+            if !self.select_connection_for_reservation(peer_id, connection_id) {
                 continue;
             }
 
@@ -231,7 +291,17 @@ impl Behaviour {
     }
 
     fn active_reservations(&self) -> usize {
-        self.connections.values().filter(|info| matches!(info.relay_status, RelayStatus::Supported { status: ReservationStatus::Active { .. } })).count()
+        self.connections
+            .values()
+            .filter(|info| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Active { .. }
+                    }
+                )
+            })
+            .count()
     }
 
     // fn on_connection_established(
@@ -336,12 +406,16 @@ impl NetworkBehaviour for Behaviour {
                     .expect("valid connection");
 
                 let id = match connection.relay_status {
-                    RelayStatus::Supported { status: ReservationStatus::Active { id } } => id,
-                    RelayStatus::Supported { status: ReservationStatus::Pending { id } } => id,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Active { id },
+                    } => id,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Pending { id },
+                    } => id,
                     _ => return,
                 };
 
-                self.pending_reservation.remove(&id);
+                self.reservations.remove(&id);
                 self.pending_target.remove(&(peer_id, connection_id));
 
                 let max_reservation = self.config.max_reservations.get() as usize;
@@ -376,7 +450,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                let Some((peer_id, connection_id)) = self.pending_reservation.remove(&listener_id)
+                let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
                 else {
                     return;
                 };
@@ -397,9 +471,15 @@ impl NetworkBehaviour for Behaviour {
                     status: ReservationStatus::Active { id },
                 };
             }
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. }) => {
+                self.disable_reservation(listener_id);
+            }
+            FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
+                self.disable_reservation(listener_id);
+            }
+            FromSwarm::ListenerClosed(ListenerClosed { listener_id, .. }) => {
+                self.disable_reservation(listener_id);
+            }
             _ => {}
         }
     }
@@ -412,7 +492,10 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let connection = self.connections.get_mut(&(peer_id, connection_id)).expect("valid connection");
+        let connection = self
+            .connections
+            .get_mut(&(peer_id, connection_id))
+            .expect("valid connection");
 
         match event {
             Out::Supported => {
