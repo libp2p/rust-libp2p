@@ -4,12 +4,12 @@ use std::{
 };
 
 use libp2p_core::upgrade::DeniedUpgrade;
-
-use crate::HOP_PROTOCOL_NAME;
 use libp2p_swarm::{
     handler::ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
     SupportedProtocols,
 };
+
+use crate::HOP_PROTOCOL_NAME;
 
 #[derive(Default, Debug)]
 pub struct Handler {

@@ -1,19 +1,26 @@
-use crate::autorelay::handler::Out;
-use crate::multiaddr_ext::MultiaddrExt;
-use either::Either;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::{ListenerId, PortUse};
-use libp2p_core::Endpoint;
-use libp2p_identity::PeerId;
-use libp2p_swarm::derive_prelude::{
-    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr, NetworkBehaviour,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZeroU8,
+    task::{Context, Poll, Waker},
 };
-use libp2p_swarm::{dummy, ExternalAddresses, ListenOpts, NewListenAddr};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::num::NonZeroU8;
-use std::task::{Context, Poll, Waker};
+
+use either::Either;
+use libp2p_core::{
+    multiaddr::Protocol,
+    transport::{ListenerId, PortUse},
+    Endpoint,
+};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    derive_prelude::{
+        AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
+        ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr, NetworkBehaviour,
+        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    },
+    dummy, ExternalAddresses, ListenOpts, NewListenAddr,
+};
+
+use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
 
 mod handler;
 
@@ -201,8 +208,8 @@ impl Behaviour {
     }
 
     fn meet_reservation_target(&mut self) {
-        // check to determine if there is a public external address that could possibly let us know the node
-        // is reachable
+        // check to determine if there is a public external address that could possibly let us know
+        // the node is reachable
         if self
             .external_addresses
             .iter()
