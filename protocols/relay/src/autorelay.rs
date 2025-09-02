@@ -145,7 +145,7 @@ impl Behaviour {
         if self
             .external_addresses
             .iter()
-            .any(|addr| addr.is_public() && !addr.is_relayed())
+            .any(|addr| !addr.is_relayed())
         {
             return;
         }
@@ -294,7 +294,17 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        let _change = self.external_addresses.on_swarm_event(&event);
+        let change = self.external_addresses.on_swarm_event(&event);
+
+        if change
+            && self
+                .external_addresses
+                .iter()
+                .any(|addr| !addr.is_relayed())
+        {
+            self.remove_all_reservations();
+            return;
+        }
 
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
