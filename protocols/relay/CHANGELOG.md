@@ -1,3 +1,7 @@
+## 0.21.1
+- Implements autorelay that would make a reservation as soon as a connection reports supporting HOP protocol.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/6067/files)
+
 ## 0.21.0
 
 <!-- Update to libp2p-swarm v0.47.0 -->
