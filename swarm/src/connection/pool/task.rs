@@ -21,6 +21,15 @@
 
 //! Async functions driving pending and established connections in the form of a task.
 
+use std::{convert::Infallible, pin::Pin};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{poll_fn, Either, Future},
+    SinkExt, StreamExt,
+};
+use libp2p_core::muxing::StreamMuxerBox;
+
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
@@ -30,14 +39,6 @@ use crate::{
     transport::TransportError,
     ConnectionHandler, Multiaddr, PeerId,
 };
-use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, Either, Future},
-    SinkExt, StreamExt,
-};
-use libp2p_core::muxing::StreamMuxerBox;
-use std::convert::Infallible;
-use std::pin::Pin;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
@@ -105,8 +106,6 @@ pub(crate) async fn new_for_pending_outgoing_connection(
                 })
                 .await;
         }
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         Either::Left((Ok(v), _)) => libp2p_core::util::unreachable(v),
         Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
@@ -145,8 +144,6 @@ pub(crate) async fn new_for_pending_incoming_connection<TFut>(
                 })
                 .await;
         }
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         Either::Left((Ok(v), _)) => libp2p_core::util::unreachable(v),
         Either::Right((Ok(output), _)) => {
             let _ = events

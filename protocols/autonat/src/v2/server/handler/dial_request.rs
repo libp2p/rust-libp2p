@@ -81,16 +81,14 @@ where
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(DIAL_REQUEST_PROTOCOL), ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         loop {
             match self.inbound.poll_unpin(cx) {
                 Poll::Ready(Ok(event)) => {
@@ -117,12 +115,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -144,8 +137,6 @@ where
                     );
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 tracing::debug!("inbound request failed: {:?}", error);
             }
@@ -223,8 +214,7 @@ async fn handle_request(
             tested_addr: observed_multiaddr,
             client,
             data_amount,
-            result: Err(io::Error::new(
-                io::ErrorKind::Other,
+            result: Err(io::Error::other(
                 "client is not conformint to protocol. the tested address is not the observed address",
             )),
         };

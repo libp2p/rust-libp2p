@@ -1,13 +1,10 @@
-use libp2p::autonat;
-use libp2p::identify;
-use libp2p::kad;
-use libp2p::ping;
-use libp2p::relay;
-use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::{NetworkBehaviour, StreamProtocol};
-use libp2p::{identity, Multiaddr, PeerId};
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
+
+use libp2p::{
+    autonat, identify, identity, kad, ping, relay,
+    swarm::{behaviour::toggle::Toggle, NetworkBehaviour, StreamProtocol},
+    Multiaddr, PeerId,
+};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",

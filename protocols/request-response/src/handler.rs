@@ -20,23 +20,6 @@
 
 pub(crate) mod protocol;
 
-pub use protocol::ProtocolSupport;
-
-use crate::codec::Codec;
-use crate::handler::protocol::Protocol;
-use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
-
-use futures::channel::mpsc;
-use futures::{channel::oneshot, prelude::*};
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
-use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
-    SubstreamProtocol,
-};
-use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
     fmt, io,
@@ -46,6 +29,25 @@ use std::{
     },
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    prelude::*,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, StreamUpgradeError,
+    },
+    SubstreamProtocol,
+};
+pub use protocol::ProtocolSupport;
+use smallvec::SmallVec;
+
+use crate::{
+    codec::Codec, handler::protocol::Protocol, InboundRequestId, OutboundRequestId,
+    EMPTY_QUEUE_SHRINK_THRESHOLD,
 };
 
 /// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
@@ -125,10 +127,7 @@ where
         FullyNegotiatedInbound {
             protocol: (mut stream, protocol),
             info: (),
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         let mut codec = self.codec.clone();
         let request_id = self.next_inbound_request_id();
@@ -176,10 +175,7 @@ where
         FullyNegotiatedOutbound {
             protocol: (mut stream, protocol),
             info: (),
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         let message = self
             .requested_outbound
@@ -209,7 +205,7 @@ where
         {
             self.pending_events.push_back(Event::OutboundStreamFailed {
                 request_id: message.request_id,
-                error: io::Error::new(io::ErrorKind::Other, "max sub-streams reached"),
+                error: io::Error::other("max sub-streams reached"),
             });
         }
     }
@@ -217,7 +213,7 @@ where
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError { error, info: () }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
@@ -240,8 +236,6 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(message.request_id));
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => {
                 self.pending_events.push_back(Event::OutboundStreamFailed {
@@ -254,12 +248,10 @@ where
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { error, .. }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         libp2p_core::util::unreachable(error)
     }
 }
@@ -381,7 +373,7 @@ where
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             Protocol {
                 protocols: self.inbound_protocols.clone(),
@@ -471,12 +463,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
@@ -488,8 +475,6 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

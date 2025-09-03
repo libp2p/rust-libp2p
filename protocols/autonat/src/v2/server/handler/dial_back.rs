@@ -14,12 +14,11 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
+use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 use crate::v2::{
     protocol::{dial_back, recv_dial_back_response},
     DIAL_BACK_PROTOCOL,
 };
-
-use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
 pub(crate) type ToBehaviour = io::Result<()>;
 
@@ -47,16 +46,14 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if let Poll::Ready(result) = self.outbound.poll_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 result
@@ -77,12 +74,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
@@ -135,6 +127,6 @@ async fn perform_dial_back(
     };
     back_channel
         .send(res)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "send error"))?;
+        .map_err(|_| io::Error::other("send error"))?;
     Ok(())
 }

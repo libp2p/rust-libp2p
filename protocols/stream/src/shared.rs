@@ -12,9 +12,11 @@ use rand::seq::IteratorRandom as _;
 use crate::{handler::NewStream, AlreadyRegistered, IncomingStreams};
 
 pub(crate) struct Shared {
-    /// Tracks the supported inbound protocols created via [`Control::accept`](crate::Control::accept).
+    /// Tracks the supported inbound protocols created via
+    /// [`Control::accept`](crate::Control::accept).
     ///
-    /// For each [`StreamProtocol`], we hold the [`mpsc::Sender`] corresponding to the [`mpsc::Receiver`] in [`IncomingStreams`].
+    /// For each [`StreamProtocol`], we hold the [`mpsc::Sender`] corresponding to the
+    /// [`mpsc::Receiver`] in [`IncomingStreams`].
     supported_inbound_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
 
     connections: HashMap<ConnectionId, PeerId>,
@@ -25,7 +27,8 @@ pub(crate) struct Shared {
 
     /// Sender for peers we want to dial.
     ///
-    /// We manage this through a channel to avoid locks as part of [`NetworkBehaviour::poll`](libp2p_swarm::NetworkBehaviour::poll).
+    /// We manage this through a channel to avoid locks as part of
+    /// [`NetworkBehaviour::poll`](libp2p_swarm::NetworkBehaviour::poll).
     dial_sender: mpsc::Sender<PeerId>,
 }
 
@@ -50,6 +53,9 @@ impl Shared {
         &mut self,
         protocol: StreamProtocol,
     ) -> Result<IncomingStreams, AlreadyRegistered> {
+        self.supported_inbound_protocols
+            .retain(|_, sender| !sender.is_closed());
+
         if self.supported_inbound_protocols.contains_key(&protocol) {
             return Err(AlreadyRegistered);
         }

@@ -24,7 +24,8 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async mode
+/// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async
+/// mode
 #[allow(unreachable_pub)] // Users should not depend on this.
 pub trait AsyncSocket: Unpin + Send + 'static {
     /// Create the async socket from the [`std::net::UdpSocket`]
@@ -32,7 +33,8 @@ pub trait AsyncSocket: Unpin + Send + 'static {
     where
         Self: Sized;
 
-    /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
+    /// Attempts to receive a single packet on the socket
+    /// from the remote address to which it is connected.
     fn poll_read(
         &mut self,
         _cx: &mut Context,
@@ -48,52 +50,11 @@ pub trait AsyncSocket: Unpin + Send + 'static {
     ) -> Poll<Result<(), Error>>;
 }
 
-#[cfg(feature = "async-io")]
-pub(crate) mod asio {
-    use super::*;
-    use async_io::Async;
-    use futures::FutureExt;
-
-    /// AsyncIo UdpSocket
-    pub(crate) type AsyncUdpSocket = Async<UdpSocket>;
-    impl AsyncSocket for AsyncUdpSocket {
-        fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
-            Async::new(socket)
-        }
-
-        fn poll_read(
-            &mut self,
-            cx: &mut Context,
-            buf: &mut [u8],
-        ) -> Poll<Result<(usize, SocketAddr), Error>> {
-            // Poll receive socket.
-            futures::ready!(self.poll_readable(cx))?;
-            match self.recv_from(buf).now_or_never() {
-                Some(data) => Poll::Ready(data),
-                None => Poll::Pending,
-            }
-        }
-
-        fn poll_write(
-            &mut self,
-            cx: &mut Context,
-            packet: &[u8],
-            to: SocketAddr,
-        ) -> Poll<Result<(), Error>> {
-            futures::ready!(self.poll_writable(cx))?;
-            match self.send_to(packet, to).now_or_never() {
-                Some(Ok(_)) => Poll::Ready(Ok(())),
-                Some(Err(err)) => Poll::Ready(Err(err)),
-                None => Poll::Pending,
-            }
-        }
-    }
-}
-
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio {
-    use super::*;
     use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};
+
+    use super::*;
 
     /// Tokio ASync Socket`
     pub(crate) type TokioUdpSocket = TkUdpSocket;

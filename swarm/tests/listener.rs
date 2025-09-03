@@ -15,12 +15,11 @@ use libp2p_swarm::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn behaviour_listener() {
-    let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
+    let mut swarm = Swarm::new_ephemeral_tokio(|_| Behaviour::default());
     let addr: Multiaddr = Protocol::Memory(0).into();
     let id = swarm.behaviour_mut().listen(addr.clone());
 

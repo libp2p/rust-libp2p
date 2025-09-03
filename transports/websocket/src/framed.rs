@@ -18,11 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, quicksink, tls};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt, io, mem,
+    net::IpAddr,
+    ops::DerefMut,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::rustls::pki_types::ServerName;
-use futures_rustls::{client, server};
+use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
@@ -33,20 +42,21 @@ use soketto::{
     connection::{self, CloseReason},
     handshake,
 };
-use std::borrow::Cow;
-use std::net::IpAddr;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc};
-use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
+
+use crate::{error::Error, quicksink, tls};
 
 /// Max. number of payload bytes of a single frame.
 const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
 /// frame payloads which does not implement [`AsyncRead`] or
-/// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
+/// [`AsyncWrite`]. See [`crate::Config`] if you require the latter.
+#[deprecated = "Use `Config` instead"]
+pub type WsConfig<T> = Config<T>;
+
 #[derive(Debug)]
-pub struct WsConfig<T> {
+pub struct Config<T> {
     transport: Arc<Mutex<T>>,
     max_data_size: usize,
     tls_config: tls::Config,
@@ -55,13 +65,13 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, WsListenProto<'static>>,
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Send,
 {
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
-        WsConfig {
+        Config {
             transport: Arc::new(Mutex::new(transport)),
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
@@ -101,7 +111,7 @@ where
 
 type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
-impl<T> Transport for WsConfig<T>
+impl<T> Transport for Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -235,7 +245,7 @@ where
     }
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -498,7 +508,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let mut protocols = addr.iter();
     let mut ip = protocols.next();
     let mut tcp = protocols.next();
-    let (host_port, server_name) = loop {
+    let (host_port, mut server_name) = loop {
         match (ip, tcp) {
             (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
                 let server_name = ServerName::IpAddress(IpAddr::V4(ip).into());
@@ -521,6 +531,8 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         }
     };
 
+    // Will hold a value if the multiaddr carries `/tls/sni/<host>`.
+    let mut sni_override: Option<ServerName<'static>> = None;
     // Now consume the `Ws` / `Wss` protocol from the end of the address,
     // preserving the trailing `P2p` protocol that identifies the remote,
     // if any.
@@ -530,6 +542,13 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         match protocols.pop() {
             p @ Some(Protocol::P2p(_)) => p2p = p,
             Some(Protocol::Ws(path)) => match protocols.pop() {
+                Some(Protocol::Sni(domain)) => match protocols.pop() {
+                    Some(Protocol::Tls) => {
+                        sni_override = Some(tls::dns_name_ref(&domain)?);
+                        break (true, path.into_owned());
+                    }
+                    _ => return Err(Error::InvalidMultiaddr(addr)),
+                },
                 Some(Protocol::Tls) => break (true, path.into_owned()),
                 Some(p) => {
                     protocols.push(p);
@@ -549,6 +568,9 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
         None => protocols,
     };
 
+    if let Some(name) = sni_override {
+        server_name = name;
+    }
     Ok(WsAddress {
         host_port,
         server_name,
@@ -771,7 +793,7 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));
-        let item = item.map(|result| result.map_err(|e| io::Error::new(io::ErrorKind::Other, e)));
+        let item = item.map(|result| result.map_err(io::Error::other));
         Poll::Ready(item)
     }
 }
@@ -785,33 +807,35 @@ where
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_ready(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
         Pin::new(&mut self.sender)
             .start_send(item)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_flush(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_close(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use libp2p_identity::PeerId;
     use std::io;
+
+    use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn listen_addr() {
@@ -1001,5 +1025,49 @@ mod tests {
         // Check non-ws address
         let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
         parse_ws_dial_addr::<io::Error>(addr).unwrap_err();
+
+        // Check `/tls/sni/.../ws` with `/dns4`
+        let addr = "/dns4/example.com/tcp/2222/tls/sni/example.com/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
+
+        // Check `/tls/sni/.../ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/sni/example.test/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "127.0.0.1:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.test".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
+
+        // Check `/tls/sni/.../ws` with trailing `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/tls/sni/example.com/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(
+            info.tcp_addr,
+            format!("/dns4/example.com/tcp/2222/p2p/{peer_id}")
+                .parse()
+                .unwrap()
+        );
+
+        // Negative: `/tls/sni/...` *without* `/ws` → error
+        let bad = "/dns4/example.com/tcp/2222/tls/sni/example.com"
+            .parse::<Multiaddr>()
+            .unwrap();
+        parse_ws_dial_addr::<io::Error>(bad).unwrap_err();
     }
 }

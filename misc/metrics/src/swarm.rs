@@ -18,17 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
+use libp2p_swarm::{ConnectionId, DialError, SwarmEvent};
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{
+        counter::Counter,
+        family::Family,
+        histogram::{exponential_buckets, Histogram},
+    },
+    registry::{Registry, Unit},
+};
+use web_time::Instant;
 
 use crate::protocol_stack;
-use libp2p_swarm::{ConnectionId, DialError, SwarmEvent};
-use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
-use prometheus_client::registry::{Registry, Unit};
-use web_time::Instant;
 
 pub(crate) struct Metrics {
     connections_incoming: Family<AddressLabels, Counter>,

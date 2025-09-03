@@ -1,10 +1,18 @@
+use std::{
+    collections::VecDeque,
+    convert::Infallible,
+    io,
+    iter::{once, repeat_n},
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use futures::{channel::oneshot, AsyncWrite};
 use futures_bounded::FuturesMap;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
 };
-
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
@@ -12,14 +20,6 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
-};
-use std::{
-    collections::VecDeque,
-    convert::Infallible,
-    io,
-    iter::{once, repeat},
-    task::{Context, Poll},
-    time::Duration,
 };
 
 use crate::v2::{
@@ -72,7 +72,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -121,16 +121,14 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
@@ -161,12 +159,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
@@ -217,8 +210,6 @@ async fn start_stream_handle(
         .map_err(|e| match e {
             StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
@@ -261,7 +252,9 @@ async fn start_stream_handle(
         Ok(_) => {}
         Err(err) => {
             if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
+                // The AutoNAT server may have already closed the stream
+                // (this is normal because the probe is finished),
+                // in this case we have this error:
                 // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
                 // so we silently ignore this error
             } else {
@@ -272,20 +265,13 @@ async fn start_stream_handle(
 
     match res.status {
         ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server rejected request",
-            )))
+            return Err(Error::Io(io::Error::other("server rejected request")))
         }
         ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server refused dial",
-            )))
+            return Err(Error::Io(io::Error::other("server refused dial")))
         }
         ResponseStatus::E_INTERNAL_ERROR => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
             )))
         }
@@ -331,8 +317,7 @@ where
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
-        .take(count_full)
+    for req in repeat_n(DATA_FIELD_LEN_UPPER_BOUND, count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
         .map(|data_count| {

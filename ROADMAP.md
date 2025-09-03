@@ -3,7 +3,7 @@
 Below is a high level roadmap for the rust-libp2p project.
 Items are ordered by priority (high to low).
 
-This is a living document.
+This is a living document. We believe the roadmap should be shaped by the needs of our user community. Many of the items below are contributions made by downstream users.
 Input is always welcome e.g. via GitHub issues or pull requests.
 
 This is the roadmap of the Rust implementation of libp2p.
@@ -61,7 +61,7 @@ The project supports Wasm already today, though the developer experience is cumb
 Properly supporting Wasm opens rust-libp2p to a whole new set of use-cases.
 I would love for this to happen earlier.
 Though (a) I think we should prioritize improving existing functionality over new functionality and (b) we don't have high demand for this feature from the community.
-(One could argue that that demand follows this roadmap item and not the other way round.)
+(One could argue that the demand follows this roadmap item and not the other way round.)
 
 ### WebRTC in the browser via WASM
 

@@ -18,7 +18,7 @@ jobs:
       matrix:
         flavour: [chromium, native]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: docker/setup-buildx-action@v3
 
@@ -28,23 +28,26 @@ jobs:
           AWS_BUCKET_NAME: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
           AWS_ACCESS_KEY_ID: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_REGION }}
           FLAVOUR: ${{ matrix.flavour }}
 
       - name: Run ${{ matrix.flavour }} tests
         uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
         with:
           test-filter: ${{ matrix.flavour }}-rust-libp2p-head
+          test-results-suffix: ${{matrix.flavour}}
           extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
           s3-cache-bucket: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
           s3-access-key-id: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
           s3-secret-access-key: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_REGION }}
           worker-count: 16
   run-holepunching-interop:
     name: Run hole-punch interoperability tests
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - name: Build image
         run: docker buildx build --load -t rust-libp2p-head . -f hole-punching-tests/Dockerfile
@@ -56,4 +59,5 @@ jobs:
           s3-cache-bucket: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
           s3-access-key-id: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
           s3-secret-access-key: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_REGION }}
           worker-count: 16

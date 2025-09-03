@@ -1,3 +1,14 @@
+## 0.47.0
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
+## 0.46.0
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.45.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
@@ -57,10 +68,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `Handler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Handler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
@@ -151,7 +162,7 @@
 - Update dependencies.
 
 - Don't close connection if ping protocol is unsupported by remote.
-  Previously, a failed protocol negotation for ping caused a force close of the connection.
+  Previously, a failed protocol negotiation for ping caused a force close of the connection.
   As a result, all nodes in a network had to support ping.
   To allow networks where some nodes don't support ping, we now emit
   `PingFailure::Unsupported` once for every connection on which ping is not supported.

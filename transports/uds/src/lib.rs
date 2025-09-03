@@ -31,28 +31,27 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(
-    unix,
-    not(target_os = "emscripten"),
-    any(feature = "tokio", feature = "async-std")
-))]
+#![cfg(all(unix, not(target_os = "emscripten"), feature = "tokio"))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::stream::BoxStream;
+use std::{
+    collections::VecDeque,
+    io,
+    path::PathBuf,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{BoxFuture, Ready},
     prelude::*,
+    stream::BoxStream,
 };
-use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{io, path::PathBuf};
 
 pub type Listener<T> = BoxStream<
     'static,
@@ -202,13 +201,6 @@ macro_rules! codegen {
     };
 }
 
-#[cfg(feature = "async-std")]
-codegen!(
-    "async-std",
-    UdsConfig,
-    |addr| async move { async_std::os::unix::net::UnixListener::bind(&addr).await },
-    async_std::os::unix::net::UnixStream,
-);
 #[cfg(feature = "tokio")]
 codegen!(
     "tokio",
@@ -239,16 +231,19 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 }
 
-#[cfg(all(test, feature = "async-std"))]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
-    use super::{multiaddr_to_path, UdsConfig};
+    use std::{borrow::Cow, path::Path};
+
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{DialOpts, ListenerId, PortUse},
         Endpoint, Transport,
     };
-    use std::{borrow::Cow, path::Path};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::{multiaddr_to_path, TokioUdsConfig};
 
     #[test]
     fn multiaddr_to_path_conversion() {
@@ -266,8 +261,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn communicating_between_dialer_and_listener() {
+    #[tokio::test]
+    async fn communicating_between_dialer_and_listener() {
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
         let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(
@@ -276,8 +271,8 @@ mod tests {
 
         let (tx, rx) = oneshot::channel();
 
-        async_std::task::spawn(async move {
-            let mut transport = UdsConfig::new().boxed();
+        let listener = async move {
+            let mut transport = TokioUdsConfig::new().boxed();
             transport.listen_on(ListenerId::next(), addr).unwrap();
 
             let listen_addr = transport
@@ -298,10 +293,10 @@ mod tests {
             let mut buf = [0u8; 3];
             sock.read_exact(&mut buf).await.unwrap();
             assert_eq!(buf, [1, 2, 3]);
-        });
+        };
 
-        async_std::task::block_on(async move {
-            let mut uds = UdsConfig::new();
+        let dialer = async move {
+            let mut uds = TokioUdsConfig::new();
             let addr = rx.await.unwrap();
             let mut socket = uds
                 .dial(
@@ -315,13 +310,15 @@ mod tests {
                 .await
                 .unwrap();
             let _ = socket.write(&[1, 2, 3]).await.unwrap();
-        });
+        };
+
+        tokio::join!(listener, dialer);
     }
 
     #[test]
     #[ignore] // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
-        let mut uds = UdsConfig::new();
+        let mut uds = TokioUdsConfig::new();
 
         let addr = "/unix//foo/bar".parse::<Multiaddr>().unwrap();
         assert!(uds.listen_on(ListenerId::next(), addr).is_err());

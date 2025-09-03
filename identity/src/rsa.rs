@@ -20,14 +20,19 @@
 
 //! RSA keys.
 
-use super::error::*;
-use asn1_der::typed::{DerDecodable, DerEncodable, DerTypeView, Sequence};
-use asn1_der::{Asn1DerError, Asn1DerErrorVariant, DerObject, Sink, VecBacking};
-use ring::rand::SystemRandom;
-use ring::signature::KeyPair;
-use ring::signature::{self, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use std::{fmt, sync::Arc};
+
+use asn1_der::{
+    typed::{DerDecodable, DerEncodable, DerTypeView, Sequence},
+    Asn1DerError, Asn1DerErrorVariant, DerObject, Sink, VecBacking,
+};
+use ring::{
+    rand::SystemRandom,
+    signature::{self, KeyPair, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256},
+};
 use zeroize::Zeroize;
+
+use super::error::*;
 
 /// An RSA keypair.
 #[derive(Clone)]
@@ -100,7 +105,7 @@ impl PublicKey {
         self.0.clone()
     }
 
-    /// Encode the RSA public key in DER as a X.509 SubjectPublicKeyInfo structure,
+    /// Encode the RSA public key in DER as an X.509 SubjectPublicKeyInfo structure,
     /// as defined in [RFC5280].
     ///
     /// [RFC5280]: https://tools.ietf.org/html/rfc5280#section-4.1
@@ -315,8 +320,9 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     const KEY1: &[u8] = include_bytes!("test/rsa-2048.pk8");
     const KEY2: &[u8] = include_bytes!("test/rsa-3072.pk8");

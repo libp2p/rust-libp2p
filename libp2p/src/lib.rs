@@ -35,11 +35,6 @@
 pub use bytes;
 pub use futures;
 #[doc(inline)]
-pub use libp2p_core::multihash;
-#[doc(inline)]
-pub use multiaddr;
-
-#[doc(inline)]
 pub use libp2p_allow_block_list as allow_block_list;
 #[cfg(feature = "autonat")]
 #[doc(inline)]
@@ -48,6 +43,8 @@ pub use libp2p_autonat as autonat;
 pub use libp2p_connection_limits as connection_limits;
 #[doc(inline)]
 pub use libp2p_core as core;
+#[doc(inline)]
+pub use libp2p_core::multihash;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
@@ -126,38 +123,47 @@ pub use libp2p_uds as uds;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_upnp as upnp;
+#[cfg(all(feature = "webrtc-websys", target_arch = "wasm32"))]
+#[doc(inline)]
+pub use libp2p_webrtc_websys as webrtc_websys;
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
-#[cfg(feature = "websocket-websys")]
+#[cfg(all(feature = "websocket-websys", target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket_websys as websocket_websys;
-#[cfg(feature = "webtransport-websys")]
+#[cfg(all(feature = "webtransport-websys", target_arch = "wasm32"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "webtransport-websys")))]
 #[doc(inline)]
 pub use libp2p_webtransport_websys as webtransport_websys;
 #[cfg(feature = "yamux")]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[doc(inline)]
+pub use multiaddr;
 
 mod builder;
-mod transport_ext;
-
-pub mod bandwidth;
 
 #[cfg(doc)]
 pub mod tutorials;
 
-pub use self::builder::SwarmBuilder;
-pub use self::core::{
-    transport::TransportError,
-    upgrade::{InboundUpgrade, OutboundUpgrade},
-    Transport,
-};
-pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
-pub use self::swarm::Swarm;
-pub use self::transport_ext::TransportExt;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+pub use builder::WebsocketError as WebsocketBuilderError;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
+
+pub use self::{
+    builder::{
+        BehaviourError as BehaviourBuilderError, SwarmBuilder,
+        TransportError as TransportBuilderError,
+    },
+    core::{
+        transport::TransportError,
+        upgrade::{InboundUpgrade, OutboundUpgrade},
+        Transport,
+    },
+    multiaddr::{multiaddr as build_multiaddr, Multiaddr},
+    swarm::Swarm,
+};

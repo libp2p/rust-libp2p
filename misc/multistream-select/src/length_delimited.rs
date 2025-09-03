@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
-use futures::{io::IoSlice, prelude::*};
 use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*};
 
 const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
@@ -383,10 +384,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::length_delimited::LengthDelimited;
+    use std::io::ErrorKind;
+
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
-    use std::io::ErrorKind;
+    use tokio::runtime::Runtime;
+
+    use crate::length_delimited::LengthDelimited;
 
     #[test]
     fn basic_read() {
@@ -488,9 +492,10 @@ mod tests {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
             let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
-            async_std::task::block_on(async move {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
                 let expected_frames = frames.clone();
-                let server = async_std::task::spawn(async move {
+                let server = tokio::task::spawn(async move {
                     let mut connec =
                         rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
 
@@ -507,15 +512,15 @@ mod tests {
                     }
                 });
 
-                let client = async_std::task::spawn(async move {
+                let client = tokio::task::spawn(async move {
                     let mut connec = LengthDelimited::new(client_connection);
                     for frame in frames {
                         connec.send(From::from(frame)).await.unwrap();
                     }
                 });
 
-                server.await;
-                client.await;
+                server.await.unwrap();
+                client.await.unwrap();
             });
 
             TestResult::passed()

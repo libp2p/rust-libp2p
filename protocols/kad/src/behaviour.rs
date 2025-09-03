@@ -22,41 +22,46 @@
 
 mod test;
 
-use crate::addresses::Addresses;
-use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus};
-use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
-use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
-use crate::record::{
-    self,
-    store::{self, RecordStore},
-    ProviderRecord, Record,
+use std::{
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    fmt,
+    num::NonZeroUsize,
+    task::{Context, Poll, Waker},
+    time::Duration,
+    vec,
 };
-use crate::{bootstrap, K_VALUE};
-use crate::{jobs::*, protocol};
+
 use fnv::FnvHashSet;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
-};
 use libp2p_swarm::{
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::fmt;
-use std::num::NonZeroUsize;
-use std::task::{Context, Poll, Waker};
-use std::time::Duration;
-use std::vec;
 use thiserror::Error;
 use tracing::Level;
 use web_time::Instant;
 
 pub use crate::query::QueryStats;
+use crate::{
+    addresses::Addresses,
+    bootstrap,
+    handler::{Handler, HandlerEvent, HandlerIn, RequestId},
+    jobs::*,
+    kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus},
+    protocol,
+    protocol::{ConnectionType, KadPeer, ProtocolConfig},
+    query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState},
+    record::{
+        self,
+        store::{self, RecordStore},
+        ProviderRecord, Record,
+    },
+    K_VALUE,
+};
 
 /// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
@@ -157,8 +162,9 @@ pub enum StoreInserts {
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
     /// Whenever a (provider) record is received, an event is emitted.
-    /// Provider records generate a [`InboundRequest::AddProvider`] under [`Event::InboundRequest`],
-    /// normal records generate a [`InboundRequest::PutRecord`] under [`Event::InboundRequest`].
+    /// Provider records generate a [`InboundRequest::AddProvider`] under
+    /// [`Event::InboundRequest`], normal records generate a [`InboundRequest::PutRecord`]
+    /// under [`Event::InboundRequest`].
     ///
     /// When deemed valid, a (provider) record needs to be explicitly stored in
     /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
@@ -205,9 +211,10 @@ pub enum Caching {
     /// [`GetRecordOk::FinishedWithNoAdditionalRecord`] is always empty.
     Disabled,
     /// Up to `max_peers` peers not returning a record that are closest to the key
-    /// being looked up are tracked and returned in [`GetRecordOk::FinishedWithNoAdditionalRecord`].
-    /// The write-back operation must be performed explicitly, if
-    /// desired and after choosing a record from the results, via [`Behaviour::put_record_to`].
+    /// being looked up are tracked and returned in
+    /// [`GetRecordOk::FinishedWithNoAdditionalRecord`]. The write-back operation must be
+    /// performed explicitly, if desired and after choosing a record from the results, via
+    /// [`Behaviour::put_record_to`].
     Enabled { max_peers: u16 },
 }
 
@@ -229,29 +236,6 @@ impl Config {
             periodic_bootstrap_interval: Some(Duration::from_secs(5 * 60)),
             automatic_bootstrap_throttle: Some(bootstrap::DEFAULT_AUTOMATIC_THROTTLE),
         }
-    }
-
-    /// Returns the default configuration.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Default::default()
-    }
-
-    /// Sets custom protocol names.
-    ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using custom name(s) therefore allows to segregate the DHT from
-    /// others, if that is desired.
-    ///
-    /// More than one protocol name can be supplied. In this case the node will
-    /// be able to talk to other nodes supporting any of the provided names.
-    /// Multiple names must be used with caution to avoid network partitioning.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(deprecated)]
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
-        self.protocol_config.set_protocol_names(names);
-        self
     }
 
     /// Sets the timeout for a single query.
@@ -398,6 +382,15 @@ impl Config {
         self
     }
 
+    /// Modifies the timeout duration of outbound substreams.
+    ///
+    /// * Default to `10` seconds.
+    /// * May need to increase this value when sending large records with poor connection.
+    pub fn set_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.protocol_config.set_substreams_timeout(timeout);
+        self
+    }
+
     /// Sets the k-bucket insertion strategy for the Kademlia routing table.
     pub fn set_kbucket_inserts(&mut self, inserts: BucketInserts) -> &mut Self {
         self.kbucket_inserts = inserts;
@@ -427,6 +420,8 @@ impl Config {
     /// Sets the configuration for the k-buckets.
     ///
     /// * Default to K_VALUE.
+    ///
+    /// **WARNING**: setting a `size` higher that `K_VALUE` may imply additional memory allocations.
     pub fn set_kbucket_size(&mut self, size: NonZeroUsize) -> &mut Self {
         self.kbucket_config.set_bucket_size(size);
         self
@@ -442,16 +437,17 @@ impl Config {
         self
     }
 
-    /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
-    /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
-    /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
-    /// triggering a bootstrap, giving more context to the future bootstrap request.
+    /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted
+    /// in the routing table. This prevent cascading bootstrap requests when multiple peers are
+    /// inserted into the routing table "at the same time". This also allows to wait a little
+    /// bit for other potential peers to be inserted into the routing table before triggering a
+    /// bootstrap, giving more context to the future bootstrap request.
     ///
     /// * Default to `500` ms.
-    /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
-    ///     is inserted in the routing table.
-    /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
-    ///     peer is inserted in the routing table).
+    /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a
+    ///   new peer is inserted in the routing table.
+    /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when
+    ///   a new peer is inserted in the routing table).
     #[cfg(test)]
     pub(crate) fn set_automatic_bootstrap_throttle(
         &mut self,
@@ -573,15 +569,13 @@ where
     ///
     /// Explicitly adding addresses of peers serves two purposes:
     ///
-    ///   1. In order for a node to join the DHT, it must know about at least
-    ///      one other node of the DHT.
+    ///   1. In order for a node to join the DHT, it must know about at least one other node of the
+    ///      DHT.
     ///
-    ///   2. When a remote peer initiates a connection and that peer is not
-    ///      yet in the routing table, the `Kademlia` behaviour must be
-    ///      informed of an address on which that peer is listening for
-    ///      connections before it can be added to the routing table
-    ///      from where it can subsequently be discovered by all peers
-    ///      in the DHT.
+    ///   2. When a remote peer initiates a connection and that peer is not yet in the routing
+    ///      table, the `Kademlia` behaviour must be informed of an address on which that peer is
+    ///      listening for connections before it can be added to the routing table from where it can
+    ///      subsequently be discovered by all peers in the DHT.
     ///
     /// If the routing table has been updated as a result of this operation,
     /// a [`Event::RoutingUpdated`] event is emitted.
@@ -735,7 +729,7 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
-        self.get_closest_peers_inner(key, None)
+        self.get_closest_peers_inner(key, K_VALUE)
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -753,10 +747,10 @@ where
         // since it would involve forging a new key and additional requests.
         // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
         let capped_num_results = std::cmp::min(num_results, K_VALUE);
-        self.get_closest_peers_inner(key, Some(capped_num_results))
+        self.get_closest_peers_inner(key, capped_num_results)
     }
 
-    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: Option<NonZeroUsize>) -> QueryId
+    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
@@ -793,7 +787,7 @@ where
         self.kbuckets
             .closest(key)
             .filter(move |e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
+            .take(K_VALUE.get())
             .map(KadPeer::from)
     }
 
@@ -829,7 +823,7 @@ where
         } else {
             QueryInfo::GetRecord {
                 key,
-                step: step.clone(),
+                step,
                 found_a_record: false,
                 cache_candidates: BTreeMap::new(),
             }
@@ -983,7 +977,8 @@ where
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
     /// > invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically
+    /// > invoked
     /// > when a new peer is inserted in the routing table.
     /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
     /// > to ensure a healthy routing table.
@@ -1067,7 +1062,14 @@ where
             .store
             .providers(&key)
             .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
+            .filter(|p| {
+                if p.is_expired(Instant::now()) {
+                    self.store.remove_provider(&key, &p.provider);
+                    false
+                } else {
+                    true
+                }
+            })
             .map(|p| p.provider)
             .collect();
 
@@ -1077,7 +1079,7 @@ where
             key: key.clone(),
             providers_found: providers.len(),
             step: if providers.is_empty() {
-                step.clone()
+                step
             } else {
                 step.next()
             },
@@ -1107,10 +1109,12 @@ where
 
     /// Set the [`Mode`] in which we should operate.
     ///
-    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
+    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we
+    /// have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
     ///
-    /// Setting a mode via this function disables this automatic behaviour and unconditionally operates in the specified mode.
-    /// To reactivate the automatic configuration, pass [`None`] instead.
+    /// Setting a mode via this function disables this automatic behaviour and unconditionally
+    /// operates in the specified mode. To reactivate the automatic configuration, pass [`None`]
+    /// instead.
     pub fn set_mode(&mut self, mode: Option<Mode>) {
         match mode {
             Some(mode) => {
@@ -1191,8 +1195,8 @@ where
                     "Previous match arm handled empty list"
                 );
 
-                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
+                // Previously, server-mode, now also server-mode because > 1 external address.
+                //  Don't log anything to avoid spam.
                 Mode::Server
             }
         };
@@ -1232,19 +1236,19 @@ where
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
-        let kbuckets = &mut self.kbuckets;
-        let connected = &mut self.connected_peers;
-        let listen_addresses = &self.listen_addresses;
-        let external_addresses = &self.external_addresses;
-
         self.store
             .providers(key)
             .into_iter()
-            .filter_map(move |p| {
+            .filter_map(|p| {
+                if p.is_expired(Instant::now()) {
+                    self.store.remove_provider(key, &p.provider);
+                    return None;
+                }
+
                 if &p.provider != source {
                     let node_id = p.provider;
                     let multiaddrs = p.addresses;
-                    let connection_ty = if connected.contains(&node_id) {
+                    let connection_ty = if self.connected_peers.contains(&node_id) {
                         ConnectionType::Connected
                     } else {
                         ConnectionType::NotConnected
@@ -1256,17 +1260,17 @@ where
                         // try to find addresses in the routing table, as was
                         // done before provider records were stored along with
                         // their addresses.
-                        if &node_id == kbuckets.local_key().preimage() {
+                        if &node_id == self.kbuckets.local_key().preimage() {
                             Some(
-                                listen_addresses
+                                self.listen_addresses
                                     .iter()
-                                    .chain(external_addresses.iter())
+                                    .chain(self.external_addresses.iter())
                                     .cloned()
                                     .collect::<Vec<_>>(),
                             )
                         } else {
                             let key = kbucket::Key::from(node_id);
-                            kbuckets
+                            self.kbuckets
                                 .entry(&key)
                                 .as_mut()
                                 .and_then(|e| e.view())
@@ -2157,7 +2161,8 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    /// Preloads a new [`Handler`] with requests that are waiting
+    /// to be sent to the newly connected peer.
     fn preload_new_handler(
         &mut self,
         handler: &mut Handler,
@@ -2245,9 +2250,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer_id = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         // We should order addresses from decreasing likelihood of connectivity, so start with
@@ -2363,7 +2367,7 @@ where
                 let peers = closer_peers.iter().chain(provider_peers.iter());
                 self.discovered(&query_id, &source, peers);
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetProviders {
                         ref key,
                         ref mut providers_found,
@@ -2383,7 +2387,7 @@ where
                                         providers,
                                     },
                                 )),
-                                step: step.clone(),
+                                step: *step,
                                 stats,
                             },
                         ));
@@ -2457,7 +2461,7 @@ where
                 query_id,
             } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
                         ref mut step,
@@ -2478,7 +2482,7 @@ where
                                     result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
                                         record,
                                     ))),
-                                    step: step.clone(),
+                                    step: *step,
                                     stats,
                                 },
                             ));
@@ -2492,11 +2496,7 @@ where
                                 let distance = source_key.distance(&target_key);
                                 cache_candidates.insert(distance, source);
                                 if cache_candidates.len() > max_peers as usize {
-                                    // TODO: `pop_last()` would be nice once stabilised.
-                                    // See https://github.com/rust-lang/rust/issues/62924.
-                                    let last =
-                                        *cache_candidates.keys().next_back().expect("len > 0");
-                                    cache_candidates.remove(&last);
+                                    cache_candidates.pop_last();
                                 }
                             }
                         }
@@ -2755,7 +2755,6 @@ pub struct PeerRecord {
 #[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// An inbound request has been received and handled.
-    //
     // Note on the difference between 'request' and 'query': A request is a
     // single request-response style exchange with a single remote peer. A query
     // is made of multiple requests across multiple remote peers.
@@ -2769,7 +2768,7 @@ pub enum Event {
         result: QueryResult,
         /// Execution statistics from the query.
         stats: QueryStats,
-        /// Indicates which event this is, if therer are multiple responses for a single query.
+        /// Indicates which event this is, if there are multiple responses for a single query.
         step: ProgressStep,
     },
 
@@ -2831,7 +2830,7 @@ pub enum Event {
 }
 
 /// Information about progress events.
-#[derive(Debug, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct ProgressStep {
     /// The index into the event
     pub count: NonZeroUsize,
@@ -2927,6 +2926,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
 /// The successful result of [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum GetRecordOk {
     FoundRecord(PeerRecord),
     FinishedWithNoAdditionalRecord {
@@ -2951,12 +2951,6 @@ pub enum GetRecordError {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
-    #[error("the quorum failed; needed {quorum} peers")]
-    QuorumFailed {
-        key: record::Key,
-        records: Vec<PeerRecord>,
-        quorum: NonZeroUsize,
-    },
     #[error("the request timed out")]
     Timeout { key: record::Key },
 }
@@ -2965,7 +2959,6 @@ impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
     pub fn key(&self) -> &record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
@@ -2975,7 +2968,6 @@ impl GetRecordError {
     /// consuming the error.
     pub fn into_key(self) -> record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
@@ -3220,8 +3212,8 @@ pub enum QueryInfo {
         key: Vec<u8>,
         /// Current index of events.
         step: ProgressStep,
-        /// If required, `num_results` specifies expected responding peers
-        num_results: Option<NonZeroUsize>,
+        /// Specifies expected number of responding peers
+        num_results: NonZeroUsize,
     },
 
     /// A (repeated) query initiated by [`Behaviour::get_providers`].

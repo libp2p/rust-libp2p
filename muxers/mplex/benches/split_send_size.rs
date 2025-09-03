@@ -21,21 +21,19 @@
 //! A benchmark for the `split_send_size` configuration option
 //! using different transports.
 
-use async_std::task;
+use std::{pin::Pin, time::Duration};
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use futures::future::poll_fn;
-use futures::prelude::*;
-use futures::{channel::oneshot, future::join};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::transport::ListenerId;
-use libp2p_core::Endpoint;
-use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use futures::{channel::oneshot, future::poll_fn, prelude::*};
+use libp2p_core::{
+    multiaddr::multiaddr, muxing, muxing::StreamMuxerExt, transport, transport::ListenerId,
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_plaintext as plaintext;
-use std::pin::Pin;
-use std::time::Duration;
+use tokio::runtime::Runtime;
 use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
@@ -120,7 +118,8 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, mut conn) = upgrade.await.unwrap();
-                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes
+                    // progress through all `poll_` functions. It is hacky though.
                     let mut s = poll_fn(|cx| conn.poll_inbound_unpin(cx))
                         .await
                         .expect("unexpected error");
@@ -158,7 +157,8 @@ fn run(
             .unwrap()
             .await
             .unwrap();
-        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress
+        // through all `poll_` functions. It is hacky though.
         let mut stream = poll_fn(|cx| conn.poll_outbound_unpin(cx)).await.unwrap();
         let mut off = 0;
         loop {
@@ -176,14 +176,17 @@ fn run(
     };
 
     // Wait for all data to be received.
-    task::block_on(join(sender, receiver));
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        tokio::join!(sender, receiver);
+    });
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
+    libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(plaintext::Config::new(
             &identity::Keypair::generate_ed25519(),
@@ -194,7 +197,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()

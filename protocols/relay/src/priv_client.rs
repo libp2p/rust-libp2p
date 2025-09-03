@@ -23,32 +23,38 @@
 pub(crate) mod handler;
 pub(crate) mod transport;
 
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::priv_client::handler::Handler;
-use crate::protocol::{self, inbound_stop};
+use std::{
+    collections::{hash_map, HashMap, VecDeque},
+    convert::Infallible,
+    io::{Error, IoSlice},
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use bytes::Bytes;
 use either::Either;
-use futures::channel::mpsc::Receiver;
-use futures::future::{BoxFuture, FutureExt};
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::ready;
-use futures::stream::StreamExt;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use futures::{
+    channel::mpsc::Receiver,
+    future::{BoxFuture, FutureExt},
+    io::{AsyncRead, AsyncWrite},
+    ready,
+    stream::StreamExt,
+};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
-use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
     NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{hash_map, HashMap, VecDeque};
-use std::convert::Infallible;
-use std::io::{Error, ErrorKind, IoSlice};
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use transport::Transport;
+
+use crate::{
+    multiaddr_ext::MultiaddrExt,
+    priv_client::handler::Handler,
+    protocol::{self, inbound_stop},
+};
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -89,7 +95,8 @@ pub struct Behaviour {
 
     /// Stores the address of a pending or confirmed reservation.
     ///
-    /// This is indexed by the [`ConnectionId`] to a relay server and the address is the `/p2p-circuit` address we reserved on it.
+    /// This is indexed by the [`ConnectionId`] to a relay server and the address is the
+    /// `/p2p-circuit` address we reserved on it.
     reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
     /// Queue of actions to return when polled.
@@ -161,12 +168,14 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
-        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+        if let Some(event) = pending_handler_command {
             handler.on_behaviour_event(event)
         }
 
@@ -181,13 +190,15 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+
         if addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
         let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
 
-        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+        if let Some(event) = pending_handler_command {
             handler.on_behaviour_event(event)
         }
 
@@ -201,21 +212,11 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 endpoint,
                 ..
-            }) => {
-                if !endpoint.is_relayed() {
-                    self.directly_connected_peers
-                        .entry(peer_id)
-                        .or_default()
-                        .push(connection_id);
-                }
-
-                if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
-                    self.queued_actions.push_back(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(event),
-                    })
-                }
+            }) if !endpoint.is_relayed() => {
+                self.directly_connected_peers
+                    .entry(peer_id)
+                    .or_default()
+                    .push(connection_id);
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
@@ -236,8 +237,6 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
@@ -410,10 +409,7 @@ impl ConnectionState {
     pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
-                let (substream, read_buffer) = circuit
-                    .accept()
-                    .await
-                    .map_err(|e| Error::new(ErrorKind::Other, e))?;
+                let (substream, read_buffer) = circuit.accept().await.map_err(Error::other)?;
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,

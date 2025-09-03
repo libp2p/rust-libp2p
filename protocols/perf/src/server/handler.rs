@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
 
 use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
@@ -29,7 +32,6 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use std::convert::Infallible;
 use tracing::error;
 
 use crate::Run;
@@ -68,24 +70,17 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         libp2p_core::util::unreachable(v)
     }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol, (), Infallible>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -100,22 +95,16 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dropping inbound stream because we are at capacity");
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
                 libp2p_core::util::unreachable(info)
             }
 
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 libp2p_core::util::unreachable(info)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 libp2p_core::util::unreachable(error)
             }
@@ -127,9 +116,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>> {
         loop {
             match self.inbound.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(stats))) => {

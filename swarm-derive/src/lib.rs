@@ -23,12 +23,12 @@
 
 mod syn_ext;
 
-use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
+use syn::{parse_macro_input, punctuated::Punctuated, Data, DataStruct, DeriveInput, Meta, Token};
+
+use crate::syn_ext::RequireStrLit;
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
@@ -170,7 +170,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         }
 
                         impl #impl_generics ::core::fmt::Debug for #enum_name #ty_generics #where_clause_debug {
-                            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+                            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
                                 match &self {
                                     #(#enum_name::#match_variants(event) => {
                                         write!(f, "{}: {:?}", #enum_name_str, event)
@@ -426,7 +426,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 connection_id: #connection_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<(), #connection_denied> {
+            ) -> std::result::Result<(), #connection_denied> {
                 #(#handle_pending_inbound_connection_stmts)*
 
                 Ok(())
@@ -439,7 +439,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 peer: #peer_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<#t_handler<Self>, #connection_denied> {
+            ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_inbound_connection)
             }
 
@@ -450,7 +450,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 maybe_peer: Option<#peer_id>,
                 addresses: &[#multiaddr],
                 effective_role: #endpoint,
-            ) -> Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
+            ) -> std::result::Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
                 #handle_pending_outbound_connection
             }
 
@@ -462,7 +462,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 addr: &#multiaddr,
                 role_override: #endpoint,
                 port_use: #port_use,
-            ) -> Result<#t_handler<Self>, #connection_denied> {
+            ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_outbound_connection)
             }
 

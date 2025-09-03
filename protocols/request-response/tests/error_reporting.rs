@@ -1,7 +1,8 @@
+use std::{io, iter, pin::pin, time::Duration};
+
 use anyhow::{bail, Result};
-use async_std::task::sleep;
 use async_trait::async_trait;
-use futures::prelude::*;
+use futures::{future::pending, prelude::*};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
@@ -10,12 +11,9 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use std::pin::pin;
-use std::time::Duration;
-use std::{io, iter};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_read_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -71,7 +69,7 @@ async fn report_outbound_failure_on_read_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_write_request() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -114,7 +112,7 @@ async fn report_outbound_failure_on_write_request() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_timeout_on_read_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -161,7 +159,7 @@ async fn report_outbound_timeout_on_read_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_max_streams() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -213,7 +211,7 @@ async fn report_outbound_failure_on_max_streams() {
     futures::future::select(swarm1_task, swarm2_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_failure_on_read_request() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -250,7 +248,7 @@ async fn report_inbound_failure_on_read_request() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_failure_on_write_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -316,7 +314,7 @@ async fn report_inbound_failure_on_write_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_timeout_on_write_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -413,7 +411,7 @@ impl TryFrom<u8> for Action {
             4 => Ok(Action::FailOnWriteResponse),
             5 => Ok(Action::TimeoutOnWriteResponse),
             6 => Ok(Action::FailOnMaxStreams),
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid action")),
+            _ => Err(io::Error::other("invalid action")),
         }
     }
 }
@@ -442,9 +440,7 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadRequest"))
-            }
+            Action::FailOnReadRequest => Err(io::Error::other("FailOnReadRequest")),
             action => Ok(action),
         }
     }
@@ -467,12 +463,11 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
+            Action::FailOnReadResponse => Err(io::Error::other("FailOnReadResponse")),
+            Action::TimeoutOnReadResponse => {
+                pending::<()>().await;
+                Err(io::Error::other("FailOnReadResponse"))
             }
-            Action::TimeoutOnReadResponse => loop {
-                sleep(Duration::MAX).await;
-            },
             action => Ok(action),
         }
     }
@@ -487,9 +482,7 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match req {
-            Action::FailOnWriteRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteRequest"))
-            }
+            Action::FailOnWriteRequest => Err(io::Error::other("FailOnWriteRequest")),
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;
@@ -508,12 +501,11 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match res {
-            Action::FailOnWriteResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
+            Action::FailOnWriteResponse => Err(io::Error::other("FailOnWriteResponse")),
+            Action::TimeoutOnWriteResponse => {
+                pending::<()>().await;
+                Err(io::Error::other("FailOnWriteResponse"))
             }
-            Action::TimeoutOnWriteResponse => loop {
-                sleep(Duration::MAX).await;
-            },
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;
@@ -528,8 +520,9 @@ fn new_swarm_with_config(
 ) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
     let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
 
-    let swarm =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
+    let swarm = Swarm::new_ephemeral_tokio(|_| {
+        request_response::Behaviour::<TestCodec>::new(protocols, cfg)
+    });
     let peed_id = *swarm.local_peer_id();
 
     (peed_id, swarm)
@@ -567,6 +560,7 @@ async fn wait_request(
                         request,
                         channel,
                     },
+                ..
             }) => {
                 return Ok((peer, request_id, request, channel));
             }
@@ -601,6 +595,7 @@ async fn wait_inbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }
@@ -619,6 +614,7 @@ async fn wait_outbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }

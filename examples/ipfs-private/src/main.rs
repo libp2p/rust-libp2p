@@ -20,6 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{env, error::Error, fs, path::Path, str::FromStr};
+
 use either::Either;
 use futures::prelude::*;
 use libp2p::{
@@ -31,7 +33,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, Transport,
 };
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;
 
@@ -137,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)
                 .build()
-                .map_err(|msg| io::Error::new(io::ErrorKind::Other, msg))?; // Temporary hack because `build` does not return a proper `std::error::Error`.
+                .map_err(io::Error::other)?; // Temporary hack because `build` does not return a proper `std::error::Error`.
             Ok(MyBehaviour {
                 gossipsub: gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
@@ -151,7 +152,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ping: ping::Behaviour::new(ping::Config::new()),
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     println!("Subscribing to {gossipsub_topic:?}");

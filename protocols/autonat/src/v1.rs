@@ -29,6 +29,8 @@
 pub(crate) mod behaviour;
 pub(crate) mod protocol;
 
+pub use libp2p_request_response::{InboundFailure, OutboundFailure};
+
 pub use self::{
     behaviour::{
         Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, NatStatus,
@@ -36,7 +38,6 @@ pub use self::{
     },
     protocol::{ResponseError, DEFAULT_PROTOCOL_NAME},
 };
-pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
 pub(crate) mod proto {
     #![allow(unreachable_pub)]

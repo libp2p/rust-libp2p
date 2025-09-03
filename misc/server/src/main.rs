@@ -1,18 +1,18 @@
+use std::{error::Error, path::PathBuf, str::FromStr};
+
 use base64::Engine;
 use clap::Parser;
 use futures::stream::StreamExt;
-use libp2p::identity;
-use libp2p::identity::PeerId;
-use libp2p::kad;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::SwarmEvent;
-use libp2p::tcp;
-use libp2p::{identify, noise, yamux};
-use prometheus_client::metrics::info::Info;
-use prometheus_client::registry::Registry;
-use std::error::Error;
-use std::path::PathBuf;
-use std::str::FromStr;
+use libp2p::{
+    identify, identity,
+    identity::PeerId,
+    kad,
+    metrics::{Metrics, Recorder},
+    noise,
+    swarm::SwarmEvent,
+    tcp, yamux,
+};
+use prometheus_client::{metrics::info::Info, registry::Registry};
 use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
@@ -21,22 +21,22 @@ mod config;
 mod http_service;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p server", about = "A rust-libp2p server binary.")]
+#[command(name = "libp2p server", about = "A rust-libp2p server binary.")]
 struct Opts {
     /// Path to IPFS config file.
-    #[clap(long)]
+    #[arg(long)]
     config: PathBuf,
 
     /// Metric endpoint path.
-    #[clap(long, default_value = "/metrics")]
+    #[arg(long, default_value = "/metrics")]
     metrics_path: String,
 
     /// Whether to run the libp2p Kademlia protocol and join the IPFS DHT.
-    #[clap(long)]
+    #[arg(long)]
     enable_kademlia: bool,
 
     /// Whether to run the libp2p Autonat protocol.
-    #[clap(long)]
+    #[arg(long)]
     enable_autonat: bool,
 }
 
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     ..
                 } = e
                 {
-                    if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
+                    if protocols.contains(&kad::PROTOCOL_NAME) {
                         for addr in listen_addrs {
                             swarm
                                 .behaviour_mut()

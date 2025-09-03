@@ -32,10 +32,8 @@ use libp2p_swarm::{
     NetworkBehaviour, NotifyHandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
-use crate::RunParams;
-use crate::{client::handler::Handler, RunUpdate};
-
 use super::{RunError, RunId};
+use crate::{client::handler::Handler, RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Event {

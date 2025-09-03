@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-tls"
-version = "0.5.0"
-edition = "2021"
+version = "0.6.2"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,9 +15,9 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 rcgen = { workspace = true }
 ring = { workspace = true }
-thiserror = "1.0.61"
-webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
-x509-parser = "0.16.0"
+thiserror = { workspace = true }
+webpki = { version = "0.103", package = "rustls-webpki", features = ["std"] }
+x509-parser = "0.17.0"
 yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
@@ -28,7 +28,6 @@ features = ["ring", "std"] # Must enable this to allow for custom verification c
 
 
 [dev-dependencies]
-hex = "0.4.3"
 hex-literal = "0.4.1"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa", "rand"] }

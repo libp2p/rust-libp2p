@@ -18,7 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// A request-response behaviour using [`serde_json`] for serializing and deserializing the messages.
+/// A request-response behaviour using [`serde_json`] for serializing and deserializing the
+/// messages.
+///
+/// # Default Size Limits
+///
+/// The codec uses the following default size limits:
+/// - Maximum request size: 1,048,576 bytes (1 MiB)
+/// - Maximum response size: 10,485,760 bytes (10 MiB)
+///
+/// These limits can be customized with [`codec::Codec::set_request_size_maximum`]
+/// and [`codec::Codec::set_response_size_maximum`].
 ///
 /// # Example
 ///
@@ -36,31 +46,36 @@
 /// }
 ///
 /// let behaviour = json::Behaviour::<GreetRequest, GreetResponse>::new(
-///     [(StreamProtocol::new("/my-json-protocol"), ProtocolSupport::Full)],
-///     request_response::Config::default()
+///     [(
+///         StreamProtocol::new("/my-json-protocol"),
+///         ProtocolSupport::Full,
+///     )],
+///     request_response::Config::default(),
 /// );
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
-mod codec {
+pub mod codec {
+    use std::{io, marker::PhantomData};
+
     use async_trait::async_trait;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
-    use std::{io, marker::PhantomData};
-
-    /// Max request size in bytes
-    const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
-    /// Max response size in bytes
-    const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
     pub struct Codec<Req, Resp> {
+        /// Max request size in bytes
+        request_size_maximum: u64,
+        /// Max response size in bytes
+        response_size_maximum: u64,
         phantom: PhantomData<(Req, Resp)>,
     }
 
     impl<Req, Resp> Default for Codec<Req, Resp> {
         fn default() -> Self {
             Codec {
+                request_size_maximum: 1024 * 1024,
+                response_size_maximum: 10 * 1024 * 1024,
                 phantom: PhantomData,
             }
         }
@@ -68,7 +83,25 @@ mod codec {
 
     impl<Req, Resp> Clone for Codec<Req, Resp> {
         fn clone(&self) -> Self {
-            Self::default()
+            Self {
+                request_size_maximum: self.request_size_maximum,
+                response_size_maximum: self.response_size_maximum,
+                phantom: self.phantom,
+            }
+        }
+    }
+
+    impl<Req, Resp> Codec<Req, Resp> {
+        /// Sets the limit for request size in bytes.
+        pub fn set_request_size_maximum(mut self, request_size_maximum: u64) -> Self {
+            self.request_size_maximum = request_size_maximum;
+            self
+        }
+
+        /// Sets the limit for response size in bytes.
+        pub fn set_response_size_maximum(mut self, response_size_maximum: u64) -> Self {
+            self.response_size_maximum = response_size_maximum;
+            self
         }
     }
 
@@ -88,7 +121,9 @@ mod codec {
         {
             let mut vec = Vec::new();
 
-            io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
+            io.take(self.request_size_maximum)
+                .read_to_end(&mut vec)
+                .await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }
@@ -99,7 +134,9 @@ mod codec {
         {
             let mut vec = Vec::new();
 
-            io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
+            io.take(self.response_size_maximum)
+                .read_to_end(&mut vec)
+                .await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }
@@ -140,13 +177,14 @@ mod codec {
 
 #[cfg(test)]
 mod tests {
-    use crate::Codec;
     use futures::AsyncWriteExt;
     use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
 
-    #[async_std::test]
+    use crate::Codec;
+
+    #[tokio::test]
     async fn test_codec() {
         let expected_request = TestRequest {
             payload: "test_payload".to_string(),

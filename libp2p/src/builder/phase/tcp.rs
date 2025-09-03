@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::marker::PhantomData;
+
 #[cfg(all(
     not(target_arch = "wasm32"),
     any(feature = "tcp", feature = "websocket")
@@ -14,7 +14,9 @@ use libp2p_core::Transport;
 use libp2p_core::{
     upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade, Negotiated, UpgradeInfo,
 };
-use std::marker::PhantomData;
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct TcpPhase {}
 
@@ -95,7 +97,6 @@ macro_rules! impl_tcp_builder {
     };
 }
 
-impl_tcp_builder!("async-std", super::provider::AsyncStd, async_io);
 impl_tcp_builder!("tokio", super::provider::Tokio, tokio);
 
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
@@ -112,18 +113,6 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-// Shortcuts
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "async-std"))]
-impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic()
-    }
-}
 #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
 impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
     pub fn with_quic(
@@ -133,18 +122,6 @@ impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
         OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
     > {
         self.without_tcp().with_quic()
-    }
-}
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "async-std"))]
-impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
-    pub fn with_quic_config(
-        self,
-        constructor: impl FnOnce(libp2p_quic::Config) -> libp2p_quic::Config,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic_config(constructor)
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
@@ -237,13 +214,6 @@ macro_rules! impl_tcp_phase_with_websocket {
         }
     }
 }
-impl_tcp_phase_with_websocket!(
-    "async-std",
-    super::provider::AsyncStd,
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
 impl_tcp_phase_with_websocket!(
     "tokio",
     super::provider::Tokio,

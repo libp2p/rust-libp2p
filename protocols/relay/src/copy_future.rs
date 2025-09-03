@@ -24,16 +24,19 @@
 //!
 //! Inspired by [`futures::io::Copy`].
 
-use futures::future::Future;
-use futures::future::FutureExt;
-use futures::io::{AsyncBufRead, BufReader};
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::ready;
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    future::{Future, FutureExt},
+    io::{AsyncBufRead, AsyncRead, AsyncWrite, BufReader},
+    ready,
+};
 use futures_timer::Delay;
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
 
 pub(crate) struct CopyFuture<S, D> {
     src: BufReader<S>,
@@ -73,10 +76,7 @@ where
 
         loop {
             if this.max_circuit_bytes > 0 && this.bytes_sent > this.max_circuit_bytes {
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Max circuit bytes reached.",
-                )));
+                return Poll::Ready(Err(io::Error::other("Max circuit bytes reached.")));
             }
 
             enum Status {
@@ -161,11 +161,12 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use futures::executor::block_on;
-    use futures::io::BufWriter;
-    use quickcheck::QuickCheck;
     use std::io::ErrorKind;
+
+    use futures::{executor::block_on, io::BufWriter};
+    use quickcheck::QuickCheck;
+
+    use super::*;
 
     #[test]
     fn quickcheck() {
@@ -356,13 +357,14 @@ mod tests {
             }
         }
 
-        // The source has two reads available, handing them out on `AsyncRead::poll_read` one by one.
+        // The source has two reads available, handing them out
+        // on `AsyncRead::poll_read` one by one.
         let mut source = BufReader::new(NeverEndingSource { read: vec![1, 2] });
 
         // The destination is wrapped by a `BufWriter` with a capacity of `3`, i.e. one larger than
         // the available reads of the source. Without an explicit `AsyncWrite::poll_flush` the two
-        // reads would thus never make it to the destination, but instead be stuck in the buffer of
-        // the `BufWrite`.
+        // reads would thus never make it to the destination,
+        // but instead be stuck in the buffer of the `BufWrite`.
         let mut destination = BufWriter::with_capacity(
             3,
             RecordingDestination {

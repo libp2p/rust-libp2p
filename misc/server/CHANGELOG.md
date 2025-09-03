@@ -1,18 +1,9 @@
-## 0.12.8
-
-### Changed
-
-- Remove deprecated [`libp2p-lookup`](https://github.com/mxinden/libp2p-lookup) from Dockerfile.
-  See [PR 5610](https://github.com/libp2p/rust-libp2p/pull/5610).
-
 ## 0.12.7
 
 ### Changed
 
-- Use periodic and automatic bootstrap of Kademlia.
-  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
-- Update to [`libp2p-identify` `v0.45.0`](protocols/identify/CHANGELOG.md#0450).
-  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
+- Deprecated #[clap] attributes with #[arg] and #[command].
+  See [PR 5932](https://github.com/libp2p/rust-libp2p/pull/5932)
 
 ## 0.12.6
 
@@ -20,6 +11,12 @@
 
 - Stop using kad default protocol.
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122)
+- Use periodic and automatic bootstrap of Kademlia.
+  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+- Update to [`libp2p-identify` `v0.45.0`](protocols/identify/CHANGELOG.md#0450).
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
+- Remove deprecated [`libp2p-lookup`](https://github.com/mxinden/libp2p-lookup) from Dockerfile.
+  See [PR 5610](https://github.com/libp2p/rust-libp2p/pull/5610).
 
 ## 0.12.5
 

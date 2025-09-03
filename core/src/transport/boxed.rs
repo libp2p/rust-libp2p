@@ -18,15 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
-use futures::{prelude::*, stream::FusedStream};
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt, io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures::{prelude::*, stream::FusedStream};
+use multiaddr::Multiaddr;
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub(crate) fn boxed<T>(transport: T) -> Boxed<T::Output>
@@ -169,5 +171,5 @@ impl<O> FusedStream for Boxed<O> {
 }
 
 fn box_err<E: Error + Send + Sync + 'static>(e: E) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
+    io::Error::other(e)
 }

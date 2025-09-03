@@ -20,17 +20,16 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::error::Error;
+
 use futures::stream::StreamExt;
-use libp2p::kad;
-use libp2p::kad::store::MemoryStore;
-use libp2p::kad::Mode;
 use libp2p::{
+    kad,
+    kad::{store::MemoryStore, Mode},
     mdns, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use std::error::Error;
-use std::time::Duration;
 use tokio::{
     io::{self, AsyncBufReadExt},
     select,
@@ -69,7 +68,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )?,
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));

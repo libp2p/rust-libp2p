@@ -1,8 +1,17 @@
+## 0.43.1
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
+## 0.43.0
+
+- Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 ## 0.42.0
 
 - Update `Transport::dial` function signature with a `DialOpts` param and remove `Transport::dial_as_listener`:
   - `DialOpts` struct contains `PortUse` and `Endpoint`, 
-  - `PortUse` allows controling port allocation of new connections (defaults to `PortUse::Reuse`)   - 
+  - `PortUse` allows controlling port allocation of new connections (defaults to `PortUse::Reuse`)   - 
   - Add `port_use` field to `ConnectedPoint`
   - Set `endpoint` field in `DialOpts` to `Endpoint::Listener` to dial as a listener
 - Remove `Transport::address_translation` and relocate functionality to `libp2p_swarm`
@@ -321,7 +330,7 @@ See [PR 4568].
 
 - Remove `TInEvent` and `TOutEvent` trait parameters on most public types.
   `TInEvent` and `TOutEvent` are implied through `THandler` and thus
-  superflucious. Both are removed in favor of a derivation through `THandler`
+  superfluous. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
 
 - Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
@@ -440,7 +449,7 @@ See [PR 4568].
 - New configurable connection limits for established connections and
   dedicated connection counters. Removed the connection limit dedicated
   to outgoing pending connection _per peer_. Connection limits are now
-  represented by `u32` intead of `usize` types.
+  represented by `u32` instead of `usize` types.
   [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).
 
 - Update `multihash`.

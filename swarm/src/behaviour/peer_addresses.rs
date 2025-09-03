@@ -1,12 +1,10 @@
-use crate::behaviour::FromSwarm;
-use crate::{DialError, DialFailure, NewExternalAddrOfPeer};
+use std::num::NonZeroUsize;
 
+use hashlink::LruCache;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 
-use lru::LruCache;
-
-use std::num::NonZeroUsize;
+use crate::{behaviour::FromSwarm, DialError, DialFailure, NewExternalAddrOfPeer};
 
 #[derive(Debug, Clone)]
 /// Configuration of a [`PeerAddresses`] instance.
@@ -56,7 +54,7 @@ impl PeerAddresses {
     ///
     /// For each peer, we will at most store `config.number_of_addresses_per_peer` addresses.
     pub fn new(config: PeerAddressesConfig) -> Self {
-        let inner = LruCache::new(config.number_of_peers);
+        let inner = LruCache::new(config.number_of_peers.get());
         Self { config, inner }
     }
 
@@ -86,16 +84,15 @@ impl PeerAddresses {
     /// Appends address to the existing set if peer addresses already exist.
     /// Creates a new cache entry for peer_id if no addresses are present.
     /// Returns true if the newly added address was not previously in the cache.
-    ///
     pub fn add(&mut self, peer: PeerId, address: Multiaddr) -> bool {
         match prepare_addr(&peer, &address) {
             Ok(address) => {
                 if let Some(cached) = self.inner.get_mut(&peer) {
-                    cached.put(address, ()).is_none()
+                    cached.insert(address, ()).is_none()
                 } else {
-                    let mut set = LruCache::new(self.config.number_of_addresses_per_peer);
-                    set.put(address, ());
-                    self.inner.put(peer, set);
+                    let mut set = LruCache::new(self.config.number_of_addresses_per_peer.get());
+                    set.insert(address, ());
+                    self.inner.insert(peer, set);
 
                     true
                 }
@@ -118,7 +115,7 @@ impl PeerAddresses {
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         match self.inner.get_mut(peer) {
             Some(addrs) => match prepare_addr(peer, address) {
-                Ok(address) => addrs.pop(&address).is_some(),
+                Ok(address) => addrs.remove(&address).is_some(),
                 Err(_) => false,
             },
             None => false,
@@ -138,16 +135,15 @@ impl Default for PeerAddresses {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::io;
+    use std::{io, sync::LazyLock};
 
-    use crate::ConnectionId;
     use libp2p_core::{
         multiaddr::Protocol,
         transport::{memory::MemoryTransportError, TransportError},
     };
 
-    use once_cell::sync::Lazy;
+    use super::*;
+    use crate::ConnectionId;
 
     #[test]
     fn new_peer_addr_returns_correct_changed_value() {
@@ -361,18 +357,15 @@ mod tests {
             .map(|addr| {
                 (
                     addr.clone(),
-                    TransportError::Other(io::Error::new(
-                        io::ErrorKind::Other,
-                        MemoryTransportError::Unreachable,
-                    )),
+                    TransportError::Other(io::Error::other(MemoryTransportError::Unreachable)),
                 )
             })
             .collect();
         errors
     }
 
-    static MEMORY_ADDR_1000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
-    static MEMORY_ADDR_2000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
+    static MEMORY_ADDR_1000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR_2000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
 }

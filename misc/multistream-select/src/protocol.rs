@@ -25,18 +25,21 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
-use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
-use crate::Version;
-
-use bytes::{BufMut, Bytes, BytesMut};
-use futures::{io::IoSlice, prelude::*, ready};
 use std::{
     error::Error,
     fmt, io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{BufMut, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*, ready};
 use unsigned_varint as uvi;
+
+use crate::{
+    length_delimited::{LengthDelimited, LengthDelimitedReader},
+    Version,
+};
 
 /// The maximum number of supported protocols that can be processed.
 const MAX_PROTOCOLS: usize = 1000;
@@ -117,7 +120,7 @@ impl fmt::Display for Protocol {
 /// A multistream-select protocol message.
 ///
 /// Multistream-select protocol messages are exchanged with the goal
-/// of agreeing on a application-layer protocol to use on an I/O stream.
+/// of agreeing on an application-layer protocol to use on an I/O stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Message {
     /// A header message identifies the multistream-select protocol
@@ -461,9 +464,11 @@ impl fmt::Display for ProtocolError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use quickcheck::*;
     use std::iter;
+
+    use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for Protocol {
         fn arbitrary(g: &mut Gen) -> Protocol {

@@ -1,3 +1,29 @@
+## 0.29.0
+
+- fix: public cbor/json codec module
+  See [PR 5830](https://github.com/libp2p/rust-libp2p/pull/5830).
+
+- feat: add `Behaviour::send_request_with_addresses()`
+  See [PR 5938](https://github.com/libp2p/rust-libp2p/issues/5938).
+
+- fix: don't fail outbound request on `DialError::DialPeerConditionFalse`.
+  See [PR 6000](https://github.com/libp2p/rust-libp2p/pull/6000)
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
+## 0.28.0
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
+- Add connection id to the events emitted by a request-response `Behaviour`.
+  See [PR 5719](https://github.com/libp2p/rust-libp2p/pull/5719).
+
+- Allow configurable request and response sizes for `json` and `cbor` codec.
+  See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.27.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
@@ -109,10 +135,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `RequestResponse`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `RequestResponse`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `RequestResponseHandler`'s `ConnectionHandler` implemention `inject_*` methods
+- Replace `RequestResponseHandler`'s `ConnectionHandler` implementation `inject_*` methods
   with the new `on_*` methods. See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

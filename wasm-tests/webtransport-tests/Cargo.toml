@@ -1,7 +1,7 @@
 [package]
 name = "webtransport-tests"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 license = "MIT"
 publish = false
 
@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 futures = { workspace = true }
-getrandom = { version = "0.2.15", features = ["js"] }
+getrandom = { workspace = true, features = ["js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }

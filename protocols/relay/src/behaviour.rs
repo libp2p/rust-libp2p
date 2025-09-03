@@ -22,26 +22,30 @@
 
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
-use crate::behaviour::handler::Handler;
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::proto;
-use crate::protocol::{inbound_hop, outbound_stop};
+use std::{
+    collections::{hash_map, HashMap, HashSet, VecDeque},
+    num::NonZeroU32,
+    ops::Add,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
+    behaviour::{ConnectionClosed, FromSwarm},
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{hash_map, HashMap, HashSet, VecDeque};
-use std::num::NonZeroU32;
-use std::ops::Add;
-use std::task::{Context, Poll};
-use std::time::Duration;
 use web_time::Instant;
+
+use crate::{
+    behaviour::handler::Handler,
+    multiaddr_ext::MultiaddrExt,
+    proto,
+    protocol::{inbound_hop, outbound_stop},
+};
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -120,12 +124,14 @@ impl std::fmt::Debug for Config {
 impl Default for Config {
     fn default() -> Self {
         let reservation_rate_limiters = vec![
-            // For each peer ID one reservation every 2 minutes with up to 30 reservations per hour.
+            // For each peer ID one reservation every 2 minutes with up
+            // to 30 reservations per hour.
             rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(30).expect("30 > 0"),
                 interval: Duration::from_secs(60 * 2),
             }),
-            // For each IP address one reservation every minute with up to 60 reservations per hour.
+            // For each IP address one reservation every minute with up
+            // to 60 reservations per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(60).expect("60 > 0"),
                 interval: Duration::from_secs(60),
@@ -178,7 +184,10 @@ pub enum Event {
         error: inbound_hop::Error,
     },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied { src_peer_id: PeerId },
+    ReservationReqDenied {
+        src_peer_id: PeerId,
+        status: StatusCode,
+    },
     /// Denying an inbound reservation request has failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
@@ -187,12 +196,15 @@ pub enum Event {
         src_peer_id: PeerId,
         error: inbound_hop::Error,
     },
+    /// A reservation has been closed.
+    ReservationClosed { src_peer_id: PeerId },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
+        status: StatusCode,
     },
     /// Denying an inbound circuit request failed.
     #[deprecated(
@@ -271,7 +283,12 @@ impl Behaviour {
         }: ConnectionClosed,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
-            peer.get_mut().remove(&connection_id);
+            if peer.get_mut().remove(&connection_id) {
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::ReservationClosed {
+                        src_peer_id: peer_id,
+                    }));
+            }
             if peer.get().is_empty() {
                 peer.remove();
             }
@@ -366,8 +383,6 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let event = match event {
             Either::Left(e) => e,
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
@@ -386,7 +401,8 @@ impl NetworkBehaviour for Behaviour {
                 );
 
                 let action = if
-                // Deny if it is a new reservation and exceeds `max_reservations_per_peer`.
+                // Deny if it is a new reservation and exceeds
+                // `max_reservations_per_peer`.
                 (!renewed
                     && self
                         .reservations
@@ -469,10 +485,11 @@ impl NetworkBehaviour for Behaviour {
                     },
                 ));
             }
-            handler::Event::ReservationReqDenied {} => {
+            handler::Event::ReservationReqDenied { status } => {
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqDenied {
                         src_peer_id: event_source,
+                        status: status.into(),
                     },
                 ));
             }
@@ -580,6 +597,7 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::CircuitReqDenied {
                 circuit_id,
                 dst_peer_id,
+                status,
             } => {
                 if let Some(circuit_id) = circuit_id {
                     self.circuits.remove(circuit_id);
@@ -589,6 +607,7 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(ToSwarm::GenerateEvent(Event::CircuitReqDenied {
                         src_peer_id: event_source,
                         dst_peer_id,
+                        status: status.into(),
                     }));
             }
             handler::Event::CircuitReqDenyFailed {
@@ -795,5 +814,33 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
+    }
+}
+
+/// Status code for a relay reservation request that was denied.
+#[derive(Debug)]
+pub enum StatusCode {
+    OK,
+    ReservationRefused,
+    ResourceLimitExceeded,
+    PermissionDenied,
+    ConnectionFailed,
+    NoReservation,
+    MalformedMessage,
+    UnexpectedMessage,
+}
+
+impl From<proto::Status> for StatusCode {
+    fn from(other: proto::Status) -> Self {
+        match other {
+            proto::Status::OK => Self::OK,
+            proto::Status::RESERVATION_REFUSED => Self::ReservationRefused,
+            proto::Status::RESOURCE_LIMIT_EXCEEDED => Self::ResourceLimitExceeded,
+            proto::Status::PERMISSION_DENIED => Self::PermissionDenied,
+            proto::Status::CONNECTION_FAILED => Self::ConnectionFailed,
+            proto::Status::NO_RESERVATION => Self::NoReservation,
+            proto::Status::MALFORMED_MESSAGE => Self::MalformedMessage,
+            proto::Status::UNEXPECTED_MESSAGE => Self::UnexpectedMessage,
+        }
     }
 }

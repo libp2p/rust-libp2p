@@ -18,14 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::ValidationMode;
-use crate::handler::HandlerEvent;
-use crate::rpc_proto::proto;
-use crate::topic::TopicHash;
-use crate::types::{
-    ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
-};
-use crate::ValidationError;
+use std::{collections::HashMap, convert::Infallible, pin::Pin};
+
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -33,11 +27,26 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::Writer;
-use std::convert::Infallible;
-use std::pin::Pin;
+use quick_protobuf::{MessageWrite, Writer};
+
+use crate::{
+    config::ValidationMode,
+    handler::HandlerEvent,
+    rpc_proto::proto,
+    topic::TopicHash,
+    types::{
+        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
+        RawMessage, RpcIn, Subscription, SubscriptionAction,
+    },
+    ValidationError,
+};
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
+
+pub(crate) const GOSSIPSUB_1_2_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.2.0"),
+    kind: PeerKind::Gossipsubv1_2,
+};
 
 pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
     protocol: StreamProtocol::new("/meshsub/1.1.0"),
@@ -57,19 +66,36 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
     pub(crate) protocol_ids: Vec<ProtocolId>,
-    /// The maximum transmit size for a packet.
-    pub(crate) max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
     pub(crate) validation_mode: ValidationMode,
+    /// The default max transmit size.
+    pub(crate) default_max_transmit_size: usize,
+    /// The max transmit sizes for a topic.
+    pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl Default for ProtocolConfig {
     fn default() -> Self {
         Self {
-            max_transmit_size: 65536,
             validation_mode: ValidationMode::Strict,
-            protocol_ids: vec![GOSSIPSUB_1_1_0_PROTOCOL, GOSSIPSUB_1_0_0_PROTOCOL],
+            protocol_ids: vec![
+                GOSSIPSUB_1_2_0_PROTOCOL,
+                GOSSIPSUB_1_1_0_PROTOCOL,
+                GOSSIPSUB_1_0_0_PROTOCOL,
+            ],
+            default_max_transmit_size: 65536,
+            max_transmit_sizes: HashMap::new(),
         }
+    }
+}
+
+impl ProtocolConfig {
+    /// Get the max transmit size for a given topic, falling back to the default.
+    pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
+        self.max_transmit_sizes
+            .get(topic)
+            .copied()
+            .unwrap_or(self.default_max_transmit_size)
     }
 }
 
@@ -109,7 +135,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(
+                    self.default_max_transmit_size,
+                    self.validation_mode,
+                    self.max_transmit_sizes,
+                ),
             ),
             protocol_id.kind,
         )))
@@ -128,29 +158,45 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(
+                    self.default_max_transmit_size,
+                    self.validation_mode,
+                    self.max_transmit_sizes,
+                ),
             ),
             protocol_id.kind,
         )))
     }
 }
 
-/* Gossip codec for the framing */
+// Gossip codec for the framing
 
 pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
+    /// Maximum transmit sizes per topic, with a default if not specified.
+    max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl GossipsubCodec {
-    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+    pub fn new(
+        max_length: usize,
+        validation_mode: ValidationMode,
+        max_transmit_sizes: HashMap<TopicHash, usize>,
+    ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
+            max_transmit_sizes,
         }
+    }
+
+    /// Get the max transmit size for a given topic if it exists.
+    fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> Option<usize> {
+        self.max_transmit_sizes.get(topic).copied()
     }
 
     /// Verifies a gossipsub message. This returns either a success or failure. All errors
@@ -233,6 +279,27 @@ impl Decoder for GossipsubCodec {
         let mut invalid_messages = Vec::new();
 
         for message in rpc.publish.into_iter() {
+            let topic = TopicHash::from_raw(&message.topic);
+
+            // Check the message size to ensure it doesn't bypass the configured max.
+            if self
+                .max_transmit_size_for_topic(&topic)
+                .is_some_and(|max| message.get_size() > max)
+            {
+                let message = RawMessage {
+                    source: None, // don't bother inform the application
+                    data: message.data.unwrap_or_default(),
+                    sequence_number: None, // don't inform the application
+                    topic: TopicHash::from_raw(message.topic),
+                    signature: None, // don't inform the application
+                    key: message.key,
+                    validated: false,
+                };
+
+                invalid_messages.push((message, ValidationError::MessageSizeTooLargeForTopic));
+                continue;
+            }
+
             // Keep track of the type of invalid message.
             let mut invalid_kind = None;
             let mut verify_signature = false;
@@ -297,7 +364,6 @@ impl Decoder for GossipsubCodec {
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
                 tracing::warn!("Invalid signature for received message");
-
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
                 let message = RawMessage {
@@ -325,6 +391,7 @@ impl Decoder for GossipsubCodec {
                             sequence_length=%seq_no.len(),
                             "Invalid sequence number length for received message"
                         );
+
                         let message = RawMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
@@ -412,33 +479,39 @@ impl Decoder for GossipsubCodec {
             let ihave_msgs: Vec<ControlAction> = rpc_control
                 .ihave
                 .into_iter()
-                .map(|ihave| ControlAction::IHave {
-                    topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
-                    message_ids: ihave
-                        .message_ids
-                        .into_iter()
-                        .map(MessageId::from)
-                        .collect::<Vec<_>>(),
+                .map(|ihave| {
+                    ControlAction::IHave(IHave {
+                        topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
+                        message_ids: ihave
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
                 })
                 .collect();
 
             let iwant_msgs: Vec<ControlAction> = rpc_control
                 .iwant
                 .into_iter()
-                .map(|iwant| ControlAction::IWant {
-                    message_ids: iwant
-                        .message_ids
-                        .into_iter()
-                        .map(MessageId::from)
-                        .collect::<Vec<_>>(),
+                .map(|iwant| {
+                    ControlAction::IWant(IWant {
+                        message_ids: iwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
                 })
                 .collect();
 
             let graft_msgs: Vec<ControlAction> = rpc_control
                 .graft
                 .into_iter()
-                .map(|graft| ControlAction::Graft {
-                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                .map(|graft| {
+                    ControlAction::Graft(Graft {
+                        topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                    })
                 })
                 .collect();
 
@@ -462,21 +535,36 @@ impl Decoder for GossipsubCodec {
                     .collect::<Vec<PeerInfo>>();
 
                 let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-                prune_msgs.push(ControlAction::Prune {
+                prune_msgs.push(ControlAction::Prune(Prune {
                     topic_hash,
                     peers,
                     backoff: prune.backoff,
-                });
+                }));
             }
+
+            let idontwant_msgs: Vec<ControlAction> = rpc_control
+                .idontwant
+                .into_iter()
+                .map(|idontwant| {
+                    ControlAction::IDontWant(IDontWant {
+                        message_ids: idontwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
+                })
+                .collect();
 
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
             control_msgs.extend(graft_msgs);
             control_msgs.extend(prune_msgs);
+            control_msgs.extend(idontwant_msgs);
         }
 
         Ok(Some(HandlerEvent::Message {
-            rpc: Rpc {
+            rpc: RpcIn {
                 messages,
                 subscriptions: rpc
                     .subscriptions
@@ -499,12 +587,17 @@ impl Decoder for GossipsubCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::Config;
-    use crate::{Behaviour, ConfigBuilder};
-    use crate::{IdentTopic as Topic, Version};
+    use std::time::Duration;
+
+    use futures_timer::Delay;
     use libp2p_identity::Keypair;
     use quickcheck::*;
+
+    use super::*;
+    use crate::{
+        config::Config, types::RpcOut, Behaviour, ConfigBuilder, IdentTopic as Topic,
+        MessageAuthenticity, Version,
+    };
 
     #[derive(Clone, Debug)]
     struct Message(RawMessage);
@@ -516,8 +609,9 @@ mod tests {
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = Config::default();
             let mut gs: Behaviour =
-                Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
-            let data = (0..g.gen_range(10..10024u32))
+                Behaviour::new(MessageAuthenticity::Signed(keypair.0), config).unwrap();
+            let mut data_g = quickcheck::Gen::new(10024);
+            let data = (0..u8::arbitrary(&mut data_g))
                 .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();
             let topic_id = TopicId::arbitrary(g).0;
@@ -530,7 +624,8 @@ mod tests {
 
     impl Arbitrary for TopicId {
         fn arbitrary(g: &mut Gen) -> Self {
-            let topic_string: String = (0..g.gen_range(20..1024u32))
+            let mut data_g = quickcheck::Gen::new(1024);
+            let topic_string: String = (0..u8::arbitrary(&mut data_g))
                 .map(|_| char::arbitrary(g))
                 .collect::<String>();
             TopicId(Topic::new(topic_string).into())
@@ -561,13 +656,13 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = Rpc {
-                messages: vec![message.clone()],
-                subscriptions: vec![],
-                control_msgs: vec![],
+            let rpc = RpcOut::Publish {
+                message: message.clone(),
+                timeout: Delay::new(Duration::from_secs(1)),
             };
 
-            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
+            let mut codec =
+                GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, HashMap::new());
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();

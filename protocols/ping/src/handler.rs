@@ -18,26 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{protocol, PROTOCOL_NAME};
-use futures::future::{BoxFuture, Either};
-use futures::prelude::*;
-use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::{
+    collections::VecDeque,
+    convert::Infallible,
     error::Error,
     fmt, io,
     task::{Context, Poll},
     time::Duration,
 };
+
+use futures::{
+    future::{BoxFuture, Either},
+    prelude::*,
+};
+use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
+use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
+};
+
+use crate::{protocol, PROTOCOL_NAME};
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -57,8 +59,7 @@ impl Config {
     /// These settings have the following effect:
     ///
     ///   * A ping is sent every 15 seconds on a healthy connection.
-    ///   * Every ping sent must yield a response within 20 seconds in order to
-    ///     be successful.
+    ///   * Every ping sent must yield a response within 20 seconds in order to be successful.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),
@@ -178,7 +179,7 @@ impl Handler {
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError { error, .. }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
@@ -210,8 +211,6 @@ impl Handler {
                     "ping protocol negotiation timed out",
                 )),
             },
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
@@ -228,7 +227,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<StreamProtocol>, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<StreamProtocol>> {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
@@ -339,12 +338,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {

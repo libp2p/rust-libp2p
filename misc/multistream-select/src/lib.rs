@@ -69,21 +69,24 @@
 //! For a dialer:
 //!
 //! ```no_run
-//! use async_std::net::TcpStream;
-//! use multistream_select::{dialer_select_proto, Version};
 //! use futures::prelude::*;
+//! use multistream_select::{dialer_select_proto, Version};
+//! use tokio::{net::TcpStream, runtime::Runtime};
+//! use tokio_util::compat::TokioAsyncReadCompatExt;
 //!
-//! async_std::task::block_on(async move {
+//! let rt = Runtime::new().unwrap();
+//! rt.block_on(async move {
 //!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
+//!     let compat_socket = socket.compat();
 //!
 //!     let protos = vec!["/echo/1.0.0", "/echo/2.5.0"];
-//!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1).await.unwrap();
+//!     let result = dialer_select_proto(compat_socket, protos, Version::V1).await;
+//!     let (protocol, _io) = result.unwrap();
 //!
 //!     println!("Negotiated protocol: {:?}", protocol);
 //!     // You can now use `_io` to communicate with the remote.
 //! });
 //! ```
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -93,10 +96,12 @@ mod listener_select;
 mod negotiated;
 mod protocol;
 
-pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
-pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
-pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
-pub use self::protocol::ProtocolError;
+pub use self::{
+    dialer_select::{dialer_select_proto, DialerSelectFuture},
+    listener_select::{listener_select_proto, ListenerSelectFuture},
+    negotiated::{Negotiated, NegotiatedComplete, NegotiationError},
+    protocol::ProtocolError,
+};
 
 /// Supported multistream-select versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -113,7 +118,7 @@ pub enum Version {
     ///
     /// This strategy is only applicable for the node with the role of "dialer"
     /// in the negotiation and only if the dialer supports just a single
-    /// application protocol. In that case the dialer immedidately "settles"
+    /// application protocol. In that case the dialer immediately "settles"
     /// on that protocol, buffering the negotiation messages to be sent
     /// with the first round of application protocol data (or an attempt
     /// is made to read from the `Negotiated` I/O stream).

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
 
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -26,7 +29,6 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use std::convert::Infallible;
 
 #[derive(libp2p_swarm_derive::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
@@ -116,8 +118,6 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         libp2p_core::util::unreachable(event)
     }
 

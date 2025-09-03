@@ -1,3 +1,55 @@
+## 0.56.0
+
+- Remove `async-std` support.
+  See [PR 6074](https://github.com/libp2p/rust-libp2p/pull/6074)
+- Remove deprecated `Transport::with_bandwidth_logging`,
+  `SwarmBuilder::with_bandwidth_logging` and `TransportExt`. 
+  See [PR 5766](https://github.com/libp2p/rust-libp2p/pull/5766).
+
+- Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
+  See [PR 5819](https://github.com/libp2p/rust-libp2p/pull/5819).
+  
+- Introduce `libp2p-peer-store`.
+  See [PR 5724](https://github.com/libp2p/rust-libp2p/pull/5724).
+
+- Make the `*-websys` variants (`libp2p-webrtc-websys`, `libp2p-websocket-websys`, `libp2p-webtransport-websys`) only available on wasm32 target architecture.
+  See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).
+
+- Remove TCP from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-tcp` transport.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955)
+
+- Remove QUIC from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-quic` transport.
+  See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
+
+- Remove DNS from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-dns` transport.
+  See [PR 5959](https://github.com/libp2p/rust-libp2p/pull/5959)
+  
+## 0.55.0
+
+- Raise MSRV to 1.83.0.
+  See [PR 5650](https://github.com/libp2p/rust-libp2p/pull/5650).
+
+- Add `with_connection_timeout` on `SwarmBuilder` to allow configuration of the connection_timeout parameter.
+  See [PR 5575](https://github.com/libp2p/rust-libp2p/pull/5575).
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
+- Update default for idle-connection-timeout to 10s.
+  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
+
+- Expose swarm builder phase errors.
+  See [PR 5726](https://github.com/libp2p/rust-libp2p/pull/5726).
+
+- Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.  
+  Previously, users could tag pending sub streams with custom data and retrieve the data 
+  after the substream has been negotiated.
+  But substreams themselves are completely interchangeable, users should instead track 
+  additional data inside `ConnectionHandler` after negotiation.   
+  See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.54.1
 
 - Update individual crates.

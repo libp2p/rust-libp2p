@@ -18,24 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
-use crate::metrics::{Metrics, Penalty};
-use crate::time_cache::TimeCache;
-use crate::{MessageId, TopicHash};
+use std::{
+    collections::{hash_map, HashMap, HashSet},
+    net::IpAddr,
+    time::Duration,
+};
+
+use futures_timer::Delay;
 use libp2p_identity::PeerId;
-use std::collections::{hash_map, HashMap, HashSet};
-use std::net::IpAddr;
-use std::time::Duration;
 use web_time::Instant;
 
+use crate::{time_cache::TimeCache, MessageId, TopicHash};
+
 mod params;
-use crate::ValidationError;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
+
+use crate::ValidationError;
 
 #[cfg(test)]
 mod tests;
@@ -43,15 +46,54 @@ mod tests;
 /// The number of seconds delivery messages are stored in the cache.
 const TIME_CACHE_DURATION: u64 = 120;
 
+/// Represents the state of the peer scoring system, which can either be active
+/// with a configured `PeerScore`, or disabled entirely.
+pub(crate) enum PeerScoreState {
+    Active(Box<PeerScore>),
+    Disabled,
+}
+
+impl PeerScoreState {
+    /// Determines if a peer's score is below a given `PeerScoreThreshold` chosen via the
+    /// `threshold` parameter.
+    pub(crate) fn below_threshold(
+        &self,
+        peer_id: &PeerId,
+        threshold: impl Fn(&PeerScoreThresholds) -> f64,
+    ) -> (bool, f64) {
+        match self {
+            PeerScoreState::Active(active) => {
+                let score = active.score_report(peer_id).score;
+                (score < threshold(&active.thresholds), score)
+            }
+            PeerScoreState::Disabled => (false, 0.0),
+        }
+    }
+}
+
+/// Result of a peer score calculation, detailing the peer's
+/// computed score and a list of any incurred penalties.
+#[derive(Default)]
+pub(crate) struct PeerScoreReport {
+    pub(crate) score: f64,
+    #[cfg(feature = "metrics")]
+    pub(crate) penalties: Vec<crate::metrics::Penalty>,
+}
+
 pub(crate) struct PeerScore {
-    params: PeerScoreParams,
     /// The score parameters.
+    pub(crate) params: PeerScoreParams,
+    /// The score threshold.
+    pub(crate) thresholds: PeerScoreThresholds,
+    /// The peer score decay interval.
+    pub(crate) decay_interval: Delay,
+    /// The stats per PeerId.
     peer_stats: HashMap<PeerId, PeerStats>,
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of [`DeliveryRecord`]s.
     deliveries: TimeCache<MessageId, DeliveryRecord>,
-    /// callback for monitoring message delivery times
+    /// Callback for monitoring message delivery times.
     message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
 }
 
@@ -67,6 +109,8 @@ struct PeerStats {
     behaviour_penalty: f64,
     /// Application specific score. Can be manipulated by calling PeerScore::set_application_score
     application_score: f64,
+    /// Scoring based on how whether this peer consumes messages fast enough or not.
+    slow_peer_penalty: f64,
 }
 
 enum ConnectionStatus {
@@ -87,18 +131,24 @@ impl Default for PeerStats {
             known_ips: HashSet::new(),
             behaviour_penalty: 0f64,
             application_score: 0f64,
+            slow_peer_penalty: 0f64,
         }
     }
 }
 
 impl PeerStats {
-    /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
-    /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
+    /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied
+    /// parameters score the topic, inserts the default stats and returns a reference to those.
+    /// If neither apply, returns None.
     pub(crate) fn stats_or_default_mut(
         &mut self,
         topic_hash: TopicHash,
         params: &PeerScoreParams,
     ) -> Option<&mut TopicStats> {
+        #[allow(
+            clippy::map_entry,
+            reason = "False positive, see rust-lang/rust-clippy#14449."
+        )]
         if params.topics.contains_key(&topic_hash) {
             Some(self.topics.entry(topic_hash).or_default())
         } else {
@@ -195,16 +245,19 @@ impl Default for DeliveryRecord {
 impl PeerScore {
     /// Creates a new [`PeerScore`] using a given set of peer scoring parameters.
     #[allow(dead_code)]
-    pub(crate) fn new(params: PeerScoreParams) -> Self {
-        Self::new_with_message_delivery_time_callback(params, None)
+    pub(crate) fn new(params: PeerScoreParams, thresholds: PeerScoreThresholds) -> Self {
+        Self::new_with_message_delivery_time_callback(params, thresholds, None)
     }
 
     pub(crate) fn new_with_message_delivery_time_callback(
         params: PeerScoreParams,
+        thresholds: PeerScoreThresholds,
         callback: Option<fn(&PeerId, &TopicHash, f64)>,
     ) -> Self {
         PeerScore {
+            decay_interval: Delay::new(params.decay_interval),
             params,
+            thresholds,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
             deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
@@ -212,18 +265,13 @@ impl PeerScore {
         }
     }
 
-    /// Returns the score for a peer
-    pub(crate) fn score(&self, peer_id: &PeerId) -> f64 {
-        self.metric_score(peer_id, None)
-    }
-
-    /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
-    /// increments the metric counts for penalties.
-    pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
+    /// Returns the score report for a peer, with applied penalties.
+    /// This is called from the heartbeat
+    pub(crate) fn score_report(&self, peer_id: &PeerId) -> PeerScoreReport {
+        let mut report = PeerScoreReport::default();
         let Some(peer_stats) = self.peer_stats.get(peer_id) else {
-            return 0.0;
+            return report;
         };
-        let mut score = 0.0;
 
         // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
@@ -263,47 +311,53 @@ impl PeerScore {
                 if topic_stats.mesh_message_deliveries_active
                     && topic_stats.mesh_message_deliveries
                         < topic_params.mesh_message_deliveries_threshold
+                    && topic_params.mesh_message_deliveries_weight != 0.0
                 {
                     let deficit = topic_params.mesh_message_deliveries_threshold
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
-                    topic_score += p3 * topic_params.mesh_message_deliveries_weight;
-                    if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty(Penalty::MessageDeficit);
-                    }
+                    let penalty = p3 * topic_params.mesh_message_deliveries_weight;
+
+                    topic_score += penalty;
+                    #[cfg(feature = "metrics")]
+                    report
+                        .penalties
+                        .push(crate::metrics::Penalty::MessageDeficit);
                     tracing::debug!(
                         peer=%peer_id,
                         %topic,
                         %deficit,
-                        penalty=%topic_score,
+                        penalty=%penalty,
                         "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
                     );
                 }
 
                 // P3b:
-                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so
+                // this detracts.
                 let p3b = topic_stats.mesh_failure_penalty;
                 topic_score += p3b * topic_params.mesh_failure_penalty_weight;
 
                 // P4: invalid messages
-                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so
+                // this detracts.
                 let p4 =
                     topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
                 topic_score += p4 * topic_params.invalid_message_deliveries_weight;
 
                 // update score, mixing with topic weight
-                score += topic_score * topic_params.topic_weight;
+                report.score += topic_score * topic_params.topic_weight;
             }
         }
 
         // apply the topic score cap, if any
-        if self.params.topic_score_cap > 0f64 && score > self.params.topic_score_cap {
-            score = self.params.topic_score_cap;
+        if self.params.topic_score_cap > 0f64 && report.score > self.params.topic_score_cap {
+            report.score = self.params.topic_score_cap;
         }
 
         // P5: application-specific score
         let p5 = peer_stats.application_score;
-        score += p5 * self.params.app_specific_weight;
+        report.score += p5 * self.params.app_specific_weight;
 
         // P6: IP collocation factor
         for ip in peer_stats.known_ips.iter() {
@@ -311,35 +365,43 @@ impl PeerScore {
                 continue;
             }
 
-            // P6 has a cliff (ip_colocation_factor_threshold); it's only applied iff
+            // P6 has a cliff (ip_colocation_factor_threshold); it's only applied if
             // at least that many peers are connected to us from that source IP
             // addr. It is quadratic, and the weight is negative (validated by
             // peer_score_params.validate()).
             if let Some(peers_in_ip) = self.peer_ips.get(ip).map(|peers| peers.len()) {
-                if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
+                if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold
+                    && self.params.ip_colocation_factor_weight != 0.0
+                {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
-                    if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty(Penalty::IPColocation);
-                    }
+                    #[cfg(feature = "metrics")]
+                    report.penalties.push(crate::metrics::Penalty::IPColocation);
                     tracing::debug!(
                         peer=%peer_id,
                         surplus_ip=%ip,
                         surplus=%surplus,
                         "[Penalty] The peer gets penalized because of too many peers with the same ip"
                     );
-                    score += p6 * self.params.ip_colocation_factor_weight;
+                    report.score += p6 * self.params.ip_colocation_factor_weight;
                 }
             }
         }
 
-        // P7: behavioural pattern penalty
+        // P7: behavioural pattern penalty.
         if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
             let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
             let p7 = excess * excess;
-            score += p7 * self.params.behaviour_penalty_weight;
+            report.score += p7 * self.params.behaviour_penalty_weight;
         }
-        score
+
+        // Slow peer weighting.
+        if peer_stats.slow_peer_penalty > self.params.slow_peer_threshold {
+            let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
+            report.score += excess * self.params.slow_peer_weight;
+        }
+
+        report
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
@@ -380,8 +442,8 @@ impl PeerScore {
                 }
 
                 // we don't decay retained scores, as the peer is not active.
-                // this way the peer cannot reset a negative score by simply disconnecting and reconnecting,
-                // unless the retention period has elapsed.
+                // this way the peer cannot reset a negative score by simply disconnecting and
+                // reconnecting, unless the retention period has elapsed.
                 // similarly, a well behaved peer does not lose its score by getting disconnected.
                 return true;
             }
@@ -428,6 +490,13 @@ impl PeerScore {
             if peer_stats.behaviour_penalty < params_ref.decay_to_zero {
                 peer_stats.behaviour_penalty = 0.0;
             }
+
+            // decay slow peer score
+            peer_stats.slow_peer_penalty *= params_ref.slow_peer_decay;
+            if peer_stats.slow_peer_penalty < params_ref.decay_to_zero {
+                peer_stats.slow_peer_penalty = 0.0;
+            }
+
             true
         });
     }
@@ -453,6 +522,14 @@ impl PeerScore {
         // Insert the ip
         peer_stats.known_ips.insert(ip);
         self.peer_ips.entry(ip).or_default().insert(*peer_id);
+    }
+
+    /// Indicate that a peer has been too slow to consume a message.
+    pub(crate) fn failed_message_slow_peer(&mut self, peer_id: &PeerId) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            peer_stats.slow_peer_penalty += 1.0;
+            tracing::debug!(peer=%peer_id, %peer_stats.slow_peer_penalty, "[Penalty] Expired message penalty.");
+        }
     }
 
     /// Removes an ip from a peer
@@ -482,7 +559,7 @@ impl PeerScore {
     /// non-positive.
     pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
-        if self.score(peer_id) > 0f64 {
+        if self.score_report(peer_id).score > 0f64 {
             if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
                 Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
                 entry.remove();
@@ -612,7 +689,8 @@ impl PeerScore {
         }
     }
 
-    /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
+    /// Similar to `reject_message` except does not require the message id or reason for an invalid
+    /// message.
     pub(crate) fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         tracing::debug!(
             peer=%from,
@@ -653,8 +731,8 @@ impl PeerScore {
             }
 
             if let RejectReason::ValidationIgnored = reason {
-                // we were explicitly instructed by the validator to ignore the message but not penalize
-                // the peer
+                // we were explicitly instructed by the validator to ignore the message but not
+                // penalize the peer
                 record.status = DeliveryStatus::Ignored;
                 record.peers.clear();
                 return;
@@ -856,13 +934,14 @@ impl PeerScore {
                         .get(topic_hash)
                         .expect("Topic must exist if there are known topic_stats");
 
-                    // check against the mesh delivery window -- if the validated time is passed as 0, then
-                    // the message was received before we finished validation and thus falls within the mesh
+                    // check against the mesh delivery window -- if the validated time is passed as
+                    // 0, then the message was received before we finished
+                    // validation and thus falls within the mesh
                     // delivery window.
                     let mut falls_in_mesh_deliver_window = true;
                     if let Some(validated_time) = validated_time {
                         if let Some(now) = &now {
-                            //should always be true
+                            // should always be true
                             let window_time = validated_time
                                 .checked_add(topic_params.mesh_message_deliveries_window)
                                 .unwrap_or(*now);

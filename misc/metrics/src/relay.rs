@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::registry::Registry;
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{counter::Counter, family::Family},
+    registry::Registry,
+};
 
 pub(crate) struct Metrics {
     events: Family<EventLabels, Counter>,
@@ -53,6 +54,7 @@ enum EventType {
     ReservationReqAcceptFailed,
     ReservationReqDenied,
     ReservationReqDenyFailed,
+    ReservationClosed,
     ReservationTimedOut,
     CircuitReqDenied,
     CircuitReqDenyFailed,
@@ -75,6 +77,7 @@ impl From<&libp2p_relay::Event> for EventType {
             libp2p_relay::Event::ReservationReqDenyFailed { .. } => {
                 EventType::ReservationReqDenyFailed
             }
+            libp2p_relay::Event::ReservationClosed { .. } => EventType::ReservationClosed,
             libp2p_relay::Event::ReservationTimedOut { .. } => EventType::ReservationTimedOut,
             libp2p_relay::Event::CircuitReqDenied { .. } => EventType::CircuitReqDenied,
             #[allow(deprecated)]

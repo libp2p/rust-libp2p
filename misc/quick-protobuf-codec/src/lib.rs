@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{io, marker::PhantomData};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BufMut, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
-use std::io;
-use std::marker::PhantomData;
 
 mod generated;
 
@@ -59,8 +59,7 @@ fn write_length(message: &impl MessageWrite, dst: &mut BytesMut) {
 /// Write the message itself to `dst`.
 fn write_message(item: &impl MessageWrite, dst: &mut BytesMut) -> io::Result<()> {
     let mut writer = Writer::new(BytesMutWriterBackend::new(dst));
-    item.write_message(&mut writer)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    item.write_message(&mut writer).map_err(io::Error::other)?;
 
     Ok(())
 }
@@ -182,12 +181,13 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use asynchronous_codec::FramedRead;
-    use futures::io::Cursor;
-    use futures::{FutureExt, StreamExt};
-    use quickcheck::{Arbitrary, Gen, QuickCheck};
     use std::error::Error;
+
+    use asynchronous_codec::FramedRead;
+    use futures::{io::Cursor, FutureExt, StreamExt};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
+
+    use super::*;
 
     #[test]
     fn honors_max_message_length() {
@@ -251,7 +251,7 @@ mod tests {
 
         let mut src = BytesMut::new();
         src.extend_from_slice(encoded_length);
-        src.extend(std::iter::repeat(0).take(length));
+        src.extend(std::iter::repeat_n(0, length));
         src
     }
 

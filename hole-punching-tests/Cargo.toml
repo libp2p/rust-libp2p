@@ -1,13 +1,13 @@
 [package]
 name = "hole-punching-tests"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 publish = false
 license = "MIT"
 
 [dependencies]
 anyhow = "1"
-env_logger = "0.10.2"
+env_logger = { workspace = true }
 futures = { workspace = true }
 libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
 tracing = { workspace = true }

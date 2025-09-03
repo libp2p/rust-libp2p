@@ -18,17 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::prelude::FutureExt;
-use futures::stream::{FuturesUnordered, SelectAll};
-use futures::StreamExt;
+use std::{task::Poll, time::Duration};
+
+use futures::{
+    stream::{FuturesUnordered, SelectAll},
+    StreamExt,
+};
 use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
-use std::{task::Poll, time::Duration};
+use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
+
 struct Graph {
     nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
 }
@@ -84,7 +88,7 @@ impl Graph {
             }
         };
 
-        match condition.timeout(Duration::from_secs(10)).await {
+        match time::timeout(Duration::from_secs(10), condition).await {
             Ok(()) => true,
             Err(_) => false,
         }
@@ -98,7 +102,7 @@ impl Graph {
                 Poll::Pending => return Poll::Ready(()),
             }
         });
-        fut.timeout(Duration::from_secs(10)).await.unwrap();
+        time::timeout(Duration::from_secs(10), fut).await.unwrap();
     }
 }
 
@@ -108,7 +112,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let mut swarm = Swarm::new_ephemeral(|identity| {
+    let mut swarm = Swarm::new_ephemeral_tokio(|identity| {
         let peer_id = identity.public().to_peer_id();
 
         let config = gossipsub::ConfigBuilder::default()
@@ -139,7 +143,9 @@ fn multi_hop_propagation() {
 
         tracing::debug!(number_of_nodes=%num_nodes, seed=%seed);
 
-        async_std::task::block_on(async move {
+        let rt = Runtime::new().unwrap();
+
+        rt.block_on(async move {
             let mut graph = Graph::new_connected(num_nodes as usize, seed).await;
             let number_nodes = graph.nodes.len();
 
