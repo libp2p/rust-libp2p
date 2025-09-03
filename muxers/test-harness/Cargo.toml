@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-muxer-test-harness"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 publish = false
 license = "MIT"
 
@@ -12,10 +12,10 @@ release = false
 
 [dependencies]
 libp2p-core = { workspace = true }
-futures = "0.3.29"
-futures-timer = "3.0.2"
+futures = { workspace = true }
+futures-timer = "3.0.3"
 futures_ringbuf = "0.4.0"
-tracing = "0.1.37"
+tracing = { workspace = true }
 
 [lints]
 workspace = true

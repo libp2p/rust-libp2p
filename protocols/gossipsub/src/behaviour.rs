@@ -19,57 +19,70 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
-    collections::HashSet,
-    collections::VecDeque,
-    collections::{BTreeSet, HashMap},
-    fmt,
+    cmp::{
+        max,
+        Ordering::{self, Equal},
+    },
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    fmt::{self, Debug},
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
 };
 
-use futures::StreamExt;
-use futures_ticker::Ticker;
-use prometheus_client::registry::Registry;
-use rand::{seq::SliceRandom, thread_rng};
-
-use instant::Instant;
-use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
+use futures::FutureExt;
+use futures_timer::Delay;
+use hashlink::LinkedHashMap;
+use libp2p_core::{
+    multiaddr::Protocol::{Ip4, Ip6},
+    transport::PortUse,
+    Endpoint, Multiaddr,
+};
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-
-use crate::backoff::BackoffStorage;
-use crate::config::{Config, ValidationMode};
-use crate::gossip_promises::GossipPromises;
-use crate::handler::{Handler, HandlerEvent, HandlerIn};
-use crate::mcache::MessageCache;
-use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
-use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::DuplicateCache;
-use crate::topic::{Hasher, Topic, TopicHash};
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::{
-    ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
-    SubscriptionAction,
-};
-use crate::types::{PeerConnections, PeerKind, RpcOut};
-use crate::{rpc_proto::proto, TopicScoreParams};
-use crate::{PublishError, SubscriptionError, ValidationError};
-use instant::SystemTime;
+#[cfg(feature = "metrics")]
+use prometheus_client::registry::Registry;
 use quick_protobuf::{MessageWrite, Writer};
-use std::{cmp::Ordering::Equal, fmt::Debug};
+use rand::{seq::SliceRandom, thread_rng};
+use web_time::{Instant, SystemTime};
+
+#[cfg(feature = "metrics")]
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
+use crate::{
+    backoff::BackoffStorage,
+    config::{Config, ValidationMode},
+    gossip_promises::GossipPromises,
+    handler::{Handler, HandlerEvent, HandlerIn},
+    mcache::MessageCache,
+    peer_score::{PeerScore, PeerScoreParams, PeerScoreState, PeerScoreThresholds, RejectReason},
+    protocol::SIGNING_PREFIX,
+    rpc::Sender,
+    rpc_proto::proto,
+    subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
+    time_cache::DuplicateCache,
+    topic::{Hasher, Topic, TopicHash},
+    transform::{DataTransform, IdentityTransform},
+    types::{
+        ControlAction, Graft, IDontWant, IHave, IWant, Message, MessageAcceptance, MessageId,
+        PeerDetails, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
+        SubscriptionAction,
+    },
+    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
+};
 
 #[cfg(test)]
 mod tests;
+
+/// IDONTWANT cache capacity.
+const IDONTWANT_CAP: usize = 10_000;
+
+/// IDONTWANT timeout before removal.
+const IDONTWANT_TIMEOUT: Duration = Duration::new(3, 0);
 
 /// Determines if published messages should be signed or not.
 ///
@@ -144,6 +157,13 @@ pub enum Event {
     },
     /// A peer that does not support gossipsub has connected.
     GossipsubNotSupported { peer_id: PeerId },
+    /// A peer is not able to download messages in time.
+    SlowPeer {
+        /// The peer_id
+        peer_id: PeerId,
+        /// The types and amounts of failed messages that are occurring for this peer.
+        failed_messages: FailedMessages,
+    },
 }
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
@@ -204,8 +224,9 @@ impl From<MessageAuthenticity> for PublishConfig {
                 let public_key = keypair.public();
                 let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::proto::Message::key`] field.
+                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we
+                    // don't include it specifically in the
+                    // [`rpc_proto::proto::Message::key`] field.
                     None
                 } else {
                     // Include the protobuf encoding of the public key in the message.
@@ -244,9 +265,6 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<ToSwarm<Event, HandlerIn>>,
 
-    /// Pools non-urgent control messages between heartbeats.
-    control_pool: HashMap<PeerId, Vec<ControlAction>>,
-
     /// Information used for publishing messages.
     publish_config: PublishConfig,
 
@@ -256,13 +274,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// A set of connected peers, indexed by their [`PeerId`] tracking both the [`PeerKind`] and
     /// the set of [`ConnectionId`]s.
-    connected_peers: HashMap<PeerId, PeerConnections>,
-
-    /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
-    topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
-
-    /// A map of all connected peers to their subscribed topics.
-    peer_topics: HashMap<PeerId, BTreeSet<TopicHash>>,
+    connected_peers: HashMap<PeerId, PeerDetails>,
 
     /// A set of all explicit peers. These are peers that remain connected and we unconditionally
     /// forward messages to, outside of the scoring system.
@@ -281,14 +293,14 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
-    ///Storage for backoffs
+    /// Storage for backoffs
     backoffs: BackoffStorage,
 
     /// Message cache for the last few heartbeats.
     mcache: MessageCache,
 
     /// Heartbeat interval stream.
-    heartbeat: Ticker,
+    heartbeat: Delay,
 
     /// Number of heartbeats since the beginning of time; this allows us to amortize some resource
     /// clean up -- eg backoff clean up.
@@ -300,27 +312,15 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// be removed from this list which may result in a true outbound rediscovery.
     px_peers: HashSet<PeerId>,
 
-    /// Set of connected outbound peers (we only consider true outbound peers found through
-    /// discovery and not by PX).
-    outbound_peers: HashSet<PeerId>,
-
     /// Stores optional peer score data together with thresholds, decay interval and gossip
     /// promises.
-    peer_score: Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
+    peer_score: PeerScoreState,
 
     /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
     count_received_ihave: HashMap<PeerId, usize>,
 
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
-
-    /// Keeps track of IWANT messages that we are awaiting to send.
-    /// This is used to prevent sending duplicate IWANT messages for the same message.
-    pending_iwant_msgs: HashSet<MessageId>,
-
-    /// Short term cache for published message ids. This is used for penalizing peers sending
-    /// our own messages back if the messages are anonymous or use a random author.
-    published_message_ids: DuplicateCache<MessageId>,
 
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
@@ -331,7 +331,14 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     data_transform: D,
 
     /// Keep track of a set of internal metrics relating to gossipsub.
+    #[cfg(feature = "metrics")]
     metrics: Option<Metrics>,
+
+    /// Tracks the numbers of failed messages per peer-id.
+    failed_messages: HashMap<PeerId, FailedMessages>,
+
+    /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
+    gossip_promises: GossipPromises,
 }
 
 impl<D, F> Behaviour<D, F>
@@ -345,25 +352,6 @@ where
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
-            None,
-            F::default(),
-            D::default(),
-        )
-    }
-
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`]. This has no subscription filter and uses no compression.
-    /// Metrics can be evaluated by passing a reference to a [`Registry`].
-    pub fn new_with_metrics(
-        privacy: MessageAuthenticity,
-        config: Config,
-        metrics_registry: &mut Registry,
-        metrics_config: MetricsConfig,
-    ) -> Result<Self, &'static str> {
-        Self::new_with_subscription_filter_and_transform(
-            privacy,
-            config,
-            Some((metrics_registry, metrics_config)),
             F::default(),
             D::default(),
         )
@@ -380,13 +368,11 @@ where
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
-            metrics,
             subscription_filter,
             D::default(),
         )
@@ -400,16 +386,15 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom data transform.
+    /// Metrics are disabled by default.
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
-            metrics,
             F::default(),
             data_transform,
         )
@@ -423,10 +408,10 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter and data transform.
+    /// Metrics are disabled by default.
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -437,13 +422,11 @@ where
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Behaviour {
-            metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
+            #[cfg(feature = "metrics")]
+            metrics: None,
             events: VecDeque::new(),
-            control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            topic_peers: HashMap::new(),
-            peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
             blacklisted_peers: HashSet::new(),
             mesh: HashMap::new(),
@@ -455,23 +438,31 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Ticker::new_with_next(
-                config.heartbeat_interval(),
-                config.heartbeat_initial_delay(),
-            ),
+            heartbeat: Delay::new(config.heartbeat_interval() + config.heartbeat_initial_delay()),
             heartbeat_ticks: 0,
             px_peers: HashSet::new(),
-            outbound_peers: HashSet::new(),
-            peer_score: None,
+            peer_score: PeerScoreState::Disabled,
             count_received_ihave: HashMap::new(),
             count_sent_iwant: HashMap::new(),
-            pending_iwant_msgs: HashSet::new(),
             connected_peers: HashMap::new(),
-            published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
             config,
             subscription_filter,
             data_transform,
+            failed_messages: Default::default(),
+            gossip_promises: Default::default(),
         })
+    }
+
+    /// Allow the [`Behaviour`] to also record metrics.
+    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    #[cfg(feature = "metrics")]
+    pub fn with_metrics(
+        mut self,
+        metrics_registry: &mut Registry,
+        metrics_config: MetricsConfig,
+    ) -> Self {
+        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
+        self
     }
 }
 
@@ -500,9 +491,9 @@ where
 
     /// Lists all known peers and their associated subscribed topics.
     pub fn all_peers(&self) -> impl Iterator<Item = (&PeerId, Vec<&TopicHash>)> {
-        self.peer_topics
+        self.connected_peers
             .iter()
-            .map(|(peer_id, topic_set)| (peer_id, topic_set.iter().collect()))
+            .map(|(peer_id, peer)| (peer_id, peer.topics.iter().collect()))
     }
 
     /// Lists all known peers and their associated protocol.
@@ -512,9 +503,10 @@ where
 
     /// Returns the gossipsub score for a given peer, if one exists.
     pub fn peer_score(&self, peer_id: &PeerId) -> Option<f64> {
-        self.peer_score
-            .as_ref()
-            .map(|(score, ..)| score.score(peer_id))
+        match &self.peer_score {
+            PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).score),
+            PeerScoreState::Disabled => None,
+        }
     }
 
     /// Subscribe to a topic.
@@ -522,22 +514,21 @@ where
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        tracing::debug!(%topic, "Subscribing to topic");
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
         }
 
-        if self.mesh.get(&topic_hash).is_some() {
+        if self.mesh.contains_key(&topic_hash) {
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
 
         // send subscription request to all peers
-        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
-            tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
+        for peer_id in self.connected_peers.keys().copied().collect::<Vec<_>>() {
+            tracing::debug!(%peer_id, "Sending SUBSCRIBE to peer");
             let event = RpcOut::Subscribe(topic_hash.clone());
-            self.send_message(peer, event);
+            self.send_message(peer_id, event);
         }
 
         // call JOIN(topic)
@@ -549,19 +540,18 @@ where
 
     /// Unsubscribes from a topic.
     ///
-    /// Returns [`Ok(true)`] if we were subscribed to this topic.
-    pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
-        tracing::debug!(%topic, "Unsubscribing from topic");
+    /// Returns `true` if we were subscribed to this topic.
+    pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> bool {
         let topic_hash = topic.hash();
 
-        if self.mesh.get(&topic_hash).is_none() {
+        if !self.mesh.contains_key(&topic_hash) {
             tracing::debug!(topic=%topic_hash, "Already unsubscribed from topic");
             // we are not subscribed
-            return Ok(false);
+            return false;
         }
 
         // announce to all peers
-        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
+        for peer in self.connected_peers.keys().copied().collect::<Vec<_>>() {
             tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
             let event = RpcOut::Unsubscribe(topic_hash.clone());
             self.send_message(peer, event);
@@ -572,7 +562,7 @@ where
         self.leave(&topic_hash);
 
         tracing::debug!(topic=%topic_hash, "Unsubscribed from topic");
-        Ok(true)
+        true
     }
 
     /// Publishes a message with multiple topics to the network.
@@ -587,8 +577,19 @@ where
         // Transform the data before building a raw_message.
         let transformed_data = self
             .data_transform
-            .outbound_transform(&topic, data.clone())?;
+            .outbound_transform(&topic.clone(), data.clone())?;
 
+        let max_transmit_size_for_topic = self
+            .config
+            .protocol_config()
+            .max_transmit_size_for_topic(&topic);
+
+        // check that the size doesn't exceed the max transmission size.
+        if transformed_data.len() > max_transmit_size_for_topic {
+            return Err(PublishError::MessageTooLarge);
+        }
+
+        let mesh_n = self.config.mesh_n_for_topic(&topic);
         let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
@@ -599,102 +600,127 @@ where
             topic: raw_message.topic.clone(),
         });
 
-        // check that the size doesn't exceed the max transmission size
-        if raw_message.raw_protobuf_len() > self.config.max_transmit_size() {
-            return Err(PublishError::MessageTooLarge);
-        }
-
         // Check the if the message has been published before
         if self.duplicate_cache.contains(&msg_id) {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             tracing::warn!(
-                message=%msg_id,
+                message_id=%msg_id,
                 "Not publishing a message that has already been published"
             );
             return Err(PublishError::Duplicate);
         }
 
-        tracing::trace!(message=%msg_id, "Publishing message");
+        tracing::trace!(message_id=%msg_id, "Publishing message");
 
         let topic_hash = raw_message.topic.clone();
 
-        let mut recipient_peers = HashSet::new();
-        if let Some(set) = self.topic_peers.get(&topic_hash) {
-            if self.config.flood_publish() {
-                // Forward to all peers above score and all explicit peers
-                recipient_peers.extend(set.iter().filter(|p| {
-                    self.explicit_peers.contains(*p)
-                        || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
-                }));
-            } else {
-                match self.mesh.get(&raw_message.topic) {
-                    // Mesh peers
-                    Some(mesh_peers) => {
-                        recipient_peers.extend(mesh_peers);
-                    }
-                    // Gossipsub peers
-                    None => {
-                        tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
-                        // If we have fanout peers add them to the map.
-                        if self.fanout.contains_key(&topic_hash) {
-                            for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
-                                recipient_peers.insert(*peer);
-                            }
-                        } else {
-                            // We have no fanout peers, select mesh_n of them and add them to the fanout
-                            let mesh_n = self.config.mesh_n();
-                            let new_peers = get_random_peers(
-                                &self.topic_peers,
-                                &self.connected_peers,
-                                &topic_hash,
-                                mesh_n,
-                                {
-                                    |p| {
-                                        !self.explicit_peers.contains(p)
-                                            && !self
-                                                .score_below_threshold(p, |pst| {
-                                                    pst.publish_threshold
-                                                })
-                                                .0
-                                    }
-                                },
-                            );
-                            // Add the new peers to the fanout and recipient peers
-                            self.fanout.insert(topic_hash.clone(), new_peers.clone());
-                            for peer in new_peers {
-                                tracing::debug!(%peer, "Peer added to fanout");
-                                recipient_peers.insert(peer);
-                            }
-                        }
-                        // We are publishing to fanout peers - update the time we published
-                        self.fanout_last_pub
-                            .insert(topic_hash.clone(), Instant::now());
-                    }
-                }
+        let mut peers_on_topic = self
+            .connected_peers
+            .iter()
+            .filter(|(_, p)| p.topics.contains(&topic_hash))
+            .map(|(peer_id, _)| peer_id)
+            .peekable();
 
-                // Explicit peers
-                for peer in &self.explicit_peers {
-                    if set.contains(peer) {
-                        recipient_peers.insert(*peer);
-                    }
-                }
-
-                // Floodsub peers
-                for (peer, connections) in &self.connected_peers {
-                    if connections.kind == PeerKind::Floodsub
-                        && !self
-                            .score_below_threshold(peer, |ts| ts.publish_threshold)
-                            .0
-                    {
-                        recipient_peers.insert(*peer);
-                    }
-                }
-            }
+        if peers_on_topic.peek().is_none() {
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
-        if recipient_peers.is_empty() {
-            return Err(PublishError::InsufficientPeers);
+        let mut recipient_peers = HashSet::new();
+        if self.config.flood_publish() {
+            // Forward to all peers above score and all explicit peers
+            recipient_peers.extend(peers_on_topic.filter(|p| {
+                self.explicit_peers.contains(*p)
+                    || !self
+                        .peer_score
+                        .below_threshold(p, |ts| ts.publish_threshold)
+                        .0
+            }));
+        } else {
+            match self.mesh.get(&topic_hash) {
+                // Mesh peers
+                Some(mesh_peers) => {
+                    // We have a mesh set. We want to make sure to publish to at least `mesh_n`
+                    // peers (if possible).
+                    let needed_extra_peers = mesh_n.saturating_sub(mesh_peers.len());
+
+                    if needed_extra_peers > 0 {
+                        // We don't have `mesh_n` peers in our mesh, we will randomly select extras
+                        // and publish to them.
+
+                        // Get a random set of peers that are appropriate to send messages too.
+                        let peer_list = get_random_peers(
+                            &self.connected_peers,
+                            &topic_hash,
+                            needed_extra_peers,
+                            |peer| {
+                                !mesh_peers.contains(peer)
+                                    && !self.explicit_peers.contains(peer)
+                                    && !self
+                                        .peer_score
+                                        .below_threshold(peer, |ts| ts.publish_threshold)
+                                        .0
+                            },
+                        );
+                        recipient_peers.extend(peer_list);
+                    }
+
+                    recipient_peers.extend(mesh_peers);
+                }
+                // Gossipsub peers
+                None => {
+                    tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
+                    // `fanout_peers` is always non-empty if it's `Some`.
+                    let fanout_peers = self
+                        .fanout
+                        .get(&topic_hash)
+                        .filter(|peers| !peers.is_empty());
+                    // If we have fanout peers add them to the map.
+                    if let Some(peers) = fanout_peers {
+                        for peer in peers {
+                            recipient_peers.insert(*peer);
+                        }
+                    } else {
+                        // We have no fanout peers, select mesh_n of them and add them to the fanout
+                        let new_peers =
+                            get_random_peers(&self.connected_peers, &topic_hash, mesh_n, {
+                                |p| {
+                                    !self.explicit_peers.contains(p)
+                                        && !self
+                                            .peer_score
+                                            .below_threshold(p, |ts| ts.publish_threshold)
+                                            .0
+                                }
+                            });
+                        // Add the new peers to the fanout and recipient peers
+                        self.fanout.insert(topic_hash.clone(), new_peers.clone());
+                        for peer in new_peers {
+                            tracing::debug!(%peer, "Peer added to fanout");
+                            recipient_peers.insert(peer);
+                        }
+                    }
+                    // We are publishing to fanout peers - update the time we published
+                    self.fanout_last_pub
+                        .insert(topic_hash.clone(), Instant::now());
+                }
+            }
+
+            // Explicit peers that are part of the topic
+            recipient_peers
+                .extend(peers_on_topic.filter(|peer_id| self.explicit_peers.contains(peer_id)));
+
+            // Floodsub peers
+            for (peer, connections) in &self.connected_peers {
+                if connections.kind == PeerKind::Floodsub
+                    && connections.topics.contains(&topic_hash)
+                    && !self
+                        .peer_score
+                        .below_threshold(peer, |ts| ts.publish_threshold)
+                        .0
+                {
+                    recipient_peers.insert(*peer);
+                }
+            }
         }
 
         // If the message isn't a duplicate and we have sent it to some peers add it to the
@@ -702,22 +728,48 @@ where
         self.duplicate_cache.insert(msg_id.clone());
         self.mcache.put(&msg_id, raw_message.clone());
 
-        // If the message is anonymous or has a random author add it to the published message ids
-        // cache.
-        if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
-            if !self.config.allow_self_origin() {
-                self.published_message_ids.insert(msg_id.clone());
+        // Consider the message as delivered for gossip promises.
+        self.gossip_promises.message_delivered(&msg_id);
+
+        // Send to peers we know are subscribed to the topic.
+        let mut publish_failed = true;
+        for peer_id in recipient_peers.iter() {
+            tracing::trace!(peer=%peer_id, "Sending message to peer");
+            // If enabled, Send first an IDONTWANT so that if we are slower than forwarders
+            // publishing the original message we don't receive it back.
+            if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+                && self.config.idontwant_on_publish()
+            {
+                self.send_message(
+                    *peer_id,
+                    RpcOut::IDontWant(IDontWant {
+                        message_ids: vec![msg_id.clone()],
+                    }),
+                );
+            }
+
+            if self.send_message(
+                *peer_id,
+                RpcOut::Publish {
+                    message: raw_message.clone(),
+                    timeout: Delay::new(self.config.publish_queue_duration()),
+                },
+            ) {
+                publish_failed = false
             }
         }
 
-        // Send to peers we know are subscribed to the topic.
-        for peer_id in recipient_peers.iter() {
-            tracing::trace!(peer=%peer_id, "Sending message to peer");
-            self.send_message(*peer_id, RpcOut::Publish(raw_message.clone()));
+        if recipient_peers.is_empty() {
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
-        tracing::debug!(message=%msg_id, "Published message");
+        if publish_failed {
+            return Err(PublishError::AllQueuesFull(recipient_peers.len()));
+        }
 
+        tracing::debug!(message_id=%msg_id, "Published message");
+
+        #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.register_published_message(&topic_hash);
         }
@@ -749,7 +801,7 @@ where
         msg_id: &MessageId,
         propagation_source: &PeerId,
         acceptance: MessageAcceptance,
-    ) -> Result<bool, PublishError> {
+    ) -> bool {
         let reject_reason = match acceptance {
             MessageAcceptance::Accept => {
                 let (raw_message, originating_peers) = match self.mcache.validate(msg_id) {
@@ -758,16 +810,18 @@ where
                     }
                     None => {
                         tracing::warn!(
-                            message=%msg_id,
+                            message_id=%msg_id,
                             "Message not in cache. Ignoring forwarding"
                         );
+                        #[cfg(feature = "metrics")]
                         if let Some(metrics) = self.metrics.as_mut() {
                             metrics.memcache_miss();
                         }
-                        return Ok(false);
+                        return false;
                     }
                 };
 
+                #[cfg(feature = "metrics")]
                 if let Some(metrics) = self.metrics.as_mut() {
                     metrics.register_msg_validation(&raw_message.topic, &acceptance);
                 }
@@ -777,21 +831,22 @@ where
                     raw_message,
                     Some(propagation_source),
                     originating_peers,
-                )?;
-                return Ok(true);
+                );
+                return true;
             }
             MessageAcceptance::Reject => RejectReason::ValidationFailed,
             MessageAcceptance::Ignore => RejectReason::ValidationIgnored,
         };
 
         if let Some((raw_message, originating_peers)) = self.mcache.remove(msg_id) {
+            #[cfg(feature = "metrics")]
             if let Some(metrics) = self.metrics.as_mut() {
                 metrics.register_msg_validation(&raw_message.topic, &acceptance);
             }
 
             // Tell peer_score about reject
             // Reject the original source, and any duplicates we've seen from other peers.
-            if let Some((peer_score, ..)) = &mut self.peer_score {
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                 peer_score.reject_message(
                     propagation_source,
                     msg_id,
@@ -802,10 +857,10 @@ where
                     peer_score.reject_message(peer, msg_id, &raw_message.topic, reject_reason);
                 }
             }
-            Ok(true)
+            true
         } else {
-            tracing::warn!(message=%msg_id, "Rejected message not in cache");
-            Ok(false)
+            tracing::warn!(message_id=%msg_id, "Rejected message not in cache");
+            false
         }
     }
 
@@ -856,19 +911,19 @@ where
     pub fn with_peer_score_and_message_delivery_time_callback(
         &mut self,
         params: PeerScoreParams,
-        threshold: PeerScoreThresholds,
+        thresholds: PeerScoreThresholds,
         callback: Option<fn(&PeerId, &TopicHash, f64)>,
     ) -> Result<(), String> {
         params.validate()?;
-        threshold.validate()?;
+        thresholds.validate()?;
 
-        if self.peer_score.is_some() {
+        if let PeerScoreState::Active(_) = self.peer_score {
             return Err("Peer score set twice".into());
         }
 
-        let interval = Ticker::new(params.decay_interval);
-        let peer_score = PeerScore::new_with_message_delivery_time_callback(params, callback);
-        self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
+        let peer_score =
+            PeerScore::new_with_message_delivery_time_callback(params, thresholds, callback);
+        self.peer_score = PeerScoreState::Active(Box::new(peer_score));
         Ok(())
     }
 
@@ -880,7 +935,7 @@ where
         topic: Topic<H>,
         params: TopicScoreParams,
     ) -> Result<(), &'static str> {
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.set_topic_params(topic.hash(), params);
             Ok(())
         } else {
@@ -890,13 +945,16 @@ where
 
     /// Returns a scoring parameters for a topic if existent.
     pub fn get_topic_params<H: Hasher>(&self, topic: &Topic<H>) -> Option<&TopicScoreParams> {
-        self.peer_score.as_ref()?.0.get_topic_params(&topic.hash())
+        match &self.peer_score {
+            PeerScoreState::Active(peer_score) => peer_score.get_topic_params(&topic.hash()),
+            PeerScoreState::Disabled => None,
+        }
     }
 
     /// Sets the application specific score for a peer. Returns true if scoring is active and
     /// the peer is connected or if the score of the peer is not yet expired, false otherwise.
     pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.set_application_score(peer_id, new_score)
         } else {
             false
@@ -905,19 +963,15 @@ where
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
-        tracing::debug!(topic=%topic_hash, "Running JOIN for topic");
-
-        // if we are already in the mesh, return
-        if self.mesh.contains_key(topic_hash) {
-            tracing::debug!(topic=%topic_hash, "JOIN: The topic is already in the mesh, ignoring JOIN");
-            return;
-        }
-
         let mut added_peers = HashSet::new();
-
+        let mesh_n = self.config.mesh_n_for_topic(topic_hash);
+        #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
         }
+
+        // Always construct a mesh regardless if we find peers or not.
+        self.mesh.entry(topic_hash.clone()).or_default();
 
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
@@ -930,13 +984,13 @@ where
             // remove explicit peers, peers with negative scores, and backoffed peers
             peers.retain(|p| {
                 !self.explicit_peers.contains(p)
-                    && !self.score_below_threshold(p, |_| 0.0).0
+                    && !self.peer_score.below_threshold(p, |_| 0.0).0
                     && !self.backoffs.is_backoff_with_slack(topic_hash, p)
             });
 
-            // Add up to mesh_n of them them to the mesh
+            // Add up to mesh_n of them to the mesh
             // NOTE: These aren't randomly added, currently FIFO
-            let add_peers = std::cmp::min(peers.len(), self.config.mesh_n());
+            let add_peers = std::cmp::min(peers.len(), mesh_n);
             tracing::debug!(
                 topic=%topic_hash,
                 "JOIN: Adding {:?} peers from the fanout for topic",
@@ -953,53 +1007,53 @@ where
             self.fanout_last_pub.remove(topic_hash);
         }
 
-        let fanaout_added = added_peers.len();
+        #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
+            m.peers_included(topic_hash, Inclusion::Fanout, added_peers.len())
         }
 
         // check if we need to get more peers, which we randomly select
-        if added_peers.len() < self.config.mesh_n() {
+        if added_peers.len() < mesh_n {
             // get the peers
-            let new_peers = get_random_peers(
-                &self.topic_peers,
+            let random_added = get_random_peers(
                 &self.connected_peers,
                 topic_hash,
-                self.config.mesh_n() - added_peers.len(),
+                mesh_n - added_peers.len(),
                 |peer| {
                     !added_peers.contains(peer)
                         && !self.explicit_peers.contains(peer)
-                        && !self.score_below_threshold(peer, |_| 0.0).0
+                        && !self.peer_score.below_threshold(peer, |_| 0.0).0
                         && !self.backoffs.is_backoff_with_slack(topic_hash, peer)
                 },
             );
-            added_peers.extend(new_peers.clone());
+
+            added_peers.extend(random_added.clone());
             // add them to the mesh
             tracing::debug!(
                 "JOIN: Inserting {:?} random peers into the mesh",
-                new_peers.len()
+                random_added.len()
             );
-            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
-            mesh_peers.extend(new_peers);
-        }
 
-        let random_added = added_peers.len() - fanaout_added;
-        if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Random, random_added)
+            #[cfg(feature = "metrics")]
+            if let Some(m) = self.metrics.as_mut() {
+                m.peers_included(topic_hash, Inclusion::Random, random_added.len())
+            }
+
+            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
+            mesh_peers.extend(random_added);
         }
 
         for peer_id in added_peers {
             // Send a GRAFT control message
             tracing::debug!(peer=%peer_id, "JOIN: Sending Graft message to peer");
-            if let Some((peer_score, ..)) = &mut self.peer_score {
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                 peer_score.graft(&peer_id, topic_hash.clone());
             }
-            Self::control_pool_add(
-                &mut self.control_pool,
+            self.send_message(
                 peer_id,
-                ControlAction::Graft {
+                RpcOut::Graft(Graft {
                     topic_hash: topic_hash.clone(),
-                },
+                }),
             );
 
             // If the peer did not previously exist in any mesh, inform the handler
@@ -1007,15 +1061,17 @@ where
                 peer_id,
                 vec![topic_hash],
                 &self.mesh,
-                self.peer_topics.get(&peer_id),
                 &mut self.events,
                 &self.connected_peers,
             );
         }
 
-        let mesh_peers = self.mesh_peers(topic_hash).count();
-        if let Some(m) = self.metrics.as_mut() {
-            m.set_mesh_peers(topic_hash, mesh_peers)
+        #[cfg(feature = "metrics")]
+        {
+            let mesh_peers = self.mesh_peers(topic_hash).count();
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_mesh_peers(topic_hash, mesh_peers)
+            }
         }
 
         tracing::debug!(topic=%topic_hash, "Completed JOIN for topic");
@@ -1028,8 +1084,8 @@ where
         peer: &PeerId,
         do_px: bool,
         on_unsubscribe: bool,
-    ) -> ControlAction {
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+    ) -> Prune {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.prune(peer, topic_hash.clone());
         }
 
@@ -1039,7 +1095,7 @@ where
             }
             Some(PeerKind::Gossipsub) => {
                 // GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
-                return ControlAction::Prune {
+                return Prune {
                     topic_hash: topic_hash.clone(),
                     peers: Vec::new(),
                     backoff: None,
@@ -1054,11 +1110,10 @@ where
         // Select peers for peer exchange
         let peers = if do_px {
             get_random_peers(
-                &self.topic_peers,
                 &self.connected_peers,
                 topic_hash,
                 self.config.prune_peers(),
-                |p| p != peer && !self.score_below_threshold(p, |_| 0.0).0,
+                |p| p != peer && !self.peer_score.below_threshold(p, |_| 0.0).0,
             )
             .into_iter()
             .map(|p| PeerInfo { peer_id: Some(p) })
@@ -1076,7 +1131,7 @@ where
         // update backoff
         self.backoffs.update_backoff(topic_hash, peer, backoff);
 
-        ControlAction::Prune {
+        Prune {
             topic_hash: topic_hash.clone(),
             peers,
             backoff: Some(backoff.as_secs()),
@@ -1089,23 +1144,24 @@ where
 
         // If our mesh contains the topic, send prune to peers and delete it from the mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
+            #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
                 m.left(topic_hash)
             }
-            for peer in peers {
+            for peer_id in peers {
                 // Send a PRUNE control message
-                tracing::debug!(%peer, "LEAVE: Sending PRUNE to peer");
+                tracing::debug!(%peer_id, "LEAVE: Sending PRUNE to peer");
+
                 let on_unsubscribe = true;
-                let control =
-                    self.make_prune(topic_hash, &peer, self.config.do_px(), on_unsubscribe);
-                Self::control_pool_add(&mut self.control_pool, peer, control);
+                let prune =
+                    self.make_prune(topic_hash, &peer_id, self.config.do_px(), on_unsubscribe);
+                self.send_message(peer_id, RpcOut::Prune(prune));
 
                 // If the peer did not previously exist in any mesh, inform the handler
                 peer_removed_from_mesh(
-                    peer,
+                    peer_id,
                     topic_hash,
                     &self.mesh,
-                    self.peer_topics.get(&peer),
                     &mut self.events,
                     &self.connected_peers,
                 );
@@ -1116,7 +1172,7 @@ where
 
     /// Checks if the given peer is still connected and if not dials the peer again.
     fn check_explicit_peer_connection(&mut self, peer_id: &PeerId) {
-        if !self.peer_topics.contains_key(peer_id) {
+        if !self.connected_peers.contains_key(peer_id) {
             // Connect to peer
             tracing::debug!(peer=%peer_id, "Connecting to explicit peer");
             self.events.push_back(ToSwarm::Dial {
@@ -1125,37 +1181,14 @@ where
         }
     }
 
-    /// Determines if a peer's score is below a given `PeerScoreThreshold` chosen via the
-    /// `threshold` parameter.
-    fn score_below_threshold(
-        &self,
-        peer_id: &PeerId,
-        threshold: impl Fn(&PeerScoreThresholds) -> f64,
-    ) -> (bool, f64) {
-        Self::score_below_threshold_from_scores(&self.peer_score, peer_id, threshold)
-    }
-
-    fn score_below_threshold_from_scores(
-        peer_score: &Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
-        peer_id: &PeerId,
-        threshold: impl Fn(&PeerScoreThresholds) -> f64,
-    ) -> (bool, f64) {
-        if let Some((peer_score, thresholds, ..)) = peer_score {
-            let score = peer_score.score(peer_id);
-            if score < threshold(thresholds) {
-                return (true, score);
-            }
-            (false, score)
-        } else {
-            (false, 0.0)
-        }
-    }
-
     /// Handles an IHAVE control message. Checks our cache of messages. If the message is unknown,
     /// requests it with an IWANT control message.
     fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<MessageId>)>) {
         // We ignore IHAVE gossip from any peer whose score is below the gossip threshold
-        if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
+        if let (true, score) = self
+            .peer_score
+            .below_threshold(peer_id, |ts| ts.gossip_threshold)
+        {
             tracing::debug!(
                 peer=%peer_id,
                 %score,
@@ -1192,21 +1225,6 @@ where
 
         let mut iwant_ids = HashSet::new();
 
-        let want_message = |id: &MessageId| {
-            if self.duplicate_cache.contains(id) {
-                return false;
-            }
-
-            if self.pending_iwant_msgs.contains(id) {
-                return false;
-            }
-
-            self.peer_score
-                .as_ref()
-                .map(|(_, _, _, promises)| !promises.contains(id))
-                .unwrap_or(true)
-        };
-
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
             if !self.mesh.contains_key(&topic) {
@@ -1217,10 +1235,17 @@ where
                 continue;
             }
 
-            for id in ids.into_iter().filter(want_message) {
+            for id in ids.into_iter().filter(|id| {
+                if self.duplicate_cache.contains(id) {
+                    return false;
+                }
+
+                !self.gossip_promises.contains(id)
+            }) {
                 // have not seen this message and are not currently requesting it
                 if iwant_ids.insert(id) {
                     // Register the IWANT metric
+                    #[cfg(feature = "metrics")]
                     if let Some(metrics) = self.metrics.as_mut() {
                         metrics.register_iwant(&topic);
                     }
@@ -1251,30 +1276,22 @@ where
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
 
-            for message_id in &iwant_ids_vec {
-                // Add all messages to the pending list
-                self.pending_iwant_msgs.insert(message_id.clone());
-            }
-
-            if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
-                gossip_promises.add_promise(
-                    *peer_id,
-                    &iwant_ids_vec,
-                    Instant::now() + self.config.iwant_followup_time(),
-                );
-            }
+            self.gossip_promises.add_promise(
+                *peer_id,
+                &iwant_ids_vec,
+                Instant::now() + self.config.iwant_followup_time(),
+            );
             tracing::trace!(
                 peer=%peer_id,
                 "IHAVE: Asking for the following messages from peer: {:?}",
                 iwant_ids_vec
             );
 
-            Self::control_pool_add(
-                &mut self.control_pool,
+            self.send_message(
                 *peer_id,
-                ControlAction::IWant {
+                RpcOut::IWant(IWant {
                     message_ids: iwant_ids_vec,
-                },
+                }),
             );
         }
         tracing::trace!(peer=%peer_id, "Completed IHAVE handling for peer");
@@ -1284,7 +1301,10 @@ where
     /// forwarded to the requesting peer.
     fn handle_iwant(&mut self, peer_id: &PeerId, iwant_msgs: Vec<MessageId>) {
         // We ignore IWANT gossip from any peer whose score is below the gossip threshold
-        if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
+        if let (true, score) = self
+            .peer_score
+            .below_threshold(peer_id, |ts| ts.gossip_threshold)
+        {
             tracing::debug!(
                 peer=%peer_id,
                 "IWANT: ignoring peer with score below threshold [score = {}]",
@@ -1297,7 +1317,7 @@ where
 
         for id in iwant_msgs {
             // If we have it and the IHAVE count is not above the threshold,
-            // foward the message.
+            // forward the message.
             if let Some((msg, count)) = self
                 .mcache
                 .get_with_iwant_counts(&id, peer_id)
@@ -1306,12 +1326,25 @@ where
                 if count > self.config.gossip_retransimission() {
                     tracing::debug!(
                         peer=%peer_id,
-                        message=%id,
+                        message_id=%id,
                         "IWANT: Peer has asked for message too many times; ignoring request"
                     );
                 } else {
+                    if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                        if peer.dont_send.contains_key(&id) {
+                            tracing::debug!(%peer_id, message_id=%id, "Peer already sent IDONTWANT for this message");
+                            continue;
+                        }
+                    }
+
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
-                    self.send_message(*peer_id, RpcOut::Forward(msg));
+                    self.send_message(
+                        *peer_id,
+                        RpcOut::Forward {
+                            message: msg,
+                            timeout: Delay::new(self.config.forward_queue_duration()),
+                        },
+                    );
                 }
             }
         }
@@ -1327,17 +1360,22 @@ where
 
         let mut do_px = self.config.do_px();
 
+        let Some(connected_peer) = self.connected_peers.get_mut(peer_id) else {
+            tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
+            return;
+        };
+        // Needs to be here to comply with the borrow checker.
+        let is_outbound = connected_peer.outbound;
+
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
         for topic in &topics {
-            self.peer_topics
-                .entry(*peer_id)
-                .or_default()
-                .insert(topic.clone());
-            self.topic_peers
-                .entry(topic.clone())
-                .or_default()
-                .insert(*peer_id);
+            if connected_peer.topics.insert(topic.clone()) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.inc_topic_peers(topic);
+                }
+            }
         }
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
@@ -1348,7 +1386,7 @@ where
             // but don't PX
             do_px = false
         } else {
-            let (below_zero, score) = self.score_below_threshold(peer_id, |_| 0.0);
+            let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
             let now = Instant::now();
             for topic_hash in topics {
                 if let Some(peers) = self.mesh.get_mut(&topic_hash) {
@@ -1371,7 +1409,8 @@ where
                                 "[Penalty] Peer attempted graft within backoff time, penalizing"
                             );
                             // add behavioural penalty
-                            if let Some((peer_score, ..)) = &mut self.peer_score {
+                            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                                #[cfg(feature = "metrics")]
                                 if let Some(metrics) = self.metrics.as_mut() {
                                     metrics.register_score_penalty(Penalty::GraftBackoff);
                                 }
@@ -1384,7 +1423,7 @@ where
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
                                 if flood_cutoff > now {
-                                    //extra penalty
+                                    // extra penalty
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
@@ -1405,18 +1444,19 @@ where
                             topic=%topic_hash,
                             "GRAFT: ignoring peer with negative score"
                         );
-                        // we do send them PRUNE however, because it's a matter of protocol correctness
+                        // we do send them PRUNE however, because it's a matter of protocol
+                        // correctness
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
                         continue;
                     }
 
-                    // check mesh upper bound and only allow graft if the upper bound is not reached or
-                    // if it is an outbound peer
-                    if peers.len() >= self.config.mesh_n_high()
-                        && !self.outbound_peers.contains(peer_id)
-                    {
+                    // check mesh upper bound and only allow graft if the upper bound is not reached
+                    // or if it is an outbound peer
+                    let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+
+                    if peers.len() >= mesh_n_high && !is_outbound {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -1429,6 +1469,7 @@ where
                     );
 
                     if peers.insert(*peer_id) {
+                        #[cfg(feature = "metrics")]
                         if let Some(m) = self.metrics.as_mut() {
                             m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
                         }
@@ -1439,12 +1480,11 @@ where
                         *peer_id,
                         vec![&topic_hash],
                         &self.mesh,
-                        self.peer_topics.get(peer_id),
                         &mut self.events,
                         &self.connected_peers,
                     );
 
-                    if let Some((peer_score, ..)) = &mut self.peer_score {
+                    if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                         peer_score.graft(peer_id, topic_hash);
                     }
                 } else {
@@ -1464,12 +1504,13 @@ where
         if !to_prune_topics.is_empty() {
             // build the prune messages to send
             let on_unsubscribe = false;
-            for action in to_prune_topics
+
+            for prune in to_prune_topics
                 .iter()
                 .map(|t| self.make_prune(t, peer_id, do_px, on_unsubscribe))
                 .collect::<Vec<_>>()
             {
-                self.send_message(*peer_id, RpcOut::Control(action));
+                self.send_message(*peer_id, RpcOut::Prune(prune));
             }
             // Send the prune messages to the peer
             tracing::debug!(
@@ -1480,45 +1521,40 @@ where
         tracing::debug!(peer=%peer_id, "Completed GRAFT handling for peer");
     }
 
+    /// Removes the specified peer from the mesh, returning true if it was present.
     fn remove_peer_from_mesh(
         &mut self,
         peer_id: &PeerId,
         topic_hash: &TopicHash,
         backoff: Option<u64>,
         always_update_backoff: bool,
-        reason: Churn,
-    ) {
-        let mut update_backoff = always_update_backoff;
+    ) -> bool {
+        let mut peer_removed = false;
         if let Some(peers) = self.mesh.get_mut(topic_hash) {
             // remove the peer if it exists in the mesh
-            if peers.remove(peer_id) {
+            peer_removed = peers.remove(peer_id);
+            if peer_removed {
                 tracing::debug!(
                     peer=%peer_id,
                     topic=%topic_hash,
                     "PRUNE: Removing peer from the mesh for topic"
                 );
-                if let Some(m) = self.metrics.as_mut() {
-                    m.peers_removed(topic_hash, reason, 1)
-                }
 
-                if let Some((peer_score, ..)) = &mut self.peer_score {
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                     peer_score.prune(peer_id, topic_hash.clone());
                 }
-
-                update_backoff = true;
 
                 // inform the handler
                 peer_removed_from_mesh(
                     *peer_id,
                     topic_hash,
                     &self.mesh,
-                    self.peer_topics.get(peer_id),
                     &mut self.events,
                     &self.connected_peers,
                 );
             }
         }
-        if update_backoff {
+        if always_update_backoff || peer_removed {
             let time = if let Some(backoff) = backoff {
                 Duration::from_secs(backoff)
             } else {
@@ -1527,6 +1563,7 @@ where
             // is there a backoff specified by the peer? if so obey it.
             self.backoffs.update_backoff(topic_hash, peer_id, time);
         }
+        peer_removed
     }
 
     /// Handles PRUNE control messages. Removes peer from the mesh.
@@ -1536,13 +1573,19 @@ where
         prune_data: Vec<(TopicHash, Vec<PeerInfo>, Option<u64>)>,
     ) {
         tracing::debug!(peer=%peer_id, "Handling PRUNE message for peer");
-        let (below_threshold, score) =
-            self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
+        let (below_threshold, score) = self
+            .peer_score
+            .below_threshold(peer_id, |ts| ts.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
-            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
+            if self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(&topic_hash, Churn::Prune, 1);
+                }
+            }
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
+                // connect to px peers
                 if !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
@@ -1574,7 +1617,7 @@ where
         let n = self.config.prune_peers();
         // Ignore peerInfo with no ID
         //
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
+        // TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
         // signed peer record?
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
@@ -1609,7 +1652,7 @@ where
     ) -> bool {
         tracing::debug!(
             peer=%propagation_source,
-            message=%msg_id,
+            message_id=%msg_id,
             "Handling message from peer"
         );
 
@@ -1619,14 +1662,15 @@ where
                 peer=%propagation_source,
                 "Rejecting message from blacklisted peer"
             );
-            if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+            self.gossip_promises
+                .reject_message(msg_id, &RejectReason::BlackListedPeer);
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                 peer_score.reject_message(
                     propagation_source,
                     msg_id,
                     &raw_message.topic,
                     RejectReason::BlackListedPeer,
                 );
-                gossip_promises.reject_message(msg_id, &RejectReason::BlackListedPeer);
             }
             return false;
         }
@@ -1641,7 +1685,8 @@ where
                 );
                 self.handle_invalid_message(
                     propagation_source,
-                    raw_message,
+                    &raw_message.topic,
+                    Some(msg_id),
                     RejectReason::BlackListedSource,
                 );
                 return false;
@@ -1659,18 +1704,23 @@ where
         let self_published = !self.config.allow_self_origin()
             && if let Some(own_id) = self.publish_config.get_own_id() {
                 own_id != propagation_source
-                    && raw_message.source.as_ref().map_or(false, |s| s == own_id)
+                    && raw_message.source.as_ref().is_some_and(|s| s == own_id)
             } else {
-                self.published_message_ids.contains(msg_id)
+                false
             };
 
         if self_published {
             tracing::debug!(
-                message=%msg_id,
+                message_id=%msg_id,
                 source=%propagation_source,
                 "Dropping message claiming to be from self but forwarded from source"
             );
-            self.handle_invalid_message(propagation_source, raw_message, RejectReason::SelfOrigin);
+            self.handle_invalid_message(
+                propagation_source,
+                &raw_message.topic,
+                Some(msg_id),
+                RejectReason::SelfOrigin,
+            );
             return false;
         }
 
@@ -1686,6 +1736,7 @@ where
         propagation_source: &PeerId,
     ) {
         // Record the received metric
+        #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.msg_recvd_unfiltered(&raw_message.topic, raw_message.raw_protobuf_len());
         }
@@ -1698,7 +1749,8 @@ where
                 // Reject the message and return
                 self.handle_invalid_message(
                     propagation_source,
-                    &raw_message,
+                    &raw_message.topic,
+                    None,
                     RejectReason::ValidationError(ValidationError::TransformFailed),
                 );
                 return;
@@ -1708,6 +1760,30 @@ where
         // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+            let recipient_peers = self
+                .mesh
+                .get(&message.topic)
+                .map(|mesh| mesh.iter())
+                .unwrap_or_default()
+                .copied()
+                .chain(self.gossip_promises.peers_for_message(&msg_id))
+                .filter(|peer_id| {
+                    peer_id != propagation_source && Some(peer_id) != message.source.as_ref()
+                })
+                .collect::<Vec<PeerId>>();
+
+            for peer_id in recipient_peers {
+                self.send_message(
+                    peer_id,
+                    RpcOut::IDontWant(IDontWant {
+                        message_ids: vec![msg_id.clone()],
+                    }),
+                );
+            }
+        }
+
         // Check the validity of the message
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
@@ -1716,34 +1792,42 @@ where
         }
 
         if !self.duplicate_cache.insert(msg_id.clone()) {
-            tracing::debug!(message=%msg_id, "Message already received, ignoring");
-            if let Some((peer_score, ..)) = &mut self.peer_score {
+            tracing::debug!(message_id=%msg_id, "Message already received, ignoring");
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg_id, &message.topic);
             }
             self.mcache.observe_duplicate(&msg_id, propagation_source);
             return;
         }
+
         tracing::debug!(
-            message=%msg_id,
+            message_id=%msg_id,
             "Put message in duplicate_cache and resolve promises"
         );
 
         // Record the received message with the metrics
+        #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.msg_recvd(&message.topic);
         }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
         // Consider the message as delivered for gossip promises.
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+        self.gossip_promises.message_delivered(&msg_id);
+
+        // Tells score that message arrived (but is maybe not fully validated yet).
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg_id, &message.topic);
-            gossip_promises.message_delivered(&msg_id);
         }
 
         // Add the message to our memcache
         self.mcache.put(&msg_id, raw_message.clone());
 
         // Dispatch the message to the user if we are subscribed to any of the topics
+        #[allow(
+            clippy::map_entry,
+            reason = "False positive, see rust-lang/rust-clippy#14449."
+        )]
         if self.mesh.contains_key(&message.topic) {
             tracing::debug!("Sending received message to user");
             self.events
@@ -1762,18 +1846,13 @@ where
 
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
-            if self
-                .forward_msg(
-                    &msg_id,
-                    raw_message,
-                    Some(propagation_source),
-                    HashSet::new(),
-                )
-                .is_err()
-            {
-                tracing::error!("Failed to forward message. Too large");
-            }
-            tracing::debug!(message=%msg_id, "Completed message handling for message");
+            self.forward_msg(
+                &msg_id,
+                raw_message,
+                Some(propagation_source),
+                HashSet::new(),
+            );
+            tracing::debug!(message_id=%msg_id, "Completed message handling for message");
         }
     }
 
@@ -1781,30 +1860,29 @@ where
     fn handle_invalid_message(
         &mut self,
         propagation_source: &PeerId,
-        raw_message: &RawMessage,
+        topic_hash: &TopicHash,
+        message_id: Option<&MessageId>,
         reject_reason: RejectReason,
     ) {
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_invalid_message(&raw_message.topic);
-            }
-
-            if let Ok(message) = self.data_transform.inbound_transform(raw_message.clone()) {
-                let message_id = self.config.message_id(&message);
-
-                peer_score.reject_message(
-                    propagation_source,
-                    &message_id,
-                    &message.topic,
-                    reject_reason,
-                );
-
-                gossip_promises.reject_message(&message_id, &reject_reason);
+        #[cfg(feature = "metrics")]
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.register_invalid_message(topic_hash);
+        }
+        if let Some(msg_id) = message_id {
+            // Valid transformation without peer scoring
+            self.gossip_promises.reject_message(msg_id, &reject_reason);
+        }
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+            // The compiler will optimize this pattern-matching
+            if let Some(msg_id) = message_id {
+                // The message itself is valid, but is from a banned peer or
+                // claiming to be self-origin but is actually forwarded from other peers.
+                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
             } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
-                peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
+                peer_score.reject_invalid_message(propagation_source, topic_hash);
             }
         }
     }
@@ -1815,7 +1893,7 @@ where
         subscriptions: &[Subscription],
         propagation_source: &PeerId,
     ) {
-        tracing::debug!(
+        tracing::trace!(
             source=%propagation_source,
             "Handling subscriptions: {:?}",
             subscriptions,
@@ -1823,7 +1901,7 @@ where
 
         let mut unsubscribed_peers = Vec::new();
 
-        let Some(subscribed_topics) = self.peer_topics.get_mut(propagation_source) else {
+        let Some(peer) = self.connected_peers.get_mut(propagation_source) else {
             tracing::error!(
                 peer=%propagation_source,
                 "Subscription by unknown peer"
@@ -1839,7 +1917,7 @@ where
 
         let filtered_topics = match self
             .subscription_filter
-            .filter_incoming_subscriptions(subscriptions, subscribed_topics)
+            .filter_incoming_subscriptions(subscriptions, &peer.topics)
         {
             Ok(topics) => topics,
             Err(s) => {
@@ -1855,48 +1933,43 @@ where
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let topic_hash = &subscription.topic_hash;
-            let peer_list = self.topic_peers.entry(topic_hash.clone()).or_default();
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
-                    if peer_list.insert(*propagation_source) {
+                    if peer.topics.insert(topic_hash.clone()) {
                         tracing::debug!(
                             peer=%propagation_source,
                             topic=%topic_hash,
                             "SUBSCRIPTION: Adding gossip peer to topic"
                         );
-                    }
 
-                    // add to the peer_topics mapping
-                    subscribed_topics.insert(topic_hash.clone());
+                        #[cfg(feature = "metrics")]
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.inc_topic_peers(topic_hash);
+                        }
+                    }
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
-                        && matches!(
-                            self.connected_peers
-                                .get(propagation_source)
-                                .map(|v| &v.kind),
-                            Some(PeerKind::Gossipsubv1_1) | Some(PeerKind::Gossipsub)
-                        )
-                        && !Self::score_below_threshold_from_scores(
-                            &self.peer_score,
-                            propagation_source,
-                            |_| 0.0,
-                        )
-                        .0
+                        && peer.kind.is_gossipsub()
+                        && !self
+                            .peer_score
+                            .below_threshold(propagation_source, |_| 0.0)
+                            .0
                         && !self
                             .backoffs
                             .is_backoff_with_slack(topic_hash, propagation_source)
                     {
                         if let Some(peers) = self.mesh.get_mut(topic_hash) {
-                            if peers.len() < self.config.mesh_n_low()
-                                && peers.insert(*propagation_source)
-                            {
+                            let mesh_n_low = self.config.mesh_n_low_for_topic(topic_hash);
+
+                            if peers.len() < mesh_n_low && peers.insert(*propagation_source) {
                                 tracing::debug!(
                                     peer=%propagation_source,
                                     topic=%topic_hash,
                                     "SUBSCRIPTION: Adding peer to the mesh for topic"
                                 );
+                                #[cfg(feature = "metrics")]
                                 if let Some(m) = self.metrics.as_mut() {
                                     m.peers_included(topic_hash, Inclusion::Subscribed, 1)
                                 }
@@ -1906,7 +1979,7 @@ where
                                     topic=%topic_hash,
                                     "Sending GRAFT to peer for topic"
                                 );
-                                if let Some((peer_score, ..)) = &mut self.peer_score {
+                                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                                     peer_score.graft(propagation_source, topic_hash.clone());
                                 }
                                 topics_to_graft.push(topic_hash.clone());
@@ -1920,16 +1993,19 @@ where
                     }));
                 }
                 SubscriptionAction::Unsubscribe => {
-                    if peer_list.remove(propagation_source) {
+                    if peer.topics.remove(topic_hash) {
                         tracing::debug!(
                             peer=%propagation_source,
                             topic=%topic_hash,
                             "SUBSCRIPTION: Removing gossip peer from topic"
                         );
+
+                        #[cfg(feature = "metrics")]
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.dec_topic_peers(topic_hash);
+                        }
                     }
 
-                    // remove topic from the peer_topics mapping
-                    subscribed_topics.remove(topic_hash);
                     unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(ToSwarm::GenerateEvent(Event::Unsubscribed {
@@ -1938,15 +2014,19 @@ where
                     }));
                 }
             }
-
-            if let Some(m) = self.metrics.as_mut() {
-                m.set_topic_peers(topic_hash, peer_list.len());
-            }
         }
 
-        // remove unsubscribed peers from the mesh if it exists
+        // remove unsubscribed peers from the mesh and fanout if they exist there.
         for (peer_id, topic_hash) in unsubscribed_peers {
-            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
+            self.fanout
+                .get_mut(&topic_hash)
+                .map(|peers| peers.remove(&peer_id));
+            if self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_removed(&topic_hash, Churn::Unsub, 1);
+                }
+            };
         }
 
         // Potentially inform the handler if we have added this peer to a mesh for the first time.
@@ -1956,7 +2036,6 @@ where
                 *propagation_source,
                 topics_joined,
                 &self.mesh,
-                self.peer_topics.get(propagation_source),
                 &mut self.events,
                 &self.connected_peers,
             );
@@ -1964,12 +2043,8 @@ where
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
         // heartbeat.
-        for action in topics_to_graft
-            .into_iter()
-            .map(|topic_hash| ControlAction::Graft { topic_hash })
-            .collect::<Vec<_>>()
-        {
-            self.send_message(*propagation_source, RpcOut::Control(action))
+        for topic_hash in topics_to_graft.into_iter() {
+            self.send_message(*propagation_source, RpcOut::Graft(Graft { topic_hash }));
         }
 
         // Notify the application of the subscriptions
@@ -1985,9 +2060,10 @@ where
 
     /// Applies penalties to peers that did not respond to our IWANT requests.
     fn apply_iwant_penalties(&mut self) {
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            for (peer, count) in gossip_promises.get_broken_promises() {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+            for (peer, count) in self.gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
+                #[cfg(feature = "metrics")]
                 if let Some(metrics) = self.metrics.as_mut() {
                     metrics.register_score_penalty(Penalty::BrokenPromise);
                 }
@@ -1997,8 +2073,19 @@ where
 
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
-        tracing::debug!("Starting heartbeat");
+        #[cfg(feature = "metrics")]
         let start = Instant::now();
+
+        // Every heartbeat we sample the send queues to add to our metrics. We do this intentionally
+        // before we add all the gossip from this heartbeat in order to gain a true measure of
+        // steady-state size of the queues.
+        #[cfg(feature = "metrics")]
+        if let Some(m) = &mut self.metrics {
+            for sender_queue in self.connected_peers.values().map(|v| &v.sender) {
+                m.observe_priority_queue_size(sender_queue.priority_queue_len());
+                m.observe_non_priority_queue_size(sender_queue.non_priority_queue_len());
+            }
+        }
 
         self.heartbeat_ticks += 1;
 
@@ -2025,11 +2112,19 @@ where
 
         // Cache the scores of all connected peers, and record metrics for current penalties.
         let mut scores = HashMap::with_capacity(self.connected_peers.len());
-        if let Some((peer_score, ..)) = &self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &self.peer_score {
             for peer_id in self.connected_peers.keys() {
-                scores
+                #[allow(unused_variables)]
+                let report = scores
                     .entry(peer_id)
-                    .or_insert_with(|| peer_score.metric_score(peer_id, self.metrics.as_mut()));
+                    .or_insert_with(|| peer_score.score_report(peer_id));
+
+                #[cfg(feature = "metrics")]
+                if let Some(metrics) = self.metrics.as_mut() {
+                    for penalty in &report.penalties {
+                        metrics.register_score_penalty(*penalty);
+                    }
+                }
             }
         }
 
@@ -2037,17 +2132,21 @@ where
         for (topic_hash, peers) in self.mesh.iter_mut() {
             let explicit_peers = &self.explicit_peers;
             let backoffs = &self.backoffs;
-            let topic_peers = &self.topic_peers;
-            let outbound_peers = &self.outbound_peers;
+
+            let mesh_n = self.config.mesh_n_for_topic(topic_hash);
+            let mesh_n_low = self.config.mesh_n_low_for_topic(topic_hash);
+            let mesh_n_high = self.config.mesh_n_high_for_topic(topic_hash);
+            let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic_hash);
 
             // drop all peers with negative score, without PX
             // if there is at some point a stable retain method for BTreeSet the following can be
             // written more efficiently with retain.
             let mut to_remove_peers = Vec::new();
             for peer_id in peers.iter() {
-                let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
+                let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
                 // Record the score per mesh
+                #[cfg(feature = "metrics")]
                 if let Some(metrics) = self.metrics.as_mut() {
                     metrics.observe_mesh_peers_score(topic_hash, peer_score);
                 }
@@ -2067,6 +2166,7 @@ where
                 }
             }
 
+            #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
                 m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
             }
@@ -2076,33 +2176,29 @@ where
             }
 
             // too little peers - add some
-            if peers.len() < self.config.mesh_n_low() {
+            if peers.len() < mesh_n_low {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh low. Topic contains: {} needs: {}",
                     peers.len(),
-                    self.config.mesh_n_low()
+                    self.config.mesh_n()
                 );
                 // not enough peers - get mesh_n - current_length more
-                let desired_peers = self.config.mesh_n() - peers.len();
-                let peer_list = get_random_peers(
-                    topic_peers,
-                    &self.connected_peers,
-                    topic_hash,
-                    desired_peers,
-                    |peer| {
+                let desired_peers = mesh_n - peers.len();
+                let peer_list =
+                    get_random_peers(&self.connected_peers, topic_hash, desired_peers, |peer| {
                         !peers.contains(peer)
                             && !explicit_peers.contains(peer)
                             && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                            && *scores.get(peer).unwrap_or(&0.0) >= 0.0
-                    },
-                );
+                            && scores.get(peer).map(|r| r.score).unwrap_or_default() >= 0.0
+                    });
                 for peer in &peer_list {
                     let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
                 // update the mesh
                 tracing::debug!("Updating mesh, new mesh: {:?}", peer_list);
+                #[cfg(feature = "metrics")]
                 if let Some(m) = self.metrics.as_mut() {
                     m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
                 }
@@ -2110,22 +2206,22 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > self.config.mesh_n_high() {
+            if peers.len() > mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
-                    "HEARTBEAT: Mesh high. Topic contains: {} needs: {}",
+                    "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",
                     peers.len(),
-                    self.config.mesh_n_high()
+                    self.config.mesh_n()
                 );
-                let excess_peer_no = peers.len() - self.config.mesh_n();
+                let excess_peer_no = peers.len() - mesh_n;
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
                 let mut rng = thread_rng();
                 let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
-                    let score_p1 = *scores.get(p1).unwrap_or(&0.0);
-                    let score_p2 = *scores.get(p2).unwrap_or(&0.0);
+                    let score_p1 = scores.get(p1).map(|r| r.score).unwrap_or_default();
+                    let score_p2 = scores.get(p2).map(|r| r.score).unwrap_or_default();
 
                     score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
@@ -2133,13 +2229,14 @@ where
                 shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
 
                 // count total number of outbound peers
-                let mut outbound = {
-                    let outbound_peers = &self.outbound_peers;
-                    shuffled
-                        .iter()
-                        .filter(|p| outbound_peers.contains(*p))
-                        .count()
-                };
+                let mut outbound = shuffled
+                    .iter()
+                    .filter(|peer_id| {
+                        self.connected_peers
+                            .get(peer_id)
+                            .is_some_and(|peer| peer.outbound)
+                    })
+                    .count();
 
                 // remove the first excess_peer_no allowed (by outbound restrictions) peers adding
                 // them to to_prune
@@ -2148,14 +2245,17 @@ where
                     if removed == excess_peer_no {
                         break;
                     }
-                    if self.outbound_peers.contains(&peer) {
-                        if outbound <= self.config.mesh_outbound_min() {
+                    if self
+                        .connected_peers
+                        .get(&peer)
+                        .is_some_and(|peer| peer.outbound)
+                    {
+                        if outbound <= mesh_outbound_min {
                             // do not remove anymore outbound peers
                             continue;
-                        } else {
-                            // an outbound peer gets removed
-                            outbound -= 1;
                         }
+                        // an outbound peer gets removed
+                        outbound -= 1;
                     }
 
                     // remove the peer
@@ -2165,38 +2265,46 @@ where
                     removed += 1;
                 }
 
+                #[cfg(feature = "metrics")]
                 if let Some(m) = self.metrics.as_mut() {
                     m.peers_removed(topic_hash, Churn::Excess, removed)
                 }
             }
 
             // do we have enough outbound peers?
-            if peers.len() >= self.config.mesh_n_low() {
+            if peers.len() >= mesh_n_low {
                 // count number of outbound peers we have
-                let outbound = { peers.iter().filter(|p| outbound_peers.contains(*p)).count() };
+                let outbound = peers
+                    .iter()
+                    .filter(|peer_id| {
+                        self.connected_peers
+                            .get(peer_id)
+                            .is_some_and(|peer| peer.outbound)
+                    })
+                    .count();
 
                 // if we have not enough outbound peers, graft to some new outbound peers
-                if outbound < self.config.mesh_outbound_min() {
-                    let needed = self.config.mesh_outbound_min() - outbound;
-                    let peer_list = get_random_peers(
-                        topic_peers,
-                        &self.connected_peers,
-                        topic_hash,
-                        needed,
-                        |peer| {
-                            !peers.contains(peer)
-                                && !explicit_peers.contains(peer)
-                                && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                                && *scores.get(peer).unwrap_or(&0.0) >= 0.0
-                                && outbound_peers.contains(peer)
-                        },
-                    );
+                if outbound < mesh_outbound_min {
+                    let needed = mesh_outbound_min - outbound;
+                    let peer_list =
+                        get_random_peers(&self.connected_peers, topic_hash, needed, |peer_id| {
+                            !peers.contains(peer_id)
+                                && !explicit_peers.contains(peer_id)
+                                && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
+                                && scores.get(peer_id).map(|r| r.score).unwrap_or_default() >= 0.0
+                                && self
+                                    .connected_peers
+                                    .get(peer_id)
+                                    .is_some_and(|peer| peer.outbound)
+                        });
+
                     for peer in &peer_list {
                         let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                         current_topic.push(topic_hash.clone());
                     }
                     // update the mesh
                     tracing::debug!("Updating mesh, new mesh: {:?}", peer_list);
+                    #[cfg(feature = "metrics")]
                     if let Some(m) = self.metrics.as_mut() {
                         m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len())
                     }
@@ -2207,9 +2315,8 @@ where
             // should we try to improve the mesh with opportunistic grafting?
             if self.heartbeat_ticks % self.config.opportunistic_graft_ticks() == 0
                 && peers.len() > 1
-                && self.peer_score.is_some()
             {
-                if let Some((_, thresholds, _, _)) = &self.peer_score {
+                if let PeerScoreState::Active(peer_score) = &self.peer_score {
                     // Opportunistic grafting works as follows: we check the median score of peers
                     // in the mesh; if this score is below the opportunisticGraftThreshold, we
                     // select a few peers at random with score over the median.
@@ -2221,8 +2328,8 @@ where
                     // now compute the median peer score in the mesh
                     let mut peers_by_score: Vec<_> = peers.iter().collect();
                     peers_by_score.sort_by(|p1, p2| {
-                        let p1_score = *scores.get(p1).unwrap_or(&0.0);
-                        let p2_score = *scores.get(p2).unwrap_or(&0.0);
+                        let p1_score = scores.get(p1).map(|r| r.score).unwrap_or_default();
+                        let p2_score = scores.get(p2).map(|r| r.score).unwrap_or_default();
                         p1_score.partial_cmp(&p2_score).unwrap_or(Equal)
                     });
 
@@ -2231,23 +2338,27 @@ where
                         let sub_middle_peer = *peers_by_score
                             .get(middle - 1)
                             .expect("middle < vector length and middle > 0 since peers.len() > 0");
-                        let sub_middle_score = *scores.get(sub_middle_peer).unwrap_or(&0.0);
+                        let sub_middle_score = scores
+                            .get(sub_middle_peer)
+                            .map(|r| r.score)
+                            .unwrap_or_default();
                         let middle_peer =
                             *peers_by_score.get(middle).expect("middle < vector length");
-                        let middle_score = *scores.get(middle_peer).unwrap_or(&0.0);
+                        let middle_score =
+                            scores.get(middle_peer).map(|r| r.score).unwrap_or_default();
 
                         (sub_middle_score + middle_score) * 0.5
                     } else {
-                        *scores
+                        scores
                             .get(*peers_by_score.get(middle).expect("middle < vector length"))
-                            .unwrap_or(&0.0)
+                            .map(|r| r.score)
+                            .unwrap_or_default()
                     };
 
                     // if the median score is below the threshold, select a better peer (if any) and
                     // GRAFT
-                    if median < thresholds.opportunistic_graft_threshold {
+                    if median < peer_score.thresholds.opportunistic_graft_threshold {
                         let peer_list = get_random_peers(
-                            topic_peers,
                             &self.connected_peers,
                             topic_hash,
                             self.config.opportunistic_graft_peers(),
@@ -2255,7 +2366,8 @@ where
                                 !peers.contains(peer_id)
                                     && !explicit_peers.contains(peer_id)
                                     && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
-                                    && *scores.get(peer_id).unwrap_or(&0.0) > median
+                                    && scores.get(peer_id).map(|r| r.score).unwrap_or_default()
+                                        > median
                             },
                         );
                         for peer in &peer_list {
@@ -2268,6 +2380,7 @@ where
                             "Opportunistically graft in topic with peers {:?}",
                             peer_list
                         );
+                        #[cfg(feature = "metrics")]
                         if let Some(m) = self.metrics.as_mut() {
                             m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
                         }
@@ -2276,6 +2389,7 @@ where
                 }
             }
             // Register the final count of peers in the mesh
+            #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
                 m.set_mesh_peers(topic_hash, peers.len())
             }
@@ -2303,25 +2417,27 @@ where
         for (topic_hash, peers) in self.fanout.iter_mut() {
             let mut to_remove_peers = Vec::new();
             let publish_threshold = match &self.peer_score {
-                Some((_, thresholds, _, _)) => thresholds.publish_threshold,
+                PeerScoreState::Active(peer_score) => peer_score.thresholds.publish_threshold,
                 _ => 0.0,
             };
-            for peer in peers.iter() {
+            let mesh_n = self.config.mesh_n_for_topic(topic_hash);
+
+            for peer_id in peers.iter() {
                 // is the peer still subscribed to the topic?
-                let peer_score = *scores.get(peer).unwrap_or(&0.0);
-                match self.peer_topics.get(peer) {
-                    Some(topics) => {
-                        if !topics.contains(topic_hash) || peer_score < publish_threshold {
+                let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
+                match self.connected_peers.get(peer_id) {
+                    Some(peer) => {
+                        if !peer.topics.contains(topic_hash) || peer_score < publish_threshold {
                             tracing::debug!(
                                 topic=%topic_hash,
                                 "HEARTBEAT: Peer removed from fanout for topic"
                             );
-                            to_remove_peers.push(*peer);
+                            to_remove_peers.push(*peer_id);
                         }
                     }
                     None => {
                         // remove if the peer has disconnected
-                        to_remove_peers.push(*peer);
+                        to_remove_peers.push(*peer_id);
                     }
                 }
             }
@@ -2330,30 +2446,28 @@ where
             }
 
             // not enough peers
-            if peers.len() < self.config.mesh_n() {
+            if peers.len() < mesh_n {
                 tracing::debug!(
                     "HEARTBEAT: Fanout low. Contains: {:?} needs: {:?}",
                     peers.len(),
-                    self.config.mesh_n()
+                    mesh_n
                 );
-                let needed_peers = self.config.mesh_n() - peers.len();
+                let needed_peers = mesh_n - peers.len();
                 let explicit_peers = &self.explicit_peers;
-                let new_peers = get_random_peers(
-                    &self.topic_peers,
-                    &self.connected_peers,
-                    topic_hash,
-                    needed_peers,
-                    |peer_id| {
+                let new_peers =
+                    get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
-                            && *scores.get(peer_id).unwrap_or(&0.0) < publish_threshold
-                    },
-                );
+                            && !self
+                                .peer_score
+                                .below_threshold(peer_id, |ts| ts.publish_threshold)
+                                .0
+                    });
                 peers.extend(new_peers);
             }
         }
 
-        if self.peer_score.is_some() {
+        if let PeerScoreState::Active(peer_score) = &self.peer_score {
             tracing::trace!("Mesh message deliveries: {:?}", {
                 self.mesh
                     .iter()
@@ -2363,15 +2477,7 @@ where
                             peers
                                 .iter()
                                 .map(|p| {
-                                    (
-                                        *p,
-                                        self.peer_score
-                                            .as_ref()
-                                            .expect("peer_score.is_some()")
-                                            .0
-                                            .mesh_message_deliveries(p, t)
-                                            .unwrap_or(0.0),
-                                    )
+                                    (*p, peer_score.mesh_message_deliveries(p, t).unwrap_or(0.0))
                                 })
                                 .collect::<HashMap<PeerId, f64>>(),
                         )
@@ -2387,13 +2493,32 @@ where
             self.send_graft_prune(to_graft, to_prune, no_px);
         }
 
-        // piggyback pooled control messages
-        self.flush_control_pool();
-
         // shift the memcache
         self.mcache.shift();
 
-        tracing::debug!("Completed Heartbeat");
+        // Report expired messages
+        for (peer_id, failed_messages) in self.failed_messages.drain() {
+            tracing::debug!("Peer couldn't consume messages: {:?}", failed_messages);
+            self.events
+                .push_back(ToSwarm::GenerateEvent(Event::SlowPeer {
+                    peer_id,
+                    failed_messages,
+                }));
+        }
+        self.failed_messages.shrink_to_fit();
+
+        // Flush stale IDONTWANTs.
+        for peer in self.connected_peers.values_mut() {
+            while let Some((_front, instant)) = peer.dont_send.front() {
+                if (*instant + IDONTWANT_TIMEOUT) >= Instant::now() {
+                    break;
+                } else {
+                    peer.dont_send.pop_front();
+                }
+            }
+        }
+
+        #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
             metrics.observe_heartbeat_duration(duration);
@@ -2404,6 +2529,7 @@ where
     /// and fanout peers
     fn emit_gossip(&mut self) {
         let mut rng = thread_rng();
+        let mut messages = Vec::new();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
             if message_ids.is_empty() {
@@ -2430,21 +2556,19 @@ where
                 )
             };
             // get gossip_lazy random peers
-            let to_msg_peers = get_random_peers_dynamic(
-                &self.topic_peers,
-                &self.connected_peers,
-                topic_hash,
-                n_map,
-                |peer| {
+            let to_msg_peers =
+                get_random_peers_dynamic(&self.connected_peers, topic_hash, n_map, |peer| {
                     !peers.contains(peer)
                         && !self.explicit_peers.contains(peer)
-                        && !self.score_below_threshold(peer, |ts| ts.gossip_threshold).0
-                },
-            );
+                        && !self
+                            .peer_score
+                            .below_threshold(peer, |ts| ts.gossip_threshold)
+                            .0
+                });
 
             tracing::debug!("Gossiping IHAVE to {} peers", to_msg_peers.len());
 
-            for peer in to_msg_peers {
+            for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
                 if peer_message_ids.len() > self.config.max_ihave_length() {
@@ -2456,15 +2580,17 @@ where
                 }
 
                 // send an IHAVE message
-                Self::control_pool_add(
-                    &mut self.control_pool,
-                    peer,
-                    ControlAction::IHave {
+                messages.push((
+                    peer_id,
+                    RpcOut::IHave(IHave {
                         topic_hash: topic_hash.clone(),
                         message_ids: peer_message_ids,
-                    },
-                );
+                    }),
+                ));
             }
+        }
+        for (peer_id, message) in messages {
+            self.send_message(peer_id, message);
         }
     }
 
@@ -2477,26 +2603,27 @@ where
         no_px: HashSet<PeerId>,
     ) {
         // handle the grafts and overlapping prunes per peer
-        for (peer, topics) in to_graft.into_iter() {
+        for (peer_id, topics) in to_graft.into_iter() {
             for topic in &topics {
                 // inform scoring of graft
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.graft(&peer, topic.clone());
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    peer_score.graft(&peer_id, topic.clone());
                 }
 
                 // inform the handler of the peer being added to the mesh
                 // If the peer did not previously exist in any mesh, inform the handler
                 peer_added_to_mesh(
-                    peer,
+                    peer_id,
                     vec![topic],
                     &self.mesh,
-                    self.peer_topics.get(&peer),
                     &mut self.events,
                     &self.connected_peers,
                 );
             }
-            let control_msgs = topics.iter().map(|topic_hash| ControlAction::Graft {
-                topic_hash: topic_hash.clone(),
+            let rpc_msgs = topics.iter().map(|topic_hash| {
+                RpcOut::Graft(Graft {
+                    topic_hash: topic_hash.clone(),
+                })
             });
 
             // If there are prunes associated with the same peer add them.
@@ -2505,43 +2632,43 @@ where
             // of its removal from another.
 
             // The following prunes are not due to unsubscribing.
-            let prunes = to_prune
-                .remove(&peer)
+            let prune_msgs = to_prune
+                .remove(&peer_id)
                 .into_iter()
                 .flatten()
                 .map(|topic_hash| {
-                    self.make_prune(
+                    let prune = self.make_prune(
                         &topic_hash,
-                        &peer,
-                        self.config.do_px() && !no_px.contains(&peer),
+                        &peer_id,
+                        self.config.do_px() && !no_px.contains(&peer_id),
                         false,
-                    )
+                    );
+                    RpcOut::Prune(prune)
                 });
 
-            // send the control messages
-            for msg in control_msgs.chain(prunes).collect::<Vec<_>>() {
-                self.send_message(peer, RpcOut::Control(msg));
+            // send the rpc messages
+            for msg in rpc_msgs.chain(prune_msgs).collect::<Vec<_>>() {
+                self.send_message(peer_id, msg);
             }
         }
 
         // handle the remaining prunes
         // The following prunes are not due to unsubscribing.
-        for (peer, topics) in to_prune.iter() {
+        for (peer_id, topics) in to_prune.iter() {
             for topic_hash in topics {
                 let prune = self.make_prune(
                     topic_hash,
-                    peer,
-                    self.config.do_px() && !no_px.contains(peer),
+                    peer_id,
+                    self.config.do_px() && !no_px.contains(peer_id),
                     false,
                 );
-                self.send_message(*peer, RpcOut::Control(prune));
+                self.send_message(*peer_id, RpcOut::Prune(prune));
 
                 // inform the handler
                 peer_removed_from_mesh(
-                    *peer,
+                    *peer_id,
                     topic_hash,
                     &self.mesh,
-                    self.peer_topics.get(peer),
                     &mut self.events,
                     &self.connected_peers,
                 );
@@ -2558,61 +2685,75 @@ where
         message: RawMessage,
         propagation_source: Option<&PeerId>,
         originating_peers: HashSet<PeerId>,
-    ) -> Result<bool, PublishError> {
+    ) -> bool {
         // message is fully validated inform peer_score
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             if let Some(peer) = propagation_source {
                 peer_score.deliver_message(peer, msg_id, &message.topic);
             }
         }
 
-        tracing::debug!(message=%msg_id, "Forwarding message");
+        tracing::debug!(message_id=%msg_id, "Forwarding message");
         let mut recipient_peers = HashSet::new();
 
-        {
-            // Populate the recipient peers mapping
+        // Populate the recipient peers mapping
 
-            // Add explicit peers
-            for peer_id in &self.explicit_peers {
-                if let Some(topics) = self.peer_topics.get(peer_id) {
-                    if Some(peer_id) != propagation_source
-                        && !originating_peers.contains(peer_id)
-                        && Some(peer_id) != message.source.as_ref()
-                        && topics.contains(&message.topic)
-                    {
-                        recipient_peers.insert(*peer_id);
-                    }
+        // Add explicit peers and floodsub peers
+        for (peer_id, peer) in &self.connected_peers {
+            if Some(peer_id) != propagation_source
+                && !originating_peers.contains(peer_id)
+                && Some(peer_id) != message.source.as_ref()
+                && peer.topics.contains(&message.topic)
+                && (self.explicit_peers.contains(peer_id)
+                    || (peer.kind == PeerKind::Floodsub
+                        && !self
+                            .peer_score
+                            .below_threshold(peer_id, |ts| ts.publish_threshold)
+                            .0))
+            {
+                recipient_peers.insert(*peer_id);
+            }
+        }
+
+        // add mesh peers
+        let topic = &message.topic;
+        // mesh
+        if let Some(mesh_peers) = self.mesh.get(topic) {
+            for peer_id in mesh_peers {
+                if Some(peer_id) != propagation_source
+                    && !originating_peers.contains(peer_id)
+                    && Some(peer_id) != message.source.as_ref()
+                {
+                    recipient_peers.insert(*peer_id);
                 }
             }
+        }
 
-            // add mesh peers
-            let topic = &message.topic;
-            // mesh
-            if let Some(mesh_peers) = self.mesh.get(topic) {
-                for peer_id in mesh_peers {
-                    if Some(peer_id) != propagation_source
-                        && !originating_peers.contains(peer_id)
-                        && Some(peer_id) != message.source.as_ref()
-                    {
-                        recipient_peers.insert(*peer_id);
-                    }
-                }
-            }
+        if recipient_peers.is_empty() {
+            return false;
         }
 
         // forward the message to peers
-        if !recipient_peers.is_empty() {
-            let event = RpcOut::Forward(message.clone());
+        for peer_id in recipient_peers.iter() {
+            if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                if peer.dont_send.contains_key(msg_id) {
+                    tracing::debug!(%peer_id, message_id=%msg_id, "Peer doesn't want message");
+                    continue;
+                }
 
-            for peer in recipient_peers.iter() {
-                tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
-                self.send_message(*peer, event.clone());
+                tracing::debug!(%peer_id, message_id=%msg_id, "Sending message to peer");
+
+                self.send_message(
+                    *peer_id,
+                    RpcOut::Forward {
+                        message: message.clone(),
+                        timeout: Delay::new(self.config.forward_queue_duration()),
+                    },
+                );
             }
-            tracing::debug!("Completed forwarding message");
-            Ok(true)
-        } else {
-            Ok(false)
         }
+        tracing::debug!("Completed forwarding message");
+        true
     }
 
     /// Constructs a [`RawMessage`] performing message signing if required.
@@ -2707,65 +2848,82 @@ where
         }
     }
 
-    // adds a control action to control_pool
-    fn control_pool_add(
-        control_pool: &mut HashMap<PeerId, Vec<ControlAction>>,
-        peer: PeerId,
-        control: ControlAction,
-    ) {
-        control_pool.entry(peer).or_default().push(control);
-    }
-
-    /// Takes each control action mapping and turns it into a message
-    fn flush_control_pool(&mut self) {
-        for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
-            for msg in controls {
-                self.send_message(peer, RpcOut::Control(msg));
-            }
-        }
-
-        // This clears all pending IWANT messages
-        self.pending_iwant_msgs.clear();
-    }
-
-    /// Send a [`RpcOut`] message to a peer. This will wrap the message in an arc if it
-    /// is not already an arc.
-    fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) {
+    /// Send a [`RpcOut`] message to a peer.
+    ///
+    /// Returns `true` if sending was successful, `false` otherwise.
+    /// The method will update the peer score and failed message counter if
+    /// sending the message failed due to the channel to the connection handler being
+    /// full (which indicates a slow peer).
+    fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) -> bool {
+        #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
-            if let RpcOut::Publish(ref message) | RpcOut::Forward(ref message) = rpc {
+            if let RpcOut::Publish { ref message, .. } | RpcOut::Forward { ref message, .. } = rpc {
                 // register bytes sent on the internal metrics.
                 m.msg_sent(&message.topic, message.raw_protobuf_len());
             }
         }
 
-        self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id,
-            event: HandlerIn::Message(rpc),
-            handler: NotifyHandler::Any,
-        });
+        let Some(peer) = &mut self.connected_peers.get_mut(&peer_id) else {
+            tracing::error!(peer = %peer_id,
+                    "Could not send rpc to connection handler, peer doesn't exist in connected peer list");
+            return false;
+        };
+
+        if !matches!(peer.kind, PeerKind::Gossipsubv1_2) && matches!(rpc, RpcOut::IDontWant(..)) {
+            tracing::trace!(peer=%peer_id, "Won't send IDONTWANT message for message to peer as it doesn't support Gossipsub v1.2");
+            return false;
+        }
+
+        // Try sending the message to the connection handler.
+        match peer.sender.send_message(rpc) {
+            Ok(()) => true,
+            Err(rpc) => {
+                // Sending failed because the channel is full.
+                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {:?}.", rpc);
+
+                // Update failed message counter.
+                let failed_messages = self.failed_messages.entry(peer_id).or_default();
+                match rpc {
+                    RpcOut::Publish { .. } => {
+                        failed_messages.priority += 1;
+                        failed_messages.publish += 1;
+                    }
+                    RpcOut::Forward { .. } => {
+                        failed_messages.non_priority += 1;
+                        failed_messages.forward += 1;
+                    }
+                    RpcOut::IWant(_) | RpcOut::IHave(_) | RpcOut::IDontWant(_) => {
+                        failed_messages.non_priority += 1;
+                    }
+                    RpcOut::Graft(_)
+                    | RpcOut::Prune(_)
+                    | RpcOut::Subscribe(_)
+                    | RpcOut::Unsubscribe(_) => {
+                        unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
+                    }
+                }
+
+                // Update peer score.
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    peer_score.failed_message_slow_peer(&peer_id);
+                }
+
+                false
+            }
+        }
     }
 
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
             peer_id,
-            connection_id,
             endpoint,
             other_established,
             ..
         }: ConnectionEstablished,
     ) {
-        // Diverging from the go implementation we only want to consider a peer as outbound peer
-        // if its first connection is outbound.
-
-        if endpoint.is_dialer() && other_established == 0 && !self.px_peers.contains(&peer_id) {
-            // The first connection is outbound and it is not a peer from peer exchange => mark
-            // it as outbound peer
-            self.outbound_peers.insert(peer_id);
-        }
-
         // Add the IP to the peer scoring system
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
                 peer_score.add_ip(&peer_id, ip);
             } else {
@@ -2777,28 +2935,11 @@ where
             }
         }
 
-        // By default we assume a peer is only a floodsub peer.
-        //
-        // The protocol negotiation occurs once a message is sent/received. Once this happens we
-        // update the type of peer that this is in order to determine which kind of routing should
-        // occur.
-        self.connected_peers
-            .entry(peer_id)
-            .or_insert(PeerConnections {
-                kind: PeerKind::Floodsub,
-                connections: vec![],
-            })
-            .connections
-            .push(connection_id);
-
         if other_established > 0 {
             return; // Not our first connection to this peer, hence nothing to do.
         }
 
-        // Insert an empty set of the topics of this peer until known.
-        self.peer_topics.insert(peer_id, Default::default());
-
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.add_peer(peer_id);
         }
 
@@ -2826,7 +2967,7 @@ where
         }: ConnectionClosed,
     ) {
         // Remove IP from peer scoring system
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(endpoint.get_remote_address()) {
                 peer_score.remove_ip(&peer_id, &ip);
             } else {
@@ -2840,28 +2981,26 @@ where
 
         if remaining_established != 0 {
             // Remove the connection from the list
-            if let Some(connections) = self.connected_peers.get_mut(&peer_id) {
-                let index = connections
+            if let Some(peer) = self.connected_peers.get_mut(&peer_id) {
+                let index = peer
                     .connections
                     .iter()
                     .position(|v| v == &connection_id)
                     .expect("Previously established connection to peer must be present");
-                connections.connections.remove(index);
+                peer.connections.remove(index);
 
-                // If there are more connections and this peer is in a mesh, inform the first connection
-                // handler.
-                if !connections.connections.is_empty() {
-                    if let Some(topics) = self.peer_topics.get(&peer_id) {
-                        for topic in topics {
-                            if let Some(mesh_peers) = self.mesh.get(topic) {
-                                if mesh_peers.contains(&peer_id) {
-                                    self.events.push_back(ToSwarm::NotifyHandler {
-                                        peer_id,
-                                        event: HandlerIn::JoinedMesh,
-                                        handler: NotifyHandler::One(connections.connections[0]),
-                                    });
-                                    break;
-                                }
+                // If there are more connections and this peer is in a mesh, inform the first
+                // connection handler.
+                if !peer.connections.is_empty() {
+                    for topic in &peer.topics {
+                        if let Some(mesh_peers) = self.mesh.get(topic) {
+                            if mesh_peers.contains(&peer_id) {
+                                self.events.push_back(ToSwarm::NotifyHandler {
+                                    peer_id,
+                                    event: HandlerIn::JoinedMesh,
+                                    handler: NotifyHandler::One(peer.connections[0]),
+                                });
+                                break;
                             }
                         }
                     }
@@ -2870,77 +3009,48 @@ where
         } else {
             // remove from mesh, topic_peers, peer_topic and the fanout
             tracing::debug!(peer=%peer_id, "Peer disconnected");
-            {
-                let Some(topics) = self.peer_topics.get(&peer_id) else {
-                    debug_assert!(
-                        self.blacklisted_peers.contains(&peer_id),
-                        "Disconnected node not in connected list"
-                    );
-                    return;
-                };
+            let Some(connected_peer) = self.connected_peers.get(&peer_id) else {
+                tracing::error!(peer_id = %peer_id, "Peer non-existent when handling disconnection");
+                return;
+            };
 
-                // remove peer from all mappings
-                for topic in topics {
-                    // check the mesh for the topic
-                    if let Some(mesh_peers) = self.mesh.get_mut(topic) {
-                        // check if the peer is in the mesh and remove it
-                        if mesh_peers.remove(&peer_id) {
-                            if let Some(m) = self.metrics.as_mut() {
-                                m.peers_removed(topic, Churn::Dc, 1);
-                                m.set_mesh_peers(topic, mesh_peers.len());
-                            }
-                        };
-                    }
-
-                    // remove from topic_peers
-                    if let Some(peer_list) = self.topic_peers.get_mut(topic) {
-                        if !peer_list.remove(&peer_id) {
-                            // debugging purposes
-                            tracing::warn!(
-                                peer=%peer_id,
-                                "Disconnected node: peer not in topic_peers"
-                            );
-                        }
+            // remove peer from all mappings
+            for topic in &connected_peer.topics {
+                // check the mesh for the topic
+                if let Some(mesh_peers) = self.mesh.get_mut(topic) {
+                    // check if the peer is in the mesh and remove it
+                    if mesh_peers.remove(&peer_id) {
+                        #[cfg(feature = "metrics")]
                         if let Some(m) = self.metrics.as_mut() {
-                            m.set_topic_peers(topic, peer_list.len())
+                            m.peers_removed(topic, Churn::Dc, 1);
+                            m.set_mesh_peers(topic, mesh_peers.len());
                         }
-                    } else {
-                        tracing::warn!(
-                            peer=%peer_id,
-                            topic=%topic,
-                            "Disconnected node: peer with topic not in topic_peers"
-                        );
-                    }
-
-                    // remove from fanout
-                    self.fanout
-                        .get_mut(topic)
-                        .map(|peers| peers.remove(&peer_id));
+                    };
                 }
+
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.dec_topic_peers(topic);
+                }
+
+                // remove from fanout
+                self.fanout
+                    .get_mut(topic)
+                    .map(|peers| peers.remove(&peer_id));
             }
 
             // Forget px and outbound status for this peer
             self.px_peers.remove(&peer_id);
-            self.outbound_peers.remove(&peer_id);
-
-            // Remove peer from peer_topics and connected_peers
-            // NOTE: It is possible the peer has already been removed from all mappings if it does not
-            // support the protocol.
-            self.peer_topics.remove(&peer_id);
 
             // If metrics are enabled, register the disconnection of a peer based on its protocol.
+            #[cfg(feature = "metrics")]
             if let Some(metrics) = self.metrics.as_mut() {
-                let peer_kind = &self
-                    .connected_peers
-                    .get(&peer_id)
-                    .expect("Connected peer must be registered")
-                    .kind;
-                metrics.peer_protocol_disconnected(peer_kind.clone());
+                metrics.peer_protocol_disconnected(connected_peer.kind);
             }
 
             self.connected_peers.remove(&peer_id);
 
-            if let Some((peer_score, ..)) = &mut self.peer_score {
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
                 peer_score.remove_peer(&peer_id);
             }
         }
@@ -2956,7 +3066,7 @@ where
         }: AddressChange,
     ) {
         // Exchange IP in peer scoring system
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(endpoint_old.get_remote_address()) {
                 peer_score.remove_ip(&peer_id, &ip);
             } else {
@@ -2975,6 +3085,14 @@ where
                     endpoint_new
                 )
             }
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    /// Register topics to ensure metrics are recorded correctly for these topics.
+    pub fn register_topics_for_metrics(&mut self, topics: Vec<TopicHash>) {
+        if let Some(metrics) = &mut self.metrics {
+            metrics.register_allowed_topics(topics);
         }
     }
 }
@@ -2997,22 +3115,58 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        // By default we assume a peer is only a floodsub peer.
+        //
+        // The protocol negotiation occurs once a message is sent/received. Once this happens we
+        // update the type of peer that this is in order to determine which kind of routing should
+        // occur.
+        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
+            kind: PeerKind::Floodsub,
+            connections: vec![],
+            outbound: false,
+            sender: Sender::new(self.config.connection_handler_queue_len()),
+            topics: Default::default(),
+            dont_send: LinkedHashMap::new(),
+        });
+        // Add the new connection
+        connected_peer.connections.push(connection_id);
+
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            connected_peer.sender.new_receiver(),
+        ))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
+            kind: PeerKind::Floodsub,
+            connections: vec![],
+            // Diverging from the go implementation we only want to consider a peer as outbound peer
+            // if its first connection is outbound.
+            outbound: !self.px_peers.contains(&peer_id),
+            sender: Sender::new(self.config.connection_handler_queue_len()),
+            topics: Default::default(),
+            dont_send: LinkedHashMap::new(),
+        });
+        // Add the new connection
+        connected_peer.connections.push(connection_id);
+
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            connected_peer.sender.new_receiver(),
+        ))
     }
 
     fn on_connection_handler_event(
@@ -3025,8 +3179,9 @@ where
             HandlerEvent::PeerKind(kind) => {
                 // We have identified the protocol this peer is using
 
+                #[cfg(feature = "metrics")]
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.peer_protocol_connected(kind.clone());
+                    metrics.peer_protocol_connected(kind);
                 }
 
                 if let PeerKind::NotSupported = kind {
@@ -3052,6 +3207,41 @@ where
                     }
                 }
             }
+            HandlerEvent::MessageDropped(rpc) => {
+                // Account for this in the scoring logic
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    peer_score.failed_message_slow_peer(&propagation_source);
+                }
+
+                // Keep track of expired messages for the application layer.
+                let failed_messages = self.failed_messages.entry(propagation_source).or_default();
+                failed_messages.timeout += 1;
+                match rpc {
+                    RpcOut::Publish { .. } => {
+                        failed_messages.publish += 1;
+                    }
+                    RpcOut::Forward { .. } => {
+                        failed_messages.forward += 1;
+                    }
+                    _ => {}
+                }
+
+                // Record metrics on the failure.
+                #[cfg(feature = "metrics")]
+                if let Some(metrics) = self.metrics.as_mut() {
+                    match rpc {
+                        RpcOut::Publish { message, .. } => {
+                            metrics.publish_msg_dropped(&message.topic);
+                            metrics.timeout_msg_dropped(&message.topic);
+                        }
+                        RpcOut::Forward { message, .. } => {
+                            metrics.forward_msg_dropped(&message.topic);
+                            metrics.timeout_msg_dropped(&message.topic);
+                        }
+                        _ => {}
+                    }
+                }
+            }
             HandlerEvent::Message {
                 rpc,
                 invalid_messages,
@@ -3065,19 +3255,21 @@ where
                 }
 
                 // Check if peer is graylisted in which case we ignore the event
-                if let (true, _) =
-                    self.score_below_threshold(&propagation_source, |pst| pst.graylist_threshold)
+                if let (true, _) = self
+                    .peer_score
+                    .below_threshold(&propagation_source, |pst| pst.graylist_threshold)
                 {
                     tracing::debug!(peer=%propagation_source, "RPC Dropped from greylisted peer");
                     return;
                 }
 
                 // Handle any invalid messages from this peer
-                if self.peer_score.is_some() {
+                if let PeerScoreState::Active(_) = self.peer_score {
                     for (raw_message, validation_error) in invalid_messages {
                         self.handle_invalid_message(
                             &propagation_source,
-                            &raw_message,
+                            &raw_message.topic,
+                            None,
                             RejectReason::ValidationError(validation_error),
                         )
                     }
@@ -3096,8 +3288,10 @@ where
                 // Handle messages
                 for (count, raw_message) in rpc.messages.into_iter().enumerate() {
                     // Only process the amount of messages the configuration allows.
-                    if self.config.max_messages_per_rpc().is_some()
-                        && Some(count) >= self.config.max_messages_per_rpc()
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
                     {
                         tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
                         break;
@@ -3106,27 +3300,57 @@ where
                 }
 
                 // Handle control messages
-                // group some control messages, this minimises SendEvents (code is simplified to handle each event at a time however)
+                // group some control messages, this minimises SendEvents (code is simplified to
+                // handle each event at a time however)
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for control_msg in rpc.control_msgs {
+                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
+                    // Only process the amount of messages the configuration allows.
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
+                    {
+                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        break;
+                    }
+
                     match control_msg {
-                        ControlAction::IHave {
+                        ControlAction::IHave(IHave {
                             topic_hash,
                             message_ids,
-                        } => {
+                        }) => {
                             ihave_msgs.push((topic_hash, message_ids));
                         }
-                        ControlAction::IWant { message_ids } => {
+                        ControlAction::IWant(IWant { message_ids }) => {
                             self.handle_iwant(&propagation_source, message_ids)
                         }
-                        ControlAction::Graft { topic_hash } => graft_msgs.push(topic_hash),
-                        ControlAction::Prune {
+                        ControlAction::Graft(Graft { topic_hash }) => graft_msgs.push(topic_hash),
+                        ControlAction::Prune(Prune {
                             topic_hash,
                             peers,
                             backoff,
-                        } => prune_msgs.push((topic_hash, peers, backoff)),
+                        }) => prune_msgs.push((topic_hash, peers, backoff)),
+                        ControlAction::IDontWant(IDontWant { message_ids }) => {
+                            let Some(peer) = self.connected_peers.get_mut(&propagation_source)
+                            else {
+                                tracing::error!(peer = %propagation_source,
+                                    "Could not handle IDONTWANT, peer doesn't exist in connected peer list");
+                                continue;
+                            };
+                            #[cfg(feature = "metrics")]
+                            if let Some(metrics) = self.metrics.as_mut() {
+                                metrics.register_idontwant(message_ids.len());
+                            }
+                            for message_id in message_ids {
+                                peer.dont_send.insert(message_id, Instant::now());
+                                // Don't exceed capacity.
+                                if peer.dont_send.len() > IDONTWANT_CAP {
+                                    peer.dont_send.pop_front();
+                                }
+                            }
+                        }
                     }
                 }
                 if !ihave_msgs.is_empty() {
@@ -3152,14 +3376,18 @@ where
         }
 
         // update scores
-        if let Some((peer_score, _, interval, _)) = &mut self.peer_score {
-            while let Poll::Ready(Some(_)) = interval.poll_next_unpin(cx) {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+            if peer_score.decay_interval.poll_unpin(cx).is_ready() {
                 peer_score.refresh_scores();
+                peer_score
+                    .decay_interval
+                    .reset(peer_score.params.decay_interval);
             }
         }
 
-        while let Poll::Ready(Some(_)) = self.heartbeat.poll_next_unpin(cx) {
+        if self.heartbeat.poll_unpin(cx).is_ready() {
             self.heartbeat();
+            self.heartbeat.reset(self.config.heartbeat_interval());
         }
 
         Poll::Pending
@@ -3186,22 +3414,23 @@ fn peer_added_to_mesh(
     peer_id: PeerId,
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    known_topics: Option<&BTreeSet<TopicHash>>,
     events: &mut VecDeque<ToSwarm<Event, HandlerIn>>,
-    connections: &HashMap<PeerId, PeerConnections>,
+    connections: &HashMap<PeerId, PeerDetails>,
 ) {
     // Ensure there is an active connection
-    let connection_id = {
-        let conn = connections.get(&peer_id).expect("To be connected to peer.");
-        assert!(
-            !conn.connections.is_empty(),
-            "Must have at least one connection"
-        );
-        conn.connections[0]
+    let connection_id = match connections.get(&peer_id) {
+        Some(p) => p
+            .connections
+            .first()
+            .expect("There should be at least one connection to a peer."),
+        None => {
+            tracing::error!(peer_id=%peer_id, "Peer not existent when added to the mesh");
+            return;
+        }
     };
 
-    if let Some(topics) = known_topics {
-        for topic in topics {
+    if let Some(peer) = connections.get(&peer_id) {
+        for topic in &peer.topics {
             if !new_topics.contains(&topic) {
                 if let Some(mesh_peers) = mesh.get(topic) {
                     if mesh_peers.contains(&peer_id) {
@@ -3216,7 +3445,7 @@ fn peer_added_to_mesh(
     events.push_back(ToSwarm::NotifyHandler {
         peer_id,
         event: HandlerIn::JoinedMesh,
-        handler: NotifyHandler::One(connection_id),
+        handler: NotifyHandler::One(*connection_id),
     });
 }
 
@@ -3227,20 +3456,23 @@ fn peer_removed_from_mesh(
     peer_id: PeerId,
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    known_topics: Option<&BTreeSet<TopicHash>>,
     events: &mut VecDeque<ToSwarm<Event, HandlerIn>>,
-    connections: &HashMap<PeerId, PeerConnections>,
+    connections: &HashMap<PeerId, PeerDetails>,
 ) {
     // Ensure there is an active connection
-    let connection_id = connections
-        .get(&peer_id)
-        .expect("To be connected to peer.")
-        .connections
-        .first()
-        .expect("There should be at least one connection to a peer.");
+    let connection_id = match connections.get(&peer_id) {
+        Some(p) => p
+            .connections
+            .first()
+            .expect("There should be at least one connection to a peer."),
+        None => {
+            tracing::error!(peer_id=%peer_id, "Peer not existent when removed from mesh");
+            return;
+        }
+    };
 
-    if let Some(topics) = known_topics {
-        for topic in topics {
+    if let Some(peer) = connections.get(&peer_id) {
+        for topic in &peer.topics {
             if topic != old_topic {
                 if let Some(mesh_peers) = mesh.get(topic) {
                     if mesh_peers.contains(&peer_id) {
@@ -3263,28 +3495,19 @@ fn peer_removed_from_mesh(
 /// filtered by the function `f`. The number of peers to get equals the output of `n_map`
 /// that gets as input the number of filtered peers.
 fn get_random_peers_dynamic(
-    topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    connected_peers: &HashMap<PeerId, PeerConnections>,
+    connected_peers: &HashMap<PeerId, PeerDetails>,
     topic_hash: &TopicHash,
     // maps the number of total peers to the number of selected peers
     n_map: impl Fn(usize) -> usize,
     mut f: impl FnMut(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
-    let mut gossip_peers = match topic_peers.get(topic_hash) {
-        // if they exist, filter the peers by `f`
-        Some(peer_list) => peer_list
-            .iter()
-            .copied()
-            .filter(|p| {
-                f(p) && match connected_peers.get(p) {
-                    Some(connections) if connections.kind == PeerKind::Gossipsub => true,
-                    Some(connections) if connections.kind == PeerKind::Gossipsubv1_1 => true,
-                    _ => false,
-                }
-            })
-            .collect(),
-        None => Vec::new(),
-    };
+    let mut gossip_peers = connected_peers
+        .iter()
+        .filter(|(_, p)| p.topics.contains(topic_hash))
+        .filter(|(peer_id, _)| f(peer_id))
+        .filter(|(_, p)| p.kind.is_gossipsub())
+        .map(|(peer_id, _)| *peer_id)
+        .collect::<Vec<PeerId>>();
 
     // if we have less than needed, return them
     let n = n_map(gossip_peers.len());
@@ -3305,13 +3528,12 @@ fn get_random_peers_dynamic(
 /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
 /// filtered by the function `f`.
 fn get_random_peers(
-    topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
-    connected_peers: &HashMap<PeerId, PeerConnections>,
+    connected_peers: &HashMap<PeerId, PeerDetails>,
     topic_hash: &TopicHash,
     n: usize,
     f: impl FnMut(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
-    get_random_peers_dynamic(topic_peers, connected_peers, topic_hash, |_| n, f)
+    get_random_peers_dynamic(connected_peers, topic_hash, |_| n, f)
 }
 
 /// Validates the combination of signing, privacy and message validation to ensure the
@@ -3349,10 +3571,7 @@ impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Behaviour<C, F
         f.debug_struct("Behaviour")
             .field("config", &self.config)
             .field("events", &self.events.len())
-            .field("control_pool", &self.control_pool)
             .field("publish_config", &self.publish_config)
-            .field("topic_peers", &self.topic_peers)
-            .field("peer_topics", &self.peer_topics)
             .field("mesh", &self.mesh)
             .field("fanout", &self.fanout)
             .field("fanout_last_pub", &self.fanout_last_pub)
@@ -3373,45 +3592,6 @@ impl fmt::Debug for PublishConfig {
             }
             PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
             PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
-        }
-    }
-}
-
-#[cfg(test)]
-mod local_test {
-    use super::*;
-    use crate::IdentTopic;
-    use quickcheck::*;
-
-    fn test_message() -> RawMessage {
-        RawMessage {
-            source: Some(PeerId::random()),
-            data: vec![0; 100],
-            sequence_number: None,
-            topic: TopicHash::from_raw("test_topic"),
-            signature: None,
-            key: None,
-            validated: false,
-        }
-    }
-
-    fn test_control() -> ControlAction {
-        ControlAction::IHave {
-            topic_hash: IdentTopic::new("TestTopic").hash(),
-            message_ids: vec![MessageId(vec![12u8]); 5],
-        }
-    }
-
-    impl Arbitrary for RpcOut {
-        fn arbitrary(g: &mut Gen) -> Self {
-            match u8::arbitrary(g) % 5 {
-                0 => RpcOut::Subscribe(IdentTopic::new("TestTopic").hash()),
-                1 => RpcOut::Unsubscribe(IdentTopic::new("TestTopic").hash()),
-                2 => RpcOut::Publish(test_message()),
-                3 => RpcOut::Forward(test_message()),
-                4 => RpcOut::Control(test_control()),
-                _ => panic!("outside range"),
-            }
         }
     }
 }

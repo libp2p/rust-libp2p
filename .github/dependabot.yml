@@ -12,7 +12,6 @@ updates:
       hickory-dns:
         patterns:
           - "hickory-*"
-          - "async-std-resolver"
       opentelemetry:
         patterns:
           - "opentelemetry*"
@@ -22,6 +21,10 @@ updates:
           - "axum"
           - "tower"
           - "tower-http"
+      webrtc:
+        patterns:
+          - "rcgen"
+          - "webrtc"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

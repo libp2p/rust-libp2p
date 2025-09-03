@@ -18,27 +18,74 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Handler, InEvent};
-use crate::protocol::{Info, UpgradeError};
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
-use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, StreamUpgradeError, THandlerInEvent, ToSwarm,
-};
-use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
-use lru::LruCache;
-use std::collections::hash_map::Entry;
-use std::num::NonZeroUsize;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    iter::FromIterator,
-    task::Context,
-    task::Poll,
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    num::NonZeroUsize,
+    sync::Arc,
+    task::{Context, Poll},
     time::Duration,
 };
+
+use libp2p_core::{
+    multiaddr::{self, Protocol},
+    transport::PortUse,
+    ConnectedPoint, Endpoint, Multiaddr,
+};
+use libp2p_identity::{Keypair, PeerId, PublicKey};
+use libp2p_swarm::{
+    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, _address_translation,
+};
+
+use crate::{
+    handler::{self, Handler, InEvent},
+    protocol::{Info, UpgradeError},
+};
+
+/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
+fn is_quic_addr(addr: &Multiaddr, v1: bool) -> bool {
+    use Protocol::*;
+    let mut iter = addr.iter();
+    let Some(first) = iter.next() else {
+        return false;
+    };
+    let Some(second) = iter.next() else {
+        return false;
+    };
+    let Some(third) = iter.next() else {
+        return false;
+    };
+    let fourth = iter.next();
+    let fifth = iter.next();
+
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
+        && matches!(second, Udp(_))
+        && if v1 {
+            matches!(third, QuicV1)
+        } else {
+            matches!(third, Quic)
+        }
+        && matches!(fourth, Some(P2p(_)) | None)
+        && fifth.is_none()
+}
+
+fn is_tcp_addr(addr: &Multiaddr) -> bool {
+    use Protocol::*;
+
+    let mut iter = addr.iter();
+
+    let Some(first) = iter.next() else {
+        return false;
+    };
+
+    let Some(second) = iter.next() else {
+        return false;
+    };
+
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
+}
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -52,6 +99,9 @@ pub struct Behaviour {
 
     /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
+
+    /// The outbound connections established without port reuse (require translation)
+    outbound_connections_with_ephemeral_port: HashSet<ConnectionId>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -68,20 +118,22 @@ pub struct Behaviour {
 pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
-    pub protocol_version: String,
-    /// The public key of the local node. To report on the wire.
-    pub local_public_key: PublicKey,
+    protocol_version: String,
+    /// The key of the local node. Only the public key will be report on the wire.
+    /// The behaviour will send signed [`PeerRecord`](libp2p_core::PeerRecord) in
+    /// its identify message only when supplied with a keypair.
+    local_key: Arc<KeyType>,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
     /// Defaults to `rust-libp2p/<libp2p-identify-version>`.
-    pub agent_version: String,
+    agent_version: String,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
     /// i.e. the delay between identification requests.
     ///
     /// Defaults to 5 minutes.
-    pub interval: Duration,
+    interval: Duration,
 
     /// Whether new or expired listen addresses of the local node should
     /// trigger an active push of an identify message to all connected peers.
@@ -91,26 +143,47 @@ pub struct Config {
     /// i.e. before the next periodic identify request with each peer.
     ///
     /// Disabled by default.
-    pub push_listen_addr_updates: bool,
+    push_listen_addr_updates: bool,
 
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
+    /// Defaults to 100
+    cache_size: usize,
+
+    /// Whether to include our listen addresses in our responses. If enabled,
+    /// we will effectively only share our external addresses.
+    ///
     /// Disabled by default.
-    pub cache_size: usize,
+    hide_listen_addrs: bool,
 }
 
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
+    /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
+    /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+        Self::new_with_key(protocol_version, local_public_key)
+    }
+
+    /// Creates a new configuration for the identify [`Behaviour`] that
+    /// advertises the given protocol version and public key.
+    /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
+    /// for verifiable address advertisement.
+    pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
+        Self::new_with_key(protocol_version, local_keypair)
+    }
+
+    fn new_with_key(protocol_version: String, key: impl Into<KeyType>) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_public_key,
+            local_key: Arc::new(key.into()),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
+            hide_listen_addrs: false,
         }
     }
 
@@ -140,6 +213,47 @@ impl Config {
         self.cache_size = cache_size;
         self
     }
+
+    /// Configures whether we prevent sending out our listen addresses.
+    pub fn with_hide_listen_addrs(mut self, b: bool) -> Self {
+        self.hide_listen_addrs = b;
+        self
+    }
+
+    /// Get the protocol version of the Config.
+    pub fn protocol_version(&self) -> &str {
+        &self.protocol_version
+    }
+
+    /// Get the local public key of the Config.
+    pub fn local_public_key(&self) -> &PublicKey {
+        self.local_key.public_key()
+    }
+
+    /// Get the agent version of the Config.
+    pub fn agent_version(&self) -> &str {
+        &self.agent_version
+    }
+
+    /// Get the interval of the Config.
+    pub fn interval(&self) -> Duration {
+        self.interval
+    }
+
+    /// Get the push listen address updates boolean value of the Config.
+    pub fn push_listen_addr_updates(&self) -> bool {
+        self.push_listen_addr_updates
+    }
+
+    /// Get the cache size of the Config.
+    pub fn cache_size(&self) -> usize {
+        self.cache_size
+    }
+
+    /// Get the hide listen address boolean value of the Config.
+    pub fn hide_listen_addrs(&self) -> bool {
+        self.hide_listen_addrs
+    }
 }
 
 impl Behaviour {
@@ -154,6 +268,7 @@ impl Behaviour {
             config,
             connected: HashMap::new(),
             our_observed_addresses: Default::default(),
+            outbound_connections_with_ephemeral_port: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -200,19 +315,72 @@ impl Behaviour {
             .or_default()
             .insert(conn, addr);
 
-        if let Some(entry) = self.discovered_peers.get_mut(&peer_id) {
+        if let Some(cache) = self.discovered_peers.0.as_mut() {
             for addr in failed_addresses {
-                entry.remove(addr);
+                cache.remove(&peer_id, addr);
             }
         }
     }
 
     fn all_addresses(&self) -> HashSet<Multiaddr> {
-        self.listen_addresses
-            .iter()
-            .chain(self.external_addresses.iter())
-            .cloned()
-            .collect()
+        let mut addrs = HashSet::from_iter(self.external_addresses.iter().cloned());
+        if !self.config.hide_listen_addrs {
+            addrs.extend(self.listen_addresses.iter().cloned());
+        };
+        addrs
+    }
+
+    fn emit_new_external_addr_candidate_event(
+        &mut self,
+        connection_id: ConnectionId,
+        observed: &Multiaddr,
+    ) {
+        if self
+            .outbound_connections_with_ephemeral_port
+            .contains(&connection_id)
+        {
+            // Apply address translation to the candidate address.
+            // For TCP without port-reuse, the observed address contains an ephemeral port which
+            // needs to be replaced by the port of a listen address.
+            let translated_addresses = {
+                let mut addrs: Vec<_> = self
+                    .listen_addresses
+                    .iter()
+                    .filter_map(|server| {
+                        if (is_tcp_addr(server) && is_tcp_addr(observed))
+                            || (is_quic_addr(server, true) && is_quic_addr(observed, true))
+                            || (is_quic_addr(server, false) && is_quic_addr(observed, false))
+                        {
+                            _address_translation(server, observed)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                // remove duplicates
+                addrs.sort_unstable();
+                addrs.dedup();
+                addrs
+            };
+
+            // If address translation yielded nothing, broadcast the original candidate address.
+            if translated_addresses.is_empty() {
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+            } else {
+                for addr in translated_addresses {
+                    self.events
+                        .push_back(ToSwarm::NewExternalAddrCandidate(addr));
+                }
+            }
+            return;
+        }
+
+        // outgoing connection dialed with port reuse
+        // incoming connection
+        self.events
+            .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
     }
 }
 
@@ -230,7 +398,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             remote_addr.clone(),
@@ -240,18 +408,35 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        // Contrary to inbound events, outbound events are full-p2p qualified
+        // so we remove /p2p/ in order to be homogeneous
+        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not
+        // fully-p2p-qualified)
+        let mut addr = addr.clone();
+        if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
+            addr.pop();
+        }
+
+        if port_use == PortUse::New {
+            self.outbound_connections_with_ephemeral_port
+                .insert(connection_id);
+        }
+
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
-            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+            // TODO: This is weird? That is the public address we dialed,
+            // shouldn't need to tell the other party?
+            addr.clone(),
             self.all_addresses(),
         ))
     }
@@ -259,7 +444,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        id: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -268,19 +453,29 @@ impl NetworkBehaviour for Behaviour {
                 info.listen_addrs
                     .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
 
-                // Replace existing addresses to prevent other peer from filling up our memory.
-                self.discovered_peers
-                    .put(peer_id, info.listen_addrs.iter().cloned());
-
                 let observed = info.observed_addr.clone();
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Received {
+                        connection_id,
+                        peer_id,
+                        info: info.clone(),
+                    }));
 
-                match self.our_observed_addresses.entry(id) {
+                if let Some(ref mut discovered_peers) = self.discovered_peers.0 {
+                    for address in &info.listen_addrs {
+                        if discovered_peers.add(peer_id, address.clone()) {
+                            self.events.push_back(ToSwarm::NewExternalAddrOfPeer {
+                                peer_id,
+                                address: address.clone(),
+                            });
+                        }
+                    }
+                }
+
+                match self.our_observed_addresses.entry(connection_id) {
                     Entry::Vacant(not_yet_observed) => {
                         not_yet_observed.insert(observed.clone());
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                     Entry::Occupied(already_observed) if already_observed.get() == &observed => {
                         // No-op, we already observed this address.
@@ -289,26 +484,33 @@ impl NetworkBehaviour for Behaviour {
                         tracing::info!(
                             old_address=%already_observed.get(),
                             new_address=%observed,
-                            "Our observed address on connection {id} changed",
+                            "Our observed address on connection {connection_id} changed",
                         );
 
                         *already_observed.get_mut() = observed.clone();
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                 }
             }
             handler::Event::Identification => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Sent {
+                    connection_id,
+                    peer_id,
+                }));
             }
             handler::Event::IdentificationPushed(info) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Pushed {
+                    connection_id,
+                    peer_id,
+                    info,
+                }));
             }
             handler::Event::IdentificationError(error) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Error {
+                    connection_id,
+                    peer_id,
+                    error,
+                }));
             }
         }
     }
@@ -329,9 +531,8 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self.discovered_peers.get(&peer))
@@ -385,14 +586,27 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.our_observed_addresses.remove(&connection_id);
+                self.outbound_connections_with_ephemeral_port
+                    .remove(&connection_id);
             }
-            FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
-                if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
-                    if let DialError::Transport(errors) = error {
-                        for (addr, _error) in errors {
-                            entry.remove(addr);
+            FromSwarm::DialFailure(DialFailure {
+                peer_id: Some(peer_id),
+                error,
+                ..
+            }) => {
+                if let Some(cache) = self.discovered_peers.0.as_mut() {
+                    match error {
+                        DialError::Transport(errors) => {
+                            for (addr, _error) in errors {
+                                cache.remove(&peer_id, addr);
+                            }
                         }
-                    }
+                        DialError::WrongPeerId { address, .. }
+                        | DialError::LocalPeerId { address } => {
+                            cache.remove(&peer_id, address);
+                        }
+                        _ => (),
+                    };
                 }
             }
             _ => {}
@@ -406,6 +620,8 @@ impl NetworkBehaviour for Behaviour {
 pub enum Event {
     /// Identification information has been received from a peer.
     Received {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that has been identified.
         peer_id: PeerId,
         /// The information provided by the peer.
@@ -414,12 +630,16 @@ pub enum Event {
     /// Identification information of the local node has been sent to a peer in
     /// response to an identification request.
     Sent {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
     },
     /// Identification information of the local node has been actively pushed to
     /// a peer.
     Pushed {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
         /// The full Info struct we pushed to the remote peer. Clients must
@@ -428,11 +648,24 @@ pub enum Event {
     },
     /// Error while attempting to identify the remote.
     Error {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
         error: StreamUpgradeError<UpgradeError>,
     },
+}
+
+impl Event {
+    pub fn connection_id(&self) -> ConnectionId {
+        match self {
+            Event::Received { connection_id, .. }
+            | Event::Sent { connection_id, .. }
+            | Event::Pushed { connection_id, .. }
+            | Event::Error { connection_id, .. } => *connection_id,
+        }
+    }
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as
@@ -445,7 +678,7 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     true
 }
 
-struct PeerCache(Option<LruCache<PeerId, HashSet<Multiaddr>>>);
+struct PeerCache(Option<PeerAddresses>);
 
 impl PeerCache {
     fn disabled() -> Self {
@@ -453,34 +686,46 @@ impl PeerCache {
     }
 
     fn enabled(size: NonZeroUsize) -> Self {
-        Self(Some(LruCache::new(size)))
-    }
-
-    fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
-        self.0.as_mut()?.get_mut(peer)
-    }
-
-    fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
-        let cache = match self.0.as_mut() {
-            None => return,
-            Some(cache) => cache,
-        };
-
-        let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
-        cache.put(peer, HashSet::from_iter(addresses));
+        Self(Some(PeerAddresses::new(size)))
     }
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        let cache = match self.0.as_mut() {
-            None => return Vec::new(),
-            Some(cache) => cache,
-        };
+        if let Some(cache) = self.0.as_mut() {
+            cache.get(peer).collect()
+        } else {
+            Vec::new()
+        }
+    }
+}
 
-        cache
-            .get(peer)
-            .cloned()
-            .map(Vec::from_iter)
-            .unwrap_or_default()
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum KeyType {
+    PublicKey(PublicKey),
+    Keypair {
+        keypair: Keypair,
+        public_key: PublicKey,
+    },
+}
+impl From<PublicKey> for KeyType {
+    fn from(value: PublicKey) -> Self {
+        Self::PublicKey(value)
+    }
+}
+impl From<&Keypair> for KeyType {
+    fn from(value: &Keypair) -> Self {
+        Self::Keypair {
+            public_key: value.public(),
+            keypair: value.clone(),
+        }
+    }
+}
+impl KeyType {
+    pub(crate) fn public_key(&self) -> &PublicKey {
+        match &self {
+            KeyType::PublicKey(pubkey) => pubkey,
+            KeyType::Keypair { public_key, .. } => public_key,
+        }
     }
 }
 

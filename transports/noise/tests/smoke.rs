@@ -18,19 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::io;
+
 use futures::prelude::*;
-use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::upgrade;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::{
+    transport::{MemoryTransport, Transport},
+    upgrade,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
-use std::{convert::TryInto, io};
 use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
-    // Tests API compaibility with the libp2p-core upgrade API,
+    // Tests API compatibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
     let noise = noise::Config::new(&id_keys).unwrap();

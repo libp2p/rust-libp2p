@@ -1,7 +1,7 @@
 [package]
 name = "ipfs-kad-example"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 publish = false
 license = "MIT"
 
@@ -9,15 +9,12 @@ license = "MIT"
 release = false
 
 [dependencies]
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
-async-trait = "0.1"
-clap = { version = "4.4.10", features = ["derive"] }
-env_logger = "0.10"
-futures = "0.3.29"
-anyhow = "1.0.75"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+clap = { version = "4.5.6", features = ["derive"] }
+futures = { workspace = true }
+anyhow = "1.0.86"
 libp2p = { path = "../../libp2p", features = [ "tokio", "dns", "kad", "noise", "tcp", "yamux", "rsa"] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

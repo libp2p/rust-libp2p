@@ -20,19 +20,21 @@
 
 //! The interface for providers of non-blocking TCP implementations.
 
-#[cfg(feature = "async-io")]
-pub mod async_io;
-
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-use futures::future::BoxFuture;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::Stream;
+use std::{
+    fmt, io,
+    net::{SocketAddr, TcpListener, TcpStream},
+    task::{Context, Poll},
+};
+
+use futures::{
+    future::BoxFuture,
+    io::{AsyncRead, AsyncWrite},
+    Stream,
+};
 use if_watch::{IfEvent, IpNet};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::task::{Context, Poll};
-use std::{fmt, io};
 
 /// An incoming connection returned from [`Provider::poll_accept()`].
 pub struct Incoming<S> {

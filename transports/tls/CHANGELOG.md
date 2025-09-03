@@ -1,3 +1,33 @@
+## 0.6.2
+
+- Upgrade `rustls-webpki` to `v0.103`
+  See [PR 5961](https://github.com/libp2p/rust-libp2p/pull/5961).
+
+- Upgrade `x509-parser` to `v0.17`
+  See [PR 5961](https://github.com/libp2p/rust-libp2p/pull/5961).
+
+## 0.6.1
+
+- Upgrade `rcgen` to `v0.13`
+  See [PR 5917](https://github.com/libp2p/rust-libp2p/pull/5917).
+
+## 0.6.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.5.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.4.1
+
+- Fix a panic caused by `rustls` parsing the libp2p TLS extension.
+  See [PR 5498](https://github.com/libp2p/rust-libp2p/pull/5498).
+
+## 0.4.0
+
+- Upgrade `rustls` to `0.23`. See [PR 5385](https://github.com/libp2p/rust-libp2p/pull/5385)
+
 ## 0.3.0
 
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.

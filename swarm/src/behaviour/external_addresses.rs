@@ -1,5 +1,6 @@
-use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 use libp2p_core::Multiaddr;
+
+use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 
 /// The maximum number of local external addresses. When reached any
 /// further externally reported addresses are ignored. The behaviour always
@@ -59,13 +60,12 @@ impl ExternalAddresses {
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
                 addr: expired_addr, ..
             }) => {
-                let pos = match self
+                let Some(pos) = self
                     .addresses
                     .iter()
                     .position(|candidate| candidate == *expired_addr)
-                {
-                    None => return false,
-                    Some(p) => p,
+                else {
+                    return false;
                 };
 
                 self.addresses.remove(pos);
@@ -78,16 +78,20 @@ impl ExternalAddresses {
     }
 
     fn push_front(&mut self, addr: &Multiaddr) {
-        self.addresses.insert(0, addr.clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
+        // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so
+        // this isn't very expensive.
+        self.addresses.insert(0, addr.clone());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::LazyLock;
+
     use libp2p_core::multiaddr::Protocol;
-    use once_cell::sync::Lazy;
     use rand::Rng;
+
+    use super::*;
 
     #[test]
     fn new_external_addr_returns_correct_changed_value() {
@@ -175,8 +179,8 @@ mod tests {
         })
     }
 
-    static MEMORY_ADDR_1000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
-    static MEMORY_ADDR_2000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
+    static MEMORY_ADDR_1000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR_2000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
 }

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::multiaddr::{Multiaddr, Protocol};
+use crate::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::PortUse,
+};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -60,26 +63,31 @@ pub enum ConnectedPoint {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
         /// Whether the role of the local node on the connection should be
-        /// overriden. I.e. whether the local node should act as a listener on
+        /// overridden. I.e. whether the local node should act as a listener on
         /// the outgoing connection.
         ///
         /// This option is needed for NAT and firewall hole punching.
         ///
         /// - [`Endpoint::Dialer`] represents the default non-overriding option.
         ///
-        /// - [`Endpoint::Listener`] represents the overriding option.
-        ///   Realization depends on the transport protocol. E.g. in the case of
-        ///   TCP, both endpoints dial each other, resulting in a _simultaneous
-        ///   open_ TCP connection. On this new connection both endpoints assume
-        ///   to be the dialer of the connection. This is problematic during the
-        ///   connection upgrade process where an upgrade assumes one side to be
-        ///   the listener. With the help of this option, both peers can
-        ///   negotiate the roles (dialer and listener) for the new connection
-        ///   ahead of time, through some external channel, e.g. the DCUtR
-        ///   protocol, and thus have one peer dial the other and upgrade the
-        ///   connection as a dialer and one peer dial the other and upgrade the
-        ///   connection _as a listener_ overriding its role.
+        /// - [`Endpoint::Listener`] represents the overriding option. Realization depends on the
+        ///   transport protocol. E.g. in the case of TCP, both endpoints dial each other,
+        ///   resulting in a _simultaneous open_ TCP connection. On this new connection both
+        ///   endpoints assume to be the dialer of the connection. This is problematic during the
+        ///   connection upgrade process where an upgrade assumes one side to be the listener. With
+        ///   the help of this option, both peers can negotiate the roles (dialer and listener) for
+        ///   the new connection ahead of time, through some external channel, e.g. the DCUtR
+        ///   protocol, and thus have one peer dial the other and upgrade the connection as a
+        ///   dialer and one peer dial the other and upgrade the connection _as a listener_
+        ///   overriding its role.
         role_override: Endpoint,
+        /// Whether the port for the outgoing connection was reused from a listener
+        /// or a new port was allocated. This is useful for address translation.
+        ///
+        /// The port use is implemented on a best-effort basis. It is not guaranteed
+        /// that [`PortUse::Reuse`] actually reused a port. A good example is the case
+        /// where there is no listener available to reuse a port from.
+        port_use: PortUse,
     },
     /// We received the node.
     Listener {
@@ -113,27 +121,18 @@ impl ConnectedPoint {
 
     /// Returns true if we are `Dialer`.
     pub fn is_dialer(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
-        }
+        matches!(self, ConnectedPoint::Dialer { .. })
     }
 
     /// Returns true if we are `Listener`.
     pub fn is_listener(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
-        }
+        matches!(self, ConnectedPoint::Listener { .. })
     }
 
     /// Returns true if the connection is relayed.
     pub fn is_relayed(&self) -> bool {
         match self {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: _,
-            } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
         }
         .iter()

@@ -1,21 +1,25 @@
 use std::{
     collections::{HashSet, VecDeque},
+    convert::Infallible,
     task::{Context, Poll},
 };
 
-use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol,
+    transport::{ListenerId, PortUse},
+    Endpoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenOpts,
     ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn behaviour_listener() {
-    let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
+    let mut swarm = Swarm::new_ephemeral_tokio(|_| Behaviour::default());
     let addr: Multiaddr = Protocol::Memory(0).into();
     let id = swarm.behaviour_mut().listen(addr.clone());
 
@@ -75,7 +79,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = void::Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -93,6 +97,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }

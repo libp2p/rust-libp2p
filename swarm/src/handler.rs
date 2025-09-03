@@ -34,9 +34,9 @@
 //! used protocol(s) determined by the associated types of the handlers.
 //!
 //! > **Note**: A [`ConnectionHandler`] handles one or more protocols in the context of a single
-//! >           connection with a remote. In order to handle a protocol that requires knowledge of
-//! >           the network as a whole, see the
-//! >           [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
+//! > connection with a remote. In order to handle a protocol that requires knowledge of
+//! > the network as a whole, see the
+//! > [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
 
 pub mod either;
 mod map_in;
@@ -46,23 +46,24 @@ mod one_shot;
 mod pending;
 mod select;
 
-pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+use core::slice;
+use std::{
+    collections::{HashMap, HashSet},
+    error, fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use libp2p_core::Multiaddr;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
-
-use crate::StreamProtocol;
-use ::either::Either;
-use libp2p_core::Multiaddr;
-use once_cell::sync::Lazy;
 use smallvec::SmallVec;
-use std::collections::hash_map::RandomState;
-use std::collections::hash_set::{Difference, Intersection};
-use std::collections::HashSet;
-use std::iter::Peekable;
-use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
+
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+use crate::{connection::AsStrHashEq, StreamProtocol};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -74,17 +75,17 @@ use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 /// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
-///      [`ConnectionHandler::poll()`] must return an [`ConnectionHandlerEvent::OutboundSubstreamRequest`],
-///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
-///      protocol(s). Upon success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionHandler::poll()`] must return an
+///      [`ConnectionHandlerEvent::OutboundSubstreamRequest`], providing an instance of
+///      [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the protocol(s). Upon
+///      success, [`ConnectionHandler::on_connection_event`] is called with
 ///      [`ConnectionEvent::FullyNegotiatedOutbound`] translating the final output of the upgrade.
 ///
-///   2. Listening by accepting a new inbound substream. When a new inbound substream
-///      is created on a connection, [`ConnectionHandler::listen_protocol`] is called
-///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
-///      negotiate the protocol(s). Upon success,
-///      [`ConnectionHandler::on_connection_event`] is called with [`ConnectionEvent::FullyNegotiatedInbound`]
-///      translating the final output of the upgrade.
+///   2. Listening by accepting a new inbound substream. When a new inbound substream is created on
+///      a connection, [`ConnectionHandler::listen_protocol`] is called to obtain an instance of
+///      [`libp2p_core::upgrade::InboundUpgrade`] that is used to negotiate the protocol(s). Upon
+///      success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionEvent::FullyNegotiatedInbound`] translating the final output of the upgrade.
 ///
 ///
 /// # Connection Keep-Alive
@@ -94,13 +95,17 @@ use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 /// implemented by the handler can include conditions for terminating the connection.
 /// The lifetime of successfully negotiated substreams is fully controlled by the handler.
 ///
-/// Implementors of this trait should keep in mind that the connection can be closed at any time.
+/// Implementers of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
 pub trait ConnectionHandler: Send + 'static {
-    /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
+    /// A type representing the message(s) a
+    /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`]
+    /// via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
     type FromBehaviour: fmt::Debug + Send + 'static;
-    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a
+    /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via
+    /// [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
@@ -115,9 +120,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// substreams to negotiate the desired protocols.
     ///
     /// > **Note**: The returned `InboundUpgrade` should always accept all the generally
-    /// >           supported protocols, even if in a specific context a particular one is
-    /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
-    /// >           This allows a remote to put the list of supported protocols in a cache.
+    /// > supported protocols, even if in a specific context a particular one is
+    /// > not supported, (eg. when only allowing one substream at a time for a protocol).
+    /// > This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
     /// Returns whether the connection should be kept alive.
@@ -130,14 +135,21 @@ pub trait ConnectionHandler: Send + 'static {
     /// - We are negotiating inbound or outbound streams.
     /// - There are active [`Stream`](crate::Stream)s on the connection.
     ///
-    /// The combination of the above means that _most_ protocols will not need to override this method.
-    /// This method is only invoked when all of the above are `false`, i.e. when the connection is entirely idle.
+    /// The combination of the above means that _most_ protocols will not need to override this
+    /// method. This method is only invoked when all of the above are `false`, i.e. when the
+    /// connection is entirely idle.
     ///
     /// ## Exceptions
     ///
-    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) need to keep a connection alive beyond these circumstances and can thus override this method.
-    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't** want to keep a connection alive despite an active streams.
-    /// In that case, protocol authors can use [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a particular stream from the keep-alive algorithm.
+    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md)
+    ///   need to keep a connection alive beyond these circumstances and can thus override this
+    ///   method.
+    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't**
+    ///   want to keep a connection alive despite an active streams.
+    ///
+    /// In that case, protocol authors can use
+    /// [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a
+    /// particular stream from the keep-alive algorithm.
     fn connection_keep_alive(&self) -> bool {
         false
     }
@@ -162,7 +174,8 @@ pub trait ConnectionHandler: Send + 'static {
     /// To signal completion, [`Poll::Ready(None)`] should be returned.
     ///
     /// Implementations MUST have a [`fuse`](futures::StreamExt::fuse)-like behaviour.
-    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to [`ConnectionHandler::poll_close`].
+    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to
+    /// [`ConnectionHandler::poll_close`].
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         Poll::Ready(None)
     }
@@ -211,7 +224,7 @@ pub trait ConnectionHandler: Send + 'static {
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
 #[non_exhaustive]
-pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI = (), OOI = ()> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
     /// Informs the handler about the output of a successful upgrade on a new outbound stream.
@@ -228,7 +241,7 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     RemoteProtocolsChange(ProtocolsChange<'a>),
 }
 
-impl<'a, IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'a, IP, OP, IOI, OOI>
+impl<IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'_, IP, OP, IOI, OOI>
 where
     IP: InboundUpgradeSend + fmt::Debug,
     IP::Output: fmt::Debug,
@@ -264,8 +277,8 @@ where
     }
 }
 
-impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
-    ConnectionEvent<'a, IP, OP, IOI, OOI>
+impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
+    ConnectionEvent<'_, IP, OP, IOI, OOI>
 {
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {
@@ -305,28 +318,31 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
 #[derive(Debug)]
-pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
+pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI = ()> {
     pub protocol: IP::Output,
     pub info: IOI,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound stream.
+/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound
+/// stream.
 ///
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Debug)]
-pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
+pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI = ()> {
     pub protocol: OP::Output,
     pub info: OOI,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the
+/// remote.
 #[derive(Debug)]
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported
+/// on the connection.
 #[derive(Debug, Clone)]
 pub enum ProtocolsChange<'a> {
     Added(ProtocolsAdded<'a>),
@@ -334,64 +350,128 @@ pub enum ProtocolsChange<'a> {
 }
 
 impl<'a> ProtocolsChange<'a> {
+    /// Compute the protocol change for the initial set of protocols.
+    pub(crate) fn from_initial_protocols<'b, T: AsRef<str> + 'b>(
+        new_protocols: impl IntoIterator<Item = &'b T>,
+        buffer: &'a mut Vec<StreamProtocol>,
+    ) -> Self {
+        buffer.clear();
+        buffer.extend(
+            new_protocols
+                .into_iter()
+                .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok()),
+        );
+
+        ProtocolsChange::Added(ProtocolsAdded {
+            protocols: buffer.iter(),
+        })
+    }
+
     /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
     ///
     /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
     pub(crate) fn add(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        to_add: &'a HashSet<StreamProtocol>,
+        existing_protocols: &HashSet<StreamProtocol>,
+        to_add: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+        buffer.clear();
+        buffer.extend(
+            to_add
+                .into_iter()
+                .filter(|i| !existing_protocols.contains(i)),
+        );
 
-        actually_added_protocols.peek()?;
+        if buffer.is_empty() {
+            return None;
+        }
 
-        Some(ProtocolsChange::Added(ProtocolsAdded {
-            protocols: actually_added_protocols,
+        Some(Self::Added(ProtocolsAdded {
+            protocols: buffer.iter(),
         }))
     }
 
-    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from
+    /// `existing_protocols`. Removes the protocols from `existing_protocols`.
     ///
-    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in
+    /// `existing_protocols`.
     pub(crate) fn remove(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        to_remove: &'a HashSet<StreamProtocol>,
+        existing_protocols: &mut HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
+        buffer.clear();
+        buffer.extend(
+            to_remove
+                .into_iter()
+                .filter_map(|i| existing_protocols.take(&i)),
+        );
 
-        actually_removed_protocols.peek()?;
+        if buffer.is_empty() {
+            return None;
+        }
 
-        Some(ProtocolsChange::Removed(ProtocolsRemoved {
-            protocols: Either::Right(actually_removed_protocols),
+        Some(Self::Removed(ProtocolsRemoved {
+            protocols: buffer.iter(),
         }))
     }
 
-    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
-    pub(crate) fn from_full_sets(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        new_protocols: &'a HashSet<StreamProtocol>,
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to
+    /// `new_protocols`.
+    pub(crate) fn from_full_sets<T: AsRef<str>>(
+        existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
+        new_protocols: impl IntoIterator<Item = T>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> SmallVec<[Self; 2]> {
-        if existing_protocols == new_protocols {
+        buffer.clear();
+
+        // Initially, set the boolean for all protocols to `false`, meaning "not visited".
+        for v in existing_protocols.values_mut() {
+            *v = false;
+        }
+
+        let mut new_protocol_count = 0; // We can only iterate `new_protocols` once, so keep track of its length separately.
+        for new_protocol in new_protocols {
+            existing_protocols
+                .entry(AsStrHashEq(new_protocol))
+                .and_modify(|v| *v = true) // Mark protocol as visited (i.e. we still support it)
+                .or_insert_with_key(|k| {
+                    // Encountered a previously unsupported protocol, remember it in `buffer`.
+                    buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                    true
+                });
+            new_protocol_count += 1;
+        }
+
+        if new_protocol_count == existing_protocols.len() && buffer.is_empty() {
             return SmallVec::new();
         }
 
+        let num_new_protocols = buffer.len();
+        // Drain all protocols that we haven't visited.
+        // For existing protocols that are not in `new_protocols`, the boolean will be false,
+        // meaning we need to remove it.
+        existing_protocols.retain(|p, &mut is_supported| {
+            if !is_supported {
+                buffer.extend(StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok());
+            }
+
+            is_supported
+        });
+
+        let (added, removed) = buffer.split_at(num_new_protocols);
         let mut changes = SmallVec::new();
-
-        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
-        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
-
-        if added_protocols.peek().is_some() {
+        if !added.is_empty() {
             changes.push(ProtocolsChange::Added(ProtocolsAdded {
-                protocols: added_protocols,
+                protocols: added.iter(),
             }));
         }
-
-        if removed_protocols.peek().is_some() {
+        if !removed.is_empty() {
             changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
-                protocols: Either::Left(removed_protocols),
+                protocols: removed.iter(),
             }));
         }
-
         changes
     }
 }
@@ -399,33 +479,13 @@ impl<'a> ProtocolsChange<'a> {
 /// An [`Iterator`] over all protocols that have been added.
 #[derive(Debug, Clone)]
 pub struct ProtocolsAdded<'a> {
-    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
-}
-
-impl<'a> ProtocolsAdded<'a> {
-    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
-        ProtocolsAdded {
-            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
-        }
-    }
+    pub(crate) protocols: slice::Iter<'a, StreamProtocol>,
 }
 
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Debug, Clone)]
 pub struct ProtocolsRemoved<'a> {
-    protocols: Either<
-        Peekable<Difference<'a, StreamProtocol, RandomState>>,
-        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
-    >,
-}
-
-impl<'a> ProtocolsRemoved<'a> {
-    #[cfg(test)]
-    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
-        ProtocolsRemoved {
-            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
-        }
-    }
+    pub(crate) protocols: slice::Iter<'a, StreamProtocol>,
 }
 
 impl<'a> Iterator for ProtocolsAdded<'a> {
@@ -464,7 +524,7 @@ pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
 /// The inbound substream protocol(s) are defined by [`ConnectionHandler::listen_protocol`]
 /// and the outbound substream protocol(s) by [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct SubstreamProtocol<TUpgrade, TInfo> {
+pub struct SubstreamProtocol<TUpgrade, TInfo = ()> {
     upgrade: TUpgrade,
     info: TInfo,
     timeout: Duration,
@@ -690,6 +750,169 @@ where
     }
 }
 
-/// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
-/// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
-static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn protocol_set_of(s: &'static str) -> HashSet<StreamProtocol> {
+        s.split_whitespace()
+            .map(|p| StreamProtocol::try_from_owned(format!("/{p}")).unwrap())
+            .collect()
+    }
+
+    fn test_remove(
+        existing: &mut HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+    ) -> HashSet<StreamProtocol> {
+        ProtocolsChange::remove(existing, to_remove, &mut Vec::new())
+            .into_iter()
+            .flat_map(|c| match c {
+                ProtocolsChange::Added(_) => panic!("unexpected added"),
+                ProtocolsChange::Removed(r) => r.cloned(),
+            })
+            .collect::<HashSet<_>>()
+    }
+
+    #[test]
+    fn test_protocol_remove_subset() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of("c"));
+        assert_eq!(change, protocol_set_of("a b"));
+    }
+
+    #[test]
+    fn test_protocol_remove_all() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_superset() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_none() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of("a b c"));
+        assert_eq!(change, protocol_set_of(""));
+    }
+
+    #[test]
+    fn test_protocol_remove_none_from_empty() {
+        let mut existing = protocol_set_of("");
+        let to_remove = protocol_set_of("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of(""));
+    }
+
+    fn test_from_full_sets(
+        existing: HashSet<StreamProtocol>,
+        new: HashSet<StreamProtocol>,
+    ) -> [HashSet<StreamProtocol>; 2] {
+        let mut buffer = Vec::new();
+        let mut existing = existing
+            .iter()
+            .map(|p| (AsStrHashEq(p.as_ref()), true))
+            .collect::<HashMap<_, _>>();
+
+        let changes = ProtocolsChange::from_full_sets(
+            &mut existing,
+            new.iter().map(AsRef::as_ref),
+            &mut buffer,
+        );
+
+        let mut added_changes = HashSet::new();
+        let mut removed_changes = HashSet::new();
+
+        for change in changes {
+            match change {
+                ProtocolsChange::Added(a) => {
+                    added_changes.extend(a.cloned());
+                }
+                ProtocolsChange::Removed(r) => {
+                    removed_changes.extend(r.cloned());
+                }
+            }
+        }
+
+        [removed_changes, added_changes]
+    }
+
+    #[test]
+    fn test_from_full_stes_subset() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("a b");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of("c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_superset() {
+        let existing = protocol_set_of("a b");
+        let new = protocol_set_of("a b c");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("c"));
+        assert_eq!(removed_changes, protocol_set_of(""));
+    }
+
+    #[test]
+    fn test_from_full_sets_intersection() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("b c d");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("d"));
+        assert_eq!(removed_changes, protocol_set_of("a"));
+    }
+
+    #[test]
+    fn test_from_full_sets_disjoint() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("d e f");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("d e f"));
+        assert_eq!(removed_changes, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_empty() {
+        let existing = protocol_set_of("");
+        let new = protocol_set_of("");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of(""));
+    }
+}

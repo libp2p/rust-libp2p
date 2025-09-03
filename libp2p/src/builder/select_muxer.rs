@@ -20,17 +20,21 @@
 
 #![allow(unreachable_pub)]
 
+use std::iter::{Chain, Map};
+
 use either::Either;
 use futures::future;
-use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
-use std::iter::{Chain, Map};
+use libp2p_core::{
+    either::EitherFuture,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
 
 #[derive(Debug, Clone)]
 pub struct SelectMuxerUpgrade<A, B>(A, B);
 
 impl<A, B> SelectMuxerUpgrade<A, B> {
+    #[allow(dead_code)]
     pub fn new(a: A, b: B) -> Self {
         SelectMuxerUpgrade(a, b)
     }

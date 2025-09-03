@@ -23,13 +23,14 @@
 //! Alongside a [`asynchronous_codec::Framed`] this provides a [Sink](futures::Sink)
 //! and [Stream](futures::Stream) for length-delimited Noise protocol messages.
 
-use super::handshake::proto;
-use crate::{protocol::PublicKey, Error};
+use std::{io, mem::size_of};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, Bytes, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
-use std::io;
-use std::mem::size_of;
+
+use super::handshake::proto;
+use crate::{protocol::PublicKey, Error};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -85,8 +86,7 @@ impl Codec<snow::HandshakeState> {
     /// `XX` pattern, which is the only handshake protocol libp2p currently supports.
     pub(crate) fn into_transport(self) -> Result<(PublicKey, Codec<snow::TransportState>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
+            Error::Io(io::Error::other(
                 "expect key to always be present at end of XX session",
             ))
         })?;
@@ -126,11 +126,11 @@ impl Decoder for Codec<snow::HandshakeState> {
     type Item = proto::NoiseHandshakePayload;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let cleartext = match decrypt(src, |ciphertext, decrypt_buffer| {
+        let Some(cleartext) = decrypt(src, |ciphertext, decrypt_buffer| {
             self.session.read_message(ciphertext, decrypt_buffer)
-        })? {
-            None => return Ok(None),
-            Some(cleartext) => cleartext,
+        })?
+        else {
+            return Ok(None);
         };
 
         let mut reader = BytesReader::from_bytes(&cleartext[..]);
@@ -170,7 +170,8 @@ impl Decoder for Codec<snow::TransportState> {
 
 /// Encrypts the given cleartext to `dst`.
 ///
-/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of the noise protocol.
+/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across
+/// different session states of the noise protocol.
 fn encrypt(
     cleartext: &[u8],
     dst: &mut BytesMut,
@@ -191,13 +192,14 @@ fn encrypt(
 
 /// Encrypts the given ciphertext.
 ///
-/// This is a standalone function so we can use it across different session states of the noise protocol.
-/// In case `ciphertext` does not contain enough bytes to decrypt the entire frame, `Ok(None)` is returned.
+/// This is a standalone function so we can use it across different session states of the noise
+/// protocol. In case `ciphertext` does not contain enough bytes to decrypt the entire frame,
+/// `Ok(None)` is returned.
 fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
 ) -> io::Result<Option<Bytes>> {
-    let Some(ciphertext) = decode_length_prefixed(ciphertext)? else {
+    let Some(ciphertext) = decode_length_prefixed(ciphertext) else {
         return Ok(None);
     };
 
@@ -223,9 +225,9 @@ fn encode_length_prefixed(src: &[u8], dst: &mut BytesMut) {
     dst.extend_from_slice(src);
 }
 
-fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+fn decode_length_prefixed(src: &mut BytesMut) -> Option<Bytes> {
     if src.len() < size_of::<u16>() {
-        return Ok(None);
+        return None;
     }
 
     let mut len_bytes = [0u8; U16_LENGTH];
@@ -235,8 +237,8 @@ fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error
     if src.len() - U16_LENGTH >= len {
         // Skip the length header we already read.
         src.advance(U16_LENGTH);
-        Ok(Some(src.split_to(len).freeze()))
+        Some(src.split_to(len).freeze())
     } else {
-        Ok(None)
+        None
     }
 }

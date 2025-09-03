@@ -20,30 +20,31 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::Version;
-
-use crate::{
-    connection::ConnectedPoint,
-    muxing::{StreamMuxer, StreamMuxerBox},
-    transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerId, Transport,
-        TransportError, TransportEvent,
-    },
-    upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
-    },
-    Negotiated,
-};
-use futures::{prelude::*, ready};
-use libp2p_identity::PeerId;
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{prelude::*, ready};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
+
+pub use crate::upgrade::Version;
+use crate::{
+    connection::ConnectedPoint,
+    muxing::{StreamMuxer, StreamMuxerBox},
+    transport::{
+        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, DialOpts, ListenerId,
+        Transport, TransportError, TransportEvent,
+    },
+    upgrade::{
+        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
+        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
+    },
+    Negotiated,
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
@@ -58,13 +59,13 @@ use std::{
 /// It thus enforces the following invariants on every transport
 /// obtained from [`multiplex`](Authenticated::multiplex):
 ///
-///   1. The transport must be [authenticated](Builder::authenticate)
-///      and [multiplexed](Authenticated::multiplex).
+///   1. The transport must be [authenticated](Builder::authenticate) and
+///      [multiplexed](Authenticated::multiplex).
 ///   2. Authentication must precede the negotiation of a multiplexer.
 ///   3. Applying a multiplexer is the last step in the upgrade process.
-///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`,
-///      namely a tuple of a [`PeerId`] (from the authentication upgrade) and a
-///      [`StreamMuxer`] (from the multiplexing upgrade).
+///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`, namely a tuple of a
+///      [`PeerId`] (from the authentication upgrade) and a [`StreamMuxer`] (from the multiplexing
+///      upgrade).
 #[derive(Clone)]
 pub struct Builder<T> {
     inner: T,
@@ -184,7 +185,7 @@ where
     }
 }
 
-/// An transport with peer authentication, obtained from [`Builder::authenticate`].
+/// A transport with peer authentication, obtained from [`Builder::authenticate`].
 #[derive(Clone)]
 pub struct Authenticated<T>(Builder<T>);
 
@@ -335,19 +336,16 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr)
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr, opts)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.0.remove_listener(id)
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial_as_listener(addr)
     }
 
     fn listen_on(
@@ -356,10 +354,6 @@ where
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
         self.0.listen_on(id, addr)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.0.address_translation(server, observed)
     }
 
     fn poll(
@@ -404,10 +398,14 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
-            .dial(addr)
+            .dial(addr, opts)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
@@ -419,20 +417,6 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self
-            .inner
-            .dial_as_listener(addr)
-            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(DialUpgradeFuture {
-            future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        })
-    }
-
     fn listen_on(
         &mut self,
         id: ListenerId,
@@ -441,10 +425,6 @@ where
         self.inner
             .listen_on(id, addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 
     fn poll(
@@ -520,7 +500,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {
@@ -579,7 +559,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {

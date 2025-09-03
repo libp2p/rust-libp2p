@@ -20,19 +20,20 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::error::Error;
+
 use futures::StreamExt;
 use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -44,7 +45,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 key.public(),
             ))
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned

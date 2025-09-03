@@ -12,6 +12,7 @@ import (
     "github.com/libp2p/go-libp2p/core/transport"
     "github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
     webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
+    "github.com/quic-go/quic-go"
     "github.com/multiformats/go-multiaddr"
 )
 
@@ -69,7 +70,7 @@ func main() {
         panic(err)
     }
 
-    connManager, err := quicreuse.NewConnManager([32]byte{})
+    connManager, err := quicreuse.NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{})
     if err != nil {
         panic(err)
     }

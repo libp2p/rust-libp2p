@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::{marker::PhantomData, sync::Arc};
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
@@ -8,7 +8,9 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::{marker::PhantomData, sync::Arc};
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -57,7 +59,6 @@ macro_rules! impl_quic_builder {
     };
 }
 
-impl_quic_builder!("async-std", AsyncStd, async_std);
 impl_quic_builder!("tokio", super::provider::Tokio, tokio);
 
 impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
@@ -83,7 +84,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     ) -> Result<
         SwarmBuilder<
             Provider,
-            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -148,23 +149,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
             .with_behaviour(constructor)
     }
 }
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub async fn with_dns(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            super::provider::AsyncStd,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-        >,
-        std::io::Error,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .with_dns()
-            .await
-    }
-}
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, QuicPhase<T>> {
     pub fn with_dns(
@@ -179,21 +163,6 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
-    }
-}
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub fn with_dns_config(
-        self,
-        cfg: libp2p_dns::ResolverConfig,
-        opts: libp2p_dns::ResolverOpts,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .with_dns_config(cfg, opts)
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
@@ -263,39 +232,12 @@ macro_rules! impl_quic_phase_with_websocket {
         }
     }
 }
-impl_quic_phase_with_websocket!(
-    "async-std",
-    super::provider::AsyncStd,
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
+
 impl_quic_phase_with_websocket!(
     "tokio",
     super::provider::Tokio,
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
-impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
-    #[allow(deprecated)]
-    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
-    pub fn with_bandwidth_logging(
-        self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<crate::bandwidth::BandwidthSinks>,
-    ) {
-        #[allow(deprecated)]
-        self.without_quic()
-            .without_any_other_transports()
-            .without_dns()
-            .without_websocket()
-            .without_relay()
-            .with_bandwidth_logging()
-    }
-}
 #[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     pub fn with_bandwidth_metrics(
@@ -310,7 +252,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
             .without_dns()
             .without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_bandwidth_metrics(registry)
     }
 }

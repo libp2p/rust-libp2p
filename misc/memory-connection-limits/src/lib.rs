@@ -18,34 +18,40 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
-};
-use void::Void;
-
 use std::{
+    convert::Infallible,
     fmt,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
 
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
+};
+use sysinfo::MemoryRefreshKind;
+
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed
+/// into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`MemoryUsageLimitExceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError)
+/// will be emitted. The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively
+/// the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`] type that can be downcast to [`MemoryUsageLimitExceeded`] error
+/// if (and only if) **this** behaviour denied the connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections,
+/// it may also be a different error.
 ///
 /// [Behaviour::with_max_bytes] and [Behaviour::with_max_percentage] are mutually exclusive.
-/// If you need to employ both of them, compose two instances of [Behaviour] into your custom behaviour.
+/// If you need to employ both of them,
+/// compose two instances of [Behaviour] into your custom behaviour.
 ///
 /// # Example
 ///
@@ -57,8 +63,8 @@ use std::{
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   limits: memory_connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     limits: memory_connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
@@ -67,7 +73,8 @@ pub struct Behaviour {
     last_refreshed: Instant,
 }
 
-/// The maximum duration for which the retrieved memory-stats of the process are allowed to be stale.
+/// The maximum duration for which the retrieved memory-stats
+/// of the process are allowed to be stale.
 ///
 /// Once exceeded, we will retrieve new stats.
 const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
@@ -75,7 +82,7 @@ const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
         Self {
             max_allowed_bytes,
@@ -88,12 +95,14 @@ impl Behaviour {
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_percentage(percentage: f64) -> Self {
-        use sysinfo::{RefreshKind, SystemExt};
+        use sysinfo::{RefreshKind, System};
 
-        let system_memory_bytes =
-            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
+        let system_memory_bytes = System::new_with_specifics(
+            RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
+        )
+        .total_memory();
 
         Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
     }
@@ -136,7 +145,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -174,6 +183,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }
@@ -186,7 +196,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {

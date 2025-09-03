@@ -18,15 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
-use crate::kbucket::{Key, KeyBytes};
-use instant::Instant;
-use libp2p_identity::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
     ops::{Index, IndexMut, Range},
 };
+
+use super::*;
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
@@ -376,7 +374,6 @@ enum ResponseState {
 
 /// Iterator combining the result of multiple [`ClosestPeersIter`] into a single
 /// deduplicated ordered iterator.
-//
 // Note: This operates under the assumption that `I` is ordered.
 #[derive(Clone, Debug)]
 struct ResultIter<I>
@@ -436,13 +433,13 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashSet, iter};
 
-    use crate::{K_VALUE, SHA_256_MH};
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
-    use std::collections::HashSet;
-    use std::iter;
+
+    use super::*;
+    use crate::SHA_256_MH;
 
     impl Arbitrary for ResultIter<std::vec::IntoIter<Key<PeerId>>> {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -463,7 +460,7 @@ mod tests {
                 peers.into_iter()
             });
 
-            ResultIter::new(target.clone(), iters)
+            ResultIter::new(target, iters)
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -484,7 +481,7 @@ mod tests {
                 .collect();
 
             Box::new(ResultIterShrinker {
-                target: self.target.clone(),
+                target: self.target,
                 peers,
                 iters,
             })
@@ -514,7 +511,7 @@ mod tests {
                 Some(iter.into_iter())
             });
 
-            Some(ResultIter::new(self.target.clone(), iters))
+            Some(ResultIter::new(self.target, iters))
         }
     }
 
@@ -555,7 +552,6 @@ mod tests {
                     .flatten()
                     .collect::<HashSet<_>>()
                     .into_iter()
-                    .map(Key::from)
                     .collect::<Vec<_>>();
 
                 deduplicated.sort_unstable_by(|a, b| {
@@ -599,20 +595,6 @@ mod tests {
                 num_results: NumResults::arbitrary(g).0,
                 peer_timeout: Duration::from_secs(1),
             }
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct PeerVec(Vec<Key<PeerId>>);
-
-    impl Arbitrary for PeerVec {
-        fn arbitrary(g: &mut Gen) -> Self {
-            PeerVec(
-                (0..g.gen_range(1..60u8))
-                    .map(|_| ArbitraryPeerId::arbitrary(g).0)
-                    .map(Key::from)
-                    .collect(),
-            )
         }
     }
 
@@ -884,7 +866,7 @@ mod tests {
             let closest = drive_to_finish(
                 PeerIterator::Closest(ClosestPeersIter::with_config(
                     cfg.clone(),
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph.clone(),
@@ -894,7 +876,7 @@ mod tests {
             let disjoint = drive_to_finish(
                 PeerIterator::Disjoint(ClosestDisjointPeersIter::with_config(
                     cfg,
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph,

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
 
 use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
@@ -30,7 +33,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use tracing::error;
-use void::Void;
 
 use crate::Run;
 
@@ -61,29 +63,24 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Event;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        void::unreachable(v)
+        libp2p_core::util::unreachable(v)
     }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol, (), Infallible>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -99,17 +96,17 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
-                void::unreachable(info)
+                libp2p_core::util::unreachable(info)
             }
 
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
-                void::unreachable(info)
+                libp2p_core::util::unreachable(info)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                void::unreachable(error)
+                libp2p_core::util::unreachable(error)
             }
             _ => {}
         }
@@ -119,9 +116,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>> {
         loop {
             match self.inbound.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(stats))) => {

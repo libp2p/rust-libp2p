@@ -36,8 +36,10 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
-use crate::client::{RunError, RunId};
-use crate::{RunParams, RunUpdate};
+use crate::{
+    client::{RunError, RunId},
+    RunParams, RunUpdate,
+};
 
 #[derive(Debug)]
 pub struct Command {
@@ -56,7 +58,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -90,7 +92,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
@@ -104,17 +106,12 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => libp2p_core::util::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (),
@@ -145,7 +142,7 @@ impl ConnectionHandler for Handler {
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                void::unreachable(error)
+                libp2p_core::util::unreachable(error)
             }
             _ => {}
         }
@@ -155,9 +152,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

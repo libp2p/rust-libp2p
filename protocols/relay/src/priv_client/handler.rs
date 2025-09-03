@@ -18,29 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::client::Connection;
-use crate::priv_client::transport;
-use crate::priv_client::transport::ToListenerMsg;
-use crate::protocol::{self, inbound_stop, outbound_hop};
-use crate::{priv_client, proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
-use futures::channel::mpsc::Sender;
-use futures::channel::{mpsc, oneshot};
-use futures::future::FutureExt;
+use std::{
+    collections::VecDeque,
+    convert::Infallible,
+    fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, mpsc::Sender, oneshot},
+    future::FutureExt,
+};
 use futures_timer::Delay;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::Multiaddr;
+use libp2p_core::{multiaddr::Protocol, upgrade::ReadyUpgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound};
 use libp2p_swarm::{
+    handler::{ConnectionEvent, FullyNegotiatedInbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use std::collections::VecDeque;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::{fmt, io};
-use void::Void;
+
+use crate::{
+    client::Connection,
+    priv_client,
+    priv_client::{transport, transport::ToListenerMsg},
+    proto,
+    protocol::{self, inbound_stop, outbound_hop},
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
+};
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -101,12 +107,12 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
-            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     >,
 
-    pending_streams: VecDeque<oneshot::Sender<Result<Stream, StreamUpgradeError<Void>>>>,
+    pending_streams: VecDeque<oneshot::Sender<Result<Stream, StreamUpgradeError<Infallible>>>>,
 
     inflight_reserve_requests: futures_bounded::FuturesTupleSet<
         Result<outbound_hop::Reservation, outbound_hop::ReserveError>,
@@ -235,7 +241,7 @@ impl ConnectionHandler for Handler {
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ())
     }
 
@@ -261,9 +267,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         loop {
             // Reservations
             match self.inflight_reserve_requests.poll_unpin(cx) {
@@ -420,12 +424,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -445,7 +444,7 @@ impl ConnectionHandler for Handler {
                     let _ = next.send(Ok(ev.protocol));
                 }
             }
-            ConnectionEvent::ListenUpgradeError(ev) => void::unreachable(ev.error),
+            ConnectionEvent::ListenUpgradeError(ev) => libp2p_core::util::unreachable(ev.error),
             ConnectionEvent::DialUpgradeError(ev) => {
                 if let Some(next) = self.pending_streams.pop_front() {
                     let _ = next.send(Err(ev.error));
@@ -578,23 +577,23 @@ impl Reservation {
     }
 }
 
-fn into_reserve_error(e: StreamUpgradeError<Void>) -> outbound_hop::ReserveError {
+fn into_reserve_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::ReserveError {
     match e {
         StreamUpgradeError::Timeout => {
             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into())
         }
-        StreamUpgradeError::Apply(never) => void::unreachable(never),
+        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
         StreamUpgradeError::NegotiationFailed => outbound_hop::ReserveError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ReserveError::Io(e),
     }
 }
 
-fn into_connect_error(e: StreamUpgradeError<Void>) -> outbound_hop::ConnectError {
+fn into_connect_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::ConnectError {
     match e {
         StreamUpgradeError::Timeout => {
             outbound_hop::ConnectError::Io(io::ErrorKind::TimedOut.into())
         }
-        StreamUpgradeError::Apply(never) => void::unreachable(never),
+        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
         StreamUpgradeError::NegotiationFailed => outbound_hop::ConnectError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ConnectError::Io(e),
     }

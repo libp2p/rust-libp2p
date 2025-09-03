@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::future::BoxFuture;
-use if_watch::IfEvent;
 use std::{
     io,
     net::{SocketAddr, UdpSocket},
@@ -27,16 +25,15 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "async-std")]
-pub mod async_std;
+use futures::future::BoxFuture;
+use if_watch::IfEvent;
+
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
 pub enum Runtime {
     #[cfg(feature = "tokio")]
     Tokio,
-    #[cfg(feature = "async-std")]
-    AsyncStd,
     Dummy,
 }
 
@@ -59,7 +56,8 @@ pub trait Provider: Unpin + Send + Sized + 'static {
     /// Sleep for specified amount of time.
     fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
 
-    /// Sends data on the socket to the given address. On success, returns the number of bytes written.
+    /// Sends data on the socket to the given address. On success,
+    /// returns the number of bytes written.
     fn send_to<'a>(
         udp_socket: &'a UdpSocket,
         buf: &'a [u8],

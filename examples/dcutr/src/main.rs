@@ -20,6 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, str::FromStr};
+
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
@@ -28,27 +30,25 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId,
 };
-use std::str::FromStr;
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p DCUtR client")]
+#[command(name = "libp2p DCUtR client")]
 struct Opts {
     /// The mode (client-listen, client-dial).
-    #[clap(long)]
+    #[arg(long)]
     mode: Mode,
 
     /// Fixed value to generate deterministic peer id.
-    #[clap(long)]
+    #[arg(long)]
     secret_key_seed: u8,
 
     /// The listening address
-    #[clap(long)]
+    #[arg(long)]
     relay_address: Multiaddr,
 
     /// Peer ID of the remote peer to hole punch to.
-    #[clap(long)]
+    #[arg(long)]
     remote_peer_id: Option<PeerId>,
 }
 
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
             .with_tokio()
             .with_tcp(
-                tcp::Config::default().port_reuse(true).nodelay(true),
+                tcp::Config::default().nodelay(true),
                 noise::Config::new,
                 yamux::Config::default,
             )?
@@ -105,7 +105,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )),
                 dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
     swarm

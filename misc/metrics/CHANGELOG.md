@@ -1,3 +1,21 @@
+## 0.17.0
+
+- Update `prometheus-client` to `0.23.0`.
+  See [PR 5960](https://github.com/libp2p/rust-libp2p/pull/5960).
+
+- Add `ReservationClosed` as a relay metric.
+  See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
+## 0.16.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.15.0
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.14.1
 
 - Add `BandwidthTransport`, wrapping an existing `Transport`, exposing Prometheus bandwidth metrics.

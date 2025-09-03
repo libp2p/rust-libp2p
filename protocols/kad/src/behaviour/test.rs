@@ -20,33 +20,26 @@
 
 #![cfg(test)]
 
-use super::*;
-
-use crate::kbucket::Distance;
-use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, SHA_256_MH};
-use futures::{executor::block_on, future::poll_fn, prelude::*};
+use futures::{future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::ConnectedPoint,
-    multiaddr::{multiaddr, Multiaddr, Protocol},
+    multiaddr::{multiaddr, Protocol},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Endpoint, Transport,
+    upgrade, Transport,
 };
 use libp2p_identity as identity;
-use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::behaviour::ConnectionEstablished;
-use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
-use std::{
-    collections::{HashMap, HashSet},
-    num::NonZeroUsize,
-    time::Duration,
-    u64,
+use tokio::runtime::Runtime;
+
+use super::*;
+use crate::{
+    record::{store::MemoryStore, Key},
+    K_VALUE, PROTOCOL_NAME, SHA_256_MH,
 };
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
@@ -72,8 +65,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor()
-            .with_idle_connection_timeout(Duration::from_secs(5)),
+        swarm::Config::with_tokio_executor(),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
@@ -173,7 +165,11 @@ fn bootstrap() {
         // or smaller than K_VALUE.
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
-        let mut cfg = Config::default();
+        let mut cfg = Config::new(PROTOCOL_NAME);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
+        cfg.set_periodic_bootstrap_interval(None);
+        cfg.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             cfg.disjoint_query_paths(true);
         }
@@ -192,7 +188,8 @@ fn bootstrap() {
         let mut first = true;
 
         // Run test
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -252,7 +249,12 @@ fn query_iter() {
 
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
-        let mut swarms = build_connected_nodes(num_total, 1)
+        let mut config = Config::new(PROTOCOL_NAME);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
+        let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
             .into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
@@ -266,7 +268,7 @@ fn query_iter() {
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
-                QueryInfo::GetClosestPeers { key, step } => {
+                QueryInfo::GetClosestPeers { key, step, .. } => {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice());
                     assert_eq!(usize::from(step.count), 1);
                 }
@@ -282,7 +284,8 @@ fn query_iter() {
         expected_distances.sort();
 
         // Run test
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -297,9 +300,11 @@ fn query_iter() {
                             assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
-                            assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
+                            let peer_ids =
+                                ok.peers.into_iter().map(|p| p.peer_id).collect::<Vec<_>>();
+                            assert!(expected_peer_ids.iter().all(|p| peer_ids.contains(p)));
                             let key = kbucket::Key::new(ok.key);
-                            assert_eq!(expected_distances, distances(&key, ok.peers));
+                            assert_eq!(expected_distances, distances(&key, peer_ids));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -343,7 +348,8 @@ fn unresponsive_not_returned_direct() {
     let search_target = PeerId::random();
     swarms[0].behaviour_mut().get_closest_peers(search_target);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -401,7 +407,8 @@ fn unresponsive_not_returned_indirect() {
     let search_target = PeerId::random();
     swarms[1].behaviour_mut().get_closest_peers(search_target);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -411,7 +418,70 @@ fn unresponsive_not_returned_indirect() {
                     }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         assert_eq!(ok.peers.len(), 1);
-                        assert_eq!(ok.peers[0], first_peer_id);
+                        assert_eq!(ok.peers[0].peer_id, first_peer_id);
+                        return Poll::Ready(());
+                    }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+
+        Poll::Pending
+    }))
+}
+
+// Test the result of get_closest_peers with different num_results
+// Note that the result is capped after exceeds K_VALUE
+#[test]
+fn get_closest_with_different_num_results() {
+    let k_value = K_VALUE.get();
+    for replication_factor in [5, k_value / 2, k_value] {
+        for num_results in k_value / 2..k_value * 2 {
+            get_closest_with_different_num_results_inner(num_results, replication_factor)
+        }
+    }
+}
+
+fn get_closest_with_different_num_results_inner(num_results: usize, replication_factor: usize) {
+    let k_value = K_VALUE.get();
+    let num_of_nodes = 3 * k_value;
+    let mut cfg = Config::new(PROTOCOL_NAME);
+    cfg.set_replication_factor(NonZeroUsize::new(replication_factor).unwrap());
+    let swarms = build_connected_nodes_with_config(num_of_nodes, replication_factor - 1, cfg);
+
+    let mut swarms = swarms
+        .into_iter()
+        .map(|(_addr, swarm)| swarm)
+        .collect::<Vec<_>>();
+
+    // Ask first to search a random value.
+    let search_target = PeerId::random();
+    let Some(num_results_nonzero) = std::num::NonZeroUsize::new(num_results) else {
+        panic!("Unexpected NonZeroUsize val of {num_results}");
+    };
+    swarms[0]
+        .behaviour_mut()
+        .get_n_closest_peers(search_target, num_results_nonzero);
+
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetClosestPeers(Ok(ok)),
+                        ..
+                    }))) => {
+                        assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                        if num_results > k_value {
+                            assert_eq!(ok.peers.len(), k_value, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        } else {
+                            assert_eq!(ok.peers.len(), num_results, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        }
+
                         return Poll::Ready(());
                     }
                     // Ignore any other event.
@@ -454,7 +524,8 @@ fn get_record_not_found() {
     let target_key = record::Key::from(random_multihash());
     let qid = swarms[0].behaviour_mut().get_record(target_key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -498,8 +569,12 @@ fn put_record() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = Config::default();
+        let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -571,7 +646,8 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
-        block_on(poll_fn(move |ctx| loop {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| loop {
             // Poll all swarms until they are "Pending".
             for swarm in &mut swarms {
                 loop {
@@ -762,7 +838,8 @@ fn get_record() {
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -819,7 +896,8 @@ fn get_record_many() {
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for (i, swarm) in swarms.iter_mut().enumerate() {
             let mut records = Vec::new();
             let quorum = quorum.eval(swarm.behaviour().queries.config().replication_factor);
@@ -867,8 +945,12 @@ fn add_provider() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = Config::default();
+        let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -915,7 +997,8 @@ fn add_provider() {
             qids.insert(qid);
         }
 
-        block_on(poll_fn(move |ctx| loop {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| loop {
             // Poll all swarms until they are "Pending".
             for swarm in &mut swarms {
                 loop {
@@ -1053,7 +1136,8 @@ fn exceed_jobs_max_queries() {
 
     assert_eq!(swarm.behaviour_mut().queries.size(), num);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for _ in 0..num {
             // There are no other nodes, so the queries finish instantly.
             loop {
@@ -1083,17 +1167,21 @@ fn exp_decr_expiration_overflow() {
     }
 
     // Right shifting a u64 by >63 results in a panic.
-    prop_no_panic(Config::default().record_ttl.unwrap(), 64);
+    prop_no_panic(Config::new(PROTOCOL_NAME).record_ttl.unwrap(), 64);
 
     quickcheck(prop_no_panic as fn(_, _))
 }
 
 #[test]
 fn disjoint_query_does_not_finish_before_all_paths_did() {
-    let mut config = Config::default();
+    let mut config = Config::new(PROTOCOL_NAME);
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
+    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering
+    // automatically.
+    config.set_periodic_bootstrap_interval(None);
+    config.set_automatic_bootstrap_throttle(None);
 
     let mut alice = build_node_with_config(config);
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
@@ -1134,7 +1222,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // Poll only `alice` and `trudy` expecting `alice` not yet to return a query
     // result as it is not able to connect to `bob` just yet.
     let addr_trudy = *Swarm::local_peer_id(&trudy);
-    block_on(poll_fn(|ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(|ctx| {
         for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -1179,7 +1268,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .behaviour()
         .queries
         .iter()
-        .for_each(|q| match &q.inner.info {
+        .for_each(|q| match &q.info {
             QueryInfo::GetRecord { step, .. } => {
                 assert_eq!(usize::from(step.count), 2);
             }
@@ -1188,7 +1277,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Poll `alice` and `bob` expecting `alice` to return a successful query
     // result as it is now able to explore the second disjoint path.
-    let records = block_on(poll_fn(|ctx| {
+    let records = rt.block_on(poll_fn(|ctx| {
         let mut records = Vec::new();
         for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
             loop {
@@ -1238,7 +1327,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 /// the routing table with `BucketInserts::Manual`.
 #[test]
 fn manual_bucket_inserts() {
-    let mut cfg = Config::default();
+    let mut cfg = Config::new(PROTOCOL_NAME);
     cfg.set_kbucket_inserts(BucketInserts::Manual);
     // 1 -> 2 -> [3 -> ...]
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
@@ -1261,7 +1350,8 @@ fn manual_bucket_inserts() {
         .1
         .behaviour_mut()
         .get_closest_peers(PeerId::random());
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -1302,9 +1392,10 @@ fn network_behaviour_on_address_change() {
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
         role_override: Endpoint::Dialer,
+        port_use: PortUse::Reuse,
     };
 
-    // Mimick a connection being established.
+    // Mimic a connection being established.
     kademlia.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: remote_peer_id,
         connection_id,
@@ -1326,7 +1417,7 @@ fn network_behaviour_on_address_change() {
         .unwrap()
         .is_empty());
 
-    // Mimick the connection handler confirming the protocol for
+    // Mimic the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
     kademlia.on_connection_handler_event(
         remote_peer_id,
@@ -1352,10 +1443,12 @@ fn network_behaviour_on_address_change() {
         old: &ConnectedPoint::Dialer {
             address: old_address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         new: &ConnectedPoint::Dialer {
             address: new_address.clone(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
     }));
 
@@ -1381,7 +1474,8 @@ fn get_providers_single() {
             .start_providing(key.clone())
             .expect("could not provide");
 
-        block_on(async {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
             match single_swarm.next().await.unwrap() {
                 SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
                     result: QueryResult::StartProviding(Ok(_)),
@@ -1395,7 +1489,7 @@ fn get_providers_single() {
 
         let query_id = single_swarm.behaviour_mut().get_providers(key);
 
-        block_on(async {
+        rt.block_on(async {
             loop {
                 match single_swarm.next().await.unwrap() {
                     SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
@@ -1459,7 +1553,8 @@ fn get_providers_limit<const N: usize>() {
 
         let mut all_providers: Vec<PeerId> = vec![];
 
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -1526,4 +1621,62 @@ fn get_providers_limit_n_2() {
 #[test]
 fn get_providers_limit_n_5() {
     get_providers_limit::<5>();
+}
+
+// Test that nodes respond with K amount of peers even when replication factor is set lower than K.
+#[test]
+fn get_closest_peers_should_return_up_to_k_peers() {
+    let k_value = K_VALUE.get();
+
+    // Rplication factor should not influence the amount of peers returned in `GetClosestPeers`.
+    for replication_factor in 5..k_value + 1 {
+        // Should be enough nodes for every node to have >= K nodes in their RT.
+        let num_of_nodes = 3 * k_value;
+
+        let mut cfg = Config::new(PROTOCOL_NAME);
+        cfg.set_replication_factor(NonZeroUsize::new(replication_factor).unwrap());
+
+        let swarms = build_connected_nodes_with_config(num_of_nodes, replication_factor - 1, cfg);
+        let mut swarms = swarms
+            .into_iter()
+            .map(|(_addr, swarm)| swarm)
+            .collect::<Vec<_>>();
+
+        // Ask first node to search for a random peer.
+        let search_target = PeerId::random();
+        swarms[0].behaviour_mut().get_closest_peers(search_target);
+
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(
+                            Event::OutboundQueryProgressed {
+                                result: QueryResult::GetClosestPeers(Ok(ok)),
+                                ..
+                            },
+                        ))) => {
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                            // Verify that we get K_VALUE amount of peers even with lower
+                            // replication factor.
+                            assert_eq!(
+                                ok.peers.len(),
+                                k_value,
+                                "Expected K_VALUE ({}) peers but got {}",
+                                k_value,
+                                ok.peers.len()
+                            );
+                            return Poll::Ready(());
+                        }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                        Poll::Pending => break,
+                    }
+                }
+            }
+            Poll::Pending
+        }))
+    }
 }

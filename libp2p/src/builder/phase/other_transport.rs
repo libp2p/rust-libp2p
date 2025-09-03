@@ -1,19 +1,16 @@
-use std::convert::Infallible;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::Transport;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    Transport,
+};
 #[cfg(feature = "relay")]
 use libp2p_core::{Negotiated, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
-#[allow(deprecated)]
-use crate::bandwidth::BandwidthSinks;
-use crate::SwarmBuilder;
-
 use super::*;
+use crate::SwarmBuilder;
 
 pub struct OtherTransportPhase<T> {
     pub(crate) transport: T,
@@ -69,22 +66,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
-{
-    pub async fn with_dns(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            super::provider::AsyncStd,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-        >,
-        std::io::Error,
-    > {
-        self.without_any_other_transports().with_dns().await
-    }
-}
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<super::provider::Tokio, OtherTransportPhase<T>>
@@ -99,22 +80,6 @@ impl<T: AuthenticatedMultiplexedTransport>
         std::io::Error,
     > {
         self.without_any_other_transports().with_dns()
-    }
-}
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
-impl<T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
-{
-    pub fn with_dns_config(
-        self,
-        cfg: libp2p_dns::ResolverConfig,
-        opts: libp2p_dns::ResolverOpts,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_any_other_transports()
-            .with_dns_config(cfg, opts)
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
@@ -143,7 +108,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     ) -> Result<
         SwarmBuilder<
             Provider,
-            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -174,28 +139,6 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, OtherTransportPhase<T>>
-{
-    #[allow(deprecated)]
-    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
-    pub fn with_bandwidth_logging(
-        self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<BandwidthSinks>,
-    ) {
-        #[allow(deprecated)]
-        self.without_any_other_transports()
-            .without_dns()
-            .without_websocket()
-            .without_relay()
-            .with_bandwidth_logging()
-    }
-}
 #[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
@@ -211,7 +154,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
             .without_dns()
             .without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_bandwidth_metrics(registry)
     }
 }
@@ -226,7 +168,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
             .without_dns()
             .without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_behaviour(constructor)
     }
 }

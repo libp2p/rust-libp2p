@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{
-    channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
-};
-
 use std::{
     io,
     task::{Context, Poll},
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    SinkExt, StreamExt,
 };
 
 pub(crate) fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
@@ -52,10 +52,8 @@ impl<Req, Res> Sender<Req, Res> {
             .await
             .send((req, sender))
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        let res = receiver
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
+        let res = receiver.await.map_err(io::Error::other)?;
 
         Ok(res)
     }

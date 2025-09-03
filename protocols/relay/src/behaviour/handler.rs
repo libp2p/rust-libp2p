@@ -18,31 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::CircuitId;
-use crate::copy_future::CopyFuture;
-use crate::protocol::{inbound_hop, outbound_stop};
-use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use bytes::Bytes;
 use either::Either;
-use futures::future::{BoxFuture, FutureExt, TryFutureExt};
-use futures::io::AsyncWriteExt;
-use futures::stream::{FuturesUnordered, StreamExt};
-use futures_timer::Delay;
-use instant::Instant;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::{ConnectedPoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+use futures::{
+    future::{BoxFuture, FutureExt, TryFutureExt},
+    io::AsyncWriteExt,
+    stream::{FuturesUnordered, StreamExt},
 };
+use futures_timer::Delay;
+use libp2p_core::{upgrade::ReadyUpgrade, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
-use std::collections::{HashMap, VecDeque};
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::{fmt, io};
+use web_time::Instant;
+
+use crate::{
+    behaviour::CircuitId,
+    copy_future::CopyFuture,
+    proto,
+    protocol::{inbound_hop, outbound_stop},
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
+};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -153,7 +159,7 @@ pub enum Event {
     /// Accepting an inbound reservation request failed.
     ReservationReqAcceptFailed { error: inbound_hop::Error },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied {},
+    ReservationReqDenied { status: proto::Status },
     /// Denying an inbound reservation request has failed.
     ReservationReqDenyFailed { error: inbound_hop::Error },
     /// An inbound reservation has timed out.
@@ -167,6 +173,7 @@ pub enum Event {
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
+        status: proto::Status,
     },
     /// Denying an inbound circuit request failed.
     CircuitReqDenyFailed {
@@ -232,9 +239,10 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::ReservationReqAcceptFailed")
                 .field("error", error)
                 .finish(),
-            Event::ReservationReqDenied {} => {
-                f.debug_struct("Event::ReservationReqDenied").finish()
-            }
+            Event::ReservationReqDenied { status } => f
+                .debug_struct("Event::ReservationReqDenied")
+                .field("status", status)
+                .finish(),
             Event::ReservationReqDenyFailed { error } => f
                 .debug_struct("Event::ReservationReqDenyFailed")
                 .field("error", error)
@@ -250,10 +258,12 @@ impl fmt::Debug for Event {
             Event::CircuitReqDenied {
                 circuit_id,
                 dst_peer_id,
+                status,
             } => f
                 .debug_struct("Event::CircuitReqDenied")
                 .field("circuit_id", circuit_id)
                 .field("dst_peer_id", dst_peer_id)
+                .field("status", status)
                 .finish(),
             Event::CircuitReqDenyFailed {
                 circuit_id,
@@ -337,7 +347,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -353,7 +363,12 @@ pub struct Handler {
     /// Futures accepting an inbound circuit request.
     circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::Error)>>,
     /// Futures denying an inbound circuit request.
-    circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), inbound_hop::Error>)>,
+    circuit_deny_futures: Futures<(
+        Option<CircuitId>,
+        PeerId,
+        proto::Status,
+        Result<(), inbound_hop::Error>,
+    )>,
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
@@ -441,7 +456,7 @@ impl Handler {
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError { error, .. }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
@@ -449,7 +464,7 @@ impl Handler {
             StreamUpgradeError::Timeout => outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
             StreamUpgradeError::NegotiationFailed => outbound_stop::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound_stop::Error::Io(e),
-            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
         };
 
         let stop_command = self
@@ -473,7 +488,7 @@ impl Handler {
 
 enum ReservationRequestFuture {
     Accepting(BoxFuture<'static, Result<(), inbound_hop::Error>>),
-    Denying(BoxFuture<'static, Result<(), inbound_hop::Error>>),
+    Denying(BoxFuture<'static, (proto::Status, Result<(), inbound_hop::Error>)>),
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
@@ -486,7 +501,7 @@ impl ConnectionHandler for Handler {
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ())
     }
 
@@ -513,7 +528,11 @@ impl ConnectionHandler for Handler {
                 if self
                     .reservation_request_future
                     .replace(ReservationRequestFuture::Denying(
-                        inbound_reservation_req.deny(status).err_into().boxed(),
+                        inbound_reservation_req
+                            .deny(status)
+                            .err_into()
+                            .map(move |result| (status, result))
+                            .boxed(),
                     ))
                     .is_some()
                 {
@@ -548,7 +567,7 @@ impl ConnectionHandler for Handler {
                     inbound_circuit_req
                         .deny(status)
                         .err_into()
-                        .map(move |result| (circuit_id, dst_peer_id, result))
+                        .map(move |result| (circuit_id, dst_peer_id, status, result))
                         .boxed(),
                 );
             }
@@ -590,9 +609,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -715,7 +732,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny new circuits.
-        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, status, result))) =
             self.circuit_deny_futures.poll_next_unpin(cx)
         {
             match result {
@@ -724,6 +741,7 @@ impl ConnectionHandler for Handler {
                         Event::CircuitReqDenied {
                             circuit_id,
                             dst_peer_id,
+                            status,
                         },
                     ));
                 }
@@ -834,13 +852,13 @@ impl ConnectionHandler for Handler {
                 }
             }
             Some(ReservationRequestFuture::Denying(fut)) => {
-                if let Poll::Ready(result) = fut.poll_unpin(cx) {
+                if let Poll::Ready((status, result)) = fut.poll_unpin(cx) {
                     self.reservation_request_future = None;
 
                     match result {
                         Ok(()) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqDenied {},
+                                Event::ReservationReqDenied { status },
                             ))
                         }
                         Err(error) => {
@@ -868,12 +886,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {

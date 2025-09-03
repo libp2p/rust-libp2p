@@ -18,25 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::Message::*;
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
-use futures::future::BoxFuture;
-use futures::future::FutureExt;
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
-use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
+use std::{
+    collections::{HashMap, VecDeque},
+    iter,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    future::{BoxFuture, FutureExt},
+    stream::{FuturesUnordered, StreamExt},
+};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::HashMap;
-use std::iter;
-use std::task::{Context, Poll};
-use std::time::Duration;
+
+use crate::codec::{
+    Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
+};
 
 pub struct Behaviour {
+    events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
+
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
     keypair: Keypair,
@@ -46,12 +53,14 @@ pub struct Behaviour {
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
-    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
-    discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by
+    /// returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
+    discovered_peers: HashMap<PeerId, HashMap<Namespace, Vec<Multiaddr>>>,
 
     registered_namespaces: HashMap<(PeerId, Namespace), Ttl>,
 
-    /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
+    /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers`
+    /// otherwise we have a memory leak.
     expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
 
     external_addresses: ExternalAddresses,
@@ -61,6 +70,7 @@ impl Behaviour {
     /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(keypair: Keypair) -> Self {
         Self {
+            events: Default::default(),
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
                 iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
@@ -80,8 +90,9 @@ impl Behaviour {
 
     /// Register our external addresses in the given namespace with the given rendezvous peer.
     ///
-    /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
-    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
+    /// External addresses are either manually added via
+    /// [`libp2p_swarm::Swarm::add_external_address`] or reported by other [`NetworkBehaviour`]s
+    /// via [`ToSwarm::ExternalAddrConfirmed`].
     pub fn register(
         &mut self,
         namespace: Namespace,
@@ -208,9 +219,15 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_connection_handler_event(
@@ -244,8 +261,11 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
-
         loop {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
+
             match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
@@ -290,13 +310,17 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => {}
             }
 
-            if let Poll::Ready(Some(expired_registration)) =
+            if let Poll::Ready(Some((peer, expired_registration))) =
                 self.expiring_registrations.poll_next_unpin(cx)
             {
-                self.discovered_peers.remove(&expired_registration);
-                return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired {
-                    peer: expired_registration.0,
-                }));
+                let Some(registrations) = self.discovered_peers.get_mut(&peer) else {
+                    continue;
+                };
+                registrations.remove(&expired_registration);
+                if registrations.is_empty() {
+                    self.discovered_peers.remove(&peer);
+                }
+                return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired { peer }));
             }
 
             return Poll::Pending;
@@ -310,20 +334,10 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
-        };
-
-        let addresses = self
-            .discovered_peers
-            .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == &peer).then_some(addresses))
-            .flatten()
-            .cloned()
-            .collect();
-
-        Ok(addresses)
+        let addrs = maybe_peer
+            .map(|peer| self.discovered_peer_addrs(&peer).cloned().collect())
+            .unwrap_or_default();
+        Ok(addrs)
     }
 }
 
@@ -355,80 +369,86 @@ impl Behaviour {
     ) -> Option<Event> {
         match response {
             RegisterResponse(Ok(ttl)) => {
-                if let Some((rendezvous_node, namespace)) =
-                    self.waiting_for_register.remove(request_id)
-                {
-                    self.registered_namespaces
-                        .insert((rendezvous_node, namespace.clone()), ttl);
+                let (rendezvous_node, namespace) = self.waiting_for_register.remove(request_id)?;
+                self.registered_namespaces
+                    .insert((rendezvous_node, namespace.clone()), ttl);
 
-                    return Some(Event::Registered {
-                        rendezvous_node,
-                        ttl,
-                        namespace,
-                    });
-                }
-
-                None
+                Some(Event::Registered {
+                    rendezvous_node,
+                    ttl,
+                    namespace,
+                })
             }
             RegisterResponse(Err(error_code)) => {
-                if let Some((rendezvous_node, namespace)) =
-                    self.waiting_for_register.remove(request_id)
-                {
-                    return Some(Event::RegisterFailed {
-                        rendezvous_node,
-                        namespace,
-                        error: error_code,
-                    });
-                }
-
-                None
+                let (rendezvous_node, namespace) = self.waiting_for_register.remove(request_id)?;
+                Some(Event::RegisterFailed {
+                    rendezvous_node,
+                    namespace,
+                    error: error_code,
+                })
             }
             DiscoverResponse(Ok((registrations, cookie))) => {
-                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
-                {
-                    self.discovered_peers
-                        .extend(registrations.iter().map(|registration| {
-                            let peer_id = registration.record.peer_id();
-                            let namespace = registration.namespace.clone();
+                let (rendezvous_node, _ns) = self.waiting_for_discovery.remove(request_id)?;
+                registrations.iter().for_each(|registration| {
+                    let peer_id = registration.record.peer_id();
+                    let addresses = registration.record.addresses();
+                    let namespace = registration.namespace.clone();
+                    let ttl = registration.ttl;
 
-                            let addresses = registration.record.addresses().to_vec();
-
-                            ((peer_id, namespace), addresses)
-                        }));
-
-                    self.expiring_registrations
-                        .extend(registrations.iter().cloned().map(|registration| {
-                            async move {
-                                // if the timer errors we consider it expired
-                                futures_timer::Delay::new(Duration::from_secs(registration.ttl))
-                                    .await;
-
-                                (registration.record.peer_id(), registration.namespace)
+                    // Emit events for all newly discovered addresses.
+                    let new_addr_events = addresses
+                        .iter()
+                        .filter_map(|address| {
+                            if self.discovered_peer_addrs(&peer_id).any(|a| a == address) {
+                                return None;
                             }
-                            .boxed()
-                        }));
+                            Some(ToSwarm::NewExternalAddrOfPeer {
+                                peer_id,
+                                address: address.clone(),
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    self.events.extend(new_addr_events);
 
-                    return Some(Event::Discovered {
-                        rendezvous_node,
-                        registrations,
-                        cookie,
-                    });
-                }
+                    // Update list of discovered peers.
+                    self.discovered_peers
+                        .entry(peer_id)
+                        .or_default()
+                        .insert(namespace.clone(), addresses.to_owned());
 
-                None
+                    // Push registration expiry future.
+                    self.expiring_registrations.push(
+                        async move {
+                            // if the timer errors we consider it expired
+                            futures_timer::Delay::new(Duration::from_secs(ttl)).await;
+                            (peer_id, namespace)
+                        }
+                        .boxed(),
+                    );
+                });
+
+                Some(Event::Discovered {
+                    rendezvous_node,
+                    registrations,
+                    cookie,
+                })
             }
             DiscoverResponse(Err(error_code)) => {
-                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
-                    return Some(Event::DiscoverFailed {
-                        rendezvous_node,
-                        namespace: ns,
-                        error: error_code,
-                    });
-                }
-
-                None
+                let (rendezvous_node, ns) = self.waiting_for_discovery.remove(request_id)?;
+                Some(Event::DiscoverFailed {
+                    rendezvous_node,
+                    namespace: ns,
+                    error: error_code,
+                })
             }
             _ => unreachable!("rendezvous clients never receive requests"),
         }
+    }
+
+    fn discovered_peer_addrs(&self, peer: &PeerId) -> impl Iterator<Item = &Multiaddr> {
+        self.discovered_peers
+            .get(peer)
+            .map(|addrs| addrs.values().flatten())
+            .unwrap_or_default()
     }
 }

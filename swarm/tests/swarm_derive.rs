@@ -18,27 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt::Debug;
+
 use futures::StreamExt;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
     behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
 fn require_net_behaviour<T: libp2p_swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
-/*#[test]
-fn empty() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    struct Foo {}
-}*/
+// #[test]
+// fn empty() {
+// #[allow(dead_code)]
+// #[derive(NetworkBehaviour)]
+// struct Foo {}
+// }
 
 #[test]
 fn one_field() {
@@ -133,19 +134,19 @@ fn custom_event() {
 
     #[allow(clippy::large_enum_variant)]
     enum MyEvent {
-        Ping(ping::Event),
-        Identify(identify::Event),
+        Ping,
+        Identify,
     }
 
     impl From<ping::Event> for MyEvent {
-        fn from(event: ping::Event) -> Self {
-            MyEvent::Ping(event)
+        fn from(_event: ping::Event) -> Self {
+            MyEvent::Ping
         }
     }
 
     impl From<identify::Event> for MyEvent {
-        fn from(event: identify::Event) -> Self {
-            MyEvent::Identify(event)
+        fn from(_event: identify::Event) -> Self {
+            MyEvent::Identify
         }
     }
 
@@ -167,19 +168,19 @@ fn custom_event_mismatching_field_names() {
 
     #[allow(clippy::large_enum_variant)]
     enum MyEvent {
-        Ping(ping::Event),
-        Identify(identify::Event),
+        Ping,
+        Identify,
     }
 
     impl From<ping::Event> for MyEvent {
-        fn from(event: ping::Event) -> Self {
-            MyEvent::Ping(event)
+        fn from(_event: ping::Event) -> Self {
+            MyEvent::Ping
         }
     }
 
     impl From<identify::Event> for MyEvent {
-        fn from(event: identify::Event) -> Self {
-            MyEvent::Identify(event)
+        fn from(_event: identify::Event) -> Self {
+            MyEvent::Identify
         }
     }
 
@@ -252,19 +253,19 @@ fn nested_derives_with_import() {
 fn custom_event_emit_event_through_poll() {
     #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
-        Ping(ping::Event),
-        Identify(identify::Event),
+        Ping,
+        Identify,
     }
 
     impl From<ping::Event> for BehaviourOutEvent {
-        fn from(event: ping::Event) -> Self {
-            BehaviourOutEvent::Ping(event)
+        fn from(_event: ping::Event) -> Self {
+            BehaviourOutEvent::Ping
         }
     }
 
     impl From<identify::Event> for BehaviourOutEvent {
-        fn from(event: identify::Event) -> Self {
-            BehaviourOutEvent::Identify(event)
+        fn from(_event: identify::Event) -> Self {
+            BehaviourOutEvent::Identify
         }
     }
 
@@ -293,8 +294,8 @@ fn custom_event_emit_event_through_poll() {
         // check that the event is bubbled up all the way to swarm
         loop {
             match _swarm.select_next_some().await {
-                SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
-                SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
+                SwarmEvent::Behaviour(BehaviourOutEvent::Ping) => break,
+                SwarmEvent::Behaviour(BehaviourOutEvent::Identify) => break,
                 _ => {}
             }
         }
@@ -372,24 +373,109 @@ fn with_generics_mixed() {
 }
 
 #[test]
+fn with_generics_constrained() {
+    use std::task::{Context, Poll};
+    trait Mark {}
+    struct Marked;
+    impl Mark for Marked {}
+
+    /// A struct with a generic constraint, for which we manually implement `NetworkBehaviour`.
+    #[allow(dead_code)]
+    struct Bar<A: Mark> {
+        a: A,
+    }
+
+    impl<A: Mark + 'static> NetworkBehaviour for Bar<A> {
+        type ConnectionHandler = dummy::ConnectionHandler;
+        type ToSwarm = std::convert::Infallible;
+
+        fn handle_established_inbound_connection(
+            &mut self,
+            _: libp2p_swarm::ConnectionId,
+            _: libp2p_identity::PeerId,
+            _: &Multiaddr,
+            _: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _: libp2p_swarm::ConnectionId,
+            _: libp2p_identity::PeerId,
+            _: &Multiaddr,
+            _: Endpoint,
+            _: PortUse,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
+        }
+
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
+
+        fn on_connection_handler_event(
+            &mut self,
+            _: libp2p_identity::PeerId,
+            _: libp2p_swarm::ConnectionId,
+            _: THandlerOutEvent<Self>,
+        ) {
+        }
+
+        fn poll(
+            &mut self,
+            _: &mut Context<'_>,
+        ) -> Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+            Poll::Pending
+        }
+    }
+
+    /// A struct which uses the above, inheriting the generic constraint,
+    /// for which we want to derive the `NetworkBehaviour`.
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo1<A: Mark> {
+        bar: Bar<A>,
+    }
+
+    /// A struct which uses the above, inheriting the generic constraint,
+    /// for which we want to derive the `NetworkBehaviour`.
+    ///
+    /// Using a where clause instead of inline constraint.
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo2<A>
+    where
+        A: Mark,
+    {
+        bar: Bar<A>,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo1<Marked>>();
+        require_net_behaviour::<Foo2<Marked>>();
+    }
+}
+
+#[test]
 fn custom_event_with_either() {
     use either::Either;
 
-    #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
-        Kad(libp2p_kad::Event),
-        PingOrIdentify(Either<ping::Event, identify::Event>),
+        Kad,
+        PingOrIdentify,
     }
 
     impl From<libp2p_kad::Event> for BehaviourOutEvent {
-        fn from(event: libp2p_kad::Event) -> Self {
-            BehaviourOutEvent::Kad(event)
+        fn from(_event: libp2p_kad::Event) -> Self {
+            BehaviourOutEvent::Kad
         }
     }
 
     impl From<Either<ping::Event, identify::Event>> for BehaviourOutEvent {
-        fn from(event: Either<ping::Event, identify::Event>) -> Self {
-            BehaviourOutEvent::PingOrIdentify(event)
+        fn from(_event: Either<ping::Event, identify::Event>) -> Self {
+            BehaviourOutEvent::PingOrIdentify
         }
     }
 
@@ -452,10 +538,10 @@ fn multiple_behaviour_attributes() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
+    use std::task::{Context, Poll};
+
     use libp2p_identity::PeerId;
     use libp2p_swarm::{ConnectionId, ToSwarm};
-    use std::task::Context;
-    use std::task::Poll;
 
     pub(crate) struct TemplatedBehaviour<T: 'static> {
         _data: T,
@@ -463,7 +549,7 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = std::convert::Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -481,6 +567,7 @@ fn custom_out_event_no_type_parameters() {
             _: PeerId,
             _: &Multiaddr,
             _: Endpoint,
+            _: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Ok(dummy::ConnectionHandler)
         }
@@ -491,7 +578,7 @@ fn custom_out_event_no_type_parameters() {
             _connection: ConnectionId,
             message: THandlerOutEvent<Self>,
         ) {
-            void::unreachable(message);
+            libp2p_core::util::unreachable(message);
         }
 
         fn poll(
@@ -515,8 +602,8 @@ fn custom_out_event_no_type_parameters() {
         None,
     }
 
-    impl From<void::Void> for OutEvent {
-        fn from(_e: void::Void) -> Self {
+    impl From<std::convert::Infallible> for OutEvent {
+        fn from(_e: std::convert::Infallible) -> Self {
             Self::None
         }
     }

@@ -20,14 +20,21 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::num::NonZeroUsize;
-use std::ops::Add;
-use std::time::{Duration, Instant};
+use std::{
+    num::NonZeroUsize,
+    ops::Add,
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::{bytes::BufMut, identity, kad, noise, swarm::SwarmEvent, tcp, yamux, PeerId};
+use libp2p::{
+    bytes::BufMut,
+    identity, kad, noise,
+    swarm::{StreamProtocol, SwarmEvent},
+    tcp, yamux, PeerId,
+};
 use tracing_subscriber::EnvFilter;
 
 const BOOTNODES: [&str; 4] = [
@@ -36,6 +43,8 @@ const BOOTNODES: [&str; 4] = [
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
+
+const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -56,12 +65,11 @@ async fn main() -> Result<()> {
         .with_dns()?
         .with_behaviour(|key| {
             // Create a Kademlia behaviour.
-            let mut cfg = kad::Config::default();
+            let mut cfg = kad::Config::new(IPFS_PROTO_NAME);
             cfg.set_query_timeout(Duration::from_secs(5 * 60));
             let store = kad::store::MemoryStore::new(key.public().to_peer_id());
             kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg)
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     // Add the bootnodes to the local routing table. `libp2p-dns` built
@@ -146,16 +154,16 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(name = "libp2p Kademlia DHT example")]
+#[command(name = "libp2p Kademlia DHT example")]
 struct Opt {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     argument: CliArgument,
 }
 
 #[derive(Debug, Parser)]
 enum CliArgument {
     GetPeers {
-        #[clap(long)]
+        #[arg(long)]
         peer_id: Option<PeerId>,
     },
     PutPkRecord {},

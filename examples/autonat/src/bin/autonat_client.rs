@@ -20,27 +20,29 @@
 
 #![doc = include_str!("../../README.md")]
 
+use std::{error::Error, net::Ipv4Addr, time::Duration};
+
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::core::multiaddr::Protocol;
-use libp2p::core::Multiaddr;
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
-use std::error::Error;
-use std::net::Ipv4Addr;
-use std::time::Duration;
+use libp2p::{
+    autonat,
+    core::{multiaddr::Protocol, Multiaddr},
+    identify, identity, noise,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, PeerId,
+};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p autonat")]
+#[command(name = "libp2p autonat")]
 struct Opt {
-    #[clap(long)]
+    #[arg(long)]
     listen_port: Option<u16>,
 
-    #[clap(long)]
+    #[arg(long)]
     server_address: Multiaddr,
 
-    #[clap(long)]
+    #[arg(long)]
     server_peer_id: PeerId,
 }
 
@@ -60,7 +62,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm.listen_on(
@@ -108,24 +109,5 @@ impl Behaviour {
                 },
             ),
         }
-    }
-}
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum Event {
-    AutoNat(autonat::Event),
-    Identify(identify::Event),
-}
-
-impl From<identify::Event> for Event {
-    fn from(v: identify::Event) -> Self {
-        Self::Identify(v)
-    }
-}
-
-impl From<autonat::Event> for Event {
-    fn from(v: autonat::Event) -> Self {
-        Self::AutoNat(v)
     }
 }

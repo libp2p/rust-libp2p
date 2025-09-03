@@ -18,21 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::FromSwarm;
-use crate::connection::ConnectionId;
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
-};
-use crate::upgrade::SendWrapper;
-use crate::{
-    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
+use std::task::{Context, Poll};
+
 use either::Either;
 use futures::future;
-use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use std::{task::Context, task::Poll};
+
+use crate::{
+    behaviour::FromSwarm,
+    connection::ConnectionId,
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
+        SubstreamProtocol,
+    },
+    upgrade::SendWrapper,
+    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -77,9 +80,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(()),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(());
         };
 
         inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
@@ -94,9 +96,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(ToggleConnectionHandler { inner: None }),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(ToggleConnectionHandler { inner: None });
         };
 
         let handler = inner.handle_established_inbound_connection(
@@ -118,9 +119,8 @@ where
         addresses: &[Multiaddr],
         effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(vec![]),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(vec![]);
         };
 
         let addresses = inner.handle_pending_outbound_connection(
@@ -139,10 +139,10 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let inner = match self.inner.as_mut() {
-            None => return Ok(ToggleConnectionHandler { inner: None }),
-            Some(inner) => inner,
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(ToggleConnectionHandler { inner: None });
         };
 
         let handler = inner.handle_established_outbound_connection(
@@ -150,6 +150,7 @@ where
             peer,
             addr,
             role_override,
+            port_use,
         )?;
 
         Ok(ToggleConnectionHandler {
@@ -207,7 +208,7 @@ where
     ) {
         let out = match out {
             future::Either::Left(out) => out,
-            future::Either::Right(v) => void::unreachable(v),
+            future::Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         if let Either::Left(info) = info {
@@ -224,7 +225,6 @@ where
             panic!("Unexpected Either::Right in enabled `on_fully_negotiated_inbound`.")
         }
     }
-
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { info, error: err }: ListenUpgradeError<
@@ -248,7 +248,7 @@ where
 
         let err = match err {
             Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

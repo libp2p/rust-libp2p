@@ -18,29 +18,39 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll},
+};
+
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::task::{Context, Poll};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed
+/// into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError)
+/// will be emitted. The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively
+/// the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
+/// **this** behaviour denied the connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// You can also set Peer IDs that bypass the said limit. Connections that
+/// match the bypass rules will not be checked against or counted for limits.
+///
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections,
+/// it may also be a different error.
 ///
 /// # Example
 ///
@@ -53,13 +63,15 @@ use void::Void;
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
-///   limits: connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     ping: ping::Behaviour,
+///     limits: connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
     limits: ConnectionLimits,
+    /// Peer IDs that bypass limit check, regardless of inbound or outbound.
+    bypass_peer_id: HashSet<PeerId>,
 
     pending_inbound_connections: HashSet<ConnectionId>,
     pending_outbound_connections: HashSet<ConnectionId>,
@@ -72,6 +84,7 @@ impl Behaviour {
     pub fn new(limits: ConnectionLimits) -> Self {
         Self {
             limits,
+            bypass_peer_id: Default::default(),
             pending_inbound_connections: Default::default(),
             pending_outbound_connections: Default::default(),
             established_inbound_connections: Default::default(),
@@ -84,6 +97,19 @@ impl Behaviour {
     /// > **Note**: A new limit will not be enforced against existing connections.
     pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
         &mut self.limits
+    }
+
+    /// Add the peer to bypass list.
+    pub fn bypass_peer_id(&mut self, peer_id: &PeerId) {
+        self.bypass_peer_id.insert(*peer_id);
+    }
+    /// Remove the peer from bypass list.
+    pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
+        self.bypass_peer_id.remove(peer_id);
+    }
+    /// Whether the connection is bypassed.
+    pub fn is_bypassed(&self, remote_peer: &PeerId) -> bool {
+        self.bypass_peer_id.contains(remote_peer)
     }
 }
 
@@ -203,7 +229,7 @@ impl ConnectionLimits {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -231,6 +257,9 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
+        if self.is_bypassed(&peer) {
+            return Ok(dummy::ConnectionHandler);
+        }
         check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
@@ -257,10 +286,13 @@ impl NetworkBehaviour for Behaviour {
     fn handle_pending_outbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        _: Option<PeerId>,
+        maybe_peer: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        if maybe_peer.is_some_and(|peer| self.is_bypassed(&peer)) {
+            return Ok(vec![]);
+        }
         check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
@@ -278,8 +310,12 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
+        if self.is_bypassed(&peer) {
+            return Ok(dummy::ConnectionHandler);
+        }
 
         check_limit(
             self.limits.max_established_outgoing,
@@ -354,7 +390,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
@@ -364,21 +400,23 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
-        ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle,
+        dial_opts::{DialOpts, PeerCondition},
+        DialError, ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
-    #[test]
-    fn max_outgoing() {
+    use super::*;
+
+    fn fill_outgoing() -> (Swarm<Behaviour>, Multiaddr, u32) {
         use rand::Rng;
 
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
-        let mut network = Swarm::new_ephemeral(|_| {
+        let mut network = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new(
                 ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)),
             )
@@ -398,10 +436,15 @@ mod tests {
                 )
                 .expect("Unexpected connection limit.");
         }
+        (network, addr, outgoing_limit)
+    }
 
+    #[tokio::test]
+    async fn max_outgoing() {
+        let (mut network, addr, outgoing_limit) = fill_outgoing();
         match network
             .dial(
-                DialOpts::peer_id(target)
+                DialOpts::peer_id(PeerId::random())
                     .condition(PeerCondition::Always)
                     .addresses(vec![addr])
                     .build(),
@@ -426,21 +469,63 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn outgoing_limit_bypass() {
+        let (mut network, addr, _) = fill_outgoing();
+        let bypassed_peer = PeerId::random();
+        network
+            .behaviour_mut()
+            .limits
+            .bypass_peer_id(&bypassed_peer);
+        assert!(network.behaviour().limits.is_bypassed(&bypassed_peer));
+        if let Err(DialError::Denied { cause }) = network.dial(
+            DialOpts::peer_id(bypassed_peer)
+                .addresses(vec![addr.clone()])
+                .build(),
+        ) {
+            cause
+                .downcast::<Exceeded>()
+                .expect_err("Unexpected connection denied because of limit");
+        }
+        let not_bypassed_peer = loop {
+            let new_peer = PeerId::random();
+            if new_peer != bypassed_peer {
+                break new_peer;
+            }
+        };
+        match network
+            .dial(
+                DialOpts::peer_id(not_bypassed_peer)
+                    .addresses(vec![addr])
+                    .build(),
+            )
+            .expect_err("Unexpected dialing success.")
+        {
+            DialError::Denied { cause } => {
+                cause
+                    .downcast::<Exceeded>()
+                    .expect("connection denied because of limit");
+            }
+            e => panic!("Unexpected error: {e:?}"),
+        }
+    }
+
     #[test]
     fn max_established_incoming() {
         fn prop(Limit(limit): Limit) {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
 
-            async_std::task::block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
@@ -449,7 +534,7 @@ mod tests {
 
                 swarm2.dial(listen_addr).unwrap();
 
-                async_std::task::spawn(swarm2.loop_on_next());
+                tokio::spawn(swarm2.loop_on_next());
 
                 let cause = swarm1
                     .wait(|event| match event {
@@ -465,13 +550,65 @@ mod tests {
             });
         }
 
-        #[derive(Debug, Clone)]
-        struct Limit(u32);
+        quickcheck(prop as fn(_));
+    }
 
-        impl Arbitrary for Limit {
-            fn arbitrary(g: &mut Gen) -> Self {
-                Self(g.gen_range(1..10))
-            }
+    #[test]
+    fn bypass_established_incoming() {
+        fn prop(Limit(limit): Limit) {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
+                Behaviour::new(
+                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                )
+            });
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
+                Behaviour::new(
+                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                )
+            });
+            let mut swarm3 = Swarm::new_ephemeral_tokio(|_| {
+                Behaviour::new(
+                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                )
+            });
+
+            let rt = Runtime::new().unwrap();
+            let bypassed_peer_id = *swarm3.local_peer_id();
+            swarm1
+                .behaviour_mut()
+                .limits
+                .bypass_peer_id(&bypassed_peer_id);
+
+            rt.block_on(async {
+                let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+
+                for _ in 0..limit {
+                    swarm2.connect(&mut swarm1).await;
+                }
+
+                swarm3.dial(listen_addr.clone()).unwrap();
+
+                tokio::spawn(swarm2.loop_on_next());
+                tokio::spawn(swarm3.loop_on_next());
+
+                swarm1
+                    .wait(|event| match event {
+                        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                            (peer_id == bypassed_peer_id).then_some(())
+                        }
+                        SwarmEvent::IncomingConnectionError {
+                            error: ListenError::Denied { cause },
+                            ..
+                        } => {
+                            cause
+                                .downcast::<Exceeded>()
+                                .expect_err("Unexpected connection denied because of limit");
+                            None
+                        }
+                        _ => None,
+                    })
+                    .await;
+            });
         }
 
         quickcheck(prop as fn(_));
@@ -484,42 +621,72 @@ mod tests {
     /// in [`SwarmEvent::ConnectionEstablished`] as the connection might still be denied by a
     /// sibling [`NetworkBehaviour`] in the former case. Only in the latter case
     /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
-    #[test]
-    fn support_other_behaviour_denying_connection() {
-        let mut swarm1 = Swarm::new_ephemeral(|_| {
+    #[tokio::test]
+    async fn support_other_behaviour_denying_connection() {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new_with_connection_denier(ConnectionLimits::default())
         });
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
 
-        async_std::task::block_on(async {
-            // Have swarm2 dial swarm1.
-            let (listen_addr, _) = swarm1.listen().await;
-            swarm2.dial(listen_addr).unwrap();
-            async_std::task::spawn(swarm2.loop_on_next());
+        // Have swarm2 dial swarm1.
+        let (listen_addr, _) = swarm1.listen().await;
+        swarm2.dial(listen_addr).unwrap();
+        tokio::spawn(swarm2.loop_on_next());
 
-            // Wait for the ConnectionDenier of swarm1 to deny the established connection.
-            let cause = swarm1
-                .wait(|event| match event {
-                    SwarmEvent::IncomingConnectionError {
-                        error: ListenError::Denied { cause },
-                        ..
-                    } => Some(cause),
-                    _ => None,
-                })
-                .await;
+        // Wait for the ConnectionDenier of swarm1 to deny the established connection.
+        let cause = swarm1
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { cause },
+                    ..
+                } => Some(cause),
+                _ => None,
+            })
+            .await;
 
-            cause.downcast::<std::io::Error>().unwrap();
+        cause.downcast::<std::io::Error>().unwrap();
 
-            assert_eq!(
-                0,
-                swarm1
-                    .behaviour_mut()
-                    .limits
-                    .established_inbound_connections
-                    .len(),
-                "swarm1 connection limit behaviour to not count denied established connection as established connection"
-            )
+        assert_eq!(
+            0,
+            swarm1
+                .behaviour_mut()
+                .limits
+                .established_inbound_connections
+                .len(),
+            "swarm1 connection limit behaviour to not count denied established connection as established connection"
+        )
+    }
+
+    #[tokio::test]
+    async fn incoming_connection_error_carries_peer_id() {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
+            // Set max incoming connections to 0 to immediately deny all connections
+            Behaviour::new(ConnectionLimits::default().with_max_established_incoming(Some(0)))
         });
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
+
+        let dialer_peer_id = *swarm2.local_peer_id();
+
+        let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+
+        swarm2.dial(listen_addr).unwrap();
+
+        tokio::spawn(swarm2.loop_on_next());
+
+        let peer_id = swarm1
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { .. },
+                    peer_id,
+                    ..
+                } => peer_id,
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(Some(dialer_peer_id), Some(peer_id));
     }
 
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
@@ -548,7 +715,7 @@ mod tests {
 
     impl NetworkBehaviour for ConnectionDenier {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = Void;
+        type ToSwarm = Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -557,8 +724,7 @@ mod tests {
             _local_addr: &Multiaddr,
             _remote_addr: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }
@@ -569,9 +735,9 @@ mod tests {
             _peer: PeerId,
             _addr: &Multiaddr,
             _role_override: Endpoint,
+            _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }
@@ -584,7 +750,7 @@ mod tests {
             _connection_id: ConnectionId,
             event: THandlerOutEvent<Self>,
         ) {
-            void::unreachable(event)
+            libp2p_core::util::unreachable(event)
         }
 
         fn poll(
@@ -592,6 +758,15 @@ mod tests {
             _: &mut Context<'_>,
         ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct Limit(u32);
+
+    impl Arbitrary for Limit {
+        fn arbitrary(g: &mut Gen) -> Self {
+            Self(g.gen_range(1..10))
         }
     }
 }

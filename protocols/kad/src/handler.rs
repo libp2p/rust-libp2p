@@ -18,27 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::Mode;
-use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+use std::{
+    collections::VecDeque,
+    error, fmt, io,
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll, Waker},
 };
-use crate::record::{self, Record};
-use crate::QueryId;
+
 use either::Either;
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::stream::SelectAll;
+use futures::{channel::oneshot, prelude::*, stream::SelectAll};
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
 };
-use std::collections::VecDeque;
-use std::task::Waker;
-use std::time::Duration;
-use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    behaviour::Mode,
+    protocol::{
+        KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+    },
+    record::{self, Record},
+    QueryId,
+};
 
 const MAX_NUM_STREAMS: usize = 32;
 
@@ -123,6 +128,7 @@ enum InboundSubstreamState {
 }
 
 impl InboundSubstreamState {
+    #[allow(clippy::result_large_err)]
     fn try_answer_with(
         &mut self,
         id: RequestId,
@@ -447,6 +453,8 @@ impl Handler {
             }
         }
 
+        let substreams_timeout = protocol_config.substreams_timeout_s();
+
         Handler {
             protocol_config,
             mode,
@@ -455,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                Duration::from_secs(10),
+                substreams_timeout,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
@@ -470,10 +478,7 @@ impl Handler {
         FullyNegotiatedOutbound {
             protocol: stream,
             info: (),
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         if let Some(sender) = self.pending_streams.pop_front() {
             let _ = sender.send(Ok(stream));
@@ -494,14 +499,13 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Void`.
+        // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => void::unreachable(p),
+            future::Either::Right(p) => libp2p_core::util::unreachable(p),
         };
 
         if self.protocol_status.is_none() {
@@ -548,7 +552,8 @@ impl Handler {
             });
     }
 
-    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol handshake using a [`oneshot::channel`].
+    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol
+    /// handshake using a [`oneshot::channel`].
     fn queue_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
         let (sender, receiver) = oneshot::channel();
 
@@ -599,7 +604,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         match self.mode {
             Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
             Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
@@ -710,9 +715,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         loop {
             match &mut self.protocol_status {
                 Some(status) if !status.reported => {
@@ -779,12 +782,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
@@ -822,14 +820,11 @@ fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
 ) -> ProtocolStatus {
-    let current_status = match current_status {
-        None => {
-            return ProtocolStatus {
-                supported: now_supported,
-                reported: false,
-            }
-        }
-        Some(current) => current,
+    let Some(current_status) = current_status else {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: false,
+        };
     };
 
     if now_supported == current_status.supported {
@@ -1058,9 +1053,10 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::{Arbitrary, Gen};
     use tracing_subscriber::EnvFilter;
+
+    use super::*;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {

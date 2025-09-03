@@ -26,8 +26,8 @@
 
 use std::fmt::Display;
 
-use instant::Duration;
 use libp2p_swarm::StreamProtocol;
+use web_time::Duration;
 
 pub mod client;
 mod protocol;
@@ -111,7 +111,7 @@ fn format_bytes(bytes: usize) -> String {
     } else if bytes >= KILO {
         format!("{:.2} KiB", bytes / KILO)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
@@ -129,7 +129,7 @@ fn format_bandwidth(duration: Duration, bytes: usize) -> String {
     } else if bandwidth >= KILO {
         format!("{:.2} Kbit/s", bandwidth / KILO)
     } else {
-        format!("{:.2} bit/s", bandwidth)
+        format!("{bandwidth:.2} bit/s")
     }
 }
 

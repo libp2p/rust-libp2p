@@ -19,18 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub(crate) mod proto {
-    #![allow(unreachable_pub)]
+    #![allow(unreachable_pub, dead_code)]
     include!("generated/mod.rs");
     pub use self::gossipsub::pb::{mod_RPC::SubOpts, *};
 }
 
 #[cfg(test)]
 mod test {
-    use crate::rpc_proto::proto::compat;
-    use crate::IdentTopic as Topic;
     use libp2p_identity::PeerId;
     use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
     use rand::Rng;
+
+    use crate::{rpc_proto::proto::compat, IdentTopic as Topic};
 
     #[test]
     fn test_multi_topic_message_compatibility() {

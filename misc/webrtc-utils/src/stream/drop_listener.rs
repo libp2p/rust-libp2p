@@ -18,17 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::channel::oneshot;
-use futures::channel::oneshot::Canceled;
-use futures::{AsyncRead, AsyncWrite, FutureExt, SinkExt};
+use std::{
+    future::Future,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-use std::future::Future;
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use futures::{
+    channel::{oneshot, oneshot::Canceled},
+    AsyncRead, AsyncWrite, FutureExt, SinkExt,
+};
 
-use crate::proto::{Flag, Message};
-use crate::stream::framed_dc::FramedDc;
+use crate::{
+    proto::{Flag, Message},
+    stream::framed_dc::FramedDc,
+};
 
 #[must_use]
 pub struct DropListener<T> {

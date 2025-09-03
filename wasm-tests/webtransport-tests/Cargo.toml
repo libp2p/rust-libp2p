@@ -1,7 +1,7 @@
 [package]
 name = "webtransport-tests"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 license = "MIT"
 publish = false
 
@@ -9,18 +9,18 @@ publish = false
 release = false
 
 [dependencies]
-futures = "0.3.29"
-getrandom = { version = "0.2.11", features = ["js"] }
+futures = { workspace = true }
+getrandom = { workspace = true, features = ["js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }
 libp2p-webtransport-websys = { workspace = true }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
-wasm-bindgen = "0.2.89"
-wasm-bindgen-futures = "0.4.39"
-wasm-bindgen-test = "0.3.39"
-web-sys = { version = "0.3.66", features = ["Response", "Window"] }
+wasm-bindgen = "0.2.93"
+wasm-bindgen-futures = "0.4.43"
+wasm-bindgen-test = "0.3.43"
+web-sys = { version = "0.3.70", features = ["Response", "Window"] }
 
 [lints]
 workspace = true

@@ -17,35 +17,29 @@
 // # Examples
 //
 // ```no_run
-// use async_std::io;
 // use futures::prelude::*;
+// use tokio::io;
+//
 // use crate::quicksink::Action;
 //
 // crate::quicksink::make_sink(io::stdout(), |mut stdout, action| async move {
 //     match action {
 //         Action::Send(x) => stdout.write_all(x).await?,
 //         Action::Flush => stdout.flush().await?,
-//         Action::Close => stdout.close().await?
+//         Action::Close => stdout.close().await?,
 //     }
 //     Ok::<_, io::Error>(stdout)
 // });
 // ```
-//
-// # Panics
-//
-// - If any of the [`Sink`] methods produce an error, the sink transitions
-// to a failure state and none of its methods must be called afterwards or
-// else a panic will occur.
-// - If [`Sink::poll_close`] has been called, no other sink method must be
-// called afterwards or else a panic will be caused.
 
-use futures::{ready, sink::Sink};
-use pin_project_lite::pin_project;
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures::{ready, sink::Sink};
+use pin_project_lite::pin_project;
 
 /// Returns a `Sink` impl based on the initial value and the given closure.
 ///
@@ -102,6 +96,15 @@ enum State {
     Failed,
 }
 
+/// Errors the `Sink` may return.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error<E> {
+    #[error("Error while sending over the sink, {0}")]
+    Send(E),
+    #[error("The Sink has closed")]
+    Closed,
+}
+
 pin_project! {
     /// `SinkImpl` implements the `Sink` trait.
     #[derive(Debug)]
@@ -119,7 +122,7 @@ where
     F: FnMut(S, Action<A>) -> T,
     T: Future<Output = Result<S, E>>,
 {
-    type Error = E;
+    type Error = Error<E>;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         let mut this = self.project();
@@ -135,7 +138,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        Poll::Ready(Err(e))
+                        Poll::Ready(Err(Error::Send(e)))
                     }
                 }
             }
@@ -143,20 +146,19 @@ where
                 Ok(_) => {
                     this.future.set(None);
                     *this.state = State::Closed;
-                    panic!("SinkImpl::poll_ready called on a closing sink.")
+                    Poll::Ready(Err(Error::Closed))
                 }
                 Err(e) => {
                     this.future.set(None);
                     *this.state = State::Failed;
-                    Poll::Ready(Err(e))
+                    Poll::Ready(Err(Error::Send(e)))
                 }
             },
             State::Empty => {
                 assert!(this.param.is_some());
                 Poll::Ready(Ok(()))
             }
-            State::Closed => panic!("SinkImpl::poll_ready called on a closed sink."),
-            State::Failed => panic!("SinkImpl::poll_ready called after error."),
+            State::Closed | State::Failed => Poll::Ready(Err(Error::Closed)),
         }
     }
 
@@ -193,7 +195,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Flushing => {
@@ -207,7 +209,7 @@ where
                         Err(e) => {
                             this.future.set(None);
                             *this.state = State::Failed;
-                            return Poll::Ready(Err(e));
+                            return Poll::Ready(Err(Error::Send(e)));
                         }
                     }
                 }
@@ -221,11 +223,10 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
-                State::Closed => return Poll::Ready(Ok(())),
-                State::Failed => panic!("SinkImpl::poll_flush called after error."),
+                State::Closed | State::Failed => return Poll::Ready(Err(Error::Closed)),
             }
         }
     }
@@ -253,7 +254,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Flushing => {
@@ -266,7 +267,7 @@ where
                         Err(e) => {
                             this.future.set(None);
                             *this.state = State::Failed;
-                            return Poll::Ready(Err(e));
+                            return Poll::Ready(Err(Error::Send(e)));
                         }
                     }
                 }
@@ -280,11 +281,11 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Closed => return Poll::Ready(Ok(())),
-                State::Failed => panic!("SinkImpl::poll_closed called after error."),
+                State::Failed => return Poll::Ready(Err(Error::Closed)),
             }
         }
     }
@@ -292,59 +293,81 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::{channel::mpsc, prelude::*};
+    use tokio::io::{self, AsyncWriteExt};
+
     use crate::quicksink::{make_sink, Action};
-    use async_std::{io, task};
-    use futures::{channel::mpsc, prelude::*, stream};
 
-    #[test]
-    fn smoke_test() {
-        task::block_on(async {
-            let sink = make_sink(io::stdout(), |mut stdout, action| async move {
-                match action {
-                    Action::Send(x) => stdout.write_all(x).await?,
-                    Action::Flush => stdout.flush().await?,
-                    Action::Close => stdout.close().await?,
-                }
-                Ok::<_, io::Error>(stdout)
-            });
+    #[tokio::test]
+    async fn smoke_test() {
+        let sink = make_sink(io::stdout(), |mut stdout, action| async move {
+            match action {
+                Action::Send(x) => stdout.write_all(x).await?,
+                Action::Flush => stdout.flush().await?,
+                Action::Close => stdout.shutdown().await?,
+            }
+            Ok::<_, io::Error>(stdout)
+        });
 
-            let values = vec![Ok(&b"hello\n"[..]), Ok(&b"world\n"[..])];
-            assert!(stream::iter(values).forward(sink).await.is_ok())
-        })
+        let values = vec![Ok(&b"hello\n"[..]), Ok(&b"world\n"[..])];
+        assert!(stream::iter(values).forward(sink).await.is_ok())
     }
 
-    #[test]
-    fn replay() {
-        task::block_on(async {
-            let (tx, rx) = mpsc::channel(5);
+    #[tokio::test]
+    async fn replay() {
+        let (tx, rx) = mpsc::channel(5);
 
-            let sink = make_sink(tx, |mut tx, action| async move {
-                tx.send(action.clone()).await?;
-                if action == Action::Close {
-                    tx.close().await?
-                }
-                Ok::<_, mpsc::SendError>(tx)
-            });
-
-            futures::pin_mut!(sink);
-
-            let expected = [
-                Action::Send("hello\n"),
-                Action::Flush,
-                Action::Send("world\n"),
-                Action::Flush,
-                Action::Close,
-            ];
-
-            for &item in &["hello\n", "world\n"] {
-                sink.send(item).await.unwrap()
+        let sink = make_sink(tx, |mut tx, action| async move {
+            tx.send(action.clone()).await?;
+            if action == Action::Close {
+                tx.close().await?
             }
-
-            sink.close().await.unwrap();
-
-            let actual = rx.collect::<Vec<_>>().await;
-
-            assert_eq!(&expected[..], &actual[..])
+            Ok::<_, mpsc::SendError>(tx)
         });
+
+        futures::pin_mut!(sink);
+
+        let expected = [
+            Action::Send("hello\n"),
+            Action::Flush,
+            Action::Send("world\n"),
+            Action::Flush,
+            Action::Close,
+        ];
+
+        for &item in &["hello\n", "world\n"] {
+            sink.send(item).await.unwrap()
+        }
+
+        sink.close().await.unwrap();
+
+        let actual = rx.collect::<Vec<_>>().await;
+
+        assert_eq!(&expected[..], &actual[..])
+    }
+
+    #[tokio::test]
+    async fn error_does_not_panic() {
+        let sink = make_sink(io::stdout(), |mut _stdout, _action| async move {
+            Err(io::Error::other("oh no"))
+        });
+
+        futures::pin_mut!(sink);
+
+        let result = sink.send("hello").await;
+        match result {
+            Err(crate::quicksink::Error::Send(e)) => {
+                assert_eq!(e.kind(), io::ErrorKind::Other);
+                assert_eq!(e.to_string(), "oh no")
+            }
+            _ => panic!("unexpected result: {result:?}"),
+        };
+
+        // Call send again, expect not to panic.
+        let result = sink.send("hello").await;
+        match result {
+            Err(crate::quicksink::Error::Closed) => {}
+            _ => panic!("unexpected result: {result:?}"),
+        };
     }
 }

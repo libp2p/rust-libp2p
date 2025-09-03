@@ -1,3 +1,22 @@
+## 0.9.0-alpha.1
+
+- Bump `webrtc` dependency to `0.12.0`.
+  See [PR 5448](https://github.com/libp2p/rust-libp2p/pull/5448).
+
+## 0.9.0-alpha
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.8.0-alpha
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
+## 0.7.1-alpha
+
+- Bump `libp2p-webrtc-utils` dependency to `0.2.0`.
+  See [PR 5118](https://github.com/libp2p/rust-libp2p/pull/5118).
+
 ## 0.7.0-alpha
 
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.

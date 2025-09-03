@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-swarm-test"
-version = "0.3.0"
-edition = "2021"
+version = "0.6.0"
+edition.workspace = true
 rust-version = { workspace = true }
 license = "MIT"
 description = "Test framework for code building on top of libp2p-swarm"
@@ -12,17 +12,21 @@ categories = ["network-programming", "asynchronous"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.74"
+async-trait = "0.1.80"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-plaintext = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["async-std"] }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-swarm = { workspace = true }
+libp2p-tcp = { workspace = true }
 libp2p-yamux = { workspace = true }
-futures = "0.3.29"
-rand = "0.8.5"
-tracing = "0.1.37"
-futures-timer = "3.0.2"
+futures = { workspace = true }
+tracing = { workspace = true }
+futures-timer = "3.0.3"
+
+[features]
+default = ["tokio"]
+
+tokio = ["libp2p-swarm/tokio", "libp2p-tcp/tokio"]
 
 [lints]
 workspace = true

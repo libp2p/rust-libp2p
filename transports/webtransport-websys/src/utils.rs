@@ -1,34 +1,27 @@
+use std::{io, sync::LazyLock};
+
 use js_sys::{Promise, Reflect};
 use send_wrapper::SendWrapper;
-use std::io;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::Error;
+
+type Closure = wasm_bindgen::closure::Closure<dyn FnMut(JsValue)>;
+static DO_NOTHING: LazyLock<SendWrapper<Closure>> = LazyLock::new(|| {
+    let cb = Closure::new(|_| {});
+    SendWrapper::new(cb)
+});
 
 /// Properly detach a promise.
 ///
 /// A promise always runs in the background, however if you don't await it,
 /// or specify a `catch` handler before you drop it, it might cause some side
 /// effects. This function avoids any side effects.
-//
 // Ref: https://github.com/typescript-eslint/typescript-eslint/blob/391a6702c0a9b5b3874a7a27047f2a721f090fb6/packages/eslint-plugin/docs/rules/no-floating-promises.md
 pub(crate) fn detach_promise(promise: Promise) {
-    type Closure = wasm_bindgen::closure::Closure<dyn FnMut(JsValue)>;
-    static mut DO_NOTHING: Option<SendWrapper<Closure>> = None;
-
-    // Allocate Closure only once and reuse it
-    let do_nothing = unsafe {
-        if DO_NOTHING.is_none() {
-            let cb = Closure::new(|_| {});
-            DO_NOTHING = Some(SendWrapper::new(cb));
-        }
-
-        DO_NOTHING.as_deref().unwrap()
-    };
-
     // Avoid having "floating" promise and ignore any errors.
     // After `catch` promise is allowed to be dropped.
-    let _ = promise.catch(do_nothing);
+    let _ = promise.catch(&DO_NOTHING);
 }
 
 /// Typecasts a JavaScript type.
@@ -55,8 +48,7 @@ where
     }
 }
 
-/// Parse reponse from `ReadableStreamDefaultReader::read`.
-//
+/// Parse response from `ReadableStreamDefaultReader::read`.
 // Ref: https://streams.spec.whatwg.org/#default-reader-prototype
 pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, JsValue> {
     let value = Reflect::get(resp, &JsValue::from_str("value"))?;
@@ -72,5 +64,5 @@ pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, J
 }
 
 pub(crate) fn to_io_error(value: JsValue) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, Error::from_js_value(value))
+    io::Error::other(Error::from_js_value(value))
 }

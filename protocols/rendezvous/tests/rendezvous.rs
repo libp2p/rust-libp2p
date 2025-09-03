@@ -18,17 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::Multiaddr;
+use std::time::Duration;
+
+use futures::{stream::FuturesUnordered, StreamExt};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::convert::TryInto;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -93,7 +91,7 @@ async fn should_return_error_when_no_external_addresses() {
         .try_init();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let server = new_server(rendezvous::server::Config::default()).await;
-    let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
+    let mut client = Swarm::new_ephemeral_tokio(rendezvous::client::Behaviour::new);
 
     let actual = client
         .behaviour_mut()
@@ -386,6 +384,7 @@ async fn registration_on_clients_expire() {
         new_server_with_connected_clients(rendezvous::server::Config::default().with_min_ttl(1))
             .await;
 
+    let alice_peer_id = *alice.local_peer_id();
     let roberts_peer_id = *robert.local_peer_id();
     tokio::spawn(robert.loop_on_next());
 
@@ -404,6 +403,16 @@ async fn registration_on_clients_expire() {
     match bob.next_behaviour_event().await {
         rendezvous::client::Event::Discovered { registrations, .. } => {
             assert!(!registrations.is_empty());
+        }
+        event => panic!("Unexpected event: {event:?}"),
+    }
+
+    match bob.next_swarm_event().await {
+        SwarmEvent::NewExternalAddrOfPeer {
+            peer_id: discovered_peer_id,
+            ..
+        } => {
+            assert_eq!(discovered_peer_id, alice_peer_id);
         }
         event => panic!("Unexpected event: {event:?}"),
     }
@@ -447,14 +456,14 @@ async fn new_server_with_connected_clients<const N: usize>(
 }
 
 async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
-    let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
+    let mut client = Swarm::new_ephemeral_tokio(rendezvous::client::Behaviour::new);
     client.listen().with_memory_addr_external().await; // we need to listen otherwise we don't have addresses to register
 
     client
 }
 
 async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
-    let mut server = Swarm::new_ephemeral(|_| rendezvous::server::Behaviour::new(config));
+    let mut server = Swarm::new_ephemeral_tokio(|_| rendezvous::server::Behaviour::new(config));
 
     server.listen().with_memory_addr_external().await;
 
@@ -462,7 +471,7 @@ async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::ser
 }
 
 async fn new_combined_node() -> Swarm<Combined> {
-    let mut node = Swarm::new_ephemeral(|identity| Combined {
+    let mut node = Swarm::new_ephemeral_tokio(|identity| Combined {
         client: rendezvous::client::Behaviour::new(identity),
         server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
     });
@@ -472,11 +481,14 @@ async fn new_combined_node() -> Swarm<Combined> {
 }
 
 async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
-    // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
-    // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
-    // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
+    // In reality, if Eve were to try and fake someones identity, she would obviously only know the
+    // public key. Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we
+    // actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
+    // As such, the best we can do is hand eve a completely different keypair from what she is using
+    // to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
-    let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
+    let mut eve =
+        Swarm::new_ephemeral_tokio(move |_| rendezvous::client::Behaviour::new(someone_else));
     eve.listen().with_memory_addr_external().await;
 
     eve

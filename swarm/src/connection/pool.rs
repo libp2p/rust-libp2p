@@ -18,39 +18,40 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::connection::{Connection, ConnectionId, PendingPoint};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    fmt,
+    num::{NonZeroU8, NonZeroUsize},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
+use concurrent_dial::ConcurrentDial;
+use fnv::FnvHashMap;
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{poll_fn, BoxFuture, Either},
+    prelude::*,
+    ready,
+    stream::{FuturesUnordered, SelectAll},
+};
+use libp2p_core::{
+    connection::Endpoint,
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::PortUse,
+};
+use tracing::Instrument;
+use web_time::{Duration, Instant};
+
 use crate::{
     connection::{
-        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
-        PendingInboundConnectionError, PendingOutboundConnectionError,
+        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
+        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
     ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
-use concurrent_dial::ConcurrentDial;
-use fnv::FnvHashMap;
-use futures::prelude::*;
-use futures::stream::SelectAll;
-use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
-    ready,
-    stream::FuturesUnordered,
-};
-use instant::{Duration, Instant};
-use libp2p_core::connection::Endpoint;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use std::task::Waker;
-use std::{
-    collections::{hash_map, HashMap},
-    fmt,
-    num::{NonZeroU8, NonZeroUsize},
-    pin::Pin,
-    task::Context,
-    task::Poll,
-};
-use tracing::Instrument;
-use void::Void;
 
 mod concurrent_dial;
 mod task;
@@ -70,6 +71,7 @@ impl ExecSwitch {
         }
     }
 
+    #[track_caller]
     fn spawn(&mut self, task: impl Future<Output = ()> + Send + 'static) {
         let task = task.boxed();
 
@@ -113,7 +115,8 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
+    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is
+    /// back-pressured.
     per_connection_event_buffer_size: usize,
 
     /// The executor to use for running connection tasks. Can either be a global executor
@@ -198,14 +201,14 @@ struct PendingConnection {
     peer_id: Option<PeerId>,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<Void>>,
+    abort_notifier: Option<oneshot::Sender<Infallible>>,
     /// The moment we became aware of this possible connection, useful for timing metrics.
     accepted_at: Instant,
 }
 
 impl PendingConnection {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
-        self.peer_id.map_or(false, |peer| peer == other)
+        self.peer_id == Some(other)
     }
 
     /// Aborts the connection attempt, closing the connection.
@@ -245,13 +248,11 @@ pub(crate) enum PoolEvent<ToBehaviour> {
     ///
     /// A connection may close if
     ///
-    ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
-    ///   * it was actively closed by [`EstablishedConnection::start_close`],
-    ///     i.e. a successful, orderly close.
-    ///   * it was actively closed by [`Pool::disconnect`], i.e.
-    ///     dropped without an orderly close.
-    ///
+    ///   * it encounters an error, which includes the connection being closed by the remote. In
+    ///     this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`], i.e. a successful,
+    ///     orderly close.
+    ///   * it was actively closed by [`Pool::disconnect`], i.e. dropped without an orderly close.
     ConnectionClosed {
         id: ConnectionId,
         /// Information about the connection that errored.
@@ -390,7 +391,7 @@ where
         peer: &PeerId,
     ) -> impl Iterator<Item = ConnectionId> + '_ {
         match self.established.get(peer) {
-            Some(conns) => either::Either::Left(conns.iter().map(|(id, _)| *id)),
+            Some(conns) => either::Either::Left(conns.keys().copied()),
             None => either::Either::Right(std::iter::empty()),
         }
     }
@@ -423,6 +424,7 @@ where
         >,
         peer: Option<PeerId>,
         role_override: Endpoint,
+        port_use: PortUse,
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
     ) {
@@ -443,7 +445,10 @@ where
             .instrument(span),
         );
 
-        let endpoint = PendingPoint::Dialer { role_override };
+        let endpoint = PendingPoint::Dialer {
+            role_override,
+            port_use,
+        };
 
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
@@ -649,10 +654,17 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
+                        (
+                            PendingPoint::Dialer {
+                                role_override,
+                                port_use,
+                            },
+                            Some((address, errors)),
+                        ) => (
                             ConnectedPoint::Dialer {
                                 address,
                                 role_override,
+                                port_use,
                             },
                             Some(errors),
                         ),
@@ -680,17 +692,45 @@ where
                     let check_peer_id = || {
                         if let Some(peer) = expected_peer_id {
                             if peer != obtained_peer_id {
-                                return Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
-                                    endpoint: endpoint.clone(),
-                                });
+                                return match &endpoint {
+                                    ConnectedPoint::Dialer { address, .. } => {
+                                        Err(PoolEvent::PendingOutboundConnectionError {
+                                            id,
+                                            error: PendingOutboundConnectionError::WrongPeerId {
+                                                obtained: obtained_peer_id,
+                                                address: address.clone(),
+                                            },
+                                            peer: Some(peer),
+                                        })
+                                    }
+                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
+                                };
                             }
                         }
 
                         if self.local_id == obtained_peer_id {
-                            return Err(PendingConnectionError::LocalPeerId {
-                                endpoint: endpoint.clone(),
-                            });
+                            return match &endpoint {
+                                ConnectedPoint::Dialer { address, .. } => {
+                                    Err(PoolEvent::PendingOutboundConnectionError {
+                                        id,
+                                        error: PendingOutboundConnectionError::LocalPeerId {
+                                            address: address.clone(),
+                                        },
+                                        peer: Some(obtained_peer_id),
+                                    })
+                                }
+                                ConnectedPoint::Listener {
+                                    send_back_addr,
+                                    local_addr,
+                                } => Err(PoolEvent::PendingInboundConnectionError {
+                                    id,
+                                    send_back_addr: send_back_addr.clone(),
+                                    local_addr: local_addr.clone(),
+                                    error: PendingInboundConnectionError::LocalPeerId {
+                                        address: send_back_addr.clone(),
+                                    },
+                                }),
+                            };
                         }
 
                         Ok(())
@@ -709,27 +749,7 @@ where
                             Poll::Ready(())
                         }));
 
-                        match endpoint {
-                            ConnectedPoint::Dialer { .. } => {
-                                return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
-                                    id,
-                                    error: error
-                                        .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
-                                    peer: expected_peer_id.or(Some(obtained_peer_id)),
-                                })
-                            }
-                            ConnectedPoint::Listener {
-                                send_back_addr,
-                                local_addr,
-                            } => {
-                                return Poll::Ready(PoolEvent::PendingInboundConnectionError {
-                                    id,
-                                    error,
-                                    send_back_addr,
-                                    local_addr,
-                                })
-                            }
-                        };
+                        return Poll::Ready(error);
                     }
 
                     let established_in = accepted_at.elapsed();
@@ -977,7 +997,7 @@ impl PoolConfig {
             task_command_buffer_size: 32,
             per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
-            idle_connection_timeout: Duration::ZERO,
+            idle_connection_timeout: Duration::from_secs(10),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
@@ -1027,30 +1047,5 @@ impl PoolConfig {
     pub(crate) fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.max_negotiating_inbound_streams = v;
         self
-    }
-}
-
-trait EntryExt<'a, K, V> {
-    fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V>;
-}
-
-impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
-    fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V> {
-        match self {
-            hash_map::Entry::Occupied(entry) => entry,
-            hash_map::Entry::Vacant(_) => panic!("{}", msg),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::future::Future;
-
-    struct Dummy;
-
-    impl Executor for Dummy {
-        fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
     }
 }

@@ -1,3 +1,18 @@
+## 0.46.1
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
+## 0.46.0
+
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.45.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.44.0
 
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.

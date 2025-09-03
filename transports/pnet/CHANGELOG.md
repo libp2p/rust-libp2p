@@ -1,9 +1,17 @@
+## 0.26.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.25.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.24.0
 
 
 ## 0.23.1
 
-<!-- Interal changes:
+<!-- Internal changes:
 
 - Allow new clippy lint.
 

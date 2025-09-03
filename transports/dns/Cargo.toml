@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-dns"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
-version = "0.41.1"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,32 +11,27 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std-resolver = { version = "0.24", optional = true }
-async-trait = "0.1.74"
-futures = "0.3.28"
+async-trait = "0.1.80"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.0"
-hickory-resolver = { version = "0.24.0", default-features = false, features = ["system-config"] }
-smallvec = "1.11.2"
-tracing = "0.1.37"
+parking_lot = "0.12.3"
+hickory-resolver = { workspace = true, features = ["system-config"] }
+smallvec = "1.13.2"
+tracing = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
-tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
-async-std-crate = { package = "async-std", version = "1.6" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { workspace = true, features = ["rt", "time"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
-async-std = ["async-std-resolver"]
-tokio = ["hickory-resolver/tokio-runtime"]
+tokio = ["hickory-resolver/tokio"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
