@@ -20,7 +20,6 @@
 
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
-    num::NonZeroUsize,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
@@ -35,8 +34,8 @@ use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm, _address_translation,
+    NetworkBehaviour, NotifyHandler, PeerAddresses, PeerAddressesConfig, StreamUpgradeError,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm, _address_translation,
 };
 
 use crate::{
