@@ -52,13 +52,7 @@ pub mod ecdsa;
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
 
-#[cfg(all(
-    feature = "rsa",
-    any(
-        not(target_arch = "wasm32"),
-        all(target_arch = "wasm32", target_os = "unknown")
-    )
-))]
+#[cfg(all(feature = "rsa", rsa_supported))]
 pub mod rsa;
 
 #[cfg(feature = "secp256k1")]
@@ -95,13 +89,7 @@ impl From<&PublicKey> for proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
                 Data: key.to_bytes().to_vec(),
             },
-            #[cfg(all(
-                feature = "rsa",
-                any(
-                    not(target_arch = "wasm32"),
-                    all(target_arch = "wasm32", target_os = "unknown")
-                )
-            ))]
+            #[cfg(all(feature = "rsa", rsa_supported))]
             keypair::PublicKeyInner::Rsa(key) => proto::PublicKey {
                 Type: proto::KeyType::RSA,
                 Data: key.encode_x509(),
