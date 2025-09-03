@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     iter,
+    num::NonZeroUsize,
     time::{Duration, Instant},
 };
 
