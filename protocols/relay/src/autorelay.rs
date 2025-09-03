@@ -196,11 +196,10 @@ impl Behaviour {
                 connection.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
-            }
-            RelayStatus::Pending => {
                 self.pending_target.remove(&(peer_id, connection_id));
             }
-            RelayStatus::Supported {
+            RelayStatus::Pending
+            | RelayStatus::Supported {
                 status: ReservationStatus::Idle,
             }
             | RelayStatus::NotSupported => {}
