@@ -33,8 +33,9 @@ use crate::{
     config::{ConfigBuilder, TopicMeshConfig},
     protocol::GossipsubCodec,
     rpc::Receiver,
+    rpc_proto::proto,
     subscription_filter::WhitelistSubscriptionFilter,
-    types::RpcIn,
+    types::{ControlAction, Extensions, RpcIn, RpcOut},
     IdentTopic as Topic,
 };
 
@@ -248,6 +249,7 @@ where
             topics: Default::default(),
             sender,
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -418,6 +420,7 @@ fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
             })
             .collect(),
         control_msgs,
+        test_extension: None,
     }
 }
 
@@ -644,6 +647,7 @@ fn test_join() {
                 topics: Default::default(),
                 sender,
                 dont_send: LinkedHashMap::new(),
+                extensions: None,
             },
         );
         receivers.insert(random_peer, receiver);
@@ -1041,6 +1045,7 @@ fn test_get_random_peers() {
                 topics: topics.clone(),
                 sender: Sender::new(gs.config.connection_handler_queue_len()),
                 dont_send: LinkedHashMap::new(),
+                extensions: None,
             },
         );
     }
@@ -1249,6 +1254,7 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![msg_id.clone()],
         })],
+        test_extension: None,
     };
     gs.on_connection_handler_event(
         peers[1],
@@ -3141,6 +3147,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
+                test_extension: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -3167,6 +3174,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
+                test_extension: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -3777,6 +3785,7 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![(m, ValidationError::InvalidSignature)],
         },
@@ -5536,6 +5545,7 @@ fn parses_idontwant() {
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![message_id.clone()],
         })],
+        test_extension: None,
     };
     gs.on_connection_handler_event(
         peers[1],
@@ -5595,6 +5605,7 @@ fn test_all_queues_full() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5631,6 +5642,7 @@ fn test_slow_peer_returns_failed_publish() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     let peer_id = PeerId::random();
@@ -5644,6 +5656,7 @@ fn test_slow_peer_returns_failed_publish() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5705,6 +5718,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5722,6 +5736,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5819,6 +5834,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5836,6 +5852,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -5913,6 +5930,7 @@ fn test_slow_peer_returns_failed_forward() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     peers.push(slow_peer_id);
@@ -5930,6 +5948,7 @@ fn test_slow_peer_returns_failed_forward() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -6012,6 +6031,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
     gs.as_peer_score_mut().add_peer(slow_peer_id);
@@ -6026,6 +6046,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
+            extensions: None,
         },
     );
 
@@ -6623,6 +6644,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![],
         },
@@ -6667,6 +6689,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        testExtension: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -6727,6 +6750,7 @@ fn test_validation_message_size_within_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                test_extension: None,
             },
             invalid_messages: vec![],
         },
@@ -6771,6 +6795,7 @@ fn test_validation_message_size_within_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        testExtension: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -6786,4 +6811,86 @@ fn test_validation_message_size_within_topic_specific() {
         }
         _ => panic!("Unexpected event"),
     }
+}
+
+#[test]
+fn test_extensions_message_creation() {
+    let extensions_rpc = RpcOut::Extensions(Extensions {
+        test_extension: Some(true),
+    });
+    let proto_rpc: proto::RPC = extensions_rpc.into();
+
+    assert!(proto_rpc.control.is_some());
+    let control = proto_rpc.control.unwrap();
+    assert!(control.extensions.is_some());
+    let test_extension = control.extensions.unwrap().testExtension.unwrap();
+    assert!(test_extension);
+    assert!(control.ihave.is_empty());
+    assert!(control.iwant.is_empty());
+    assert!(control.graft.is_empty());
+    assert!(control.prune.is_empty());
+    assert!(control.idontwant.is_empty());
+}
+
+#[test]
+fn test_handle_extensions_message() {
+    let mut gs: Behaviour = Behaviour::new(
+        MessageAuthenticity::Anonymous,
+        ConfigBuilder::default()
+            .validation_mode(ValidationMode::None)
+            .build()
+            .unwrap(),
+    )
+    .unwrap();
+
+    let peer_id = PeerId::random();
+    let sender = Sender::new(gs.config.connection_handler_queue_len());
+
+    // Add peer without extensions
+    gs.connected_peers.insert(
+        peer_id,
+        PeerDetails {
+            kind: PeerKind::Gossipsubv1_3,
+            connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
+            topics: BTreeSet::new(),
+            sender,
+            dont_send: LinkedHashMap::new(),
+            extensions: None,
+        },
+    );
+
+    // Simulate receiving extensions message
+    let extensions = Extensions {
+        test_extension: Some(false),
+    };
+    gs.handle_extensions(&peer_id, extensions);
+
+    // Verify extensions were stored
+    let peer_details = gs.connected_peers.get(&peer_id).unwrap();
+    assert!(peer_details.extensions.is_some());
+
+    // Simulate receiving duplicate extensions message from another peer
+    let duplicate_rpc = RpcIn {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::Extensions(Some(Extensions {
+            test_extension: Some(true),
+        }))],
+        test_extension: None,
+    };
+
+    gs.on_connection_handler_event(
+        peer_id,
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc: duplicate_rpc,
+            invalid_messages: vec![],
+        },
+    );
+
+    // Extensions should still be present (not cleared or changed)
+    let peer_details = gs.connected_peers.get(&peer_id).unwrap();
+    let test_extension = peer_details.extensions.unwrap().test_extension.unwrap();
+    assert!(!test_extension);
 }
