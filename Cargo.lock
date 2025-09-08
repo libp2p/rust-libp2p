@@ -2760,7 +2760,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "futures",
  "libp2p-core",
