@@ -95,7 +95,7 @@ impl<T> MemoryStore<T> {
         let record = self
             .records
             .entry(*peer)
-            .or_insert(PeerRecord::new(self.config.record_capacity));
+            .or_insert_with(|| PeerRecord::new(self.config.record_capacity));
         let is_new = record.add_address(address, is_permanent);
         if is_new {
             self.push_event_and_wake(Event::PeerAddressAdded {
