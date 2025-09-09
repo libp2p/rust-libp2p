@@ -236,7 +236,7 @@ impl MdnsPeer {
     pub(crate) fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
-            .additionals()
+            .additional()
             .iter()
             .filter_map(|add_record| {
                 if add_record.name() != record_value {
