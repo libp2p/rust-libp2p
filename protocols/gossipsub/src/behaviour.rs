@@ -3125,14 +3125,17 @@ where
         // The protocol negotiation occurs once a message is sent/received. Once this happens we
         // update the type of peer that this is in order to determine which kind of routing should
         // occur.
-        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
-            kind: PeerKind::Floodsub,
-            connections: vec![],
-            outbound: false,
-            sender: Sender::new(self.config.connection_handler_queue_len()),
-            topics: Default::default(),
-            dont_send: LinkedHashMap::new(),
-        });
+        let connected_peer = self
+            .connected_peers
+            .entry(peer_id)
+            .or_insert_with(|| PeerDetails {
+                kind: PeerKind::Floodsub,
+                connections: vec![],
+                outbound: false,
+                sender: Sender::new(self.config.connection_handler_queue_len()),
+                topics: Default::default(),
+                dont_send: LinkedHashMap::new(),
+            });
         // Add the new connection
         connected_peer.connections.push(connection_id);
 
@@ -3150,16 +3153,19 @@ where
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
-            kind: PeerKind::Floodsub,
-            connections: vec![],
-            // Diverging from the go implementation we only want to consider a peer as outbound peer
-            // if its first connection is outbound.
-            outbound: !self.px_peers.contains(&peer_id),
-            sender: Sender::new(self.config.connection_handler_queue_len()),
-            topics: Default::default(),
-            dont_send: LinkedHashMap::new(),
-        });
+        let connected_peer = self
+            .connected_peers
+            .entry(peer_id)
+            .or_insert_with(|| PeerDetails {
+                kind: PeerKind::Floodsub,
+                connections: vec![],
+                // Diverging from the go implementation we only want to consider a peer as outbound
+                // peer if its first connection is outbound.
+                outbound: !self.px_peers.contains(&peer_id),
+                sender: Sender::new(self.config.connection_handler_queue_len()),
+                topics: Default::default(),
+                dont_send: LinkedHashMap::new(),
+            });
         // Add the new connection
         connected_peer.connections.push(connection_id);
 
