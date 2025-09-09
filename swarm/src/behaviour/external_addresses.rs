@@ -46,13 +46,17 @@ impl ExternalAddresses {
                 self.push_front(addr);
 
                 if self.addresses.len() > MAX_LOCAL_EXTERNAL_ADDRS {
-                    let expired = self.addresses.pop().expect("list to be not empty");
-
-                    tracing::debug!(
-                        external_address=%expired,
-                        address_limit=%MAX_LOCAL_EXTERNAL_ADDRS,
-                        "Removing previously confirmed external address because we reached the address limit"
-                    );
+                    if let Some(expired) = self.addresses.pop() {
+                        tracing::debug!(
+                            external_address=%expired,
+                            address_limit=%MAX_LOCAL_EXTERNAL_ADDRS,
+                            "Removing previously confirmed external address because we reached the address limit"
+                        );
+                    } else {
+                        tracing::warn!(
+                            "ExternalAddresses invariant violated: empty list on eviction path"
+                        );
+                    }
                 }
 
                 return true;
