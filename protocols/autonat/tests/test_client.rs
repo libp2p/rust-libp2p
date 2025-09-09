@@ -229,7 +229,7 @@ async fn test_throttle_server_period() {
                 refresh_interval: TEST_REFRESH_INTERVAL,
                 confidence_max: MAX_CONFIDENCE,
                 only_global_ips: false,
-                // Throttle servers so they can not be re-used for dial request.
+                // Throttle servers so they can not be reused for dial request.
                 throttle_server_period: Duration::from_secs(1000),
                 boot_delay: Duration::from_millis(100),
                 ..Default::default()
