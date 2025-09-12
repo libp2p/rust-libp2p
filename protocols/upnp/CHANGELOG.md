@@ -1,3 +1,12 @@
+## 0.6.0
+
+- Change `Event::NewExternalAddr` and `Event::ExpiredExternalAddr` from tuple variants to struct variants 
+  that include both local and external addresses. This allows users to correlate which local listen 
+  address was mapped to which external address.
+  - `Event::NewExternalAddr` now contains `local_addr` and `external_addr` fields
+  - `Event::ExpiredExternalAddr` now contains `local_addr` and `external_addr` fields
+  See [PR 6121](https://github.com/libp2p/rust-libp2p/pull/6121).
+
 ## 0.5.1
 
 - Skip port mapping when an active port mapping is present.
