@@ -1,6 +1,9 @@
 ## 0.21.1
 - Implements autorelay that would make a reservation as soon as a connection reports supporting HOP protocol.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/6067/files)
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
+- reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
+  See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
 
 ## 0.21.0
 
