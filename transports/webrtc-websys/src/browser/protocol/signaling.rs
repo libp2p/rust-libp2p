@@ -1,9 +1,9 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
-use futures::{lock::Mutex, AsyncRead, AsyncWrite, SinkExt, StreamExt};
-use tracing::instrument;
+use futures::{lock::Mutex, AsyncRead, AsyncWrite};
+use tracing::{info, instrument};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::{JsFuture};
 use web_sys::{
     RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState,
     RtcPeerConnectionIceEvent, RtcPeerConnectionState, RtcSdpType, RtcSessionDescriptionInit,
@@ -12,7 +12,8 @@ use web_sys::{
 
 use crate::{
     browser::{
-        protocol::pb::{signaling_message, SignalingMessage}, SignalingConfig, SignalingStream
+        protocol::pb::{signaling_message, SignalingMessage},
+        SignalingConfig, SignalingStream,
     },
     connection::RtcPeerConnection,
     error::Error,
@@ -39,7 +40,43 @@ struct ConnectionCallbacks {
     _ice_gathering_callback: Closure<dyn FnMut(web_sys::Event)>,
     _peer_connection_callback: Closure<dyn FnMut(web_sys::Event)>,
     _signaling_callback: Closure<dyn FnMut(web_sys::Event)>,
-    _ice_candidate_callback: Option<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
+}
+
+/// Collected ICE candidates during the gathering phase
+#[derive(Debug, Clone)]
+struct IceCandidateCollection {
+    candidates: Vec<RtcIceCandidate>,
+    gathering_complete: bool,
+}
+
+impl IceCandidateCollection {
+    fn new() -> Self {
+        Self {
+            candidates: Vec::new(),
+            gathering_complete: false,
+        }
+    }
+
+    fn add_candidate(&mut self, candidate: Option<RtcIceCandidate>) {
+        match candidate {
+            Some(candidate) => {
+                tracing::trace!("Collected ICE candidate: {}", candidate.candidate());
+                self.candidates.push(candidate);
+            }
+            None => {
+                tracing::info!("ICE gathering complete (null candidate received)");
+                self.gathering_complete = true;
+            }
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.gathering_complete
+    }
+
+    fn drain_candidates(&mut self) -> Vec<RtcIceCandidate> {
+        self.candidates.drain(..).collect()
+    }
 }
 
 /// Helper function to safely convert ice connection state
@@ -153,7 +190,7 @@ pub trait Signaling {
 #[derive(Debug)]
 pub struct ProtocolHandler {
     states: send_wrapper::SendWrapper<Rc<RefCell<ConnectionState>>>,
-    config: SignalingConfig
+    config: SignalingConfig,
 }
 
 impl ProtocolHandler {
@@ -165,14 +202,14 @@ impl ProtocolHandler {
                 signaling: RtcSignalingState::Closed,
                 peer_connection: RtcPeerConnectionState::Closed,
             }))),
-            config
+            config,
         }
     }
 }
 
 impl ProtocolHandler {
-    /// Sets up the peer connection statee callbacks including ICE connection, ICE gathering, 
-    /// peer connectiona and signaling.
+    /// Sets up the peer connection state callbacks including ICE connection, ICE gathering,
+    /// peer connection and signaling.
     fn setup_peer_connection_state_callbacks(
         &self,
         connection: &web_sys::RtcPeerConnection,
@@ -187,7 +224,7 @@ impl ProtocolHandler {
                 if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
                     let state_js = pc.ice_connection_state();
                     let state = safe_ice_connection_state_from_js(state_js.into());
-        
+
                     tracing::debug!("ICE connection state changed to: {:?}", state);
                     states.borrow_mut().ice_connection = state;
                 }
@@ -202,10 +239,10 @@ impl ProtocolHandler {
         let states = self.states.clone();
         let ice_gathering_callback = Closure::wrap(Box::new(move |event: web_sys::Event| {
             if let Some(target) = event.target() {
-                if let Some(pc)  = target.dyn_ref::<web_sys::RtcPeerConnection>() {
+                if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
                     let state_js = pc.ice_gathering_state();
                     let state = safe_ice_gathering_state_from_js(state_js.into());
-        
+
                     tracing::debug!("ICE gathering state changed to: {:?}", state);
                     states.borrow_mut().ice_gathering = state;
                 }
@@ -222,7 +259,7 @@ impl ProtocolHandler {
                 if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
                     let state_js = pc.connection_state();
                     let state = safe_peer_connection_state_from_js(state_js.into());
-        
+
                     tracing::debug!("Peer connection state changed to: {:?}", state);
                     states.borrow_mut().peer_connection = state;
                 }
@@ -239,7 +276,7 @@ impl ProtocolHandler {
                 if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
                     let state_js = pc.signaling_state();
                     let state = safe_signaling_state_from_js(state_js.into());
-        
+
                     tracing::debug!("Signaling state changed to: {:?}", state);
                     states.borrow_mut().signaling = state;
                 }
@@ -249,21 +286,71 @@ impl ProtocolHandler {
         connection.set_onsignalingstatechange(Some(&signaling_callback.as_ref().unchecked_ref()));
 
         // Create the callbacks struct to keep closures alive
-        let callbacks = ConnectionCallbacks {
+        ConnectionCallbacks {
             _ice_connection_callback: ice_connection_callback,
             _ice_gathering_callback: ice_gathering_callback,
             _peer_connection_callback: peer_connection_callback,
             _signaling_callback: signaling_callback,
-            _ice_candidate_callback: None,
+        }
+    }
+
+    /// Sets up ICE candidate collection for finite signaling
+    fn setup_ice_candidate_collection(
+        &self,
+        connection: &web_sys::RtcPeerConnection,
+    ) -> (
+        Rc<RefCell<IceCandidateCollection>>,
+        Closure<dyn FnMut(RtcPeerConnectionIceEvent)>,
+    ) {
+        let ice_candidates = Rc::new(RefCell::new(IceCandidateCollection::new()));
+
+        let ice_candidate_callback = {
+            let ice_candidates = ice_candidates.clone();
+            Closure::wrap(Box::new(move |event: RtcPeerConnectionIceEvent| {
+                ice_candidates.borrow_mut().add_candidate(event.candidate());
+            }) as Box<dyn FnMut(RtcPeerConnectionIceEvent)>)
         };
 
-        callbacks
+        connection.set_onicecandidate(Some(ice_candidate_callback.as_ref().unchecked_ref()));
+
+        (ice_candidates, ice_candidate_callback)
+    }
+
+    /// Waits for ICE gathering to complete
+    async fn wait_for_ice_gathering_complete(&self) -> Result<(), Error> {
+        let mut attempts = 0;
+        const MAX_ICE_GATHERING_ATTEMPTS: u32 = 100; // 10 seconds at 100ms intervals
+        info!("Waiting for ice gathering to complete");
+        loop {
+            let current_state = self.states.borrow().ice_gathering.clone();
+
+            match current_state {
+                RtcIceGatheringState::Complete => {
+                    tracing::info!("ICE gathering completed");
+                    break;
+                }
+                RtcIceGatheringState::New | RtcIceGatheringState::Gathering => {
+                    attempts += 1;
+                    if attempts >= MAX_ICE_GATHERING_ATTEMPTS {
+                        tracing::warn!("ICE gathering timeout, proceeding anyway");
+                        break;
+                    }
+                    gloo_timers::future::sleep(Duration::from_millis(100)).await;
+                }
+                _ => {
+                    tracing::warn!("Unexpected ICE gathering state: {:?}", current_state);
+                    break;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Waits for the RtcPeerConnection to establish
     async fn wait_for_established_conn(&self) -> Result<(), Error> {
         let mut attempts = 0;
-
+        info!("Waiting for connection to establish");
         loop {
             let current_states = self.states.borrow().clone();
 
@@ -298,34 +385,132 @@ impl ProtocolHandler {
                         return Err(Error::Signaling("Connection timeout".to_string()));
                     }
 
-                    gloo_timers::future::sleep(self.config.connection_establishment_delay_in_millis).await;
+                    gloo_timers::future::sleep(
+                        self.config.connection_establishment_delay_in_millis,
+                    )
+                    .await;
                 }
             }
+        }
+
+        let current_states = self.states.borrow().clone();
+        if current_states.peer_connection != web_sys::RtcPeerConnectionState::Connected {
+            tracing::error!("Rtc peer connection failed. Connection not properly established.");
+             return Err(Error::Signaling("Connection not properly established".to_string()));
         }
 
         Ok(())
     }
 
-/// Parse ICE candidate from JSON message
-fn parse_ice_candidate(message: &SignalingMessage) -> Option<RtcIceCandidateInit> {
-    if let Ok(candidate_json) = serde_json::from_str::<serde_json::Value>(&message.data) {
-        if let Some(candidate_str) = candidate_json.get("candidate").and_then(|v| v.as_str()) {
-            let candidate_init = RtcIceCandidateInit::new(candidate_str);
+    /// Parse ICE candidate from JSON message
+    fn parse_ice_candidate(message: &SignalingMessage) -> Option<RtcIceCandidateInit> {
+        if let Ok(candidate_json) = serde_json::from_str::<serde_json::Value>(&message.data) {
+            if let Some(candidate_str) = candidate_json.get("candidate").and_then(|v| v.as_str()) {
+                let candidate_init = RtcIceCandidateInit::new(candidate_str);
 
-            if let Some(sdp_mid) = candidate_json.get("sdpMid").and_then(|v| v.as_str()) {
-                candidate_init.set_sdp_mid(Some(sdp_mid));
+                if let Some(sdp_mid) = candidate_json.get("sdpMid").and_then(|v| v.as_str()) {
+                    candidate_init.set_sdp_mid(Some(sdp_mid));
+                }
+
+                if let Some(sdp_m_line_index) =
+                    candidate_json.get("sdpMLineIndex").and_then(|v| v.as_u64())
+                {
+                    candidate_init.set_sdp_m_line_index(Some(sdp_m_line_index as u16));
+                }
+
+                return Some(candidate_init);
             }
-
-            if let Some(sdp_m_line_index) = candidate_json.get("sdpMLineIndex").and_then(|v| v.as_u64()) {
-                candidate_init.set_sdp_m_line_index(Some(sdp_m_line_index as u16));
-            }
-
-            return Some(candidate_init);
         }
+
+        None
     }
-    
-    None
-}
+
+    /// Sends collected ICE candidates through the signaling stream
+    async fn send_ice_candidates(
+        stream: &Arc<Mutex<SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>>>,
+        candidates: Vec<RtcIceCandidate>,
+    ) -> Result<(), Error> {
+        tracing::info!("Sending {} ICE candidates", candidates.len());
+
+        for candidate in candidates {
+            let candidate_json = candidate.to_json();
+            let candidate_as_str = js_sys::JSON::stringify(&candidate_json)
+                .unwrap()
+                .as_string()
+                .unwrap_or_default();
+
+            let message = SignalingMessage {
+                r#type: signaling_message::Type::IceCandidate as i32,
+                data: candidate_as_str,
+            };
+
+            stream.lock().await.write(message).await.map_err(|_| {
+                Error::ProtoSerialization("Failed to send ICE candidate".to_string())
+            })?;
+        }
+
+        // Send end-of-candidates marker
+        let end_message = SignalingMessage {
+            r#type: signaling_message::Type::IceCandidate as i32,
+            data: "{}".to_string(), // Empty JSON object indicates end of candidates
+        };
+
+        stream.lock().await.write(end_message).await.map_err(|_| {
+            Error::ProtoSerialization("Failed to send end-of-candidates marker".to_string())
+        })?;
+
+        tracing::info!("ICE candidate transmission complete");
+        Ok(())
+    }
+
+    /// Receives ICE candidates from the signaling stream until end marker
+    async fn receive_ice_candidates(
+        stream: &Arc<Mutex<SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>>>,
+        connection: &web_sys::RtcPeerConnection,
+    ) -> Result<(), Error> {
+        tracing::info!("Receiving ICE candidates from remote peer");
+
+        loop {
+            let message = stream.lock().await.read().await.map_err(|_| {
+                Error::ProtoSerialization("Failed to read ICE candidate".to_string())
+            })?;
+
+            if message.r#type != signaling_message::Type::IceCandidate as i32 {
+                return Err(Error::Signaling(
+                    "Expected ICE candidate message".to_string(),
+                ));
+            }
+
+            // Check for end-of-candidates marker
+            if message.data == "{}" {
+                tracing::info!("Received end-of-candidates marker");
+                break;
+            }
+
+            tracing::trace!("Received remote ICE candidate: {}", message.data);
+
+            if let Some(candidate_init) = Self::parse_ice_candidate(&message) {
+                match JsFuture::from(
+                    connection
+                        .add_ice_candidate_with_opt_rtc_ice_candidate_init(Some(&candidate_init)),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        tracing::trace!("Successfully added remote ICE candidate");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to add remote ICE candidate: {:?}", e);
+                    }
+                }
+            } else {
+                tracing::warn!("Failed to parse ICE candidate: {}", message.data);
+            }
+        }
+
+        tracing::info!("ICE candidate reception complete");
+        Ok(())
+    }
 }
 
 impl Signaling for ProtocolHandler {
@@ -334,15 +519,13 @@ impl Signaling for ProtocolHandler {
         &self,
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
-        tracing::info!("Starting WebRTC signaling");
+        tracing::info!("Starting WebRTC signaling as responder");
         let rtc_conn = RtcPeerConnection::new("sha-256".to_string()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
-        let (ice_candidate_sender, mut ice_candidate_receiver) =
-            futures::channel::mpsc::channel::<RtcIceCandidate>(100);
-
-        let mut callbacks = self.setup_peer_connection_state_callbacks(connection);
+        let callbacks = self.setup_peer_connection_state_callbacks(connection);
+        let (ice_candidates, _ice_callback) = self.setup_ice_candidate_collection(connection);
 
         // Read SDP offer
         let offer_message = pb_stream.lock().await.read().await.map_err(|_| {
@@ -391,83 +574,30 @@ impl Signaling for ProtocolHandler {
                 )
             })?;
 
-        // Set up ICE candidate callback for non-initiator
-        let sender_for_closure = ice_candidate_sender.clone();
-        let ice_candidate_callback =
-            Closure::wrap(Box::new(move |event: RtcPeerConnectionIceEvent| {
-                if let Some(candidate) = event.candidate() {
-                    tracing::trace!("Generated ICE candidate: {}", candidate.candidate());
-                    let candidate_for_task = candidate.clone();
-                    let mut sender_for_task = sender_for_closure.clone();
-                    spawn_local(async move {
-                        tracing::trace!("Sending ICE candidate");
-                        if let Err(e) = sender_for_task.send(candidate_for_task).await {
-                            tracing::error!("Failed to send ICE candidate: {:?}", e);
-                        }
-                    });
-                } else {
-                    tracing::info!("End of ICE candidates (null candidate)");
-                }
-            }) as Box<dyn FnMut(RtcPeerConnectionIceEvent)>);
+        self.wait_for_ice_gathering_complete().await?;
 
-        connection.set_onicecandidate(Some(ice_candidate_callback.as_ref().unchecked_ref()));
-        callbacks._ice_candidate_callback = Some(ice_candidate_callback);
+        let candidates = ice_candidates.borrow_mut().drain_candidates();
+        Self::send_ice_candidates(&pb_stream, candidates).await?;
 
-        // Send ICE candidates to remote peer
-        let ice_sender_stream = pb_stream.clone();
-        spawn_local(async move {
-            while let Some(candidate) = ice_candidate_receiver.next().await {
-                let candidate_json = candidate.to_json();
-                let candidate_as_str = js_sys::JSON::stringify(&candidate_json)
-                    .unwrap()
-                    .as_string()
-                    .unwrap_or_default();
-
-                let message = SignalingMessage {
-                    r#type: signaling_message::Type::IceCandidate as i32,
-                    data: candidate_as_str,
-                };
-
-                if let Err(e) = ice_sender_stream.lock().await.write(message).await {
-                    tracing::error!("Failed to send ICE candidate: {:?}", e);
-                    break;
-                }
-            }
-        });
-
-        // Receive and add ice candidates from remote peer
-        let ice_reader_stream = pb_stream.clone();
-        let connection_clone = connection.clone();
-        spawn_local(async move {
-            while let Ok(message) = ice_reader_stream.lock().await.read().await {
-                if message.r#type == signaling_message::Type::IceCandidate as i32 {
-                    tracing::trace!("Received remote ICE candidate: {}", message.data);
-
-                    if let Some(candidate_init) = ProtocolHandler::parse_ice_candidate(&message) {
-                        match JsFuture::from(
-                            connection_clone.add_ice_candidate_with_opt_rtc_ice_candidate_init(
-                                Some(&candidate_init),
-                            ),
-                        )
-                        .await
-                        {
-                            Ok(_) => {}
-                            Err(e) => tracing::error!(
-                                "Failed to add remote ICE candidate: {:?}",
-                                e
-                            ),
-                        }
-                    }
-
-                   
-                }
-            }
-        });
+        Self::receive_ice_candidates(&pb_stream, connection).await?;
 
         self.wait_for_established_conn().await?;
-        drop(callbacks);
 
-        tracing::info!("Successfully created WebRTC connection");
+        tracing::info!(
+            "WebRTC connection established - Current state: {:?}",
+            connection.connection_state()
+        );
+        tracing::info!(
+            "ICE connection state: {:?}",
+            connection.ice_connection_state()
+        );
+
+        // Clean up callbacks and close signaling stream
+        drop(callbacks);
+        drop(_ice_callback);
+        drop(pb_stream);
+
+        tracing::info!("Completed signaling as responder, returning connection.");
         Ok(Connection::new(rtc_conn))
     }
 
@@ -476,68 +606,17 @@ impl Signaling for ProtocolHandler {
         &self,
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
-        tracing::info!("Starting signaling");
+        tracing::info!("Starting WebRTC signaling as initiator");
         let rtc_conn = RtcPeerConnection::new("sha-256".to_string()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
-        let (ice_candidate_sender, mut ice_candidate_receiver) =
-            futures::channel::mpsc::channel::<RtcIceCandidate>(100);
-
-        let mut callbacks = self.setup_peer_connection_state_callbacks(connection);
+        let callbacks = self.setup_peer_connection_state_callbacks(connection);
+        let (ice_candidates, _ice_callback) = self.setup_ice_candidate_collection(connection);
 
         // Create a data channel to ensure ICE information is shared in the SDP
-        tracing::trace!("Creating data channel");
+        tracing::trace!("Creating init data channel");
         let data_channel = connection.create_data_channel("init");
-
-        // Set a callback to handle ice candidates
-        let sender_for_closure = ice_candidate_sender.clone();
-        let ice_candidate_callback =
-            Closure::wrap(Box::new(move |event: RtcPeerConnectionIceEvent| {
-                if let Some(candidate) = event.candidate() {
-                    let candidate_for_task = candidate.clone();
-                    let mut sender_for_task = sender_for_closure.clone();
-
-                    spawn_local(async move {
-                        if let Err(e) = sender_for_task.send(candidate_for_task).await {
-                            tracing::error!("Failed to send ICE candidate: {:?}", e);
-                        }
-                    });
-                } else {
-                    tracing::info!("End of ICE candidates (null candidate)");
-                }
-            }) as Box<dyn FnMut(RtcPeerConnectionIceEvent)>);
-
-        connection.set_onicecandidate(Some(ice_candidate_callback.as_ref().unchecked_ref()));
-        callbacks._ice_candidate_callback = Some(ice_candidate_callback);
-
-        let pb_stream_clone = Arc::clone(&pb_stream);
-
-        // Send ICE candidates to remote peer through the signaling stream
-        spawn_local(async move {
-            while let Some(candidate) = ice_candidate_receiver.next().await {
-                tracing::trace!("New ICE candidate: {}", candidate.to_string());
-                let candidate_json = candidate.to_json();
-                let candidate_as_str = js_sys::JSON::stringify(&candidate_json)
-                    .unwrap()
-                    .as_string()
-                    .unwrap_or_default();
-
-                let message = SignalingMessage {
-                    r#type: signaling_message::Type::IceCandidate as i32,
-                    data: candidate_as_str,
-                };
-
-                let mut guard = pb_stream_clone.lock().await;
-                if let Err(e) = guard.write(message).await {
-                    tracing::error!(
-                        "Failure to write ICE candidate to signaling stream: {:?}",
-                        e
-                    );
-                    break;
-                }
-            }
-        });
 
         // Create offer
         let offer = JsFuture::from(connection.create_offer()).await?;
@@ -555,7 +634,7 @@ impl Signaling for ProtocolHandler {
         // Write SDP offer to the signaling stream
         let message = SignalingMessage {
             r#type: signaling_message::Type::SdpOffer as i32,
-            data: offer_sdp,
+            data: offer_sdp.clone(),
         };
 
         pb_stream.lock().await.write(message).await.map_err(|_| {
@@ -581,36 +660,31 @@ impl Signaling for ProtocolHandler {
             .await
             .map_err(|_| Error::Js("Could not set remote description".to_string()))?;
 
-        // Receive and add ice candidates from remote peer until connected
-        let connection_clone = connection.clone();
-        spawn_local(async move {
-            while let Ok(message) = pb_stream.lock().await.read().await {
-                if message.r#type == signaling_message::Type::IceCandidate as i32 {
-                    if let Some(candidate_init) = ProtocolHandler::parse_ice_candidate(&message) {
-                        match JsFuture::from(
-                            connection_clone.add_ice_candidate_with_opt_rtc_ice_candidate_init(
-                                Some(&candidate_init),
-                            ),
-                        )
-                        .await
-                        {
-                            Ok(_) => {}
-                            Err(e) => tracing::error!(
-                                "Failed to add remote ICE candidate: {:?}",
-                                e
-                            ),
-                        }
-                    }
-                   
-                }
-            }
-        });
+        self.wait_for_ice_gathering_complete().await?;
+
+        let candidates = ice_candidates.borrow_mut().drain_candidates();
+        Self::send_ice_candidates(&pb_stream, candidates).await?;
+
+        Self::receive_ice_candidates(&pb_stream, connection).await?;
 
         self.wait_for_established_conn().await?;
+
+        tracing::info!(
+            "WebRTC connection established - Current state: {:?}",
+            connection.connection_state()
+        );
+        tracing::info!(
+            "ICE connection state: {:?}",
+            connection.ice_connection_state()
+        );
+
+        // Clean up callbacks, close data channel, and close signaling stream
         data_channel.close();
         drop(callbacks);
+        drop(_ice_callback);
+        drop(pb_stream);
 
-        tracing::info!("Successfully created WebRTC connection");
+        tracing::info!("Completed signaling as initiator, returning connection.");
         Ok(Connection::new(rtc_conn))
     }
 }

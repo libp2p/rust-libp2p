@@ -1,13 +1,13 @@
 use std::{
-    collections::{HashMap, VecDeque},
-    task::Poll,
-    time::Duration
+    collections::{HashMap, VecDeque}, task::{Poll}, time::Duration
 };
+
+use tracing::info;
 
 use wasm_timer::Instant;
 
-use libp2p_core::PeerId;
-use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
+use libp2p_core::{multiaddr::Protocol, PeerId};
+use libp2p_swarm::{ ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 
 use crate::browser::handler::{FromBehaviourEvent, SignalingHandler, ToBehaviourEvent};
 
@@ -20,27 +20,40 @@ pub struct SignalingConfig {
     /// Time to wait between each check for an established WebRTC connection.
     pub(crate) connection_establishment_delay_in_millis: Duration,
     /// Maximum number of checks to attempt for establishing the WebRTC connection.
-    pub(crate) max_connection_establishment_checks: u32
+    pub(crate) max_connection_establishment_checks: u32,
+    /// Maximum time to wait for ICE gathering to complete before proceeding.
+    pub(crate) ice_gathering_timeout: Duration,
+    pub(crate) local_peer_id: PeerId,
 }
 
-impl Default for SignalingConfig {
-    fn default() -> Self {
-        Self {
-            max_signaling_retries: 3,
-            signaling_delay: Duration::from_millis(100),
-            connection_establishment_delay_in_millis: Duration::from_millis(100),
-            max_connection_establishment_checks: 300
-        }
-    }
-}
+// impl Default for SignalingConfig {
+//     fn default() -> Self {
+//         Self {
+//             max_signaling_retries: 3,
+//             signaling_delay: Duration::from_millis(100),
+//             connection_establishment_delay_in_millis: Duration::from_millis(100),
+//             max_connection_establishment_checks: 300,
+//             ice_gathering_timeout: Duration::from_secs(10),
+//         }
+//     }
+// }
 
 impl SignalingConfig {
-    pub fn new(max_retries: u8, signaling_delay: Duration, connection_establishment_delay_in_millis: Duration, max_connection_establishment_checks: u32) -> Self {
+    pub fn new(
+        max_retries: u8,
+        signaling_delay: Duration,
+        connection_establishment_delay_in_millis: Duration,
+        max_connection_establishment_checks: u32,
+        ice_gathering_timeout: Duration,
+        local_peer_id: PeerId,
+    ) -> Self {
         Self {
             max_signaling_retries: max_retries,
             signaling_delay,
             connection_establishment_delay_in_millis,
-            max_connection_establishment_checks
+            max_connection_establishment_checks,
+            ice_gathering_timeout,
+            local_peer_id,
         }
     }
 }
@@ -95,10 +108,14 @@ impl NetworkBehaviour for Behaviour {
         _local_addr: &libp2p_core::Multiaddr,
         _remote_addr: &libp2p_core::Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
+        info!("Creating signaling handler for established inbound connection");
+
         Ok(SignalingHandler::new(
+            self.signaling_config.local_peer_id,
             peer,
             false,
             self.signaling_config.clone(),
+            false
         ))
     }
 
@@ -106,15 +123,32 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _connection_id: libp2p_swarm::ConnectionId,
         peer: PeerId,
-        _addr: &libp2p_core::Multiaddr,
-        _role_override: libp2p_core::Endpoint,
+        addr: &libp2p_core::Multiaddr,
+        endpoint: libp2p_core::Endpoint,
         _port_use: libp2p_core::transport::PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(SignalingHandler::new(
-            peer,
-            true,
-            self.signaling_config.clone(),
-        ))
+        tracing::info!("=====Established outbound connection======");
+        if addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) &&
+            addr.iter().any(|p| matches!(p, Protocol::WebRTC)) {
+            tracing::info!("Creating signaling handler for WebRTC connection to {} on addr {}", peer.clone(), addr.clone());
+
+            Ok(SignalingHandler::new(
+                self.signaling_config.local_peer_id,
+                peer,
+                true,
+                self.signaling_config.clone(),
+                false
+            ))
+        } else {
+            info!("Skipping handler creation for {} on addr {}  as it is not a web rtc conn.", peer, addr);
+            Ok(SignalingHandler::new(
+                self.signaling_config.local_peer_id,
+                peer,
+                true,
+                self.signaling_config.clone(),
+                true
+            ))
+       }
     }
 
     fn on_swarm_event(&mut self, event: libp2p_swarm::FromSwarm) {
@@ -138,6 +172,11 @@ impl NetworkBehaviour for Behaviour {
                 }
             }
             libp2p_swarm::FromSwarm::ConnectionClosed(connection_closed) => {
+                info!("Connection with id {} on address {} for peer {} closed",
+                connection_closed.connection_id,
+                connection_closed.endpoint.get_remote_address(),
+                connection_closed.peer_id);
+
                 if self
                     .peers
                     .get(&connection_closed.peer_id)
@@ -159,21 +198,22 @@ impl NetworkBehaviour for Behaviour {
     ) {
         match event {
             ToBehaviourEvent::WebRTCConnectionSuccess(connection) => {
-                tracing::info!("Successfully webrtc connection to peer {}", peer_id);
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     SignalingEvent::NewWebRTCConnection(connection),
                 ));
+
+                // Remove peer from tracking since signaling is complete
                 self.peers.remove(&peer_id);
             }
             ToBehaviourEvent::WebRTCConnectionFailure(error) => {
-                tracing::error!("WebRTC connection failed: {:?}", error);
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     SignalingEvent::WebRTCConnectionError(error),
                 ));
+
+                // Remove peer from tracking since signaling failed
                 self.peers.remove(&peer_id);
             }
             ToBehaviourEvent::SignalingRetry => {
-                tracing::info!("Scheduling signaling retry for peer {}", peer_id);
                 if let Some(state) = self.peers.get_mut(&peer_id) {
                     state.initiated = false;
                     state.discovered_at = Instant::now();

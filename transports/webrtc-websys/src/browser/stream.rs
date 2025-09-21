@@ -1,5 +1,6 @@
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use prost::Message;
+use tracing::info;
 
 use crate::browser::protocol::pb::SignalingMessage;
 
@@ -18,6 +19,7 @@ where
 
     /// Encodes and writes a signaling message to the stream.
     pub async fn write(&mut self, message: SignalingMessage) -> Result<(), std::io::Error> {
+        info!("Writing signaling message through signaling stream");
         let mut buf = Vec::new();
         message.encode(&mut buf)?;
         let len = buf.len() as u32;
@@ -30,6 +32,7 @@ where
 
     /// Reads and decodes a signaling message from the stream.
     pub async fn read(&mut self) -> Result<SignalingMessage, std::io::Error> {
+        info!("Reading signaling message from signaling stream");
         let mut len_buf = [0u8; 4];
         self.inner.read_exact(&mut len_buf).await?;
         let len = u32::from_be_bytes(len_buf) as usize;

@@ -3,12 +3,13 @@ use std::str::FromStr;
 use futures::{channel::mpsc, StreamExt};
 use js_sys::{Object, Reflect};
 use libp2p::{
-    identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, yamux,
-    Multiaddr, Swarm, Transport,
+    identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, yamux, Multiaddr, PeerId, Swarm, Transport
 };
 use libp2p_core::{muxing::StreamMuxerBox, upgrade::Version};
 use libp2p_swarm::NetworkBehaviour;
-use libp2p_webrtc_websys::browser::{self, Behaviour, Transport as BrowserWebrtcTransport};
+use libp2p_webrtc_websys::browser::{
+    self, Behaviour, SignalingConfig, Transport as BrowserWebrtcTransport,
+};
 use tracing;
 use tracing_wasm;
 use wasm_bindgen::prelude::*;
@@ -17,13 +18,19 @@ use wasm_bindgen_futures::spawn_local;
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
+    tracing_wasm::set_as_global_default_with_config(
+        tracing_wasm::WASMLayerConfigBuilder::new()
+            .set_max_level(tracing::Level::DEBUG)
+            .set_console_config(tracing_wasm::ConsoleConfig::ReportWithConsoleColor)
+            .build(),
+    );
 }
 
 #[wasm_bindgen]
 pub fn initialize() {
     tracing_wasm::set_as_global_default_with_config(
         tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(tracing::Level::TRACE)
+            .set_max_level(tracing::Level::DEBUG)
             .set_console_config(tracing_wasm::ConsoleConfig::ReportWithConsoleColor)
             .build(),
     );
@@ -34,6 +41,7 @@ pub struct BrowserTransport {
     cmd_sender: mpsc::UnboundedSender<Command>,
     event_receiver: std::sync::Arc<futures::lock::Mutex<mpsc::UnboundedReceiver<Event>>>,
     peer_id: String,
+    connections: std::sync::Arc<futures::lock::Mutex<std::collections::HashMap<PeerId, libp2p_webrtc_websys::Connection>>>,
 }
 
 enum Command {
@@ -46,6 +54,7 @@ enum Event {
     ReservationCreated,
     ConnectionEstablished { peer_id: String },
     PingSuccess { peer_id: String, rtt_ms: f64 },
+    WebRTCConnectionEstablished { peer_id: String },
     Error { msg: String },
 }
 
@@ -73,24 +82,32 @@ impl BrowserTransport {
             .multiplex(yamux::Config::default())
             .boxed();
 
-        // Create a websocket transport to faciliate connection to the relay server
+        // Create a websocket transport to facilitate connection to the relay server
         let ws_transport = libp2p_websocket_websys::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::Config::new(&keypair)?)
             .multiplex(yamux::Config::default())
             .boxed();
 
-
         let webrtc_config = libp2p_webrtc_websys::browser::Config {
             keypair: keypair.clone(),
         };
-        let signaling_config = libp2p_webrtc_websys::browser::SignalingConfig::default();
-        
+
+        // Configure finite signaling with appropriate timeouts
+        let signaling_config = SignalingConfig::new(
+            3,                                     // max retries
+            std::time::Duration::from_millis(100), // signaling delay
+            std::time::Duration::from_millis(100), // connection check delay
+            300,                                   // max connection checks (30 seconds)
+            std::time::Duration::from_secs(10),    // ICE gathering timeout
+            keypair.public().to_peer_id(),         // The local peers peer_id derived from the public key
+        );
+
         let (webrtc_transport, webrtc_behaviour) =
             BrowserWebrtcTransport::new(webrtc_config, signaling_config);
         let webrtc_transport_boxed = webrtc_transport.boxed();
 
-        // A WebRTC behaviour faciliating coordination between the relay connection and webrtc signaling
+        // A WebRTC behaviour facilitating coordination between the relay connection and webrtc signaling
         let behaviour = WebRTCBehaviour {
             relay: relay_behaviour,
             webrtc: webrtc_behaviour,
@@ -98,7 +115,11 @@ impl BrowserTransport {
                 "browser-to-browser-webrtc/1.0.0".into(),
                 keypair.public(),
             )),
-            ping: ping::Behaviour::new(ping::Config::default()),
+            ping: ping::Behaviour::new(
+                ping::Config::new()
+                    .with_interval(std::time::Duration::from_millis(500))
+                    .with_timeout(std::time::Duration::from_secs(3)),
+            ),
         };
 
         // The final transport consisting of a webrtc, relay and websocket transport
@@ -121,11 +142,14 @@ impl BrowserTransport {
             local_peer_id,
             libp2p::swarm::Config::with_executor(Box::new(|fut| {
                 wasm_bindgen_futures::spawn_local(fut);
-            })),
+            }))
+            .with_idle_connection_timeout(std::time::Duration::from_secs(300)),
         );
 
         let (cmd_sender, mut cmd_receiver) = mpsc::unbounded();
         let (event_sender, event_receiver) = mpsc::unbounded();
+         let connections = std::sync::Arc::new(futures::lock::Mutex::new(std::collections::HashMap::new()));
+        let connections_clone = connections.clone();
 
         spawn_local(async move {
             loop {
@@ -164,12 +188,20 @@ impl BrowserTransport {
                     event = swarm.select_next_some() => {
                         match event {
                             SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
-
                                 let remote_addr = endpoint.get_remote_address().to_string();
 
                                 if remote_addr.contains("/webrtc") {
                                     tracing::info!(
-                                        "Connection established with: {} via {} (remote: WebRTC, connection_id: {})",
+                                        "WebRTC connection established with: {} via {} (connection_id: {})",
+                                        peer_id, remote_addr, connection_id
+                                    );
+
+                                    let _ = event_sender.unbounded_send(Event::WebRTCConnectionEstablished {
+                                        peer_id: peer_id.to_string()
+                                    });
+                                } else {
+                                    tracing::info!(
+                                        "Relay connection established with: {} via {} (connection_id: {})",
                                         peer_id, remote_addr, connection_id
                                     );
                                 }
@@ -198,11 +230,19 @@ impl BrowserTransport {
                                 match event {
                                     WebRTCBehaviourEvent::Webrtc(webrtc_event) => {
                                         match webrtc_event {
-                                            browser::SignalingEvent::NewWebRTCConnection(_connection) => {
-                                                tracing::info!("Successfully established WebRTC connection");
+                                            browser::SignalingEvent::NewWebRTCConnection(connection) => {
+                                                tracing::info!("Successfully established connection - application level");
+
+                                                // At this point, the connection is independent of the relay
+
+                                                // TODO: Pass the associated peer from the conn handler.
+                                                 connections_clone.lock().await.insert(PeerId::random(), connection);
                                             }
-                                            browser::SignalingEvent::WebRTCConnectionError(_error) => {
-                                                tracing::error!("Failed to establish WebRTC connection.")
+                                            browser::SignalingEvent::WebRTCConnectionError(error) => {
+                                                tracing::error!("Failed to establish WebRTC connection: {:?}", error);
+                                                let _ = event_sender.unbounded_send(Event::Error {
+                                                    msg: format!("WebRTC connection error: {}", error)
+                                                });
                                             }
                                         }
                                     }
@@ -210,14 +250,12 @@ impl BrowserTransport {
                                         match ping_event {
                                             ping::Event { peer, result: Ok(rtt), .. } => {
                                                 let rtt_ms = rtt.as_millis() as f64;
-                                                tracing::info!("Ping successful: from {}", peer);
                                                 let _ = event_sender.unbounded_send(Event::PingSuccess {
                                                     peer_id: peer.to_string(),
                                                     rtt_ms,
                                                 });
                                             }
                                             ping::Event { peer, result: Err(e), .. } => {
-                                                tracing::error!("Ping failed to {}: {}", peer, e);
                                                 let _ = event_sender.unbounded_send(Event::Error {
                                                     msg: format!("Ping failed to {}: {}", peer, e)
                                                 });
@@ -238,6 +276,7 @@ impl BrowserTransport {
             cmd_sender,
             event_receiver: std::sync::Arc::new(futures::lock::Mutex::new(event_receiver)),
             peer_id: local_peer_id.to_string(),
+            connections
         })
     }
 
@@ -283,6 +322,10 @@ impl BrowserTransport {
                 }
                 Event::ConnectionEstablished { peer_id } => {
                     Reflect::set(&obj, &"type".into(), &"connectionEstablished".into())?;
+                    Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
+                }
+                Event::WebRTCConnectionEstablished { peer_id } => {
+                    Reflect::set(&obj, &"type".into(), &"webrtcConnectionEstablished".into())?;
                     Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
                 }
                 Event::PingSuccess { peer_id, rtt_ms } => {

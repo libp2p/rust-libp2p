@@ -16,6 +16,7 @@ use web_sys::{
     RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
     RtcSessionDescriptionInit,
 };
+use tracing::info;
 
 use super::{Error, Stream};
 use crate::stream::DropListener;
@@ -93,8 +94,8 @@ impl Connection {
     /// This closes the data channels also and they will return an error
     /// if they are used.
     fn close_connection(&mut self) {
+        info!("Calling close connection.. closing webrtc connection");
         if !self.closed {
-            tracing::trace!("connection::close_connection");
             self.inner.inner.close();
             self.closed = true;
         }
@@ -103,6 +104,7 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        info!("WebRTC connection dropped. Webrtc connection will be closed");
         self.close_connection();
     }
 }
@@ -149,8 +151,6 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        tracing::trace!("connection::poll_close");
-
         self.close_connection();
         Poll::Ready(Ok(()))
     }
