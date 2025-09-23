@@ -59,6 +59,11 @@ impl Namespace {
     /// are enforcing a `static lifetime which means this value can only be a constant in the
     /// program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
+        // Empty namespaces are ambiguous on the wire encoding (would be indistinguishable from
+        // `None`). Disallow empty values to avoid semantic collisions.
+        if value.is_empty() {
+            panic!("Namespace must not be empty");
+        }
         if value.len() > crate::MAX_NAMESPACE {
             panic!("Namespace '{value}' is too long!")
         }
@@ -67,6 +72,11 @@ impl Namespace {
     }
 
     pub fn new(value: String) -> Result<Self, NamespaceTooLong> {
+        // Empty namespaces are ambiguous on the wire encoding (would be indistinguishable from
+        // `None`). Disallow empty values to avoid semantic collisions.
+        if value.is_empty() {
+            return Err(NamespaceTooLong);
+        }
         if value.len() > crate::MAX_NAMESPACE {
             return Err(NamespaceTooLong);
         }
