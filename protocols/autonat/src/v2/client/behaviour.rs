@@ -149,98 +149,93 @@ where
         connection_id: ConnectionId,
         event: <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour,
     ) {
-        let (nonce, outcome) = match event {
+        match event {
             Either::Right(IncomingNonce { nonce, sender }) => {
-                let Some((_, info)) = self
+                if let Some((_, info)) = self
                     .address_candidates
                     .iter_mut()
                     .find(|(_, info)| info.is_pending_with_nonce(nonce))
-                else {
+                {
+                    info.status = TestStatus::Received(nonce);
+                    tracing::debug!(%peer_id, %nonce, "Successful dial-back");
+
+                    let _ = sender.send(Ok(()));
+                } else {
                     let _ = sender.send(Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Received unexpected nonce: {nonce} from {peer_id}"),
                     )));
-                    return;
                 };
-
-                info.status = TestStatus::Received(nonce);
-                tracing::debug!(%peer_id, %nonce, "Successful dial-back");
-
-                let _ = sender.send(Ok(()));
-
-                return;
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
                 self.peer_info
                     .get_mut(&connection_id)
                     .expect("inconsistent state")
                     .supports_autonat = true;
-                return;
             }
             Either::Left(dial_request::ToBehaviour::TestOutcome { nonce, outcome }) => {
-                (nonce, outcome)
-            }
-        };
+                match outcome {
+                    Ok((tested_addr, bytes_sent)) => {
+                        if self
+                            .address_candidates
+                            .iter_mut()
+                            .any(|(_, info)| info.was_received_with_nonce(nonce))
+                        {
+                            self.pending_events
+                                .push_back(ToSwarm::ExternalAddrConfirmed(tested_addr.clone()));
 
-        let ((tested_addr, bytes_sent), result) = match outcome {
-            Ok(address) => {
-                let received_dial_back = self
-                    .address_candidates
-                    .iter_mut()
-                    .any(|(_, info)| info.is_received_with_nonce(nonce));
+                            self.pending_events.push_back(ToSwarm::GenerateEvent(Event {
+                                tested_addr,
+                                bytes_sent,
+                                server: peer_id,
+                                result: Ok(()),
+                            }));
+                        } else {
+                            tracing::warn!(
+                                %peer_id,
+                                %nonce,
+                                "Server reported reachability but we never received a dial-back"
+                            );
+                        }
+                    }
+                    Err(dial_request::Error::UnsupportedProtocol) => {
+                        self.peer_info
+                            .get_mut(&connection_id)
+                            .expect("inconsistent state")
+                            .supports_autonat = false;
 
-                if !received_dial_back {
-                    tracing::warn!(
-                        %peer_id,
-                        %nonce,
-                        "Server reported reachbility but we never received a dial-back"
-                    );
-                    return;
+                        tracing::trace![
+                            "for {nonce} reset `status` to `Untested` so it will be tried again"
+                        ];
+                        self.reset_status_to(nonce, TestStatus::Untested);
+                    }
+                    Err(dial_request::Error::Io(e)) => {
+                        tracing::debug!(
+                            %peer_id,
+                            %nonce,
+                            "Failed to complete AutoNAT probe: {e}"
+                        );
+
+                        tracing::trace!["reset `status` to `Untested` so it will be tried again"];
+                        self.reset_status_to(nonce, TestStatus::Untested);
+                    }
+                    Err(dial_request::Error::AddressNotReachable {
+                        address,
+                        bytes_sent,
+                        error,
+                    }) => {
+                        self.reset_status_to(nonce, TestStatus::Failed);
+
+                        self.pending_events.push_back(ToSwarm::GenerateEvent(Event {
+                            tested_addr: address,
+                            bytes_sent,
+                            server: peer_id,
+                            result: Err(Error { inner: error }),
+                        }));
+                    }
                 }
-
-                self.pending_events
-                    .push_back(ToSwarm::ExternalAddrConfirmed(address.0.clone()));
-
-                (address, Ok(()))
             }
-            Err(dial_request::Error::UnsupportedProtocol) => {
-                self.peer_info
-                    .get_mut(&connection_id)
-                    .expect("inconsistent state")
-                    .supports_autonat = false;
-
-                self.reset_status_to(nonce, TestStatus::Untested); // Reset so it will be tried again.
-
-                return;
-            }
-            Err(dial_request::Error::Io(e)) => {
-                tracing::debug!(
-                    %peer_id,
-                    %nonce,
-                    "Failed to complete AutoNAT probe: {e}"
-                );
-
-                self.reset_status_to(nonce, TestStatus::Untested); // Reset so it will be tried again.
-
-                return;
-            }
-            Err(dial_request::Error::AddressNotReachable {
-                address,
-                bytes_sent,
-                error,
-            }) => {
-                self.reset_status_to(nonce, TestStatus::Failed);
-
-                ((address, bytes_sent), Err(error))
-            }
-        };
-
-        self.pending_events.push_back(ToSwarm::GenerateEvent(Event {
-            tested_addr,
-            bytes_sent,
-            server: peer_id,
-            result: result.map_err(|e| Error { inner: e }),
-        }));
+        }
     }
 
     fn poll(
@@ -348,22 +343,12 @@ where
     }
 
     fn reset_status_to(&mut self, nonce: Nonce, new_status: TestStatus) {
-        let Some((_, info)) = self
+        if let Some((_, info)) = self
             .address_candidates
             .iter_mut()
-            .find(|(_, i)| i.is_pending_with_nonce(nonce) || i.is_received_with_nonce(nonce))
-        else {
-            return;
-        };
-
-        info.status = new_status;
-    }
-
-    // FIXME: We don't want test-only APIs in our public API.
-    #[doc(hidden)]
-    pub fn validate_addr(&mut self, addr: &Multiaddr) {
-        if let Some(info) = self.address_candidates.get_mut(addr) {
-            info.status = TestStatus::Received(self.rng.next_u64());
+            .find(|(_, i)| i.is_pending_with_nonce(nonce) || i.was_received_with_nonce(nonce))
+        {
+            info.status = new_status
         }
     }
 }
@@ -424,11 +409,8 @@ impl AddressInfo {
         }
     }
 
-    fn is_received_with_nonce(&self, nonce: Nonce) -> bool {
-        match self.status {
-            TestStatus::Received(c) => c == nonce,
-            _ => false,
-        }
+    fn was_received_with_nonce(&self, nonce: Nonce) -> bool {
+        self.status == TestStatus::Received(nonce)
     }
 }
 

@@ -218,97 +218,82 @@ async fn start_stream_handle(
     coder.send(req.clone()).await?;
 
     let (res, bytes_sent) = match coder.next().await? {
+        Response::Dial(dial_response) => (dial_response, 0),
         Response::Data(DialDataRequest {
             addr_idx,
             num_bytes,
         }) => {
             if addr_idx >= req.addrs.len() {
-                return Err(Error::Io(io::Error::new(
+                Err(Error::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "address index out of bounds",
-                )));
-            }
-            if !(DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND).contains(&num_bytes) {
-                return Err(Error::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "requested bytes out of bounds",
-                )));
-            }
+                )))
+            } else {
+                if (DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND).contains(&num_bytes) {
+                    send_aap_data(&mut coder, num_bytes).await?;
 
-            send_aap_data(&mut coder, num_bytes).await?;
-
-            let Response::Dial(dial_response) = coder.next().await? else {
-                return Err(Error::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "expected message",
-                )));
-            };
-
-            (dial_response, num_bytes)
+                    if let Response::Dial(dial_response) = coder.next().await? {
+                        Ok((dial_response, num_bytes))
+                    } else {
+                        Err(Error::Io(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "expected message",
+                        )))
+                    }
+                } else {
+                    Err(Error::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "requested bytes out of bounds",
+                    )))
+                }
+            }?
         }
-        Response::Dial(dial_response) => (dial_response, 0),
     };
     match coder.close().await {
-        Ok(_) => {}
-        Err(err) => {
-            if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream
-                // (this is normal because the probe is finished),
-                // in this case we have this error:
-                // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
-                // so we silently ignore this error
-            } else {
-                return Err(err.into());
+        // The AutoNAT server may have already closed the stream (this is normal because the probe
+        // is finished), in this case we have
+        // `Err(Custom { kind: ConnectionReset, error: Stopped(0) })` so we silently ignore this
+        // error.
+        Err(err) if err.kind() != io::ErrorKind::ConnectionReset => Err(err.into()),
+        _ => match res.status {
+            ResponseStatus::E_REQUEST_REJECTED => {
+                Err(Error::Io(io::Error::other("server rejected request")))
             }
-        }
-    }
-
-    match res.status {
-        ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::other("server rejected request")))
-        }
-        ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::other("server refused dial")))
-        }
-        ResponseStatus::E_INTERNAL_ERROR => {
-            return Err(Error::Io(io::Error::other(
+            ResponseStatus::E_DIAL_REFUSED => {
+                Err(Error::Io(io::Error::other("server refused dial")))
+            }
+            ResponseStatus::E_INTERNAL_ERROR => Err(Error::Io(io::Error::other(
                 "server encountered internal error",
-            )))
-        }
-        ResponseStatus::OK => {}
+            ))),
+            ResponseStatus::OK => {
+                let tested_address = req
+                    .addrs
+                    .get(res.addr_idx)
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "address index out of bounds")
+                    })?
+                    .clone();
+
+                match res.dial_status {
+                    DialStatus::UNUSED => Err(Error::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "unexpected message",
+                    ))),
+                    DialStatus::E_DIAL_ERROR => Err(Error::AddressNotReachable {
+                        address: tested_address,
+                        bytes_sent,
+                        error: DialBackError::NoConnection,
+                    }),
+                    DialStatus::E_DIAL_BACK_ERROR => Err(Error::AddressNotReachable {
+                        address: tested_address,
+                        bytes_sent,
+                        error: DialBackError::StreamFailed,
+                    }),
+                    DialStatus::OK => Ok((tested_address, bytes_sent)),
+                }
+            }
+        },
     }
-
-    let tested_address = req
-        .addrs
-        .get(res.addr_idx)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "address index out of bounds"))?
-        .clone();
-
-    match res.dial_status {
-        DialStatus::UNUSED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "unexpected message",
-            )))
-        }
-        DialStatus::E_DIAL_ERROR => {
-            return Err(Error::AddressNotReachable {
-                address: tested_address,
-                bytes_sent,
-                error: DialBackError::NoConnection,
-            })
-        }
-        DialStatus::E_DIAL_BACK_ERROR => {
-            return Err(Error::AddressNotReachable {
-                address: tested_address,
-                bytes_sent,
-                error: DialBackError::StreamFailed,
-            })
-        }
-        DialStatus::OK => {}
-    }
-
-    Ok((tested_address, bytes_sent))
 }
 
 async fn send_aap_data<I>(stream: &mut Coder<I>, num_bytes: usize) -> io::Result<()>

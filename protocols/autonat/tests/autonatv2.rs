@@ -309,7 +309,6 @@ async fn dial_back_to_non_libp2p() {
 
     let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
     assert_eq!(alice_bytes_sent, bob_bytes_sent);
-    bob.behaviour_mut().autonat.validate_addr(&addr);
 }
 
 #[tokio::test]
