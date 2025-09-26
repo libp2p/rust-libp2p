@@ -1,3 +1,5 @@
+- Fix `DialBackError` visibility so downstream could differentiate between `NoConnection` and `StreamFailed`.
+
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.
