@@ -1,3 +1,4 @@
+## 0.16.0
 - Fix `DialBackError` visibility so downstream could differentiate between `NoConnection` and `StreamFailed`.
 
 ## 0.15.0
