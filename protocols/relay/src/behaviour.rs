@@ -270,10 +270,10 @@ pub struct Behaviour {
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Status {
-    /// Enables advertisement of the STOP protocol
+    /// Enables advertisement of the HOP protocol
     Enable,
 
-    /// Disables advertisement of the STOP protocol
+    /// Disables advertisement of the HOP protocol
     Disable,
 }
 
@@ -295,9 +295,11 @@ impl Behaviour {
     pub fn set_status(&mut self, status: Option<Status>) {
         match status {
             Some(status) => {
-                self.status = status;
                 self.auto_status_change = false;
-                self.reconfigure_relay_status();
+                if (self.status != status) { 
+                    self.status = status;
+                    self.reconfigure_relay_status();
+                }
             }
             None => {
                 self.auto_status_change = true;
