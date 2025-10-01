@@ -35,6 +35,7 @@ use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpo
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, FromSwarm},
+    derive_prelude::ConnectionEstablished,
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
@@ -253,6 +254,7 @@ pub struct Behaviour {
 
     local_peer_id: PeerId,
 
+    connections: HashMap<PeerId, HashSet<ConnectionId>>,
     reservations: HashMap<PeerId, HashSet<ConnectionId>>,
     circuits: CircuitsTracker,
 
@@ -282,6 +284,7 @@ impl Behaviour {
         Self {
             config,
             local_peer_id,
+            connections: Default::default(),
             reservations: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
@@ -296,7 +299,7 @@ impl Behaviour {
         match status {
             Some(status) => {
                 self.auto_status_change = false;
-                if (self.status != status) { 
+                if (self.status != status) {
                     self.status = status;
                     self.reconfigure_relay_status();
                 }
@@ -312,11 +315,11 @@ impl Behaviour {
     }
 
     fn reconfigure_relay_status(&mut self) {
-        if self.reservations.is_empty() {
+        if self.connections.is_empty() {
             return;
         }
 
-        for (peer_id, connections) in self.reservations.iter() {
+        for (peer_id, connections) in self.connections.iter() {
             self.queued_actions
                 .extend(connections.iter().map(|id| ToSwarm::NotifyHandler {
                     peer_id: *peer_id,
@@ -363,6 +366,20 @@ impl Behaviour {
         }
     }
 
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        self.connections
+            .entry(peer_id)
+            .or_default()
+            .insert(connection_id);
+    }
+
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
@@ -378,6 +395,13 @@ impl Behaviour {
                         src_peer_id: peer_id,
                     }));
             }
+            if peer.get().is_empty() {
+                peer.remove();
+            }
+        }
+
+        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
+            peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
                 peer.remove();
             }
@@ -465,8 +489,14 @@ impl NetworkBehaviour for Behaviour {
             self.determine_relay_status_from_external_address();
         }
 
-        if let FromSwarm::ConnectionClosed(connection_closed) = event {
-            self.on_connection_closed(connection_closed)
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            _ => {}
         }
     }
 
