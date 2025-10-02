@@ -299,7 +299,7 @@ impl Behaviour {
         match status {
             Some(status) => {
                 self.auto_status_change = false;
-                if (self.status != status) {
+                if self.status != status {
                     self.status = status;
                     self.reconfigure_relay_status();
                 }
