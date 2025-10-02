@@ -1,3 +1,8 @@
+## 0.48.0
+
+- Replace `with_cache_size` by `with_cache_config` to fully configure the identify cache using `PeerAddressesConfig`.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
+
 ## 0.47.0
 
 - Implement optional `signedPeerRecord` support for identify messages.
