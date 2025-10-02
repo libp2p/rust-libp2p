@@ -1,3 +1,6 @@
+## 0.51.0
+- remove `max_transmit_size_for_topic` which duplicated `set_topic_max_transmit_size` precisely
+
 ## 0.50.0
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
