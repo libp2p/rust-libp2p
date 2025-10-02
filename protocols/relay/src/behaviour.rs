@@ -175,26 +175,10 @@ pub enum Event {
         /// Indicates whether the request replaces an existing reservation.
         renewed: bool,
     },
-    /// Accepting an inbound reservation request failed.
-    #[deprecated(
-        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
-    )]
-    ReservationReqAcceptFailed {
-        src_peer_id: PeerId,
-        error: inbound_hop::Error,
-    },
     /// An inbound reservation request has been denied.
     ReservationReqDenied {
         src_peer_id: PeerId,
         status: StatusCode,
-    },
-    /// Denying an inbound reservation request has failed.
-    #[deprecated(
-        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
-    )]
-    ReservationReqDenyFailed {
-        src_peer_id: PeerId,
-        error: inbound_hop::Error,
     },
     /// A reservation has been closed.
     ReservationClosed { src_peer_id: PeerId },
@@ -206,37 +190,10 @@ pub enum Event {
         dst_peer_id: PeerId,
         status: StatusCode,
     },
-    /// Denying an inbound circuit request failed.
-    #[deprecated(
-        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
-    )]
-    CircuitReqDenyFailed {
-        src_peer_id: PeerId,
-        dst_peer_id: PeerId,
-        error: inbound_hop::Error,
-    },
     /// An inbound circuit request has been accepted.
     CircuitReqAccepted {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-    },
-    /// An outbound connect for an inbound circuit request failed.
-    #[deprecated(
-        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
-    )]
-    CircuitReqOutboundConnectFailed {
-        src_peer_id: PeerId,
-        dst_peer_id: PeerId,
-        error: outbound_stop::Error,
-    },
-    /// Accepting an inbound circuit request failed.
-    #[deprecated(
-        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
-    )]
-    CircuitReqAcceptFailed {
-        src_peer_id: PeerId,
-        dst_peer_id: PeerId,
-        error: inbound_hop::Error,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -477,13 +434,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
-                #[allow(deprecated)]
-                self.queued_actions.push_back(ToSwarm::GenerateEvent(
-                    Event::ReservationReqAcceptFailed {
-                        src_peer_id: event_source,
-                        error,
-                    },
-                ));
+                tracing::warn!("Reservation request accept failed: {:?}", error);
             }
             handler::Event::ReservationReqDenied { status } => {
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
@@ -494,13 +445,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqDenyFailed { error } => {
-                #[allow(deprecated)]
-                self.queued_actions.push_back(ToSwarm::GenerateEvent(
-                    Event::ReservationReqDenyFailed {
-                        src_peer_id: event_source,
-                        error,
-                    },
-                ));
+                tracing::warn!("Reservation request deny failed: {:?}", error);
             }
             handler::Event::ReservationTimedOut {} => {
                 match self.reservations.entry(event_source) {
@@ -619,14 +564,7 @@ impl NetworkBehaviour for Behaviour {
                     self.circuits.remove(circuit_id);
                 }
 
-                #[allow(deprecated)]
-                self.queued_actions.push_back(ToSwarm::GenerateEvent(
-                    Event::CircuitReqDenyFailed {
-                        src_peer_id: event_source,
-                        dst_peer_id,
-                        error,
-                    },
-                ));
+                tracing::warn!("Circuit request deny failed: {:?}", error);
             }
             handler::Event::OutboundConnectNegotiated {
                 circuit_id,
@@ -665,14 +603,7 @@ impl NetworkBehaviour for Behaviour {
                         status,
                     }),
                 });
-                #[allow(deprecated)]
-                self.queued_actions.push_back(ToSwarm::GenerateEvent(
-                    Event::CircuitReqOutboundConnectFailed {
-                        src_peer_id,
-                        dst_peer_id: event_source,
-                        error,
-                    },
-                ));
+                tracing::warn!("Outbound connect for circuit request failed: {:?}", error);
             }
             handler::Event::CircuitReqAccepted {
                 dst_peer_id,
@@ -691,14 +622,7 @@ impl NetworkBehaviour for Behaviour {
                 error,
             } => {
                 self.circuits.remove(circuit_id);
-                #[allow(deprecated)]
-                self.queued_actions.push_back(ToSwarm::GenerateEvent(
-                    Event::CircuitReqAcceptFailed {
-                        src_peer_id: event_source,
-                        dst_peer_id,
-                        error,
-                    },
-                ));
+                tracing::warn!("Accepting inbound circuit request failed: {:?}", error);
             }
             handler::Event::CircuitClosed {
                 dst_peer_id,
