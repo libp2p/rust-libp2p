@@ -1406,7 +1406,7 @@ impl Config {
     ///     task()
     /// }
     /// ```
-    #[cfg(feature = "wasm-bindgen")]
+    #[cfg(target_arch = "wasm32")]
     pub fn with_wasm_executor() -> Self {
         Self::with_executor(crate::executor::WasmBindgenExecutor)
     }
