@@ -26,7 +26,7 @@ use std::{
     collections::{hash_map, HashMap, HashSet, VecDeque},
     num::NonZeroU32,
     ops::Add,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 
@@ -35,6 +35,7 @@ use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpo
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, FromSwarm},
+    derive_prelude::ConnectionEstablished,
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
@@ -253,6 +254,7 @@ pub struct Behaviour {
 
     local_peer_id: PeerId,
 
+    connections: HashMap<PeerId, HashSet<ConnectionId>>,
     reservations: HashMap<PeerId, HashSet<ConnectionId>>,
     circuits: CircuitsTracker,
 
@@ -260,6 +262,21 @@ pub struct Behaviour {
     queued_actions: VecDeque<ToSwarm<Event, THandlerInEvent<Self>>>,
 
     external_addresses: ExternalAddresses,
+
+    status: Status,
+
+    auto_status_change: bool,
+
+    waker: Option<Waker>,
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum Status {
+    /// Enables advertisement of the HOP protocol
+    Enable,
+
+    /// Disables advertisement of the HOP protocol
+    Disable,
 }
 
 impl Behaviour {
@@ -267,11 +284,100 @@ impl Behaviour {
         Self {
             config,
             local_peer_id,
+            connections: Default::default(),
             reservations: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
             external_addresses: Default::default(),
+            status: Status::Disable,
+            auto_status_change: true,
+            waker: None,
         }
+    }
+
+    pub fn set_status(&mut self, status: Option<Status>) {
+        match status {
+            Some(status) => {
+                self.auto_status_change = false;
+                if self.status != status {
+                    self.status = status;
+                    self.reconfigure_relay_status();
+                }
+            }
+            None => {
+                self.auto_status_change = true;
+                self.determine_relay_status_from_external_address();
+            }
+        }
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+
+    fn reconfigure_relay_status(&mut self) {
+        if self.connections.is_empty() {
+            return;
+        }
+
+        for (peer_id, connections) in self.connections.iter() {
+            self.queued_actions
+                .extend(connections.iter().map(|id| ToSwarm::NotifyHandler {
+                    peer_id: *peer_id,
+                    handler: NotifyHandler::One(*id),
+                    event: Either::Left(handler::In::SetStatus {
+                        status: self.status,
+                    }),
+                }));
+        }
+    }
+
+    fn determine_relay_status_from_external_address(&mut self) {
+        let old = self.status;
+
+        self.status = match (self.external_addresses.as_slice(), self.status) {
+            ([], Status::Enable) => {
+                tracing::debug!("disabling protocol advertisment because we no longer have any confirmed external addresses");
+                Status::Disable
+            }
+            ([], Status::Disable) => {
+                // Previously disabled because of no external addresses.
+                Status::Disable
+            }
+            (confirmed_external_addresses, Status::Disable) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+                tracing::debug!("advertising protcol because we are now externally reachable");
+                Status::Enable
+            }
+            (confirmed_external_addresses, Status::Enable) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                Status::Enable
+            }
+        };
+
+        if self.status != old {
+            self.reconfigure_relay_status();
+        }
+    }
+
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        self.connections
+            .entry(peer_id)
+            .or_default()
+            .insert(connection_id);
     }
 
     fn on_connection_closed(
@@ -289,6 +395,13 @@ impl Behaviour {
                         src_peer_id: peer_id,
                     }));
             }
+            if peer.get().is_empty() {
+                peer.remove();
+            }
+        }
+
+        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
+            peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
                 peer.remove();
             }
@@ -337,6 +450,7 @@ impl NetworkBehaviour for Behaviour {
                 local_addr: local_addr.clone(),
                 send_back_addr: remote_addr.clone(),
             },
+            self.status,
         )))
     }
 
@@ -364,14 +478,25 @@ impl NetworkBehaviour for Behaviour {
                 role_override,
                 port_use,
             },
+            self.status,
         )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.external_addresses.on_swarm_event(&event);
+        let changed = self.external_addresses.on_swarm_event(&event);
 
-        if let FromSwarm::ConnectionClosed(connection_closed) = event {
-            self.on_connection_closed(connection_closed)
+        if self.auto_status_change && changed {
+            self.determine_relay_status_from_external_address();
+        }
+
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            _ => {}
         }
     }
 
@@ -718,10 +843,15 @@ impl NetworkBehaviour for Behaviour {
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
-    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(to_swarm) = self.queued_actions.pop_front() {
             return Poll::Ready(to_swarm);
         }
+
+        self.waker = Some(cx.waker().clone());
 
         Poll::Pending
     }
