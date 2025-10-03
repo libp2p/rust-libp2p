@@ -4199,7 +4199,7 @@ fn test_scoring_p6() {
 
     // create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
-    let peers = vec![
+    let peers = [
         add_peer_with_addr(&mut gs, &[], false, false, addr.clone()).0,
         add_peer_with_addr(&mut gs, &[], false, false, addr.clone()).0,
         add_peer_with_addr(&mut gs, &[], true, false, addr.clone()).0,
@@ -4209,7 +4209,7 @@ fn test_scoring_p6() {
 
     // create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
-    let others = vec![
+    let others = [
         add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()).0,
         add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()).0,
         add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()).0,
@@ -6343,7 +6343,7 @@ fn test_publish_message_with_default_transmit_size_config() {
     let topic_hash = topic.hash();
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .max_transmit_size_for_topic(Config::default_max_transmit_size(), topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6375,7 +6375,7 @@ fn test_publish_large_message_with_default_transmit_size_config() {
     let topic_hash = topic.hash();
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .max_transmit_size_for_topic(Config::default_max_transmit_size(), topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6403,7 +6403,7 @@ fn test_publish_message_with_specific_transmit_size_config() {
 
     let max_topic_transmit_size = 2000;
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .max_transmit_size_for_topic(max_topic_transmit_size, topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6436,7 +6436,7 @@ fn test_publish_large_message_with_specific_transmit_size_config() {
 
     let max_topic_transmit_size = 2048;
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .max_transmit_size_for_topic(max_topic_transmit_size, topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6464,7 +6464,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
     let max_size = 2048;
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_size)
+        .max_transmit_size_for_topic(max_size, topic_hash.clone())
         .validation_mode(ValidationMode::None)
         .build()
         .unwrap();
@@ -6568,7 +6568,7 @@ fn test_validation_message_size_within_topic_specific() {
     let max_size = 2048;
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_size)
+        .max_transmit_size_for_topic(max_size, topic_hash.clone())
         .validation_mode(ValidationMode::None)
         .build()
         .unwrap();

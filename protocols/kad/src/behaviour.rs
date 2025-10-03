@@ -1230,7 +1230,7 @@ where
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.peers.addresses.insert(peer.node_id, addrs);
             }
-            query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
+            query.on_success(source, others_iter.map(|kp| kp.node_id))
         }
     }
 
