@@ -775,6 +775,20 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum byte size for each gossip for a given topic. (default is
+    /// [`Self::max_transmit_size`]).
+    pub fn max_transmit_size_for_topic(
+        &mut self,
+        max_transmit_size: usize,
+        topic: TopicHash,
+    ) -> &mut Self {
+        self.config
+            .protocol
+            .max_transmit_sizes
+            .insert(topic, max_transmit_size);
+        self
+    }
+
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
     /// This settings sets the time period that messages are stored in the cache. Duplicates can be
     /// received if duplicate messages are sent at a time greater than this setting apart. The
@@ -1058,16 +1072,6 @@ impl ConfigBuilder {
             .topic_configuration
             .topic_mesh_params
             .insert(topic, config);
-        self
-    }
-
-    /// The topic max size sets the message size limit for a given topic. (for default see
-    /// [`Self::max_transmit_size`])
-    pub fn set_topic_max_transmit_size(&mut self, topic: TopicHash, max_size: usize) -> &mut Self {
-        self.config
-            .protocol
-            .max_transmit_sizes
-            .insert(topic, max_size);
         self
     }
 

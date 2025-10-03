@@ -6471,7 +6471,7 @@ fn test_publish_message_with_default_transmit_size_config() {
     let topic_hash = topic.hash();
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .max_transmit_size_for_topic(Config::default_max_transmit_size(), topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6503,7 +6503,7 @@ fn test_publish_large_message_with_default_transmit_size_config() {
     let topic_hash = topic.hash();
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .max_transmit_size_for_topic(Config::default_max_transmit_size(), topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6531,7 +6531,7 @@ fn test_publish_message_with_specific_transmit_size_config() {
 
     let max_topic_transmit_size = 2000;
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .max_transmit_size_for_topic(max_topic_transmit_size, topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6564,7 +6564,7 @@ fn test_publish_large_message_with_specific_transmit_size_config() {
 
     let max_topic_transmit_size = 2048;
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .max_transmit_size_for_topic(max_topic_transmit_size, topic_hash.clone())
         .validation_mode(ValidationMode::Strict)
         .build()
         .unwrap();
@@ -6592,7 +6592,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
     let max_size = 2048;
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_size)
+        .max_transmit_size_for_topic(max_size, topic_hash.clone())
         .validation_mode(ValidationMode::None)
         .build()
         .unwrap();
@@ -6696,7 +6696,7 @@ fn test_validation_message_size_within_topic_specific() {
     let max_size = 2048;
 
     let config = ConfigBuilder::default()
-        .set_topic_max_transmit_size(topic_hash.clone(), max_size)
+        .max_transmit_size_for_topic(max_size, topic_hash.clone())
         .validation_mode(ValidationMode::None)
         .build()
         .unwrap();
