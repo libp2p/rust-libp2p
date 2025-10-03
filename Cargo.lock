@@ -2609,7 +2609,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.51.0"
+version = "0.50.0"
 dependencies = [
  "async-channel",
  "asynchronous-codec",
