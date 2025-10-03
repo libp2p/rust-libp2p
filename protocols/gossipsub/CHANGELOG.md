@@ -18,7 +18,7 @@
   See [PR 6173](https://github.com/libp2p/rust-libp2p/pull/6173).
 
 - Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
-  with an internal priority queue. See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/6175)
+  with an internal priority queue. See [PR 6175](https://github.com/libp2p/rust-libp2p/pull/6175)
 
 ## 0.49.2
 
