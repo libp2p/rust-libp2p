@@ -34,11 +34,11 @@ use prometheus_client::{
 
 use crate::protocol_stack;
 
-const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
+const BASE_ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
-    // #[cfg(feature = "gossipsub")]
-    // TODO: Add Gossipsub protocol name
+    // NOTE: Not including gossipsub here as users may configure custom protocol IDs
+    // via ConfigBuilder::protocol_id. Hard-coding defaults would misclassify such setups.
     libp2p_identify::PROTOCOL_NAME,
     libp2p_identify::PUSH_PROTOCOL_NAME,
     #[cfg(feature = "kad")]
@@ -62,8 +62,57 @@ pub(crate) struct Metrics {
 impl Metrics {
     pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("identify");
+        let peers = Peers::new(Vec::new());
+        sub_registry.register_collector(Box::new(peers.clone()));
 
-        let peers = Peers::default();
+        let error = Counter::default();
+        sub_registry.register(
+            "errors",
+            "Number of errors while attempting to identify the remote",
+            error.clone(),
+        );
+
+        let pushed = Counter::default();
+        sub_registry.register(
+            "pushed",
+            "Number of times identification information of the local node has \
+             been actively pushed to a peer.",
+            pushed.clone(),
+        );
+
+        let received = Counter::default();
+        sub_registry.register(
+            "received",
+            "Number of times identification information has been received from \
+             a peer",
+            received.clone(),
+        );
+
+        let sent = Counter::default();
+        sub_registry.register(
+            "sent",
+            "Number of times identification information of the local node has \
+             been sent to a peer in response to an identification request",
+            sent.clone(),
+        );
+
+        Self {
+            peers,
+            error,
+            pushed,
+            received,
+            sent,
+        }
+    }
+
+    /// Create Identify metrics with additional allowed protocols used for classification.
+    pub(crate) fn new_with_allowed_protocols(
+        registry: &mut Registry,
+        extra_allowed_protocols: impl IntoIterator<Item = StreamProtocol>,
+    ) -> Self {
+        let sub_registry = registry.sub_registry_with_prefix("identify");
+
+        let peers = Peers::new(extra_allowed_protocols.into_iter().collect());
         sub_registry.register_collector(Box::new(peers.clone()));
 
         let error = Counter::default();
@@ -142,16 +191,29 @@ impl<TBvEv> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
     }
 }
 
-#[derive(Default, Debug, Clone)]
-struct Peers(Arc<Mutex<HashMap<PeerId, libp2p_identify::Info>>>);
+#[derive(Debug, Clone)]
+struct Peers(Arc<PeersInner>);
+
+#[derive(Debug)]
+struct PeersInner {
+    infos: Mutex<HashMap<PeerId, libp2p_identify::Info>>,
+    extra_allowed_protocols: Vec<StreamProtocol>,
+}
 
 impl Peers {
+    fn new(extra_allowed_protocols: Vec<StreamProtocol>) -> Self {
+        Self(Arc::new(PeersInner {
+            infos: Mutex::new(HashMap::new()),
+            extra_allowed_protocols,
+        }))
+    }
+
     fn record(&self, peer_id: PeerId, info: libp2p_identify::Info) {
-        self.0.lock().unwrap().insert(peer_id, info);
+        self.0.infos.lock().unwrap().insert(peer_id, info);
     }
 
     fn remove(&self, peer_id: PeerId) {
-        self.0.lock().unwrap().remove(&peer_id);
+        self.0.infos.lock().unwrap().remove(&peer_id);
     }
 }
 
@@ -161,13 +223,15 @@ impl Collector for Peers {
         let mut count_by_listen_addresses: HashMap<String, i64> = Default::default();
         let mut count_by_observed_addresses: HashMap<String, i64> = Default::default();
 
-        for (_, peer_info) in self.0.lock().unwrap().iter() {
+        for (_, peer_info) in self.0.infos.lock().unwrap().iter() {
             {
                 let mut protocols: Vec<_> = peer_info
                     .protocols
                     .iter()
                     .map(|p| {
-                        if ALLOWED_PROTOCOLS.contains(p) {
+                        if BASE_ALLOWED_PROTOCOLS.contains(p)
+                            || self.0.extra_allowed_protocols.contains(p)
+                        {
                             p.to_string()
                         } else {
                             "unrecognized".to_string()
