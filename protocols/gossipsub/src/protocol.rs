@@ -659,6 +659,7 @@ mod tests {
             let rpc = RpcOut::Publish {
                 message: message.clone(),
                 timeout: Delay::new(Duration::from_secs(1)),
+                message_id: MessageId(vec![0, 0]),
             };
 
             let mut codec =
