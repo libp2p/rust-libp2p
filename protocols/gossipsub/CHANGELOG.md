@@ -14,6 +14,9 @@
 - Fix incorrect default values in ConfigBuilder
   See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
 
+- Remove duplicated config `set_topic_max_transmit_size` method, prefer `max_transmit_size_for_topic`.
+  See [PR 6173](https://github.com/libp2p/rust-libp2p/pull/6173).
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
