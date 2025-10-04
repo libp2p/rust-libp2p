@@ -27,7 +27,8 @@ use std::{
 };
 
 use either::Either;
-use futures::{channel::oneshot, prelude::*, stream::SelectAll};
+use futures::{channel::oneshot, prelude::*};
+use futures_bounded::{Delay, StreamSet};
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -77,7 +78,8 @@ pub struct Handler {
     pending_messages: VecDeque<(KadRequestMsg, QueryId)>,
 
     /// List of active inbound substreams with the state they are in.
-    inbound_substreams: SelectAll<InboundSubstreamState>,
+    /// The streams are typed `InboundSubstreamState`, but the set uses the item type.
+    inbound_substreams: StreamSet<ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>>,
 
     /// The connected endpoint of the connection that the handler
     /// is associated with.
@@ -119,8 +121,6 @@ enum InboundSubstreamState {
     PendingFlush(UniqueConnecId, KadInStreamSink<Stream>),
     /// The substream is being closed.
     Closing(KadInStreamSink<Stream>),
-    /// The substream was cancelled in favor of a new one.
-    Cancelled,
 
     Poisoned {
         phantom: PhantomData<QueryId>,
@@ -172,9 +172,6 @@ impl InboundSubstreamState {
             | InboundSubstreamState::PendingFlush(_, substream)
             | InboundSubstreamState::Closing(substream) => {
                 *self = InboundSubstreamState::Closing(substream);
-            }
-            InboundSubstreamState::Cancelled => {
-                *self = InboundSubstreamState::Cancelled;
             }
             InboundSubstreamState::Poisoned { .. } => unreachable!(),
         }
@@ -461,9 +458,12 @@ impl Handler {
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
-            inbound_substreams: Default::default(),
+            inbound_substreams: StreamSet::new(
+                move || Delay::futures_timer(substreams_timeout),
+                MAX_NUM_STREAMS,
+            ),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                substreams_timeout,
+                move || Delay::futures_timer(substreams_timeout),
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
@@ -518,19 +518,31 @@ impl Handler {
             });
         }
 
-        if self.inbound_substreams.len() == MAX_NUM_STREAMS {
-            if let Some(s) = self.inbound_substreams.iter_mut().find(|s| {
-                matches!(
-                    s,
-                    // An inbound substream waiting to be reused.
-                    InboundSubstreamState::WaitingMessage { first: false, .. }
-                )
-            }) {
-                *s = InboundSubstreamState::Cancelled;
+        let connec_unique_id = self.next_connec_unique_id;
+        self.next_connec_unique_id.0 += 1;
+        let new_substream = InboundSubstreamState::WaitingMessage {
+            first: true,
+            connection_id: connec_unique_id,
+            substream: protocol,
+        };
+
+        if self.inbound_substreams.len() >= MAX_NUM_STREAMS {
+            if let Some(s) = self
+                .inbound_substreams
+                .iter_mut_of_type::<InboundSubstreamState>()
+                .find(|s| {
+                    matches!(
+                        **s,
+                        // An inbound substream waiting to be reused.
+                        InboundSubstreamState::WaitingMessage { first: false, .. }
+                    )
+                })
+            {
+                *s.get_mut() = new_substream;
                 tracing::debug!(
                     peer=?self.remote_peer_id,
                     "New inbound substream to peer exceeds inbound substream limit. \
-                    Removed older substream waiting to be reused."
+                    Replacing older substream that was waiting to be reused."
                 )
             } else {
                 tracing::warn!(
@@ -538,18 +550,13 @@ impl Handler {
                     "New inbound substream to peer exceeds inbound substream limit. \
                      No older substream waiting to be reused. Dropping new substream."
                 );
-                return;
             }
+        } else {
+            self.inbound_substreams
+                .try_push(new_substream)
+                .map_err(|_| ())
+                .expect("Just checked that stream set is not full; qed");
         }
-
-        let connec_unique_id = self.next_connec_unique_id;
-        self.next_connec_unique_id.0 += 1;
-        self.inbound_substreams
-            .push(InboundSubstreamState::WaitingMessage {
-                first: true,
-                connection_id: connec_unique_id,
-                substream: protocol,
-            });
     }
 
     /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol
@@ -616,15 +623,15 @@ impl ConnectionHandler for Handler {
             HandlerIn::Reset(request_id) => {
                 if let Some(state) = self
                     .inbound_substreams
-                    .iter_mut()
-                    .find(|state| match state {
+                    .iter_mut_of_type::<InboundSubstreamState>()
+                    .find(|state| match **state {
                         InboundSubstreamState::WaitingBehaviour(conn_id, _, _) => {
-                            conn_id == &request_id.connec_unique_id
+                            conn_id == request_id.connec_unique_id
                         }
                         _ => false,
                     })
                 {
-                    state.close();
+                    state.get_mut().close();
                 }
             }
             HandlerIn::FindNodeReq { key, query_id } => {
@@ -763,8 +770,16 @@ impl ConnectionHandler for Handler {
                 Poll::Pending => {}
             }
 
-            if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
-                return Poll::Ready(event);
+            if let Poll::Ready(Some(event_result)) = self.inbound_substreams.poll_next_unpin(cx) {
+                match event_result {
+                    Ok(event) => return Poll::Ready(event),
+                    Err(_stream_set_timeout) => {
+                        tracing::trace!(
+                            "Inbound substream timed out waiting for peer, send, or close"
+                        );
+                        continue;
+                    }
+                }
             }
 
             if self.outbound_substreams.len() < MAX_NUM_STREAMS {
@@ -848,8 +863,11 @@ fn compute_new_protocol_status(
 
 impl Handler {
     fn answer_pending_request(&mut self, request_id: RequestId, mut msg: KadResponseMsg) {
-        for state in self.inbound_substreams.iter_mut() {
-            match state.try_answer_with(request_id, msg) {
+        for state in self
+            .inbound_substreams
+            .iter_mut_of_type::<InboundSubstreamState>()
+        {
+            match state.get_mut().try_answer_with(request_id, msg) {
                 Ok(()) => return,
                 Err(m) => {
                     msg = m;
@@ -1006,7 +1024,6 @@ impl futures::Stream for InboundSubstreamState {
                     }
                 },
                 InboundSubstreamState::Poisoned { .. } => unreachable!(),
-                InboundSubstreamState::Cancelled => return Poll::Ready(None),
             }
         }
     }

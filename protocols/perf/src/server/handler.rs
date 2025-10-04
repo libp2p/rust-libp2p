@@ -24,6 +24,7 @@ use std::{
 };
 
 use futures::FutureExt;
+use futures_bounded::Delay;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
@@ -49,7 +50,7 @@ impl Handler {
     pub fn new() -> Self {
         Self {
             inbound: futures_bounded::FuturesSet::new(
-                crate::RUN_TIMEOUT,
+                || Delay::futures_timer(crate::RUN_TIMEOUT),
                 crate::MAX_PARALLEL_RUNS_PER_CONNECTION,
             ),
         }

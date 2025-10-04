@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures::channel::oneshot;
-use futures_bounded::StreamSet;
+use futures_bounded::{Delay, StreamSet};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
@@ -22,7 +22,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: StreamSet::new(Duration::from_secs(5), 2),
+            inbound: StreamSet::new(|| Delay::futures_timer(Duration::from_secs(5)), 2),
         }
     }
 }
