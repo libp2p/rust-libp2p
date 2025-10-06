@@ -261,7 +261,7 @@ pub enum HandlerEvent {
         query_id: QueryId,
     },
 
-    /// Request to put a value in the dht records
+    /// Request to put a value in the DHT records
     PutRecord {
         record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
@@ -316,8 +316,8 @@ impl error::Error for HandlerQueryErr {
 /// Event to send to the handler.
 #[derive(Debug)]
 pub enum HandlerIn {
-    /// Resets the (sub)stream associated with the given request ID,
-    /// thus signaling an error to the remote.
+    /// Resets the (sub)stream associated with the given request ID, thus signaling an error to the
+    /// remote.
     ///
     /// Explicitly resetting the (sub)stream associated with a request
     /// can be used as an alternative to letting requests simply time
@@ -399,7 +399,7 @@ pub enum HandlerIn {
         request_id: RequestId,
     },
 
-    /// Put a value into the dht records.
+    /// Put a value into the DHT records.
     PutRecord {
         record: Record,
         /// ID of the query that generated this request.
@@ -624,21 +624,19 @@ impl ConnectionHandler for Handler {
                         _ => false,
                     })
                 {
-                    state.close();
+                    state.close()
                 }
             }
-            HandlerIn::FindNodeReq { key, query_id } => {
-                let msg = KadRequestMsg::FindNode { key };
-                self.pending_messages.push_back((msg, query_id));
-            }
+            HandlerIn::FindNodeReq { key, query_id } => self
+                .pending_messages
+                .push_back((KadRequestMsg::FindNode { key }, query_id)),
             HandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
-            HandlerIn::GetProvidersReq { key, query_id } => {
-                let msg = KadRequestMsg::GetProviders { key };
-                self.pending_messages.push_back((msg, query_id));
-            }
+            HandlerIn::GetProvidersReq { key, query_id } => self
+                .pending_messages
+                .push_back((KadRequestMsg::GetProviders { key }, query_id)),
             HandlerIn::GetProvidersRes {
                 closer_peers,
                 provider_peers,
@@ -654,38 +652,31 @@ impl ConnectionHandler for Handler {
                 key,
                 provider,
                 query_id,
-            } => {
-                let msg = KadRequestMsg::AddProvider { key, provider };
-                self.pending_messages.push_back((msg, query_id));
-            }
-            HandlerIn::GetRecord { key, query_id } => {
-                let msg = KadRequestMsg::GetValue { key };
-                self.pending_messages.push_back((msg, query_id));
-            }
-            HandlerIn::PutRecord { record, query_id } => {
-                let msg = KadRequestMsg::PutValue { record };
-                self.pending_messages.push_back((msg, query_id));
-            }
+            } => self
+                .pending_messages
+                .push_back((KadRequestMsg::AddProvider { key, provider }, query_id)),
+            HandlerIn::GetRecord { key, query_id } => self
+                .pending_messages
+                .push_back((KadRequestMsg::GetValue { key }, query_id)),
+            HandlerIn::PutRecord { record, query_id } => self
+                .pending_messages
+                .push_back((KadRequestMsg::PutValue { record }, query_id)),
             HandlerIn::GetRecordRes {
                 record,
                 closer_peers,
                 request_id,
-            } => {
-                self.answer_pending_request(
-                    request_id,
-                    KadResponseMsg::GetValue {
-                        record,
-                        closer_peers,
-                    },
-                );
-            }
+            } => self.answer_pending_request(
+                request_id,
+                KadResponseMsg::GetValue {
+                    record,
+                    closer_peers,
+                },
+            ),
             HandlerIn::PutRecordRes {
                 key,
                 request_id,
                 value,
-            } => {
-                self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
-            }
+            } => self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value }),
             HandlerIn::ReconfigureMode { new_mode } => {
                 let peer = self.remote_peer_id;
 
