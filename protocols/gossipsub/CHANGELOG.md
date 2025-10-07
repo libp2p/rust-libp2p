@@ -13,9 +13,12 @@
 
 - Fix incorrect default values in ConfigBuilder
   See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
-
+  
 - Remove duplicated config `set_topic_max_transmit_size` method, prefer `max_transmit_size_for_topic`.
   See [PR 6173](https://github.com/libp2p/rust-libp2p/pull/6173).
+
+- Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
+  with an internal priority queue. See [PR 6175](https://github.com/libp2p/rust-libp2p/pull/6175)
 
 ## 0.49.2
 
@@ -37,6 +40,7 @@
 
 - Feature gate metrics related code. This changes some `Behaviour` constructor methods.
   See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
+
 - Send IDONTWANT before Publishing a new message.
   See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
 
