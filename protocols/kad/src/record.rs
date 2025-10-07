@@ -90,14 +90,14 @@ pub struct Record {
 
 impl Record {
     /// Creates a new record for insertion into the DHT.
-    pub fn new<K>(key: K, value: Vec<u8>) -> Self
+    pub fn new<K>(key: K, value: Vec<u8>, publisher: Option<PeerId>) -> Self
     where
         K: Into<Key>,
     {
         Record {
             key: key.into(),
             value,
-            publisher: None,
+            publisher,
             expires: None,
         }
     }

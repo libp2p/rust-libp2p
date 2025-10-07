@@ -254,7 +254,7 @@ impl super::Recorder<libp2p_kad::Event> for Metrics {
                 }
             }
 
-            libp2p_kad::Event::InboundRequest { request } => {
+            libp2p_kad::Event::InboundRequest(request) => {
                 self.inbound_requests.get_or_create(&request.into()).inc();
             }
             _ => {}
