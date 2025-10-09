@@ -4248,7 +4248,7 @@ fn test_scoring_p6() {
 
     // create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
-    let peers = vec![
+    let peers = [
         add_peer_with_addr(&mut gs, &[], false, false, addr.clone()).0,
         add_peer_with_addr(&mut gs, &[], false, false, addr.clone()).0,
         add_peer_with_addr(&mut gs, &[], true, false, addr.clone()).0,
@@ -4258,7 +4258,7 @@ fn test_scoring_p6() {
 
     // create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
-    let others = vec![
+    let others = [
         add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()).0,
         add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()).0,
         add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()).0,
