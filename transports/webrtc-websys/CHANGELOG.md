@@ -1,3 +1,8 @@
+## 0.4.1
+
+- Require `getrandom/js` feature only under `wasm` target.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
 ## 0.4.0
 
 - Cut stable release.
