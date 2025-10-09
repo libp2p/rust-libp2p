@@ -33,7 +33,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 pub use listen_addresses::ListenAddresses;
-pub use peer_addresses::PeerAddresses;
+pub use peer_addresses::{PeerAddresses, PeerAddressesConfig};
 
 use crate::{
     connection::ConnectionId, dial_opts::DialOpts, listen_opts::ListenOpts, ConnectionDenied,
