@@ -181,7 +181,7 @@ fn setting_engine(
 
     // Select only the first address of the local candidates.
     // See https://github.com/libp2p/rust-libp2p/pull/5448#discussion_r2017418520.
-    // TODO: remove when https://github.com/webrtc-rs/webrtc/issues/662 get's addressed.
+    // TODO: remove when https://github.com/webrtc-rs/webrtc/issues/662 gets addressed.
     se.set_ip_filter(Box::new({
         let once = AtomicBool::new(true);
         move |_ip| {
