@@ -23,7 +23,7 @@
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
 use std::{
-    collections::{hash_map, HashMap, HashSet, VecDeque},
+    collections::{hash_map, HashMap, VecDeque},
     num::NonZeroU32,
     ops::Add,
     task::{Context, Poll, Waker},
@@ -254,8 +254,7 @@ pub struct Behaviour {
 
     local_peer_id: PeerId,
 
-    connections: HashMap<PeerId, HashSet<ConnectionId>>,
-    reservations: HashMap<PeerId, HashSet<ConnectionId>>,
+    connections: HashMap<PeerId, HashMap<ConnectionId, Reservation>>,
     circuits: CircuitsTracker,
 
     /// Queue of actions to return when polled.
@@ -279,13 +278,24 @@ pub enum Status {
     Disable,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Reservation {
+    Active,
+    None,
+}
+
+impl Reservation {
+    pub(crate) fn is_active(&self) -> bool {
+        *self == Reservation::Active
+    }
+}
+
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
             local_peer_id,
             connections: Default::default(),
-            reservations: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
             external_addresses: Default::default(),
@@ -321,7 +331,7 @@ impl Behaviour {
 
         for (peer_id, connections) in self.connections.iter() {
             self.queued_actions
-                .extend(connections.iter().map(|id| ToSwarm::NotifyHandler {
+                .extend(connections.keys().map(|id| ToSwarm::NotifyHandler {
                     peer_id: *peer_id,
                     handler: NotifyHandler::One(*id),
                     event: Either::Left(handler::In::SetStatus {
@@ -377,7 +387,7 @@ impl Behaviour {
         self.connections
             .entry(peer_id)
             .or_default()
-            .insert(connection_id);
+            .insert(connection_id, Reservation::None);
     }
 
     fn on_connection_closed(
@@ -388,8 +398,8 @@ impl Behaviour {
             ..
         }: ConnectionClosed,
     ) {
-        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
-            if peer.get_mut().remove(&connection_id) {
+        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
+            if peer.get_mut().remove(&connection_id).is_some() {
                 self.queued_actions
                     .push_back(ToSwarm::GenerateEvent(Event::ReservationClosed {
                         src_peer_id: peer_id,
@@ -530,16 +540,16 @@ impl NetworkBehaviour for Behaviour {
                 // `max_reservations_per_peer`.
                 (!renewed
                     && self
-                        .reservations
+                        .connections
                         .get(&event_source)
-                        .map(|cs| cs.len())
+                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
                         .unwrap_or(0)
                         > self.config.max_reservations_per_peer)
                     // Deny if it exceeds `max_reservations`.
                     || self
-                        .reservations
+                        .connections
                         .values()
-                        .map(|cs| cs.len())
+                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
                         .sum::<usize>()
                         >= self.config.max_reservations
                     // Deny if it exceeds the allowed rate of reservations.
@@ -560,10 +570,10 @@ impl NetworkBehaviour for Behaviour {
                     }
                 } else {
                     // Accept reservation.
-                    self.reservations
+                    self.connections
                         .entry(event_source)
                         .or_default()
-                        .insert(connection);
+                        .insert(connection, Reservation::Active);
 
                     ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
@@ -589,10 +599,10 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::ReservationReqAccepted { renewed } => {
                 // Ensure local eventual consistent reservation state matches handler (source of
                 // truth).
-                self.reservations
-                    .entry(event_source)
-                    .or_default()
-                    .insert(connection);
+                self.connections
+                    .get_mut(&event_source)
+                    .expect("valid connection")
+                    .insert(connection, Reservation::Active);
 
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqAccepted {
@@ -628,7 +638,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationTimedOut {} => {
-                match self.reservations.entry(event_source) {
+                match self.connections.entry(event_source) {
                     hash_map::Entry::Occupied(mut peer) => {
                         peer.get_mut().remove(&connection);
                         if peer.get().is_empty() {
@@ -681,11 +691,13 @@ impl NetworkBehaviour for Behaviour {
                             status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
-                } else if let Some(dst_conn) = self
-                    .reservations
+                } else if let Some((dst_conn, status)) = self
+                    .connections
                     .get(&inbound_circuit_req.dst())
                     .and_then(|cs| cs.iter().next())
                 {
+                    assert_eq!(*status, Reservation::Active);
+
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
