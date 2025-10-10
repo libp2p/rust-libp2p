@@ -566,7 +566,7 @@ fn put_record() {
         tracing::trace!("remove records without a publisher");
         // this test relies on counting republished `Record` against `records.len()`
         records.retain(|r| r.publisher.is_some());
-        
+
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
