@@ -379,7 +379,9 @@ impl Behaviour {
         if self.status != old {
             self.reconfigure_relay_status();
             self.queued_actions
-                .push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status: self.status }));
+                .push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                    status: self.status,
+                }));
         }
     }
 
