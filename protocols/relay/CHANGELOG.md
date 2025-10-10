@@ -1,4 +1,4 @@
-## 0.21.1
+## 0.22.0
 
 - Automatically configure HOP protocol advertisement based on external addresses, with the ability to override this
   functionality using `Behaviour::set_status` to explicitly set `Status::{Enable,Disable}` to enable or disable
