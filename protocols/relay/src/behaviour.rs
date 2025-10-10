@@ -245,6 +245,11 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: Option<std::io::Error>,
     },
+    /// Status has been changed.
+    ///
+    /// This is triggered based on if the external address
+    /// has been added or removed.
+    StatusChanged { status: Status },
 }
 
 /// [`NetworkBehaviour`] implementation of the relay server
@@ -373,6 +378,8 @@ impl Behaviour {
 
         if self.status != old {
             self.reconfigure_relay_status();
+            self.queued_actions
+                .push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status: self.status }));
         }
     }
 
