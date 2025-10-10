@@ -562,7 +562,11 @@ fn get_record_not_found() {
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
+    fn prop(mut records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
+        tracing::trace!("remove records without a publisher");
+        // this test relies on counting republished `Record` against `records.len()`
+        records.retain(|r| r.publisher.is_some());
+        
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();

@@ -870,7 +870,9 @@ where
         mut record: Record,
         quorum: Quorum,
     ) -> Result<QueryId, store::Error> {
-        record.publisher = Some(*self.kbuckets.local_key().preimage());
+        if record.publisher.is_some() {
+            record.publisher = Some(*self.kbuckets.local_key().preimage())
+        }
         self.store.put(record.clone())?;
         record.expires = record
             .expires
