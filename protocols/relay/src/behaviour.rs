@@ -351,7 +351,7 @@ impl Behaviour {
 
         self.status = match (self.external_addresses.as_slice(), self.status) {
             ([], Status::Enable) => {
-                tracing::debug!("disabling protocol advertisment because we no longer have any confirmed external addresses");
+                tracing::debug!("disabling protocol advertisement because we no longer have any confirmed external addresses");
                 Status::Disable
             }
             ([], Status::Disable) => {
@@ -363,7 +363,7 @@ impl Behaviour {
                     !confirmed_external_addresses.is_empty(),
                     "Previous match arm handled empty list"
                 );
-                tracing::debug!("advertising protcol because we are now externally reachable");
+                tracing::debug!("advertising protocol because we are now externally reachable");
                 Status::Enable
             }
             (confirmed_external_addresses, Status::Enable) => {
