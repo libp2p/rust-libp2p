@@ -2414,7 +2414,7 @@ checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
 
 [[package]]
 name = "libp2p"
-version = "0.56.0"
+version = "0.56.1"
 dependencies = [
  "bytes",
  "either",

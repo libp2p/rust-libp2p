@@ -3,7 +3,7 @@ name = "libp2p"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.56.0"
+version = "0.56.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -65,7 +65,7 @@ kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
-metrics = ["dep:libp2p-metrics"]
+metrics = ["dep:libp2p-metrics", "libp2p-gossipsub?/metrics"]
 noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]

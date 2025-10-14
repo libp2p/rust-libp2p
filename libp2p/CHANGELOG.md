@@ -1,3 +1,8 @@
+## 0.56.1
+
+- Fix `metrics` delegation to gossipsub protocol.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 ## 0.56.0
 
 - Remove `async-std` support.
