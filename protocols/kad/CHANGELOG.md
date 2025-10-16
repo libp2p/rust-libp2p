@@ -1,3 +1,8 @@
+## 0.49.1
+
+- Enforce an inbound substream timeout in the kad substream handler.
+  See [PR 6009](https://github.com/libp2p/rust-libp2p/pull/6009).
+
 ## 0.49.0
 
 - Remove no longer constructed GetRecordError::QuorumFailed.
