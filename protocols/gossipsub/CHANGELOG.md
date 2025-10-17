@@ -1,4 +1,7 @@
 ## 0.50.0
+- Prevent mesh exceeding mesh_n_high when handling GRAFT messages.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 - Fix underflow when shuffling peers after prunning.
   See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
 
