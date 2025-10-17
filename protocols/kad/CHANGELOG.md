@@ -1,3 +1,5 @@
+- minimized #6176
+
 ## 0.49.0
 
 - Remove no longer constructed GetRecordError::QuorumFailed.
