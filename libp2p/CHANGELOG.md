@@ -5,6 +5,9 @@
 
 ## 0.56.0
 
+- Add support for `libp2p-propeller` protocol behind `propeller` feature flag.
+  See [PR 6169](https://github.com/libp2p/rust-libp2p/pull/6169)
+
 - Remove `async-std` support.
   See [PR 6074](https://github.com/libp2p/rust-libp2p/pull/6074)
 - Remove deprecated `Transport::with_bandwidth_logging`,

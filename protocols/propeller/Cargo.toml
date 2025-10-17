@@ -1,0 +1,61 @@
+[package]
+name = "libp2p-propeller"
+edition.workspace = true
+rust-version = { workspace = true }
+description = "Propeller protocol for libp2p"
+version = "0.1.0"
+authors = ["Age Manning <Age@AgeManning.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[features]
+metrics = ["prometheus-client"]
+
+[dependencies]
+asynchronous-codec = { workspace = true }
+bytes = "1.6"
+futures = { workspace = true }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-swarm = { workspace = true }
+lru_time_cache = "0.11.11"
+quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
+rand = "0.9"
+
+rand_chacha = "0.9"
+reed-solomon-simd = "3.0"
+serde = { version = "1", optional = true, features = ["derive"] }
+sha2 = "0.10.8"
+tracing = { workspace = true }
+web-time = { workspace = true }
+
+# Metrics dependencies
+prometheus-client = { workspace = true, optional = true }
+
+[dev-dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
+libp2p-plaintext = { workspace = true }
+libp2p-yamux = { workspace = true }
+libp2p-quic = { workspace = true, features = ["tokio"] }
+quickcheck = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = [
+    "rt",
+    "rt-multi-thread",
+    "time",
+    "macros",
+] }
+rstest = "0.26.1"
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+
+[lints]
+workspace = true
