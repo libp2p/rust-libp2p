@@ -1366,8 +1366,6 @@ where
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-        // Needs to be here to comply with the borrow checker.
-        let is_outbound = connected_peer.outbound;
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
@@ -1455,10 +1453,9 @@ where
                     }
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
-                    // or if it is an outbound peer
                     let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
 
-                    if peers.len() >= mesh_n_high && !is_outbound {
+                    if peers.len() >= mesh_n_high {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -2228,7 +2225,9 @@ where
                     score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
                 // shuffle everything except the last retain_scores many peers (the best ones)
-                shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                if peers.len() > self.config.retain_scores() {
+                    shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                }
 
                 // count total number of outbound peers
                 let mut outbound = shuffled
