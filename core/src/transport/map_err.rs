@@ -27,7 +27,7 @@ use std::{
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent};
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -143,7 +143,7 @@ where
     T: Transport,
     F: FnOnce(T::Error) -> TErr,
 {
-    type Output = Result<T::Output, TErr>;
+    type Output = Result<(T::Output, PortUse), TErr>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();

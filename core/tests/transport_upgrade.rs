@@ -123,7 +123,7 @@ async fn upgrade_pipeline() {
     };
 
     let client = async move {
-        let (peer, _mplex) = dialer_transport
+        let ((peer, _mplex), _port_use) = dialer_transport
             .dial(
                 listen_addr2,
                 DialOpts {

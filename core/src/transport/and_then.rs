@@ -31,7 +31,7 @@ use multiaddr::Multiaddr;
 
 use crate::{
     connection::ConnectedPoint,
-    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent},
 };
 
 /// See the [`Transport::and_then`] method.
@@ -59,7 +59,7 @@ where
     type Output = O;
     type Error = Either<T::Error, F::Error>;
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
-    type Dial = AndThenFuture<T::Dial, C, F>;
+    type Dial = AndThenDialFuture<T::Dial, C, F>;
 
     fn listen_on(
         &mut self,
@@ -84,16 +84,20 @@ where
             .transport
             .dial(addr.clone(), opts)
             .map_err(|err| err.map(Either::Left))?;
-        let future = AndThenFuture {
+
+        // Construct now a "partially" complete ConnectedPoint
+        let point = ConnectedPoint::Dialer {
+            address: addr,
+            role_override: opts.role,
+            // Use a default as the placeholder for PortUse here.
+            // It will be replaced with by the actual from T::Dial value,
+            // inside of the AndThenFuture
+            port_use: PortUse::default(),
+        };
+
+        let future = AndThenDialFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((
-                self.fun.clone(),
-                ConnectedPoint::Dialer {
-                    address: addr,
-                    role_override: opts.role,
-                    port_use: opts.port_use,
-                },
-            )),
+            args: Some((self.fun.clone(), point)),
             _marker: PhantomPinned,
         };
         Ok(future)
@@ -139,7 +143,7 @@ where
 
 /// Custom `Future` to avoid boxing.
 ///
-/// Applies a function to the result of the inner future.
+/// Applies a function to the result of the inner future for listener upgrades.
 #[derive(Debug)]
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
     inner: Either<Pin<Box<TFut>>, Pin<Box<TMapOut>>>,
@@ -157,7 +161,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            let future = match &mut self.inner {
+            match &mut self.inner {
                 Either::Left(future) => {
                     let item = match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => v,
@@ -168,7 +172,10 @@ where
                         .args
                         .take()
                         .expect("AndThenFuture has already finished.");
-                    f(item, a)
+                    let future = f(item, a);
+
+                    // Transition to the second state
+                    self.inner = Either::Right(Box::pin(future));
                 }
                 Either::Right(future) => {
                     return match TryFuture::try_poll(future.as_mut(), cx) {
@@ -178,10 +185,65 @@ where
                     }
                 }
             };
-
-            self.inner = Either::Right(Box::pin(future));
         }
     }
 }
 
 impl<TFut, TMap, TMapOut> Unpin for AndThenFuture<TFut, TMap, TMapOut> {}
+
+/// Custom `Future` to avoid boxing.
+///
+/// Applies a function to the result of the inner future for outgoing connections.
+pub struct AndThenDialFuture<TFut, TMap, TMapOut> {
+    inner: Either<Pin<Box<TFut>>, (Pin<Box<TMapOut>>, PortUse)>,
+    args: Option<(TMap, ConnectedPoint)>,
+    _marker: PhantomPinned,
+}
+
+impl<TFut, TMap, TMapOut, TItem> Future for AndThenDialFuture<TFut, TMap, TMapOut>
+where
+    TFut: TryFuture<Ok = (TItem, PortUse)>,
+    TMap: FnOnce(TItem, ConnectedPoint) -> TMapOut,
+    TMapOut: TryFuture,
+{
+    type Output = Result<(TMapOut::Ok, PortUse), Either<TFut::Error, TMapOut::Error>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match &mut self.inner {
+                Either::Left(future) => {
+                    // T::Dial completed
+                    let (item, port_use) = match TryFuture::try_poll(future.as_mut(), cx) {
+                        Poll::Ready(Ok((v, port_use))) => (v, port_use),
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Left(err))),
+                        Poll::Pending => return Poll::Pending,
+                    };
+
+                    let (f, mut point) = self
+                        .args
+                        .take()
+                        .expect("AndThenDialFuture has already finished.");
+
+                    // The ConnectedPoint must be updated with the resolved PortUse,
+                    // before passing it to the mapping closure
+                    if let ConnectedPoint::Dialer { port_use: p, .. } = &mut point {
+                        *p = port_use;
+                    }
+                    let new_future = f(item, point);
+
+                    // Transition to the second state, caching the PortUse
+                    self.inner = Either::Right((Box::pin(new_future), port_use));
+                }
+                Either::Right((future, port_use)) => {
+                    return match TryFuture::try_poll(future.as_mut(), cx) {
+                        Poll::Ready(Ok(v)) => Poll::Ready(Ok((v, *port_use))),
+                        Poll::Ready(Err(err)) => Poll::Ready(Err(Either::Right(err))),
+                        Poll::Pending => Poll::Pending,
+                    };
+                }
+            };
+        }
+    }
+}
+
+impl<TFut, TMap, TMapOut> Unpin for AndThenDialFuture<TFut, TMap, TMapOut> {}

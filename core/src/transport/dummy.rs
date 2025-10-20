@@ -26,7 +26,7 @@ use futures::{
 };
 
 use crate::{
-    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent},
     Multiaddr,
 };
 
@@ -64,7 +64,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
     type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
-    type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
+    type Dial = futures::future::Pending<Result<(Self::Output, PortUse), io::Error>>;
 
     fn listen_on(
         &mut self,

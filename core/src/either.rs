@@ -29,7 +29,7 @@ use pin_project::pin_project;
 
 use crate::{
     muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent},
     Multiaddr,
 };
 
@@ -91,16 +91,16 @@ where
     }
 }
 
-/// Implements `Future` and dispatches all method calls to either `First` or `Second`.
-#[pin_project(project = EitherFutureProj)]
+/// Future for listener upgrades that returns Either<A::Output, B::Output>
+#[pin_project(project = EitherUpgradeFutureProj)]
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
-pub enum EitherFuture<A, B> {
+pub enum EitherUpgradeFuture<A, B> {
     First(#[pin] A),
     Second(#[pin] B),
 }
 
-impl<AFuture, BFuture, AInner, BInner> Future for EitherFuture<AFuture, BFuture>
+impl<AFuture, BFuture, AInner, BInner> Future for EitherUpgradeFuture<AFuture, BFuture>
 where
     AFuture: TryFuture<Ok = AInner>,
     BFuture: TryFuture<Ok = BInner>,
@@ -109,11 +109,40 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project() {
-            EitherFutureProj::First(a) => TryFuture::try_poll(a, cx)
+            EitherUpgradeFutureProj::First(a) => TryFuture::try_poll(a, cx)
                 .map_ok(future::Either::Left)
                 .map_err(Either::Left),
-            EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
+            EitherUpgradeFutureProj::Second(b) => TryFuture::try_poll(b, cx)
                 .map_ok(future::Either::Right)
+                .map_err(Either::Right),
+        }
+    }
+}
+
+/// Future for dials that returns (Either<A::Output, B::Output>, PortUse)
+#[pin_project(project = EitherDialFutureProj)]
+#[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
+pub enum EitherDialFuture<A, B> {
+    First(#[pin] A),
+    Second(#[pin] B),
+}
+
+impl<AFuture, BFuture, AInner, BInner> Future for EitherDialFuture<AFuture, BFuture>
+where
+    AFuture: TryFuture<Ok = (AInner, PortUse)>,
+    BFuture: TryFuture<Ok = (BInner, PortUse)>,
+{
+    type Output =
+        Result<(future::Either<AInner, BInner>, PortUse), Either<AFuture::Error, BFuture::Error>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.project() {
+            EitherDialFutureProj::First(a) => TryFuture::try_poll(a, cx)
+                .map_ok(|(inner, port_use)| (future::Either::Left(inner), port_use))
+                .map_err(Either::Left),
+            EitherDialFutureProj::Second(b) => TryFuture::try_poll(b, cx)
+                .map_ok(|(inner, port_use)| (future::Either::Right(inner), port_use))
                 .map_err(Either::Right),
         }
     }
@@ -126,8 +155,8 @@ where
 {
     type Output = future::Either<A::Output, B::Output>;
     type Error = Either<A::Error, B::Error>;
-    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
+    type ListenerUpgrade = EitherUpgradeFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+    type Dial = EitherDialFuture<A::Dial, B::Dial>;
 
     fn poll(
         self: Pin<&mut Self>,
@@ -136,15 +165,17 @@ where
         match self.as_pin_mut() {
             Either::Left(a) => match a.poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => {
-                    Poll::Ready(event.map_upgrade(EitherFuture::First).map_err(Either::Left))
-                }
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherUpgradeFuture::First)
+                        .map_err(Either::Left),
+                ),
             },
             Either::Right(b) => match b.poll(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(event) => Poll::Ready(
                     event
-                        .map_upgrade(EitherFuture::Second)
+                        .map_upgrade(EitherUpgradeFuture::Second)
                         .map_err(Either::Right),
                 ),
             },
@@ -184,12 +215,12 @@ where
         use TransportError::*;
         match self {
             Either::Left(a) => match a.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Ok(connec) => Ok(EitherDialFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
             Either::Right(b) => match b.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Ok(connec) => Ok(EitherDialFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
             },
