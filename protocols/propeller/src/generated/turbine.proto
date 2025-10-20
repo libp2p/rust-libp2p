@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package propeller.pb;
+
+message Shred {
+    uint64 message_id = 1;
+    uint32 index = 2;
+    bytes publisher = 3;
+    bytes data = 4;
+    bytes signature = 5;
+}
+
+message PropellerMessage {
+    Shred shred = 1;
+}
