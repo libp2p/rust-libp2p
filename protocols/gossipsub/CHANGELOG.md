@@ -1,4 +1,7 @@
 ## 0.50.0
+- Fix underflow when shuffling peers after prunning.
+  See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
+
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
 
