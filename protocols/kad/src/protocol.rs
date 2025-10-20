@@ -556,14 +556,6 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     let key = record::Key::from(record.key);
     let value = record.value;
 
-    let publisher = if !record.publisher.is_empty() {
-        PeerId::from_bytes(&record.publisher)
-            .map(Some)
-            .map_err(|_| invalid_data("Invalid publisher peer ID."))?
-    } else {
-        None
-    };
-
     let expires = if record.ttl > 0 {
         Some(Instant::now() + Duration::from_secs(record.ttl as u64))
     } else {
@@ -573,7 +565,14 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     Ok(Record {
         key,
         value,
-        publisher,
+        publisher: if record.publisher.is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_bytes(&record.publisher)
+                    .map_err(|_| invalid_data("Invalid publisher peer ID."))?,
+            )
+        },
         expires,
     })
 }

@@ -1,3 +1,5 @@
+- Allow putting `Record` with `publisher: None` sacrificing republishing.
+
 ## 0.49.0
 
 - Remove no longer constructed GetRecordError::QuorumFailed.
