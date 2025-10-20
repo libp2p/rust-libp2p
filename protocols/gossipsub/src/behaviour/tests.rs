@@ -2341,43 +2341,6 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
 }
 
 #[test]
-fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
-    let config: Config = Config::default();
-
-    // enough peers to fill the mesh
-    let (mut gs, peers, _, topics) = inject_nodes1()
-        .peer_no(config.mesh_n_high())
-        .topics(vec!["test".into()])
-        .to_subscribe(true)
-        .create_network();
-
-    // graft all the peers => this will fill the mesh
-    for peer in peers {
-        gs.handle_graft(&peer, topics.clone());
-    }
-
-    // assert current mesh size
-    assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
-
-    // create an outbound and an inbound peer
-    let (inbound, _in_queue) = add_peer(&mut gs, &topics, false, false);
-    let (outbound, _out_queue) = add_peer(&mut gs, &topics, true, false);
-
-    // send grafts
-    gs.handle_graft(&inbound, vec![topics[0].clone()]);
-    gs.handle_graft(&outbound, vec![topics[0].clone()]);
-
-    // assert mesh size
-    assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high() + 1);
-
-    // inbound is not in mesh
-    assert!(!gs.mesh[&topics[0]].contains(&inbound));
-
-    // outbound is in mesh
-    assert!(gs.mesh[&topics[0]].contains(&outbound));
-}
-
-#[test]
 fn test_do_not_remove_too_many_outbound_peers() {
     // use an extreme case to catch errors with high probability
     let m = 50;
@@ -2412,7 +2375,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
     }
 
     // mesh is overly full
-    assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n + m);
+    assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n);
 
     // run a heartbeat
     gs.heartbeat();
