@@ -34,6 +34,7 @@ use libp2p_core::{
 pub struct SelectMuxerUpgrade<A, B>(A, B);
 
 impl<A, B> SelectMuxerUpgrade<A, B> {
+    #[allow(dead_code)]
     pub fn new(a: A, b: B) -> Self {
         SelectMuxerUpgrade(a, b)
     }

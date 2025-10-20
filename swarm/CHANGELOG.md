@@ -1,4 +1,8 @@
 ## 0.47.0
+
+- Remove `async-std` support.
+  See [PR 6074](https://github.com/libp2p/rust-libp2p/pull/6074)
+
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
 
@@ -8,6 +12,10 @@
   Substreams are not completely interchangeable and a certain Substream may be associated with a
   certain upgrade.
   See [PR 5860](https://github.com/libp2p/rust-libp2p/pull/5860).
+
+- Expose `Option<PeerId>` in `SwarmEvent::IncomingConnectionError`.
+  This enables insight to which `PeerId` errored.
+  See [PR 6032](https://github.com/libp2p/rust-libp2p/pull/6032)
 
 ## 0.46.0
 

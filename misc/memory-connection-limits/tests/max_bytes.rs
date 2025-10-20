@@ -29,12 +29,15 @@ use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
 use libp2p_swarm_test::SwarmExt;
 use util::*;
 
-#[test]
-fn max_bytes() {
+#[tokio::test]
+async fn max_bytes() {
+    // These tests use connections as unit to test the memory limit.
+    // Each connection consumes approximately 1MB of memory, so we give
+    // one connection as buffer for test stability (CONNECTION_LIMIT - 1) on line 35.
     const CONNECTION_LIMIT: usize = 20;
-    let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
+    let max_allowed_bytes = (CONNECTION_LIMIT - 1) * 1024 * 1024;
 
-    let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
+    let mut network = Swarm::new_ephemeral_tokio(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
@@ -69,8 +72,9 @@ fn max_bytes() {
             .expect("Unexpected connection limit.");
     }
 
-    std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try
-                                                    // to exceed it.
+    // Memory stats are only updated every 100ms internally,
+    // ensure they are up-to-date when we try to exceed it.
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     match network
         .dial(

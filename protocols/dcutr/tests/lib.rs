@@ -101,7 +101,7 @@ async fn connect() {
 }
 
 fn build_relay() -> Swarm<Relay> {
-    Swarm::new_ephemeral(|identity| {
+    Swarm::new_ephemeral_tokio(|identity| {
         let local_peer_id = identity.public().to_peer_id();
 
         Relay {
@@ -135,7 +135,7 @@ fn build_client() -> Swarm<Client> {
 
     let transport = relay_transport
         .or_transport(MemoryTransport::default())
-        .or_transport(libp2p_tcp::async_io::Transport::default())
+        .or_transport(libp2p_tcp::tokio::Transport::default())
         .upgrade(Version::V1)
         .authenticate(plaintext::Config::new(&local_key))
         .multiplex(libp2p_yamux::Config::default())
@@ -152,7 +152,7 @@ fn build_client() -> Swarm<Client> {
             )),
         },
         local_peer_id,
-        Config::with_async_std_executor(),
+        Config::with_tokio_executor(),
     )
 }
 

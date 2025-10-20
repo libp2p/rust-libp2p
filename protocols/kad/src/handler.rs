@@ -453,7 +453,7 @@ impl Handler {
             }
         }
 
-        let outbound_substreams_timeout = protocol_config.outbound_substreams_timeout_s();
+        let substreams_timeout = protocol_config.substreams_timeout_s();
 
         Handler {
             protocol_config,
@@ -463,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                outbound_substreams_timeout,
+                substreams_timeout,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
@@ -820,14 +820,11 @@ fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
 ) -> ProtocolStatus {
-    let current_status = match current_status {
-        None => {
-            return ProtocolStatus {
-                supported: now_supported,
-                reported: false,
-            }
-        }
-        Some(current) => current,
+    let Some(current_status) = current_status else {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: false,
+        };
     };
 
     if now_supported == current_status.supported {

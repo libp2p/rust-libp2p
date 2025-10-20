@@ -127,7 +127,6 @@ pub struct Config {
     max_ihave_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
-    published_message_ids_cache_time: Duration,
     connection_handler_queue_len: usize,
     connection_handler_publish_duration: Duration,
     connection_handler_forward_duration: Duration,
@@ -444,11 +443,6 @@ impl Config {
         self.protocol.protocol_ids.contains(&FLOODSUB_PROTOCOL)
     }
 
-    /// Published message ids time cache duration. The default is 10 seconds.
-    pub fn published_message_ids_cache_time(&self) -> Duration {
-        self.published_message_ids_cache_time
-    }
-
     /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&self) -> usize {
         self.connection_handler_queue_len
@@ -546,7 +540,6 @@ impl Default for ConfigBuilder {
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
-                published_message_ids_cache_time: Duration::from_secs(10),
                 connection_handler_queue_len: 5000,
                 connection_handler_publish_duration: Duration::from_secs(5),
                 connection_handler_forward_duration: Duration::from_secs(1),
@@ -578,8 +571,8 @@ impl ConfigBuilder {
         let cow = protocol_id_prefix.into();
 
         match (
-            StreamProtocol::try_from_owned(format!("{}/1.1.0", cow)),
-            StreamProtocol::try_from_owned(format!("{}/1.0.0", cow)),
+            StreamProtocol::try_from_owned(format!("{cow}/1.1.0")),
+            StreamProtocol::try_from_owned(format!("{cow}/1.0.0")),
         ) {
             (Ok(p1), Ok(p2)) => {
                 self.config.protocol.protocol_ids = vec![
@@ -768,13 +761,22 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum byte size for each gossip (default is 2048 bytes).
+    /// The maximum byte size for each gossip (default is 65536 bytes).
+    ///
+    /// ```rust
+    /// use libp2p_gossipsub::ConfigBuilder;
+    /// let mut config = ConfigBuilder::default();
+    /// assert_eq!(config.build().unwrap().max_transmit_size(), 65536);
+    /// config.max_transmit_size(1 << 20);
+    /// assert_eq!(config.build().unwrap().max_transmit_size(), 1 << 20);
+    /// ```
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.protocol.default_max_transmit_size = max_transmit_size;
         self
     }
 
-    /// The maximum byte size for each gossip for a given topic. (default is 2048 bytes).
+    /// The maximum byte size for each gossip for a given topic. (default is
+    /// [`Self::max_transmit_size`]).
     pub fn max_transmit_size_for_topic(
         &mut self,
         max_transmit_size: usize,
@@ -865,8 +867,8 @@ impl ConfigBuilder {
     /// This is how long to wait before resubscribing to the topic. A short backoff period in case
     /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
     /// is 10 seconds.
-    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
-        self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
+    pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: Duration) -> &mut Self {
+        self.config.unsubscribe_backoff = unsubscribe_backoff;
         self
     }
 
@@ -1008,15 +1010,6 @@ impl ConfigBuilder {
         self
     }
 
-    /// Published message ids time cache duration. The default is 10 seconds.
-    pub fn published_message_ids_cache_time(
-        &mut self,
-        published_message_ids_cache_time: Duration,
-    ) -> &mut Self {
-        self.config.published_message_ids_cache_time = published_message_ids_cache_time;
-        self
-    }
-
     /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&mut self, len: usize) -> &mut Self {
         self.config.connection_handler_queue_len = len;
@@ -1079,15 +1072,6 @@ impl ConfigBuilder {
             .topic_configuration
             .topic_mesh_params
             .insert(topic, config);
-        self
-    }
-
-    /// The topic max size sets message sizes for a given topic.
-    pub fn set_topic_max_transmit_size(&mut self, topic: TopicHash, max_size: usize) -> &mut Self {
-        self.config
-            .protocol
-            .max_transmit_sizes
-            .insert(topic, max_size);
         self
     }
 
@@ -1177,10 +1161,6 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
-        let _ = builder.field(
-            "published_message_ids_cache_time",
-            &self.published_message_ids_cache_time,
-        );
         let _ = builder.field(
             "idontwant_message_size_threshold",
             &self.idontwant_message_size_threshold,

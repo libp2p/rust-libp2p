@@ -33,14 +33,14 @@ use libp2p_swarm_test::SwarmExt;
 use sysinfo::{MemoryRefreshKind, RefreshKind};
 use util::*;
 
-#[test]
-fn max_percentage() {
+#[tokio::test]
+async fn max_percentage() {
     const CONNECTION_LIMIT: usize = 20;
     let system_info = sysinfo::System::new_with_specifics(
         RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
     );
 
-    let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
+    let mut network = Swarm::new_ephemeral_tokio(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_percentage(0.1),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
@@ -59,7 +59,10 @@ fn max_percentage() {
 
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
-    let max_allowed_bytes = current_mem + CONNECTION_LIMIT * 1024 * 1024;
+    // These tests use connections as unit to test the memory limit.
+    // Each connection consumes approximately 1MB of memory, so we give
+    // one connection as buffer for test stability (CONNECTION_LIMIT - 1) on line 35.
+    let max_allowed_bytes = current_mem + (CONNECTION_LIMIT - 1) * 1024 * 1024;
     network.behaviour_mut().connection_limits = Behaviour::with_max_percentage(
         max_allowed_bytes as f64 / system_info.total_memory() as f64,
     );
@@ -78,7 +81,7 @@ fn max_percentage() {
 
     // Memory stats are only updated every 100ms internally,
     // ensure they are up-to-date when we try to exceed it.
-    std::thread::sleep(Duration::from_millis(100));
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     match network
         .dial(

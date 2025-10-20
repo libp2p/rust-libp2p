@@ -1,3 +1,8 @@
+## 0.17.1
+
+- Fix panic in swarm metrics when `ConnectionClosed` events are received for connections that were established before metrics collection started.
+  See [PR 6158](https://github.com/libp2p/rust-libp2p/pull/6158).
+
 ## 0.17.0
 
 - Update `prometheus-client` to `0.23.0`.
@@ -5,6 +10,8 @@
 
 - Add `ReservationClosed` as a relay metric.
   See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.16.0
 

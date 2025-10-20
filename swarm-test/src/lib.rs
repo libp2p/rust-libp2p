@@ -38,17 +38,6 @@ use libp2p_swarm::{
 pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
-    /// Create a new [`Swarm`] with an ephemeral identity and the `async-std` runtime.
-    ///
-    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a
-    /// [`libp2p_plaintext::Config`] authentication layer and [`libp2p_yamux::Config`] as the
-    /// multiplexer. However, these details should not be relied
-    /// upon by the test and may change at any time.
-    #[cfg(feature = "async-std")]
-    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
-    where
-        Self: Sized;
-
     /// Create a new [`Swarm`] with an ephemeral identity and the `tokio` runtime.
     ///
     /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a
@@ -222,33 +211,6 @@ where
     <B as NetworkBehaviour>::ToSwarm: Debug,
 {
     type NB = B;
-
-    #[cfg(feature = "async-std")]
-    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
-    where
-        Self: Sized,
-    {
-        use libp2p_core::{transport::MemoryTransport, upgrade::Version, Transport as _};
-        use libp2p_identity::Keypair;
-
-        let identity = Keypair::generate_ed25519();
-        let peer_id = PeerId::from(identity.public());
-
-        let transport = MemoryTransport::default()
-            .or_transport(libp2p_tcp::async_io::Transport::default())
-            .upgrade(Version::V1)
-            .authenticate(libp2p_plaintext::Config::new(&identity))
-            .multiplex(libp2p_yamux::Config::default())
-            .timeout(Duration::from_secs(20))
-            .boxed();
-
-        Swarm::new(
-            transport,
-            behaviour_fn(identity),
-            peer_id,
-            libp2p_swarm::Config::with_async_std_executor(),
-        )
-    }
 
     #[cfg(feature = "tokio")]
     fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self

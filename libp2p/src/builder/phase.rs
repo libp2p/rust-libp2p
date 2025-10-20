@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-mod bandwidth_logging;
 mod bandwidth_metrics;
 mod behaviour;
 mod build;
@@ -14,7 +13,6 @@ mod swarm;
 mod tcp;
 mod websocket;
 
-use bandwidth_logging::*;
 use bandwidth_metrics::*;
 pub use behaviour::BehaviourError;
 use behaviour::*;
@@ -37,7 +35,7 @@ use super::{
     select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,
 };
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub, dead_code)]
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -79,7 +77,7 @@ where
     }
 }
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub, dead_code)]
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 

@@ -167,7 +167,7 @@ pub struct VerificationError(#[from] pub(crate) webpki::Error);
 /// Internal function that only parses but does not verify the certificate.
 ///
 /// Useful for testing but unsuitable for production.
-fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate<'_>, webpki::Error> {
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
         .map_err(|_| webpki::Error::BadDer)?;
@@ -185,7 +185,7 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
         }
 
         if oid == &p2p_ext_oid {
-            // The public host key and the signature are ANS.1-encoded
+            // The public host key and the signature are ASN.1-encoded
             // into the SignedKey data structure, which is carried
             // in the libp2p Public Key Extension.
             // SignedKey ::= SEQUENCE {
@@ -254,7 +254,7 @@ fn make_libp2p_extension(
             .map_err(|_| rcgen::Error::RingUnspecified)?
     };
 
-    // The public host key and the signature are ANS.1-encoded
+    // The public host key and the signature are ASN.1-encoded
     // into the SignedKey data structure, which is carried
     // in the libp2p Public Key Extension.
     // SignedKey ::= SEQUENCE {

@@ -221,6 +221,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
         send_back_addr: Multiaddr,
         /// The error that happened.
         error: ListenError,
+        /// If known, [`PeerId`] of the peer that tried to connect to us.
+        peer_id: Option<PeerId>,
     },
     /// An error happened on an outbound connection.
     OutgoingConnectionError {
@@ -756,6 +758,7 @@ where
                                         send_back_addr,
                                         local_addr,
                                         error: listen_error,
+                                        peer_id: Some(peer_id),
                                     },
                                 );
                                 return;
@@ -868,6 +871,7 @@ where
                         local_addr,
                         send_back_addr,
                         error,
+                        peer_id: None,
                     });
             }
             PoolEvent::ConnectionClosed {
@@ -974,6 +978,7 @@ where
                                 local_addr,
                                 send_back_addr,
                                 error: listen_error,
+                                peer_id: None,
                             });
                         return;
                     }
@@ -1413,15 +1418,6 @@ impl Config {
     ))]
     pub fn with_tokio_executor() -> Self {
         Self::with_executor(crate::executor::TokioExecutor)
-    }
-
-    /// Builds a new [`Config`] from the given `async-std` executor.
-    #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    pub fn with_async_std_executor() -> Self {
-        Self::with_executor(crate::executor::AsyncStdExecutor)
     }
 
     /// Configures the number of events from the [`NetworkBehaviour`] in

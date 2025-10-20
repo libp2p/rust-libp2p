@@ -50,49 +50,6 @@ pub trait AsyncSocket: Unpin + Send + 'static {
     ) -> Poll<Result<(), Error>>;
 }
 
-#[cfg(feature = "async-io")]
-pub(crate) mod asio {
-    use async_io::Async;
-    use futures::FutureExt;
-
-    use super::*;
-
-    /// AsyncIo UdpSocket
-    pub(crate) type AsyncUdpSocket = Async<UdpSocket>;
-    impl AsyncSocket for AsyncUdpSocket {
-        fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
-            Async::new(socket)
-        }
-
-        fn poll_read(
-            &mut self,
-            cx: &mut Context,
-            buf: &mut [u8],
-        ) -> Poll<Result<(usize, SocketAddr), Error>> {
-            // Poll receive socket.
-            futures::ready!(self.poll_readable(cx))?;
-            match self.recv_from(buf).now_or_never() {
-                Some(data) => Poll::Ready(data),
-                None => Poll::Pending,
-            }
-        }
-
-        fn poll_write(
-            &mut self,
-            cx: &mut Context,
-            packet: &[u8],
-            to: SocketAddr,
-        ) -> Poll<Result<(), Error>> {
-            futures::ready!(self.poll_writable(cx))?;
-            match self.send_to(packet, to).now_or_never() {
-                Some(Ok(_)) => Poll::Ready(Ok(())),
-                Some(Err(err)) => Poll::Ready(Err(err)),
-                None => Poll::Pending,
-            }
-        }
-    }
-}
-
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio {
     use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};

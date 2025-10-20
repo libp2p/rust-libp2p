@@ -9,14 +9,14 @@
 //! ```
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     num::NonZeroUsize,
     task::{Poll, Waker},
 };
 
+use hashlink::LruCache;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{behaviour::ConnectionEstablished, DialError, FromSwarm};
-use lru::LruCache;
 
 use super::Store;
 
@@ -49,10 +49,9 @@ pub enum Event {
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
 /// and a frequency-based ordering of addresses.
-#[derive(Default)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
-    records: HashMap<PeerId, PeerRecord<T>>,
+    records: LruCache<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm).
     pending_events: VecDeque<Event>,
     /// Config of the store.
@@ -65,8 +64,8 @@ impl<T> MemoryStore<T> {
     /// Create a new [`MemoryStore`] with the given config.
     pub fn new(config: Config) -> Self {
         Self {
+            records: LruCache::new(config.peer_capacity().get()),
             config,
-            records: HashMap::new(),
             pending_events: VecDeque::default(),
             waker: None,
         }
@@ -96,7 +95,7 @@ impl<T> MemoryStore<T> {
         let record = self
             .records
             .entry(*peer)
-            .or_insert(PeerRecord::new(self.config.record_capacity));
+            .or_insert_with(|| PeerRecord::new(self.config.record_capacity));
         let is_new = record.add_address(address, is_permanent);
         if is_new {
             self.push_event_and_wake(Event::PeerAddressAdded {
@@ -137,7 +136,7 @@ impl<T> MemoryStore<T> {
 
     /// Get a reference to a peer's custom data.
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
-        self.records.get(peer).and_then(|r| r.get_custom_data())
+        self.records.peek(peer).and_then(|r| r.get_custom_data())
     }
 
     /// Take ownership of the internal data, leaving `None` in its place.
@@ -176,7 +175,7 @@ impl<T> MemoryStore<T> {
 
     /// Iterate over all internal records mutably.
     ///
-    /// Changes to the records will not generate an event.  
+    /// Changes to the records will not generate an event.
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
@@ -240,7 +239,7 @@ impl<T> Store for MemoryStore<T> {
     }
 
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
-        self.records.get(peer).map(|record| record.addresses())
+        self.records.peek(peer).map(|record| record.addresses())
     }
 
     fn poll(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Self::Event> {
@@ -257,6 +256,7 @@ impl<T> Store for MemoryStore<T> {
 /// Config for [`MemoryStore`]. The available options are documented via their setters.
 #[derive(Debug, Clone)]
 pub struct Config {
+    peer_capacity: NonZeroUsize,
     record_capacity: NonZeroUsize,
     remove_addr_on_dial_error: bool,
 }
@@ -264,6 +264,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            peer_capacity: NonZeroUsize::try_from(1000).expect("1000 > 0"),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
             remove_addr_on_dial_error: true,
         }
@@ -271,12 +272,24 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn peer_capacity(&self) -> &NonZeroUsize {
+        &self.peer_capacity
+    }
+    /// The capacity of the address store per peer.
+    ///
+    /// The least recently updated peer will be discarded to make room for a new peer.
+    ///
+    /// `1000` by default.
+    pub fn set_peer_capacity(mut self, capacity: NonZeroUsize) -> Self {
+        self.peer_capacity = capacity;
+        self
+    }
     pub fn record_capacity(&self) -> &NonZeroUsize {
         &self.record_capacity
     }
-    /// The capacity of an address store.
+    /// The capacity of the address store per peer.
     ///
-    /// The least active address will be discarded to make room for new address.
+    /// The least active address will be discarded to make room for a new address.
     ///
     /// `8` by default.
     pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
@@ -307,7 +320,7 @@ impl Config {
 /// Internal record of [`MemoryStore`].
 #[derive(Debug, Clone)]
 pub struct PeerRecord<T> {
-    /// A LRU(Least Recently Used) cache for addresses.  
+    /// A LRU(Least Recently Used) cache for addresses.
     /// Will delete the least-recently-used record when full.
     /// If the associated `bool` is true, the address can only be force-removed.
     addresses: LruCache<Multiaddr, bool>,
@@ -317,7 +330,7 @@ pub struct PeerRecord<T> {
 impl<T> PeerRecord<T> {
     pub(crate) fn new(cap: NonZeroUsize) -> Self {
         Self {
-            addresses: LruCache::new(cap),
+            addresses: LruCache::new(cap.get()),
             custom_data: None,
         }
     }
@@ -325,7 +338,7 @@ impl<T> PeerRecord<T> {
     /// Iterate over all addresses. More recently-used address comes first.
     /// Does not change the order.
     pub fn addresses(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.addresses.iter().map(|(addr, _)| addr)
+        self.addresses.iter().rev().map(|(addr, _)| addr)
     }
 
     /// Update the address in the LRU cache, promote it to the front if it exists,
@@ -335,14 +348,13 @@ impl<T> PeerRecord<T> {
     pub fn add_address(&mut self, address: &Multiaddr, is_permanent: bool) -> bool {
         if let Some(was_permanent) = self.addresses.get(address) {
             if !*was_permanent && is_permanent {
-                self.addresses
-                    .get_or_insert(address.clone(), || is_permanent);
+                self.addresses.insert(address.clone(), is_permanent);
             }
-            return false;
+            false
+        } else {
+            self.addresses.insert(address.clone(), is_permanent);
+            true
         }
-        self.addresses
-            .get_or_insert(address.clone(), || is_permanent);
-        true
     }
 
     /// Remove the address in the LRU cache regardless of its position.
@@ -353,7 +365,7 @@ impl<T> PeerRecord<T> {
         if !force && self.addresses.peek(address) == Some(&true) {
             return false;
         }
-        self.addresses.pop(address).is_some()
+        self.addresses.remove(address).is_some()
     }
 
     pub fn get_custom_data(&self) -> Option<&T> {
@@ -399,14 +411,14 @@ mod test {
         store.add_address(&peer, &addr1);
         store.add_address(&peer, &addr2);
         store.add_address(&peer, &addr3);
-        assert!(
+        assert_eq!(
             store
                 .records
                 .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
-                .collect::<Vec<_>>()
-                == vec![&addr3, &addr2, &addr1]
+                .collect::<Vec<_>>(),
+            vec![&addr3, &addr2, &addr1]
         );
         store.add_address(&peer, &addr1);
         assert!(
@@ -435,7 +447,7 @@ mod test {
         let mut store: MemoryStore = MemoryStore::new(Default::default());
         let peer = PeerId::random();
         for i in 1..10 {
-            let addr_string = format!("/ip4/127.0.0.{}", i);
+            let addr_string = format!("/ip4/127.0.0.{i}");
             store.add_address(
                 &peer,
                 &Multiaddr::from_str(&addr_string).expect("parsing to succeed"),
@@ -474,7 +486,7 @@ mod test {
                     assert!(expected_address.is_none_or(|a| *a == address));
                     assert!(!is_permanent)
                 }
-                ev => panic!("Unexpected event {:?}.", ev),
+                ev => panic!("Unexpected event {ev:?}."),
             }
         }
 
@@ -566,7 +578,7 @@ mod test {
                         assert!(!is_permanent);
                         break;
                     }
-                    ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {:?}.", ev),
+                    ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {ev:?}."),
                     _ => {}
                 }
             }

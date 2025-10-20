@@ -1,4 +1,52 @@
+## 0.50.0
+- Fix underflow when shuffling peers after prunning.
+  See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
+
+- Remove peer penalty for duplicate messages.
+  See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
+
+- Remove `Rpc` from the public API.
+  See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
+
+- reduce allocations by replacing `or_insert` with `or_insert_with`
+  See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
+
+- Fix `unsubscribe_backoff` expecting number of seconds instead of `Duration`
+  See [PR 6124](https://github.com/libp2p/rust-libp2p/pull/6124)
+
+- Fix incorrect default values in ConfigBuilder
+  See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
+  
+- Remove duplicated config `set_topic_max_transmit_size` method, prefer `max_transmit_size_for_topic`.
+  See [PR 6173](https://github.com/libp2p/rust-libp2p/pull/6173).
+
+- Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
+  with an internal priority queue. See [PR 6175](https://github.com/libp2p/rust-libp2p/pull/6175)
+
+## 0.49.2
+
+- Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
+  See [PR 6097](https://github.com/libp2p/rust-libp2p/pull/6097)
+
+## 0.49.1
+
+- Fix applying P3 and P6 Score penalties when their weight is zero
+  See [PR 6097](https://github.com/libp2p/rust-libp2p/pull/6097)
+
+- Fix fanout logic to include correctly scored peers and prevent panics when memcache is set to 0.
+  See [PR 6095](https://github.com/libp2p/rust-libp2p/pull/6095)
+
+- Fix mesh not being constructed even when not adding any peer.
+  See [PR 6100](https://github.com/libp2p/rust-libp2p/pull/6100)
+
 ## 0.49.0
+
+- Feature gate metrics related code. This changes some `Behaviour` constructor methods.
+  See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
+
+- Send IDONTWANT before Publishing a new message.
+  See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
+
 - Improve log messaging by renaming `message` to `message_id`. This change makes it log coherent to
   the field and also improve duplication of `message` field.
   See [PR 5972](https://github.com/libp2p/rust-libp2p/pull/5972)
@@ -32,6 +80,8 @@
 
 - Allow customizing max transmit size and mesh-n-* parameters per topic.
   See [PR 5868](https://github.com/libp2p/rust-libp2p/pull/5868)
+
+<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.48.0
 

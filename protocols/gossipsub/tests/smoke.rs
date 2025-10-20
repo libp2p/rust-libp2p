@@ -112,7 +112,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let mut swarm = Swarm::new_ephemeral(|identity| {
+    let mut swarm = Swarm::new_ephemeral_tokio(|identity| {
         let peer_id = identity.public().to_peer_id();
 
         let config = gossipsub::ConfigBuilder::default()

@@ -1,3 +1,7 @@
+## 0.6.0
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.5.0
 
 - Add getters & setters for the allowed/blocked peers.

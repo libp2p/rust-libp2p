@@ -1,8 +1,19 @@
+## 0.21.1
+
+- reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
+  See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
+
+## 0.21.0
+
+<!-- Update to libp2p-swarm v0.47.0 -->
+
 ## 0.20.0
 
 - Remove duplicated forwarding of pending events to connection handler.
 - Emit `relay::Event::ReservationClosed` when an active reservation is dropped due to the connection closing.
   See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
+- Include denial reason in `relay::Event::CircuitReqDenied` and `relay::Event::ReservationReqDenied`
+  See [PR 6067](https://github.com/libp2p/rust-libp2p/pull/6067/files).
 
 ## 0.19.0
 
