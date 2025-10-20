@@ -28,7 +28,7 @@ use futures::future;
 use multiaddr::Multiaddr;
 
 use crate::{
-    either::EitherFuture,
+    either::{EitherDialFuture, EitherUpgradeFuture},
     transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
 };
 
@@ -50,8 +50,8 @@ where
 {
     type Output = future::Either<A::Output, B::Output>;
     type Error = Either<A::Error, B::Error>;
-    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
+    type ListenerUpgrade = EitherUpgradeFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+    type Dial = EitherDialFuture<A::Dial, B::Dial>;
 
     fn listen_on(
         &mut self,
@@ -110,7 +110,7 @@ where
             std::any::type_name::<A>()
         );
         let addr = match self.0.dial(addr, opts) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(connec) => return Ok(EitherDialFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 tracing::debug!(
                     address=%addr,
@@ -130,7 +130,7 @@ where
             std::any::type_name::<A>()
         );
         let addr = match self.1.dial(addr, opts) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(connec) => return Ok(EitherDialFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 tracing::debug!(
                     address=%addr,
@@ -154,13 +154,19 @@ where
         let this = self.project();
         match this.0.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(Either::Left))
+                return Poll::Ready(
+                    ev.map_upgrade(EitherUpgradeFuture::First)
+                        .map_err(Either::Left),
+                )
             }
             Poll::Pending => {}
         }
         match this.1.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(Either::Right))
+                return Poll::Ready(
+                    ev.map_upgrade(EitherUpgradeFuture::Second)
+                        .map_err(Either::Right),
+                )
             }
             Poll::Pending => {}
         }

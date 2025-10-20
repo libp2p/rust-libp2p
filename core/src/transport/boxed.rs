@@ -28,7 +28,7 @@ use std::{
 use futures::{prelude::*, stream::FusedStream};
 use multiaddr::Multiaddr;
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent};
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub(crate) fn boxed<T>(transport: T) -> Boxed<T::Output>
@@ -50,7 +50,7 @@ pub struct Boxed<O> {
     inner: Box<dyn Abstract<O> + Send + Unpin>,
 }
 
-type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
+type Dial<O> = Pin<Box<dyn Future<Output = io::Result<(O, PortUse)>> + Send>>;
 type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
 trait Abstract<O> {

@@ -29,7 +29,7 @@ use multiaddr::Multiaddr;
 use super::ListenerId;
 use crate::{
     connection::ConnectedPoint,
-    transport::{DialOpts, Transport, TransportError, TransportEvent},
+    transport::{DialOpts, PortUse, Transport, TransportError, TransportEvent},
 };
 
 /// See `Transport::map`.
@@ -62,8 +62,8 @@ where
 {
     type Output = D;
     type Error = T::Error;
-    type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
-    type Dial = MapFuture<T::Dial, F>;
+    type ListenerUpgrade = MapListenerUpgradeFuture<T::ListenerUpgrade, F>;
+    type Dial = MapDialFuture<T::Dial, F>;
 
     fn listen_on(
         &mut self,
@@ -88,7 +88,7 @@ where
             role_override: opts.role,
             port_use: opts.port_use,
         };
-        Ok(MapFuture {
+        Ok(MapDialFuture {
             inner: future,
             args: Some((self.fun.clone(), p)),
         })
@@ -112,7 +112,7 @@ where
                 };
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id,
-                    upgrade: MapFuture {
+                    upgrade: MapListenerUpgradeFuture {
                         inner: upgrade,
                         args: Some((this.fun.clone(), point)),
                     },
@@ -129,18 +129,18 @@ where
     }
 }
 
-/// Custom `Future` to avoid boxing.
+/// Custom `Future` for listener upgrades to avoid boxing.
 ///
 /// Applies a function to the inner future's result.
 #[pin_project::pin_project]
 #[derive(Clone, Debug)]
-pub struct MapFuture<T, F> {
+pub struct MapListenerUpgradeFuture<T, F> {
     #[pin]
     inner: T,
     args: Option<(F, ConnectedPoint)>,
 }
 
-impl<T, A, F, B> Future for MapFuture<T, F>
+impl<T, A, F, B> Future for MapListenerUpgradeFuture<T, F>
 where
     T: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B,
@@ -156,5 +156,32 @@ where
         };
         let (f, a) = this.args.take().expect("MapFuture has already finished.");
         Poll::Ready(Ok(f(item, a)))
+    }
+}
+
+#[pin_project::pin_project]
+#[derive(Clone, Debug)]
+pub struct MapDialFuture<T, F> {
+    #[pin]
+    inner: T,
+    args: Option<(F, ConnectedPoint)>,
+}
+
+impl<T, A, F, B> Future for MapDialFuture<T, F>
+where
+    T: TryFuture<Ok = (A, PortUse)>,
+    F: FnOnce(A, ConnectedPoint) -> B,
+{
+    type Output = Result<(B, PortUse), T::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let (item, port_use) = match TryFuture::try_poll(this.inner, cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(v)) => v,
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+        };
+        let (f, a) = this.args.take().expect("MapFuture has already finished.");
+        Poll::Ready(Ok((f(item, a), port_use)))
     }
 }
