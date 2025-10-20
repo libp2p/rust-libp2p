@@ -1,3 +1,8 @@
+## 0.14.0
+
+- Added more QUIC transport config parameters.
+  See [PR ????](https://github.com/libp2p/rust-libp2p/pull/????)
+
 ## 0.13.0
 
 - Remove `async-std` support.
