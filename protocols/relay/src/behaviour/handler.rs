@@ -159,7 +159,7 @@ pub enum Event {
     /// Accepting an inbound reservation request failed.
     ReservationReqAcceptFailed { error: inbound_hop::Error },
     /// An inbound reservation request has been denied.
-    ReservationReqDenied {},
+    ReservationReqDenied { status: proto::Status },
     /// Denying an inbound reservation request has failed.
     ReservationReqDenyFailed { error: inbound_hop::Error },
     /// An inbound reservation has timed out.
@@ -173,6 +173,7 @@ pub enum Event {
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
+        status: proto::Status,
     },
     /// Denying an inbound circuit request failed.
     CircuitReqDenyFailed {
@@ -238,9 +239,10 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::ReservationReqAcceptFailed")
                 .field("error", error)
                 .finish(),
-            Event::ReservationReqDenied {} => {
-                f.debug_struct("Event::ReservationReqDenied").finish()
-            }
+            Event::ReservationReqDenied { status } => f
+                .debug_struct("Event::ReservationReqDenied")
+                .field("status", status)
+                .finish(),
             Event::ReservationReqDenyFailed { error } => f
                 .debug_struct("Event::ReservationReqDenyFailed")
                 .field("error", error)
@@ -256,10 +258,12 @@ impl fmt::Debug for Event {
             Event::CircuitReqDenied {
                 circuit_id,
                 dst_peer_id,
+                status,
             } => f
                 .debug_struct("Event::CircuitReqDenied")
                 .field("circuit_id", circuit_id)
                 .field("dst_peer_id", dst_peer_id)
+                .field("status", status)
                 .finish(),
             Event::CircuitReqDenyFailed {
                 circuit_id,
@@ -359,7 +363,12 @@ pub struct Handler {
     /// Futures accepting an inbound circuit request.
     circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::Error)>>,
     /// Futures denying an inbound circuit request.
-    circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), inbound_hop::Error>)>,
+    circuit_deny_futures: Futures<(
+        Option<CircuitId>,
+        PeerId,
+        proto::Status,
+        Result<(), inbound_hop::Error>,
+    )>,
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
@@ -479,7 +488,7 @@ impl Handler {
 
 enum ReservationRequestFuture {
     Accepting(BoxFuture<'static, Result<(), inbound_hop::Error>>),
-    Denying(BoxFuture<'static, Result<(), inbound_hop::Error>>),
+    Denying(BoxFuture<'static, (proto::Status, Result<(), inbound_hop::Error>)>),
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
@@ -519,7 +528,11 @@ impl ConnectionHandler for Handler {
                 if self
                     .reservation_request_future
                     .replace(ReservationRequestFuture::Denying(
-                        inbound_reservation_req.deny(status).err_into().boxed(),
+                        inbound_reservation_req
+                            .deny(status)
+                            .err_into()
+                            .map(move |result| (status, result))
+                            .boxed(),
                     ))
                     .is_some()
                 {
@@ -554,7 +567,7 @@ impl ConnectionHandler for Handler {
                     inbound_circuit_req
                         .deny(status)
                         .err_into()
-                        .map(move |result| (circuit_id, dst_peer_id, result))
+                        .map(move |result| (circuit_id, dst_peer_id, status, result))
                         .boxed(),
                 );
             }
@@ -719,7 +732,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny new circuits.
-        if let Poll::Ready(Some((circuit_id, dst_peer_id, result))) =
+        if let Poll::Ready(Some((circuit_id, dst_peer_id, status, result))) =
             self.circuit_deny_futures.poll_next_unpin(cx)
         {
             match result {
@@ -728,6 +741,7 @@ impl ConnectionHandler for Handler {
                         Event::CircuitReqDenied {
                             circuit_id,
                             dst_peer_id,
+                            status,
                         },
                     ));
                 }
@@ -838,13 +852,13 @@ impl ConnectionHandler for Handler {
                 }
             }
             Some(ReservationRequestFuture::Denying(fut)) => {
-                if let Poll::Ready(result) = fut.poll_unpin(cx) {
+                if let Poll::Ready((status, result)) = fut.poll_unpin(cx) {
                     self.reservation_request_future = None;
 
                     match result {
                         Ok(()) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqDenied {},
+                                Event::ReservationReqDenied { status },
                             ))
                         }
                         Err(error) => {

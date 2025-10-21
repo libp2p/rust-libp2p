@@ -135,7 +135,7 @@ where
         }
     }
 
-    pub(crate) fn entry(&mut self, key: Key) -> Entry<Key, Value> {
+    pub(crate) fn entry(&mut self, key: Key) -> Entry<'_, Key, Value> {
         let now = Instant::now();
         self.remove_expired_keys(now);
         match self.map.entry(key) {

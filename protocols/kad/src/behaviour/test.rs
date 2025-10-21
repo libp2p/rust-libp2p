@@ -20,7 +20,7 @@
 
 #![cfg(test)]
 
-use futures::{executor::block_on, future::poll_fn, prelude::*};
+use futures::{future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
     multiaddr::{multiaddr, Protocol},
@@ -34,6 +34,7 @@ use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
+use tokio::runtime::Runtime;
 
 use super::*;
 use crate::{
@@ -64,7 +65,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor(),
+        swarm::Config::with_tokio_executor(),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
@@ -187,7 +188,8 @@ fn bootstrap() {
         let mut first = true;
 
         // Run test
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -282,7 +284,8 @@ fn query_iter() {
         expected_distances.sort();
 
         // Run test
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -345,7 +348,8 @@ fn unresponsive_not_returned_direct() {
     let search_target = PeerId::random();
     swarms[0].behaviour_mut().get_closest_peers(search_target);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -403,7 +407,8 @@ fn unresponsive_not_returned_indirect() {
     let search_target = PeerId::random();
     swarms[1].behaviour_mut().get_closest_peers(search_target);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -461,7 +466,8 @@ fn get_closest_with_different_num_results_inner(num_results: usize, replication_
         .behaviour_mut()
         .get_n_closest_peers(search_target, num_results_nonzero);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -518,7 +524,8 @@ fn get_record_not_found() {
     let target_key = record::Key::from(random_multihash());
     let qid = swarms[0].behaviour_mut().get_record(target_key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -639,7 +646,8 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
-        block_on(poll_fn(move |ctx| loop {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| loop {
             // Poll all swarms until they are "Pending".
             for swarm in &mut swarms {
                 loop {
@@ -830,7 +838,8 @@ fn get_record() {
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -887,7 +896,8 @@ fn get_record_many() {
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for (i, swarm) in swarms.iter_mut().enumerate() {
             let mut records = Vec::new();
             let quorum = quorum.eval(swarm.behaviour().queries.config().replication_factor);
@@ -987,7 +997,8 @@ fn add_provider() {
             qids.insert(qid);
         }
 
-        block_on(poll_fn(move |ctx| loop {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| loop {
             // Poll all swarms until they are "Pending".
             for swarm in &mut swarms {
                 loop {
@@ -1125,7 +1136,8 @@ fn exceed_jobs_max_queries() {
 
     assert_eq!(swarm.behaviour_mut().queries.size(), num);
 
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for _ in 0..num {
             // There are no other nodes, so the queries finish instantly.
             loop {
@@ -1210,7 +1222,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // Poll only `alice` and `trudy` expecting `alice` not yet to return a query
     // result as it is not able to connect to `bob` just yet.
     let addr_trudy = *Swarm::local_peer_id(&trudy);
-    block_on(poll_fn(|ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(|ctx| {
         for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -1264,7 +1277,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Poll `alice` and `bob` expecting `alice` to return a successful query
     // result as it is now able to explore the second disjoint path.
-    let records = block_on(poll_fn(|ctx| {
+    let records = rt.block_on(poll_fn(|ctx| {
         let mut records = Vec::new();
         for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
             loop {
@@ -1337,7 +1350,8 @@ fn manual_bucket_inserts() {
         .1
         .behaviour_mut()
         .get_closest_peers(PeerId::random());
-    block_on(poll_fn(move |ctx| {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
@@ -1460,7 +1474,8 @@ fn get_providers_single() {
             .start_providing(key.clone())
             .expect("could not provide");
 
-        block_on(async {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
             match single_swarm.next().await.unwrap() {
                 SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
                     result: QueryResult::StartProviding(Ok(_)),
@@ -1474,7 +1489,7 @@ fn get_providers_single() {
 
         let query_id = single_swarm.behaviour_mut().get_providers(key);
 
-        block_on(async {
+        rt.block_on(async {
             loop {
                 match single_swarm.next().await.unwrap() {
                     SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
@@ -1538,7 +1553,8 @@ fn get_providers_limit<const N: usize>() {
 
         let mut all_providers: Vec<PeerId> = vec![];
 
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for (i, swarm) in swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -1630,7 +1646,8 @@ fn get_closest_peers_should_return_up_to_k_peers() {
         let search_target = PeerId::random();
         swarms[0].behaviour_mut().get_closest_peers(search_target);
 
-        block_on(poll_fn(move |ctx| {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {

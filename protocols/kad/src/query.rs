@@ -464,7 +464,7 @@ impl Query {
 }
 
 /// Execution statistics of a query.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryStats {
     requests: u32,
     success: u32,

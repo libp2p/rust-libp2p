@@ -3,7 +3,7 @@ name = "libp2p-ping"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Ping protocol for libp2p"
-version = "0.46.0"
+version = "0.47.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

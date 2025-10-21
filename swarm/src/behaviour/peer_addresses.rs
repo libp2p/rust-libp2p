@@ -1,8 +1,8 @@
 use std::num::NonZeroUsize;
 
+use hashlink::LruCache;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use lru::LruCache;
 
 use crate::{behaviour::FromSwarm, DialError, DialFailure, NewExternalAddrOfPeer};
 
@@ -15,7 +15,7 @@ impl PeerAddresses {
     ///
     /// For each peer, we will at most store 10 addresses.
     pub fn new(number_of_peers: NonZeroUsize) -> Self {
-        Self(LruCache::new(number_of_peers))
+        Self(LruCache::new(number_of_peers.get()))
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
@@ -48,11 +48,11 @@ impl PeerAddresses {
         match prepare_addr(&peer, &address) {
             Ok(address) => {
                 if let Some(cached) = self.0.get_mut(&peer) {
-                    cached.put(address, ()).is_none()
+                    cached.insert(address, ()).is_none()
                 } else {
-                    let mut set = LruCache::new(NonZeroUsize::new(10).expect("10 > 0"));
-                    set.put(address, ());
-                    self.0.put(peer, set);
+                    let mut set = LruCache::new(10);
+                    set.insert(address, ());
+                    self.0.insert(peer, set);
 
                     true
                 }
@@ -75,7 +75,7 @@ impl PeerAddresses {
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         match self.0.get_mut(peer) {
             Some(addrs) => match prepare_addr(peer, address) {
-                Ok(address) => addrs.pop(&address).is_some(),
+                Ok(address) => addrs.remove(&address).is_some(),
                 Err(_) => false,
             },
             None => false,
@@ -89,7 +89,7 @@ fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Result<Multiaddr, Multiaddr>
 
 impl Default for PeerAddresses {
     fn default() -> Self {
-        Self(LruCache::new(NonZeroUsize::new(100).unwrap()))
+        Self(LruCache::new(100))
     }
 }
 

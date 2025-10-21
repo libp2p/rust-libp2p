@@ -1,3 +1,8 @@
+## 0.45.2
+
+- feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport
+  See [PR 6041](https://github.com/your-username/rust-libp2p/pull/6041)
+
 ## 0.45.1
 - Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
   See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).

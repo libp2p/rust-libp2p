@@ -39,7 +39,7 @@ mod proto {
     };
 }
 
-pub use behaviour::{rate_limiter::RateLimiter, Behaviour, CircuitId, Config, Event};
+pub use behaviour::{rate_limiter::RateLimiter, Behaviour, CircuitId, Config, Event, StatusCode};
 pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 /// Types related to the relay protocol inbound.

@@ -71,36 +71,6 @@ pub trait Provider: 'static {
     fn spawn(task: impl Future<Output = ()> + Send + 'static);
 }
 
-/// The type of a [`Behaviour`] using the `async-io` implementation.
-#[cfg(feature = "async-io")]
-pub mod async_io {
-    use std::future::Future;
-
-    use if_watch::smol::IfWatcher;
-
-    use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
-
-    #[doc(hidden)]
-    pub enum AsyncIo {}
-
-    impl Provider for AsyncIo {
-        type Socket = AsyncUdpSocket;
-        type Timer = AsyncTimer;
-        type Watcher = IfWatcher;
-
-        fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
-            IfWatcher::new()
-        }
-
-        fn spawn(task: impl Future<Output = ()> + Send + 'static) {
-            async_std::task::spawn(task);
-        }
-    }
-
-    pub type Behaviour = super::Behaviour<AsyncIo>;
-}
-
 /// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
@@ -271,9 +241,8 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer_id = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![]);
         };
 
         Ok(self
