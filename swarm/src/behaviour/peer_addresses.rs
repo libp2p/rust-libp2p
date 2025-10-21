@@ -18,12 +18,14 @@ pub struct PeerAddressesConfig {
 
 impl PeerAddressesConfig {
     /// Configure the capacity of the [`PeerAddresses`] cache.
+    /// The default capacity is 100.
     pub fn with_number_of_peers(mut self, number_of_peers: NonZeroUsize) -> Self {
         self.number_of_peers = number_of_peers;
         self
     }
 
     /// Configure the maximum number of cached addresses per peer.
+    /// The default number is 10.
     pub fn with_number_of_addresses_per_peer(
         mut self,
         number_of_addresses_per_peer: NonZeroUsize,
