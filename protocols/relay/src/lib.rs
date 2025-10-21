@@ -23,6 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+pub mod autorelay;
 mod behaviour;
 mod copy_future;
 mod multiaddr_ext;
