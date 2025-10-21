@@ -557,16 +557,12 @@ fn get_record_not_found() {
     }))
 }
 
-/// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
+/// A node joining a fully connected network via three (`ALPHA_VALUE`) bootnodes
 /// should be able to put a record to the X closest nodes of the network where X
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(mut records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
-        tracing::trace!("remove records without a publisher");
-        // this test relies on counting republished `Record` against `records.len()`
-        records.retain(|r| r.publisher.is_some());
-
+    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
@@ -613,6 +609,8 @@ fn put_record() {
         #[allow(clippy::mutable_key_type)] // False positive, we never modify `Bytes`.
         let records = records
             .into_iter()
+            // Exclude records without a publisher.
+            .filter(|r| r.publisher.is_some())
             .take(num_total)
             .map(|mut r| {
                 // We don't want records to expire prematurely, as they would
