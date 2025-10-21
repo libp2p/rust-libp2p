@@ -139,7 +139,7 @@ impl Handler {
             remote_peer_id,
             events: SmallVec::new(),
             active_streams: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             trigger_next_identify: Delay::new(Duration::ZERO),

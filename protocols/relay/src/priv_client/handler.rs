@@ -142,19 +142,19 @@ impl Handler {
             queued_events: Default::default(),
             pending_streams: Default::default(),
             inflight_reserve_requests: futures_bounded::FuturesTupleSet::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_inbound_circuit_requests: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_circuit_deny_requests: futures_bounded::FuturesSet::new(
-                DENYING_CIRCUIT_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(DENYING_CIRCUIT_TIMEOUT),
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
             reservation: Reservation::None,
