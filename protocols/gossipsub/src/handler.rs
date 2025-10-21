@@ -37,7 +37,7 @@ use web_time::Instant;
 
 use crate::{
     protocol::{GossipsubCodec, ProtocolConfig},
-    rpc::Receiver,
+    queue::Queue,
     rpc_proto::proto,
     types::{PeerKind, RawMessage, RpcIn, RpcOut},
     ValidationError,
@@ -98,8 +98,8 @@ pub struct EnabledHandler {
     /// The single long-lived inbound substream.
     inbound_substream: Option<InboundSubstreamState>,
 
-    /// Queue of values that we want to send to the remote
-    send_queue: Receiver,
+    /// Queue of dispatched Rpc messages to send.
+    message_queue: Queue,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -162,7 +162,7 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub fn new(protocol_config: ProtocolConfig, message_queue: Receiver) -> Self {
+    pub(crate) fn new(protocol_config: ProtocolConfig, message_queue: Queue) -> Self {
         Handler::Enabled(EnabledHandler {
             listen_protocol: protocol_config,
             inbound_substream: None,
@@ -170,7 +170,7 @@ impl Handler {
             outbound_substream_establishing: false,
             outbound_substream_attempts: 0,
             inbound_substream_attempts: 0,
-            send_queue: message_queue,
+            message_queue,
             peer_kind: None,
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
@@ -234,7 +234,7 @@ impl EnabledHandler {
         }
 
         // determine if we need to create the outbound stream
-        if !self.send_queue.poll_is_empty(cx)
+        if !self.message_queue.is_empty()
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
@@ -252,15 +252,18 @@ impl EnabledHandler {
             {
                 // outbound idle state
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
-                    if let Poll::Ready(Some(mut message)) = self.send_queue.poll_next_unpin(cx) {
+                    if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
+                    {
                         match message {
                             RpcOut::Publish {
                                 message: _,
                                 ref mut timeout,
+                                ..
                             }
                             | RpcOut::Forward {
                                 message: _,
                                 ref mut timeout,
+                                ..
                             } => {
                                 if Pin::new(timeout).poll(cx).is_ready() {
                                     // Inform the behaviour and end the poll.
@@ -405,13 +408,6 @@ impl EnabledHandler {
                     unreachable!("Error occurred during inbound stream processing")
                 }
             }
-        }
-
-        // Drop the next message in queue if it's stale.
-        if let Poll::Ready(Some(rpc)) = self.send_queue.poll_stale(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                HandlerEvent::MessageDropped(rpc),
-            ));
         }
 
         Poll::Pending
