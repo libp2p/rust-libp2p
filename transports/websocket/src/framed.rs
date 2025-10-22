@@ -34,7 +34,7 @@ use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
     Transport,
 };
 use parking_lot::Mutex;
@@ -122,7 +122,7 @@ where
     type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
     fn listen_on(
         &mut self,
@@ -300,7 +300,7 @@ where
         addr: WsAddress,
         tls_config: tls::Config,
         dial_opts: DialOpts,
-    ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+    ) -> Result<Either<String, (Connection<T::Output>, PortUse)>, Error<T::Error>> {
         tracing::trace!(address=?addr, "Dialing websocket address");
 
         let dial = transport
@@ -311,7 +311,7 @@ where
                 TransportError::Other(e) => Error::Transport(e),
             })?;
 
-        let stream = dial.map_err(Error::Transport).await?;
+        let (stream, port_use) = dial.map_err(Error::Transport).await?;
         tracing::trace!(port=%addr.host_port, "TCP connection established");
 
         let stream = if addr.use_tls {
@@ -359,7 +359,10 @@ where
             }
             handshake::ServerResponse::Accepted { .. } => {
                 tracing::trace!(port=%addr.host_port, "websocket handshake successful");
-                Ok(Either::Right(Connection::new(client.into_builder())))
+                Ok(Either::Right((
+                    Connection::new(client.into_builder()),
+                    port_use,
+                )))
             }
         }
     }
