@@ -1,3 +1,9 @@
+## 0.6.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.5.0
 
 - fix: Return `None` when extracting a `/dnsaddr` address

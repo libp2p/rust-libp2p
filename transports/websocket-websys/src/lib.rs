@@ -40,7 +40,7 @@ use futures::{future::Ready, io, prelude::*, task::AtomicWaker};
 use js_sys::Array;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use send_wrapper::SendWrapper;
 use wasm_bindgen::prelude::*;
@@ -78,7 +78,7 @@ impl libp2p_core::Transport for Transport {
     type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<(Self::Output, PortUse), Self::Error>> + Send>>;
 
     fn listen_on(
         &mut self,
@@ -110,7 +110,9 @@ impl libp2p_core::Transport for Transport {
                 Err(_) => return Err(Error::invalid_websocket_url(&url)),
             };
 
-            Ok(Connection::new(socket))
+            // WebSocket in browser (WASM) doesn't support port reuse
+            // The browser controls the local port, so we always use the new one
+            Ok((Connection::new(socket), PortUse::New))
         }
         .boxed())
     }
