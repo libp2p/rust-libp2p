@@ -1,3 +1,9 @@
+## 0.44.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.43.1
 
 - Rename Config to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
