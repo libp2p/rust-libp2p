@@ -146,7 +146,7 @@ fn run(
     // Spawn and block on the sender, i.e. until all data is sent.
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, mut conn) = sender_trans
+        let ((_peer, mut conn), _port_use) = sender_trans
             .dial(
                 addr,
                 transport::DialOpts {
