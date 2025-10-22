@@ -29,7 +29,7 @@ use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -77,7 +77,7 @@ impl libp2p_core::Transport for Transport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
     fn listen_on(
         &mut self,
@@ -138,6 +138,7 @@ impl libp2p_core::Transport for Transport {
 
         let config = self.config.clone();
         let client_fingerprint = self.config.fingerprint;
+        // WebRTC connections share the same underlying UDP socket
         let udp_mux = self
             .listeners
             .iter()
@@ -157,7 +158,8 @@ impl libp2p_core::Transport for Transport {
             )
             .await?;
 
-            Ok((peer_id, connection))
+            // Since we got here, we're reusing the UDP port from the listener (via udp_mux)
+            Ok(((peer_id, connection), PortUse::Reuse))
         }
         .boxed())
     }
