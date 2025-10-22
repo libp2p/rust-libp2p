@@ -103,7 +103,7 @@ async fn wrapped_with_delay() {
         type Output = (PeerId, StreamMuxerBox);
         type Error = std::io::Error;
         type ListenerUpgrade = Pin<Box<dyn Future<Output = io::Result<Self::Output>> + Send>>;
-        type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+        type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
         fn listen_on(
             &mut self,
@@ -195,7 +195,8 @@ async fn wrapped_with_delay() {
     let (a_connected, b_connected) = future::join(listener, dial).await;
 
     assert_eq!(a_connected.unwrap(), b_peer_id);
-    assert_eq!(b_connected.unwrap(), a_peer_id);
+    let (peer_id, _stream) = b_connected.unwrap();
+    assert_eq!(peer_id, a_peer_id);
 }
 
 #[cfg(feature = "tokio")]
@@ -786,7 +787,7 @@ async fn dial(
     )
     .await
     {
-        Either::Left((conn, _)) => conn,
+        Either::Left((res, _)) => res.map(|(output, _port_use)| output),
         Either::Right((event, _)) => {
             panic!("Unexpected event: {event:?}")
         }
