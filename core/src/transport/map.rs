@@ -62,7 +62,7 @@ where
 {
     type Output = D;
     type Error = T::Error;
-    type ListenerUpgrade = MapListenerUpgradeFuture<T::ListenerUpgrade, F>;
+    type ListenerUpgrade = MapListenerFuture<T::ListenerUpgrade, F>;
     type Dial = MapDialFuture<T::Dial, F>;
 
     fn listen_on(
@@ -112,7 +112,7 @@ where
                 };
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id,
-                    upgrade: MapListenerUpgradeFuture {
+                    upgrade: MapListenerFuture {
                         inner: upgrade,
                         args: Some((this.fun.clone(), point)),
                     },
@@ -134,13 +134,13 @@ where
 /// Applies a function to the inner future's result.
 #[pin_project::pin_project]
 #[derive(Clone, Debug)]
-pub struct MapListenerUpgradeFuture<T, F> {
+pub struct MapListenerFuture<T, F> {
     #[pin]
     inner: T,
     args: Option<(F, ConnectedPoint)>,
 }
 
-impl<T, A, F, B> Future for MapListenerUpgradeFuture<T, F>
+impl<T, A, F, B> Future for MapListenerFuture<T, F>
 where
     T: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B,
