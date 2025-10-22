@@ -116,7 +116,7 @@ use hickory_resolver::{
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -161,7 +161,7 @@ where
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
-        BoxFuture<'static, Result<Self::Output, Self::Error>>,
+        BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>,
     >;
 
     fn listen_on(
@@ -612,7 +612,7 @@ mod tests {
             type Output = ();
             type Error = std::io::Error;
             type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
             fn listen_on(
                 &mut self,
@@ -636,7 +636,7 @@ mod tests {
                     p,
                     Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
                 )));
-                Ok(Box::pin(future::ready(Ok(()))))
+                Ok(Box::pin(future::ready(Ok(((), PortUse::Reuse)))))
             }
 
             fn poll(
@@ -765,7 +765,7 @@ mod tests {
             type Output = ();
             type Error = std::io::Error;
             type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
             fn listen_on(
                 &mut self,
