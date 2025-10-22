@@ -314,7 +314,7 @@ where
 {
     type Output = T::Stream;
     type Error = io::Error;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<(Self::Output, PortUse), Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -372,9 +372,19 @@ where
         let local_config = self.config.clone();
 
         Ok(async move {
+            // Track the actual port use that succeede
+            let mut actual_port_use: PortUse;
+
             if let Some(bind_addr) = bind_addr {
                 socket.bind(&bind_addr.into())?;
             }
+
+            // Determine the actual port use based on whether we bound to a local address
+            actual_port_use = if bind_addr.is_some() {
+                PortUse::Reuse
+            } else {
+                PortUse::New
+            };
 
             // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
             // do the `connect` call within the [`Future`].
@@ -388,6 +398,10 @@ where
                     tracing::debug!(connect_addr = %socket_addr, ?bind_addr, "Failed to connect using existing socket because we already have a connection, re-dialing with new port");
                     std::mem::drop(socket);
                     let socket = local_config.create_socket(socket_addr, PortUse::New)?;
+
+                    // We're definitely using a new port now
+                    actual_port_use = PortUse::New;
+
                     match socket.connect(&socket_addr.into()) {
                         Ok(()) => socket,
                         Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => socket,
@@ -399,7 +413,7 @@ where
             };
 
             let stream = T::new_stream(socket.into()).await?;
-            Ok(stream)
+            Ok((stream, actual_port_use))
         }
         .boxed())
     }
@@ -786,7 +800,7 @@ mod tests {
             let mut tcp = Transport::<T>::default();
 
             // Obtain a future socket through dialing
-            let mut socket = tcp
+            let (mut socket, _port_use) = tcp
                 .dial(
                     addr.clone(),
                     DialOpts {
@@ -954,7 +968,7 @@ mod tests {
                         .ok();
 
                     // Obtain a future socket through dialing
-                    let mut socket = tcp
+                    let (mut socket, _port_use) = tcp
                         .dial(
                             dest_addr,
                             DialOpts {
