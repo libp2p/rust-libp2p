@@ -1,3 +1,9 @@
+## 0.9.0-alpha.3
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.9.0-alpha.2
 
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
