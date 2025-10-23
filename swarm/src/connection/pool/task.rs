@@ -28,7 +28,7 @@ use futures::{
     future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
-use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::{muxing::StreamMuxerBox, transport::PortUse};
 
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
@@ -50,14 +50,22 @@ pub(crate) enum Command<T> {
     Close,
 }
 
+/// Additional data for an outgoing connection.
+pub(crate) struct OutgoingConnectionData {
+    pub(crate) address: Multiaddr,
+    /// The port used policy for the connection.
+    pub(crate) port_use: PortUse,
+    /// Addresses are dialed in parallel. Contains the addresses and errors
+    /// of dial attempts that failed before the one successful dial.
+    pub(crate) errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
+}
+
 pub(crate) enum PendingConnectionEvent {
     ConnectionEstablished {
         id: ConnectionId,
         output: (PeerId, StreamMuxerBox),
         /// [`Some`] when the new connection is an outgoing connection.
-        /// Addresses are dialed in parallel. Contains the addresses and errors
-        /// of dial attempts that failed before the one successful dial.
-        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<std::io::Error>)>)>,
+        outgoing: Option<OutgoingConnectionData>,
     },
     /// A pending connection failed.
     PendingFailed {
@@ -107,12 +115,16 @@ pub(crate) async fn new_for_pending_outgoing_connection(
                 .await;
         }
         Either::Left((Ok(v), _)) => libp2p_core::util::unreachable(v),
-        Either::Right((Ok((address, output, errors)), _)) => {
+        Either::Right((Ok((address, (output, port_use), errors)), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
                     id: connection_id,
                     output,
-                    outgoing: Some((address, errors)),
+                    outgoing: Some(OutgoingConnectionData {
+                        address,
+                        port_use,
+                        errors,
+                    }),
                 })
                 .await;
         }
