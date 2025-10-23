@@ -1,3 +1,8 @@
+## 0.17.2
+
+- changes to transport implementation due to changes in the `Trasnport::Dial` future which returns PortUse policy.
+See [PR ]
+
 ## 0.17.1
 
 - Fix panic in swarm metrics when `ConnectionClosed` events are received for connections that were established before metrics collection started.
