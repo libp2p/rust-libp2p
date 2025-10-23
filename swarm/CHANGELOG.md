@@ -1,3 +1,13 @@
+## 0.47.1
+
+- Updated underlying `Transport::Dial` promise now yields the actual port used policy as `Transport::PortUse`.
+  `ConcurrentDial` futures used within the Connection pool, once resolved in the `new_for_pending_outgoing_connection`
+  task will provide the `PendingConnectionEvent::ConnectionEstablished` event with `Transport::PortUse` data.
+  Polling these event in the Coonection pool handler will eventually provide the `ConnectedPoint::Dialer` with
+  the actual `Transport::PortUse` policy used for that connection.
+
+
+
 ## 0.47.0
 
 - Remove `async-std` support.

@@ -46,8 +46,8 @@ use web_time::{Duration, Instant};
 
 use crate::{
     connection::{
-        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
-        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
+        pool::task::OutgoingConnectionData, Connected, Connection, ConnectionError, ConnectionId,
+        IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
     ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
@@ -418,7 +418,7 @@ where
                 'static,
                 (
                     Multiaddr,
-                    Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
+                    Result<((PeerId, StreamMuxerBox), PortUse), TransportError<std::io::Error>>,
                 ),
             >,
         >,
@@ -655,16 +655,19 @@ where
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
                         (
-                            PendingPoint::Dialer {
-                                role_override,
-                                port_use,
-                            },
-                            Some((address, errors)),
+                            PendingPoint::Dialer { role_override, .. },
+                            Some(OutgoingConnectionData {
+                                address,
+                                // Get the actual port used for the connection
+                                port_use: actual_port_use,
+                                errors,
+                            }),
                         ) => (
                             ConnectedPoint::Dialer {
                                 address,
                                 role_override,
-                                port_use,
+                                // And update the ConnectedPoint with proper port used
+                                port_use: actual_port_use,
                             },
                             Some(errors),
                         ),
