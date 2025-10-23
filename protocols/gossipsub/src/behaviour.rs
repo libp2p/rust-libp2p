@@ -2203,7 +2203,7 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > mesh_n_high {
+            if peers.len() >= mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",
