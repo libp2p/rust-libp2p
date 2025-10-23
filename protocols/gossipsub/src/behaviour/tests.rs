@@ -6091,6 +6091,8 @@ fn test_mesh_subtraction_with_topic_config() {
     );
 }
 
+/// Tests that if a mesh reaches `mesh_n_high`,
+/// but is only composed of outbound peers, it is not reduced to `mesh_n`.
 #[test]
 fn test_mesh_subtraction_with_topic_config_min_outbound() {
     let topic = String::from("topic1");
