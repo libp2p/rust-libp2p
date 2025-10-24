@@ -1,3 +1,9 @@
+## 0.45.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.44.0
 
 - Remove `async-std` support.

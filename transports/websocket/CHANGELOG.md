@@ -1,3 +1,9 @@
+## 0.46.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.45.2
 
 - feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport

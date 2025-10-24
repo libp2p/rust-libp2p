@@ -1,3 +1,9 @@
+## 0.45.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR ]
+
 ## 0.44.0
 
 - Removed `async_std` module [PR 5959](https://github.com/libp2p/rust-libp2p/pull/5959)
