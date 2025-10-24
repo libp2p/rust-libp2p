@@ -1366,8 +1366,6 @@ where
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-        // Needs to be here to comply with the borrow checker.
-        let is_outbound = connected_peer.outbound;
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
@@ -1419,8 +1417,6 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
-                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
-                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
@@ -1455,10 +1451,9 @@ where
                     }
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
-                    // or if it is an outbound peer
                     let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
 
-                    if peers.len() >= mesh_n_high && !is_outbound {
+                    if peers.len() >= mesh_n_high {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -2208,7 +2203,7 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > mesh_n_high {
+            if peers.len() >= mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",

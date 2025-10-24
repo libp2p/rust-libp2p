@@ -1,4 +1,7 @@
 ## 0.50.0
+- Prevent mesh exceeding mesh_n_high.
+  See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
+
 - Fix underflow when shuffling peers after prunning.
   See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
 
