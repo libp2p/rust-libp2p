@@ -1,7 +1,7 @@
-## 0.21.2
+## 0.22.0
 
 - changes to `priv_client` due to changes in the `Trasnport::Dial` future which returns PortUse policy.
-See [PR ]
+See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
 
 ## 0.21.1
 

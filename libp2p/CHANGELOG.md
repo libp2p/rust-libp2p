@@ -1,8 +1,8 @@
 ## 0.56.2
 
 - changes to `SelectMuxerUpgrade` and `SelectSecurityUpgrade` due to changes in the `Transport::Dial` future
-  which returns PortUse policy.
-  See [PR ]
+  which returns PortUse policy. Using appropriate `EitherUpgradeFuture` as returned future for connection upgrades.
+  See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
 
 ## 0.56.1
 
