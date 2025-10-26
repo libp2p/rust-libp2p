@@ -388,7 +388,8 @@ impl NetworkBehaviour for Behaviour {
                             handler::In::EstablishCircuit {
                                 to_dial: send_back,
                                 dst_peer_id,
-                                port_use: PortUse::Reuse, // Will be updated when connection establishes
+                                port_use: PortUse::Reuse, /* Will be updated when connection
+                                                           * establishes */
                             },
                         );
 
