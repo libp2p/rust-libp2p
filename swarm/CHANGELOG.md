@@ -5,8 +5,7 @@
   task will provide the `PendingConnectionEvent::ConnectionEstablished` event with `Transport::PortUse` data.
   Polling these event in the Coonection pool handler will eventually provide the `ConnectedPoint::Dialer` with
   the actual `Transport::PortUse` policy used for that connection.
-
-
+  See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
 
 ## 0.47.0
 

@@ -2,7 +2,7 @@
 
 - Implement changed `Transport::Dial` future.
 - For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
-  See [PR ]
+  See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
 
 ## 0.45.2
 

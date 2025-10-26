@@ -2,7 +2,7 @@
 - Updated `Transport::Dial` future for outbound connections, which on success now yields:
   - `Transport::Output` as a handle to the established data stream,
   - `Transport::PortUse` as the port reuse policy used while creating the outbound connection.
-See [PR]
+See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
 
 ## 0.43.1
 - Remove `once_cell` dependency.
