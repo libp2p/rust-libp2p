@@ -3,7 +3,8 @@ use std::str::FromStr;
 use futures::{channel::mpsc, StreamExt};
 use js_sys::{Object, Reflect};
 use libp2p::{
-    identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, yamux, Multiaddr, PeerId, Swarm, Transport
+    identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent,
+    yamux, Multiaddr, PeerId, Swarm, Transport
 };
 use libp2p_core::{muxing::StreamMuxerBox, upgrade::Version};
 use libp2p_swarm::NetworkBehaviour;
@@ -41,20 +42,20 @@ pub struct BrowserTransport {
     cmd_sender: mpsc::UnboundedSender<Command>,
     event_receiver: std::sync::Arc<futures::lock::Mutex<mpsc::UnboundedReceiver<Event>>>,
     peer_id: String,
-    connections: std::sync::Arc<futures::lock::Mutex<std::collections::HashMap<PeerId, libp2p_webrtc_websys::Connection>>>,
 }
 
 enum Command {
     ListenOnRelay { addr: Multiaddr },
     DialPeer { addr: Multiaddr },
+    ListenForWebRTC,
 }
 
 #[derive(Debug, Clone)]
 enum Event {
-    ReservationCreated,
-    ConnectionEstablished { peer_id: String },
-    PingSuccess { peer_id: String, rtt_ms: f64 },
+    ReservationCreated { address: String },
+    RelayConnectionEstablished { peer_id: String },
     WebRTCConnectionEstablished { peer_id: String },
+    PingSuccess { peer_id: String, rtt_ms: f64 },
     Error { msg: String },
 }
 
@@ -100,7 +101,7 @@ impl BrowserTransport {
             std::time::Duration::from_millis(100), // connection check delay
             300,                                   // max connection checks (30 seconds)
             std::time::Duration::from_secs(10),    // ICE gathering timeout
-            keypair.public().to_peer_id(),         // The local peers peer_id derived from the public key
+            keypair.public().to_peer_id(),         // The local peer's peer_id
         );
 
         let (webrtc_transport, webrtc_behaviour) =
@@ -148,17 +149,19 @@ impl BrowserTransport {
 
         let (cmd_sender, mut cmd_receiver) = mpsc::unbounded();
         let (event_sender, event_receiver) = mpsc::unbounded();
-         let connections = std::sync::Arc::new(futures::lock::Mutex::new(std::collections::HashMap::new()));
-        let connections_clone = connections.clone();
 
         spawn_local(async move {
+            let mut relay_address: Option<Multiaddr> = None;
+            let mut webrtc_listening = false;
+
             loop {
                 futures::select! {
                     cmd = cmd_receiver.next() => {
                         if let Some(cmd) = cmd {
                             match cmd {
                                 Command::ListenOnRelay { addr } => {
-                                    // Build the circuit address for reservation by adding /p2p-circuit
+                                    relay_address = Some(addr.clone());
+                                    // Build the circuit address for reservation
                                     let circuit_addr = addr.with(Protocol::P2pCircuit);
 
                                     match swarm.listen_on(circuit_addr.clone()) {
@@ -181,6 +184,25 @@ impl BrowserTransport {
                                         });
                                     }
                                 }
+                                Command::ListenForWebRTC => {
+                                    if !webrtc_listening {
+                                        // Create a virtual WebRTC listener address
+                                        let webrtc_addr = Multiaddr::from_str(&format!(
+                                            "/memory/0/webrtc/p2p/{}",
+                                            local_peer_id
+                                        )).unwrap();
+
+                                        match swarm.listen_on(webrtc_addr.clone()) {
+                                            Ok(listener_id) => {
+                                                webrtc_listening = true;
+                                                tracing::info!("WebRTC listener created with id: {}", listener_id);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Failed to create WebRTC listener: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -190,28 +212,33 @@ impl BrowserTransport {
                             SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, .. } => {
                                 let remote_addr = endpoint.get_remote_address().to_string();
 
-                                if remote_addr.contains("/webrtc") {
+                                if remote_addr.contains("/webrtc") && !remote_addr.contains("/p2p-circuit") {
                                     tracing::info!(
-                                        "WebRTC connection established with: {} via {} (connection_id: {})",
+                                        "Direct WebRTC connection established with: {} via {} (connection_id: {})",
                                         peer_id, remote_addr, connection_id
                                     );
 
                                     let _ = event_sender.unbounded_send(Event::WebRTCConnectionEstablished {
                                         peer_id: peer_id.to_string()
                                     });
-                                } else {
+                                } else if remote_addr.contains("/p2p-circuit") {
                                     tracing::info!(
                                         "Relay connection established with: {} via {} (connection_id: {})",
                                         peer_id, remote_addr, connection_id
                                     );
-                                }
 
-                                let _ = event_sender.unbounded_send(Event::ConnectionEstablished {
-                                    peer_id: peer_id.to_string()
-                                });
+                                    let _ = event_sender.unbounded_send(Event::RelayConnectionEstablished {
+                                        peer_id: peer_id.to_string()
+                                    });
+                                }
                             }
-                            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
-                                tracing::info!("Connection closed with {}: {:?}", peer_id, cause);
+                            SwarmEvent::ConnectionClosed { peer_id, cause, endpoint, .. } => {
+                                let addr = endpoint.get_remote_address().to_string();
+                                if addr.contains("/p2p-circuit") && !addr.contains("/webrtc") {
+                                    tracing::info!("Relay connection closed with {}: {:?}", peer_id, cause);
+                                } else if addr.contains("/webrtc") {
+                                    tracing::info!("WebRTC connection closed with {}: {:?}", peer_id, cause);
+                                }
                             }
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                                 tracing::error!("Outgoing connection error to {:?}: {}", peer_id, error);
@@ -222,26 +249,32 @@ impl BrowserTransport {
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 tracing::info!("Listening on: {}", address);
                                 if address.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
-                                    tracing::info!("Relay reservation address: {}", address);
-                                    let _ = event_sender.unbounded_send(Event::ReservationCreated);
+                                    // Generate the complete WebRTC address
+                                    if let Some(relay_addr) = &relay_address {
+                                        let webrtc_addr = format!(
+                                            "{}/p2p-circuit/webrtc/p2p/{}",
+                                            relay_addr,
+                                            local_peer_id
+                                        );
+                                        tracing::info!("WebRTC address: {}", webrtc_addr);
+                                        let _ = event_sender.unbounded_send(Event::ReservationCreated {
+                                            address: webrtc_addr,
+                                        });
+                                    }
                                 }
                             }
                             SwarmEvent::Behaviour(event) => {
                                 match event {
                                     WebRTCBehaviourEvent::Webrtc(webrtc_event) => {
                                         match webrtc_event {
-                                            browser::SignalingEvent::NewWebRTCConnection(connection) => {
-                                                tracing::info!("Successfully established connection - application level");
-
-                                                // At this point, the connection is independent of the relay
-
-                                                // TODO: Pass the associated peer from the conn handler.
-                                                 connections_clone.lock().await.insert(PeerId::random(), connection);
+                                            browser::SignalingEvent::NewWebRTCConnection { peer_id } => {
+                                                tracing::info!("WebRTC connection established with peer: {}", peer_id);
+                                                // Connection is now managed by the swarm
                                             }
-                                            browser::SignalingEvent::WebRTCConnectionError(error) => {
-                                                tracing::error!("Failed to establish WebRTC connection: {:?}", error);
+                                            browser::SignalingEvent::WebRTCConnectionError { peer_id, error } => {
+                                                tracing::error!("Failed to establish WebRTC connection with {}: {:?}", peer_id, error);
                                                 let _ = event_sender.unbounded_send(Event::Error {
-                                                    msg: format!("WebRTC connection error: {}", error)
+                                                    msg: format!("WebRTC error with {}: {}", peer_id, error)
                                                 });
                                             }
                                         }
@@ -276,7 +309,6 @@ impl BrowserTransport {
             cmd_sender,
             event_receiver: std::sync::Arc::new(futures::lock::Mutex::new(event_receiver)),
             peer_id: local_peer_id.to_string(),
-            connections
         })
     }
 
@@ -288,6 +320,11 @@ impl BrowserTransport {
         self.cmd_sender
             .unbounded_send(Command::ListenOnRelay { addr })
             .map_err(|e| JsValue::from_str(&format!("Failed to send command: {}", e)))?;
+
+        // Also setup WebRTC listener
+        self.cmd_sender
+            .unbounded_send(Command::ListenForWebRTC)
+            .map_err(|e| JsValue::from_str(&format!("Failed to setup WebRTC listener: {}", e)))?;
 
         Ok(())
     }
@@ -317,11 +354,12 @@ impl BrowserTransport {
             let obj = Object::new();
 
             match event {
-                Event::ReservationCreated => {
+                Event::ReservationCreated { address } => {
                     Reflect::set(&obj, &"type".into(), &"reservationCreated".into())?;
+                    Reflect::set(&obj, &"address".into(), &address.into())?;
                 }
-                Event::ConnectionEstablished { peer_id } => {
-                    Reflect::set(&obj, &"type".into(), &"connectionEstablished".into())?;
+                Event::RelayConnectionEstablished { peer_id } => {
+                    Reflect::set(&obj, &"type".into(), &"relayConnectionEstablished".into())?;
                     Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
                 }
                 Event::WebRTCConnectionEstablished { peer_id } => {

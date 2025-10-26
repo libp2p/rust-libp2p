@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .with(Protocol::Tcp(port))
                     .with(Protocol::Ws(std::borrow::Cow::Borrowed("/")));
 
-                tracing::info!(?address, "Listening on webSocket");
+               // println!("Listening on {:?}", address);
                 swarm.listen_on(address.clone())?;
             }
             None => {
