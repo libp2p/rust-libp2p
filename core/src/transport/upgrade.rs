@@ -408,7 +408,7 @@ where
             .dial(addr, opts)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
-            future: future,
+            future,
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
     }
@@ -436,7 +436,7 @@ where
         this.inner.poll(cx).map(|event| {
             event
                 .map_upgrade(move |future| ListenerUpgradeFuture {
-                    future: future,
+                    future,
                     upgrade: future::Either::Left(Some(upgrade)),
                 })
                 .map_err(TransportUpgradeError::Transport)
