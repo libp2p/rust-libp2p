@@ -39,7 +39,10 @@ use futures::{future::BoxFuture, prelude::*, ready};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    transport::{map::MapFuture, DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{
+        map::{MapDialFuture, MapListenerFuture},
+        DialOpts, ListenerId, PortUse, TransportError, TransportEvent,
+    },
     Transport,
 };
 use rw_stream_sink::RwStreamSink;
@@ -206,8 +209,9 @@ where
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
     type Error = Error<T::Error>;
-    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
-    type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type ListenerUpgrade =
+        MapListenerFuture<InnerListenerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type Dial = MapDialFuture<InnerDialFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
     fn listen_on(
         &mut self,
@@ -237,8 +241,11 @@ where
     }
 }
 
-/// Type alias corresponding to `framed::Config::Dial` and `framed::Config::ListenerUpgrade`.
-pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
+/// Type alias corresponding to `framed::Config::ListenerUpgrade`.
+pub type InnerListenerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
+
+/// Type alias corresponding to `framed::Config::Dial`.
+pub type InnerDialFuture<T, E> = BoxFuture<'static, Result<(Connection<T>, PortUse), Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
 pub type WrapperFn<T> = fn(Connection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;

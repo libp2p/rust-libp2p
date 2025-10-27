@@ -29,7 +29,7 @@ use futures::{
     ready,
     stream::{FuturesUnordered, StreamExt},
 };
-use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::{muxing::StreamMuxerBox, transport::PortUse};
 use libp2p_identity::PeerId;
 
 use crate::{transport::TransportError, Multiaddr};
@@ -38,7 +38,7 @@ type Dial = BoxFuture<
     'static,
     (
         Multiaddr,
-        Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
+        Result<((PeerId, StreamMuxerBox), PortUse), TransportError<std::io::Error>>,
     ),
 >;
 
@@ -76,7 +76,7 @@ impl Future for ConcurrentDial {
         // muxer and the addresses and errors of the dials that failed before.
         (
             Multiaddr,
-            (PeerId, StreamMuxerBox),
+            ((PeerId, StreamMuxerBox), PortUse),
             Vec<(Multiaddr, TransportError<std::io::Error>)>,
         ),
         // Or all dials failed, thus returning the address and error for each dial.

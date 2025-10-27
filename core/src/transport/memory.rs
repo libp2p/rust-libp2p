@@ -37,7 +37,7 @@ use multiaddr::{Multiaddr, Protocol};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, PortUse, Transport, TransportError, TransportEvent};
 
 static HUB: LazyLock<Hub> = LazyLock::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
@@ -114,10 +114,11 @@ pub struct DialFuture {
     sender: ChannelSender,
     channel_to_send: Option<Channel<Vec<u8>>>,
     channel_to_return: Option<Channel<Vec<u8>>>,
+    port_use: PortUse,
 }
 
 impl DialFuture {
-    fn new(port: NonZeroU64) -> Option<Self> {
+    fn new(port: NonZeroU64, port_use: PortUse) -> Option<Self> {
         let sender = HUB.get(&port)?;
 
         let (_dial_port_channel, dial_port) = HUB
@@ -139,12 +140,13 @@ impl DialFuture {
                 outgoing: a_tx,
                 dial_port: Some(dial_port),
             })),
+            port_use,
         })
     }
 }
 
 impl Future for DialFuture {
-    type Output = Result<Channel<Vec<u8>>, MemoryTransportError>;
+    type Output = Result<(Channel<Vec<u8>>, PortUse), MemoryTransportError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.sender.poll_ready(cx) {
@@ -166,10 +168,12 @@ impl Future for DialFuture {
             return Poll::Ready(Err(MemoryTransportError::Unreachable));
         }
 
-        Poll::Ready(Ok(self
+        let chan = self
             .channel_to_return
             .take()
-            .expect("Future should not be polled again once complete")))
+            .expect("Future should not be polled again once complete");
+
+        Poll::Ready(Ok((chan, self.port_use)))
     }
 }
 
@@ -218,7 +222,7 @@ impl Transport for MemoryTransport {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        _opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
@@ -230,7 +234,8 @@ impl Transport for MemoryTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
+        DialFuture::new(port, opts.port_use)
+            .ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
     fn poll(
@@ -578,7 +583,7 @@ mod tests {
 
         let mut t2 = MemoryTransport::default();
         let dialer = async move {
-            let mut socket = t2
+            let (mut socket, _port_use) = t2
                 .dial(
                     cloned_t1_addr,
                     DialOpts {

@@ -59,7 +59,7 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
         )
         .unwrap();
     tokio::spawn(async move {
-        let connection = dial_fut.await.unwrap().1;
+        let (_peer_id, connection) = dial_fut.await.unwrap().0;
 
         let _ = dialer_conn_sender.send(connection);
     });

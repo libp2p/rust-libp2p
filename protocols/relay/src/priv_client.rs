@@ -103,6 +103,9 @@ pub struct Behaviour {
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Infallible>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
+
+    /// Tracks PortUse for outbound connections to relays
+    connection_port_use: HashMap<ConnectionId, PortUse>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -115,6 +118,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         reservation_addresses: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
+        connection_port_use: Default::default(),
     };
     (transport, behaviour)
 }
@@ -153,6 +157,9 @@ impl Behaviour {
                 self.queued_actions
                     .push_back(ToSwarm::ExternalAddrExpired(addr));
             }
+
+            // Clean up the PortUse tracking
+            self.connection_port_use.remove(&connection_id);
         }
     }
 }
@@ -188,13 +195,16 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
-        _: PortUse,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
 
         if addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
+
+        // Store the PortUse for this connection to the relay
+        self.connection_port_use.insert(connection_id, port_use);
 
         let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
 
@@ -347,14 +357,24 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.first())
                 {
-                    Some(connection_id) => ToSwarm::NotifyHandler {
-                        peer_id: relay_peer_id,
-                        handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::EstablishCircuit {
-                            to_dial: send_back,
-                            dst_peer_id,
-                        }),
-                    },
+                    Some(connection_id) => {
+                        // Get the PortUse for this connection to the relay
+                        let port_use = self
+                            .connection_port_use
+                            .get(connection_id)
+                            .copied()
+                            .unwrap_or(PortUse::New); // Fallback to New if not found
+
+                        ToSwarm::NotifyHandler {
+                            peer_id: relay_peer_id,
+                            handler: NotifyHandler::One(*connection_id),
+                            event: Either::Left(handler::In::EstablishCircuit {
+                                to_dial: send_back,
+                                dst_peer_id,
+                                port_use,
+                            }),
+                        }
+                    }
                     None => {
                         let opts = DialOpts::peer_id(relay_peer_id)
                             .addresses(vec![relay_addr])
@@ -362,11 +382,14 @@ impl NetworkBehaviour for Behaviour {
                             .build();
                         let connection_id = opts.connection_id();
 
+                        // For new dials, we'll use the PortUse default value
                         self.pending_handler_commands.insert(
                             connection_id,
                             handler::In::EstablishCircuit {
                                 to_dial: send_back,
                                 dst_peer_id,
+                                port_use: PortUse::Reuse, /* Will be updated when connection
+                                                           * establishes */
                             },
                         );
 

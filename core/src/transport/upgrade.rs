@@ -37,7 +37,7 @@ use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, DialOpts, ListenerId,
+        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, DialOpts, ListenerId, PortUse,
         Transport, TransportError, TransportEvent,
     },
     upgrade::{
@@ -408,7 +408,7 @@ where
             .dial(addr, opts)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
-            future: Box::pin(future),
+            future,
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
     }
@@ -436,7 +436,7 @@ where
         this.inner.poll(cx).map(|event| {
             event
                 .map_upgrade(move |future| ListenerUpgradeFuture {
-                    future: Box::pin(future),
+                    future,
                     upgrade: future::Either::Left(Some(upgrade)),
                 })
                 .map_err(TransportUpgradeError::Transport)
@@ -480,33 +480,33 @@ where
 }
 
 /// The [`Transport::Dial`] future of an [`Upgrade`]d transport.
+#[pin_project::pin_project]
 pub struct DialUpgradeFuture<F, U, C>
 where
     U: OutboundConnectionUpgrade<Negotiated<C>>,
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (PeerId, OutboundUpgradeApply<C, U>)>,
+    #[pin]
+    future: F,
+    upgrade: future::Either<Option<U>, (PeerId, PortUse, OutboundUpgradeApply<C, U>)>,
 }
 
 impl<F, U, C, D> Future for DialUpgradeFuture<F, U, C>
 where
-    F: TryFuture<Ok = (PeerId, C)>,
+    F: TryFuture<Ok = ((PeerId, C), PortUse)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundConnectionUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error,
 {
-    type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
+    type Output = Result<((PeerId, D), PortUse), TransportUpgradeError<F::Error, U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // across a `Deref`.
-        let this = &mut *self;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
 
         loop {
-            this.upgrade = match this.upgrade {
-                future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
+            match this.upgrade {
+                future::Either::Left(up) => {
+                    let ((i, c), pu) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
                         .map_err(TransportUpgradeError::Transport))
                     {
                         Ok(v) => v,
@@ -515,36 +515,34 @@ where
                     let u = up
                         .take()
                         .expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((i, apply_outbound(c, u, upgrade::Version::V1)))
+
+                    // Transition to the next state
+                    *this.upgrade =
+                        future::Either::Right((i, pu, apply_outbound(c, u, upgrade::Version::V1)));
                 }
-                future::Either::Right((i, ref mut up)) => {
+                future::Either::Right((i, port_use, ref mut up)) => {
                     let d = match ready!(
                         Future::poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)
                     ) {
                         Ok(d) => d,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    return Poll::Ready(Ok((i, d)));
+                    return Poll::Ready(Ok(((*i, d), *port_use)));
                 }
             }
         }
     }
 }
 
-impl<F, U, C> Unpin for DialUpgradeFuture<F, U, C>
-where
-    U: OutboundConnectionUpgrade<Negotiated<C>>,
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-}
-
 /// The [`Transport::ListenerUpgrade`] future of an [`Upgrade`]d transport.
+#[pin_project::pin_project]
 pub struct ListenerUpgradeFuture<F, U, C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundConnectionUpgrade<Negotiated<C>>,
 {
-    future: Pin<Box<F>>,
+    #[pin]
+    future: F,
     upgrade: future::Either<Option<U>, (PeerId, InboundUpgradeApply<C, U>)>,
 }
 
@@ -557,14 +555,12 @@ where
 {
     type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // across a `Deref`.
-        let this = &mut *self;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
 
         loop {
-            this.upgrade = match this.upgrade {
-                future::Either::Left(ref mut up) => {
+            match this.upgrade {
+                future::Either::Left(up) => {
                     let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
                         .map_err(TransportUpgradeError::Transport))
                     {
@@ -574,7 +570,9 @@ where
                     let u = up
                         .take()
                         .expect("ListenerUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((i, apply_inbound(c, u)))
+
+                    // Transition to the next state
+                    *this.upgrade = future::Either::Right((i, apply_inbound(c, u)));
                 }
                 future::Either::Right((i, ref mut up)) => {
                     let d = match ready!(TryFuture::try_poll(Pin::new(up), cx)
@@ -583,16 +581,9 @@ where
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    return Poll::Ready(Ok((i, d)));
+                    return Poll::Ready(Ok((*i, d)));
                 }
             }
         }
     }
-}
-
-impl<F, U, C> Unpin for ListenerUpgradeFuture<F, U, C>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundConnectionUpgrade<Negotiated<C>>,
-{
 }

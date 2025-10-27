@@ -13,7 +13,7 @@ use futures::{
 };
 use libp2p_core::{
     muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
@@ -72,7 +72,10 @@ where
     type Error = T::Error;
     type ListenerUpgrade =
         MapOk<T::ListenerUpgrade, Box<dyn FnOnce((PeerId, M)) -> (PeerId, Muxer<M>) + Send>>;
-    type Dial = MapOk<T::Dial, Box<dyn FnOnce((PeerId, M)) -> (PeerId, Muxer<M>) + Send>>;
+    type Dial = MapOk<
+        T::Dial,
+        Box<dyn FnOnce(((PeerId, M), PortUse)) -> ((PeerId, Muxer<M>), PortUse) + Send>,
+    >;
 
     fn listen_on(
         &mut self,
@@ -95,8 +98,8 @@ where
         Ok(self
             .transport
             .dial(addr.clone(), dial_opts)?
-            .map_ok(Box::new(|(peer_id, stream_muxer)| {
-                (peer_id, Muxer::new(stream_muxer, metrics))
+            .map_ok(Box::new(|((peer_id, stream_muxer), port_use)| {
+                ((peer_id, Muxer::new(stream_muxer, metrics)), port_use)
             })))
     }
 
