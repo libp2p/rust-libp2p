@@ -76,8 +76,26 @@ impl PeerScoreState {
 #[derive(Default)]
 pub(crate) struct PeerScoreReport {
     pub(crate) score: f64,
+    pub(crate) params: PeerScoreParameters,
     #[cfg(feature = "metrics")]
     pub(crate) penalties: Vec<crate::metrics::Penalty>,
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct PeerScoreParameters {
+    pub final_score: f64,
+    // weighted contributions per the spec.
+    // https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function
+    pub p1: f64,
+    pub p2: f64,
+    pub p3: f64,
+    pub p3b: f64,
+    pub p4: f64,
+    pub p5: f64,
+    pub p6: f64,
+    pub p7: f64,
+    // not part of the spec, but useful.
+    pub slow_peer_penalty: f64,
 }
 
 pub(crate) struct PeerScore {
@@ -273,14 +291,13 @@ impl PeerScore {
             return report;
         };
 
-        // topic scores
+        // topic scores - accumulate weighted contributions per P, including topic weight.
         for (topic, topic_stats) in peer_stats.topics.iter() {
             // topic parameters
             if let Some(topic_params) = self.params.topics.get(topic) {
                 // we are tracking the topic
 
-                // the topic score
-                let mut topic_score = 0.0;
+                let topic_weight = topic_params.topic_weight;
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
@@ -293,19 +310,22 @@ impl PeerScore {
                             topic_params.time_in_mesh_cap
                         }
                     };
-                    topic_score += p1 * topic_params.time_in_mesh_weight;
+                    let p1_contrib = p1 * topic_params.time_in_mesh_weight * topic_weight;
+                    report.params.p1 += p1_contrib;
                 }
 
                 // P2: first message deliveries
-                let p2 = {
+                {
                     let v = topic_stats.first_message_deliveries;
-                    if v < topic_params.first_message_deliveries_cap {
+                    let p2 = if v < topic_params.first_message_deliveries_cap {
                         v
                     } else {
                         topic_params.first_message_deliveries_cap
-                    }
-                };
-                topic_score += p2 * topic_params.first_message_deliveries_weight;
+                    };
+                    let p2_contrib =
+                        p2 * topic_params.first_message_deliveries_weight * topic_weight;
+                    report.params.p2 += p2_contrib;
+                }
 
                 // P3: mesh message deliveries
                 if topic_stats.mesh_message_deliveries_active
@@ -318,7 +338,9 @@ impl PeerScore {
                     let p3 = deficit * deficit;
                     let penalty = p3 * topic_params.mesh_message_deliveries_weight;
 
-                    topic_score += penalty;
+                    // contribution includes the topic weight.
+                    report.params.p3 += penalty * topic_weight;
+
                     #[cfg(feature = "metrics")]
                     report
                         .penalties
@@ -335,29 +357,41 @@ impl PeerScore {
                 // P3b:
                 // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so
                 // this detracts.
-                let p3b = topic_stats.mesh_failure_penalty;
-                topic_score += p3b * topic_params.mesh_failure_penalty_weight;
+                {
+                    let p3b_val = topic_stats.mesh_failure_penalty;
+                    let p3b_contrib =
+                        p3b_val * topic_params.mesh_failure_penalty_weight * topic_weight;
+                    report.params.p3b += p3b_contrib;
+                }
 
                 // P4: invalid messages
                 // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so
                 // this detracts.
-                let p4 =
-                    topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
-                topic_score += p4 * topic_params.invalid_message_deliveries_weight;
-
-                // update score, mixing with topic weight
-                report.score += topic_score * topic_params.topic_weight;
+                {
+                    let p4_val = topic_stats.invalid_message_deliveries
+                        * topic_stats.invalid_message_deliveries;
+                    let p4_contrib =
+                        p4_val * topic_params.invalid_message_deliveries_weight * topic_weight;
+                    report.params.p4 += p4_contrib;
+                }
             }
         }
 
-        // apply the topic score cap, if any
-        if self.params.topic_score_cap > 0f64 && report.score > self.params.topic_score_cap {
-            report.score = self.params.topic_score_cap;
+        // aggregate topic contributions.
+        let mut topic_total = report.params.p1
+            + report.params.p2
+            + report.params.p3
+            + report.params.p3b
+            + report.params.p4;
+
+        // apply the topic score cap, if any.
+        if self.params.topic_score_cap > 0f64 && topic_total > self.params.topic_score_cap {
+            topic_total = self.params.topic_score_cap;
         }
 
         // P5: application-specific score
-        let p5 = peer_stats.application_score;
-        report.score += p5 * self.params.app_specific_weight;
+        let p5 = peer_stats.application_score * self.params.app_specific_weight;
+        report.params.p5 = p5;
 
         // P6: IP collocation factor
         for ip in peer_stats.known_ips.iter() {
@@ -383,7 +417,7 @@ impl PeerScore {
                         surplus=%surplus,
                         "[Penalty] The peer gets penalized because of too many peers with the same ip"
                     );
-                    report.score += p6 * self.params.ip_colocation_factor_weight;
+                    report.params.p6 += p6 * self.params.ip_colocation_factor_weight;
                 }
             }
         }
@@ -391,15 +425,24 @@ impl PeerScore {
         // P7: behavioural pattern penalty.
         if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
             let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
-            let p7 = excess * excess;
-            report.score += p7 * self.params.behaviour_penalty_weight;
+            let p7 = (excess * excess) * self.params.behaviour_penalty_weight;
+            report.params.p7 = p7;
         }
 
         // Slow peer weighting.
         if peer_stats.slow_peer_penalty > self.params.slow_peer_threshold {
             let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
-            report.score += excess * self.params.slow_peer_weight;
+            report.params.slow_peer_penalty = excess * self.params.slow_peer_weight;
         }
+
+        // Final total score with cap applied on topic contributions.
+        report.score = topic_total
+            + report.params.p5
+            + report.params.p6
+            + report.params.p7
+            + report.params.slow_peer_penalty;
+
+        report.params.final_score = report.score;
 
         report
     }
