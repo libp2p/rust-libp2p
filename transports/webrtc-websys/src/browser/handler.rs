@@ -2,7 +2,9 @@ use std::task::Poll;
 
 use futures::FutureExt;
 use libp2p_core::{upgrade::ReadyUpgrade, PeerId};
-use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol};
+use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+};
 use tracing::{info, instrument};
 
 use crate::browser::{
@@ -25,12 +27,10 @@ pub enum FromBehaviourEvent {
     InitiateSignaling,
 }
 
-/// The current status of the signaling process
-/// for this handler.
+/// The current status of the signaling process for this handler.
 #[derive(Debug, PartialEq)]
 pub(crate) enum SignalingStatus {
-    /// Relay connection has been established but no signaling
-    /// attempts have been made
+    /// Relay connection has been established but no signaling attempts have been made
     Idle,
     /// Currently signaling (either as initiator or responder)
     Negotiating,
@@ -198,18 +198,12 @@ impl SignalingHandler {
     }
 }
 
-
 impl ConnectionHandler for SignalingHandler {
     type FromBehaviour = FromBehaviourEvent;
-
     type ToBehaviour = ToBehaviourEvent;
-
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
-
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
-
     type InboundOpenInfo = ();
-
     type OutboundOpenInfo = ();
 
     fn listen_protocol(
@@ -276,7 +270,7 @@ impl ConnectionHandler for SignalingHandler {
         }
     }
 
-     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         let should_be_initiator = self.should_be_initiator(&self.peer);
         match (&mut self.handler_type, event) {
             (HandlerType::Signaling { signaling_status, .. }, FromBehaviourEvent::InitiateSignaling) => {
@@ -284,10 +278,11 @@ impl ConnectionHandler for SignalingHandler {
                     || *signaling_status == SignalingStatus::WaitingForRetry
                 {
                     if should_be_initiator {
-                        tracing::info!("Initiating signaling with peer {}", self.peer);
-                        *signaling_status = SignalingStatus::AwaitingInitiation;
+                        tracing::info!("Initiating signaling with peer {} (I am initiator)", self.peer);
+                    *signaling_status = SignalingStatus::AwaitingInitiation;
                     } else {
-                        tracing::info!("Waiting for peer {} to initiate signaling", self.peer);
+                         tracing::info!("Waiting for peer {} to initiate signaling (I am responder)", self.peer);
+                    *signaling_status = SignalingStatus::Negotiating;
                     }
                 }
             }
@@ -297,120 +292,124 @@ impl ConnectionHandler for SignalingHandler {
 
     #[instrument(skip(self))]
     fn on_connection_event(
-        &mut self,
-        event: libp2p_swarm::handler::ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
-    ) {
-        let peer = self.peer.clone();
-        let should_be_initiator = self.should_be_initiator(&peer);
-        match &mut self.handler_type {
-            HandlerType::Noop | HandlerType::EstablishedWebRTC => return,
-            HandlerType::Signaling {
-                role,
-                signaling_status,
-                signaling_config,
-                signaling_result_receiver,
-                ..
-            } => {
-                match event {
-                    libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedInbound(
-                        fully_negotiated_inbound,
-                    ) => {
-                        info!("Received connection event for fully negotiated inbound - Local peer id : {}", self.local_peer_id);
+    &mut self,
+    event: libp2p_swarm::handler::ConnectionEvent<
+        Self::InboundProtocol,
+        Self::OutboundProtocol,
+        Self::InboundOpenInfo,
+        Self::OutboundOpenInfo,
+    >,
+) {
+    let should_be_initiator = self.should_be_initiator(&self.peer);
+    match &mut self.handler_type {
+        HandlerType::Noop | HandlerType::EstablishedWebRTC => return,
+        HandlerType::Signaling {
+            role,
+            signaling_status,
+            signaling_config,
+            signaling_result_receiver,
+            ..
+        } => {
+            match event {
+                libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedInbound(
+                    fully_negotiated_inbound,
+                ) => {
+                    info!("Received connection event for fully negotiated inbound - Local peer id : {}", self.local_peer_id);
 
-                        if role.is_some() || should_be_initiator {
-                            tracing::info!(
-                                "Ignoring inbound stream - role already assigned or should be initiator"
-                            );
-                            return;
-                        }
-
-                        tracing::info!(
-                            "Negotiated inbound substream for signaling with peer {}",
-                            self.peer
-                        );
-
-                        *role = Some(SignalingRole::Responder);
-                        *signaling_status = SignalingStatus::Negotiating;
-
-                        let substream = fully_negotiated_inbound.protocol;
-                        let signaling_protocol = ProtocolHandler::new(signaling_config.clone());
-
-                        let (tx, rx) = futures::channel::oneshot::channel();
-                        *signaling_result_receiver = Some(rx);
-
-                        wasm_bindgen_futures::spawn_local(async move {
-                            tracing::debug!("Starting signaling as responder");
-                            let signaling_result = signaling_protocol
-                                .signaling_as_responder(SignalingStream::new(substream))
-                                .await;
-
-                            let _ = tx.send(signaling_result);
-                        });
+                    if role.is_some() {
+                        tracing::info!("Ignoring inbound stream - role already assigned");
+                        return;
                     }
-                    libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedOutbound(
-                        fully_negotiated_outbound,
-                    ) => {
-                        info!("Received conn event for fully negotiated outbound - Local peer id: {}", self.local_peer_id);
 
-                        if role.is_some() || !should_be_initiator{
-                            tracing::info!(
-                                "Ignoring outbound stream - role already assigned or should be responder"
-                            );
-                            return;
-                        }
-
-                        tracing::info!(
-                            "Negotiated outbound substream for signaling with peer {}",
-                            self.peer
-                        );
-
-                        *role = Some(SignalingRole::Initiator);
-                        let substream = fully_negotiated_outbound.protocol;
-                        let signaling_protocol = ProtocolHandler::new(signaling_config.clone());
-
-                        let (tx, rx) = futures::channel::oneshot::channel();
-                        *signaling_result_receiver = Some(rx);
-
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let signaling_result = signaling_protocol
-                                .signaling_as_initiator(SignalingStream::new(substream))
-                                .await;
-
-                            let _ = tx.send(signaling_result);
-                        });
+                    if should_be_initiator {
+                        tracing::warn!("Accepting inbound stream even though I should be initiator (race condition)");
                     }
-                    libp2p_swarm::handler::ConnectionEvent::DialUpgradeError(error) => {
-                        if *role == Some(SignalingRole::Initiator)
-                            || *signaling_status == SignalingStatus::Negotiating
-                        {
-                            tracing::error!(
-                                "Outbound signaling upgrade failed with peer {}: {:?}",
-                                self.peer,
-                                error
-                            );
-                            *signaling_status = SignalingStatus::Fail;
-                        }
-                    }
-                    libp2p_swarm::handler::ConnectionEvent::ListenUpgradeError(error) => {
-                        if *role == Some(SignalingRole::Responder)
-                            || *signaling_status == SignalingStatus::Negotiating
-                        {
-                            tracing::error!(
-                                "Inbound signaling upgrade failed with peer {}: {:?}",
-                                self.peer,
-                                error
-                            );
-                            *signaling_status = SignalingStatus::Fail;
-                        }
-                    }
-                    _ => {}
+
+                    tracing::info!(
+                        "Negotiated inbound substream for signaling with peer {}",
+                        self.peer
+                    );
+
+                    *role = Some(SignalingRole::Responder);
+                    *signaling_status = SignalingStatus::Negotiating;
+
+                    let substream = fully_negotiated_inbound.protocol;
+                    let signaling_protocol = ProtocolHandler::new(signaling_config.clone());
+
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    *signaling_result_receiver = Some(rx);
+
+                    wasm_bindgen_futures::spawn_local(async move {
+                        tracing::debug!("Starting signaling as responder");
+                        let signaling_result = signaling_protocol
+                            .signaling_as_responder(SignalingStream::new(substream))
+                            .await;
+
+                        let _ = tx.send(signaling_result);
+                    });
                 }
+                libp2p_swarm::handler::ConnectionEvent::FullyNegotiatedOutbound(
+                    fully_negotiated_outbound,
+                ) => {
+                    info!("Received conn event for fully negotiated outbound - Local peer id: {}", self.local_peer_id);
+
+                    if role.is_some() {
+                        tracing::info!("Ignoring outbound stream - role already assigned");
+                        return;
+                    }
+
+                    if !should_be_initiator {
+                        tracing::warn!("Opening outbound stream even though I should be responder (race condition)");
+                    }
+
+                    tracing::info!(
+                        "Negotiated outbound substream for signaling with peer {}",
+                        self.peer
+                    );
+
+                    *role = Some(SignalingRole::Initiator);
+                    let substream = fully_negotiated_outbound.protocol;
+                    let signaling_protocol = ProtocolHandler::new(signaling_config.clone());
+
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    *signaling_result_receiver = Some(rx);
+
+                    wasm_bindgen_futures::spawn_local(async move {
+                        tracing::info!("Starting signaling as initiator");
+                        let signaling_result = signaling_protocol
+                            .signaling_as_initiator(SignalingStream::new(substream))
+                            .await;
+
+                        let _ = tx.send(signaling_result);
+                    });
+                }
+                libp2p_swarm::handler::ConnectionEvent::DialUpgradeError(error) => {
+                    if *role == Some(SignalingRole::Initiator)
+                        || *signaling_status == SignalingStatus::Negotiating
+                    {
+                        tracing::error!(
+                            "Outbound signaling upgrade failed with peer {}: {:?}",
+                            self.peer,
+                            error
+                        );
+                        *signaling_status = SignalingStatus::Fail;
+                    }
+                }
+                libp2p_swarm::handler::ConnectionEvent::ListenUpgradeError(error) => {
+                    if *role == Some(SignalingRole::Responder)
+                        || *signaling_status == SignalingStatus::Negotiating
+                    {
+                        tracing::error!(
+                            "Inbound signaling upgrade failed with peer {}: {:?}",
+                            self.peer,
+                            error
+                        );
+                        *signaling_status = SignalingStatus::Fail;
+                    }
+                }
+                _ => {}
             }
         }
     }
+}
 }

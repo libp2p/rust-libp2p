@@ -13,8 +13,7 @@ use send_wrapper::SendWrapper;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
-    RtcSessionDescriptionInit,
+    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType, RtcIceServer, RtcSessionDescriptionInit
 };
 use tracing::info;
 
@@ -197,6 +196,16 @@ impl RtcPeerConnection {
         let certificate_arr = js_sys::Array::new();
         certificate_arr.push(&certificate);
         config.set_certificates(&certificate_arr);
+
+        let stun_server = RtcIceServer::new();
+    stun_server.set_url("stun:stun.l.google.com:19302");
+
+    // ✅ Wrap the STUN server in a JavaScript Array
+    let ice_servers_array = js_sys::Array::new();
+    ice_servers_array.push(&stun_server);
+
+    // ✅ Pass the Array to set_ice_servers
+    config.set_ice_servers(&ice_servers_array.into());
 
         let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 

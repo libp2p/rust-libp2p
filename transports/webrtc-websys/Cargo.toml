@@ -50,6 +50,7 @@ web-sys = { version = "0.3.70", features = [
   "RtcIceGatheringState",
   "RtcIceCandidate",
   "RtcIceCandidateInit",
+  "RtcIceServer",
   "RtcPeerConnectionIceEvent",
   "Event",
   "EventTarget",
