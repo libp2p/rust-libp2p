@@ -41,11 +41,11 @@ use crate::{
     QueryInfo, ALPHA_VALUE, K_VALUE,
 };
 
-/// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
+/// A `QueryPool` provides an aggregate state machine for driving [`Query`] to completion.
 ///
-/// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
-/// that determines the peer selection strategy, i.e. the order in which the
-/// peers involved in the query should be contacted.
+/// Internally, a `Query` is in turn driven by an underlying [`QueryPeerIter`] that determines the
+/// peer selection strategy, i.e. the order in which the peers involved in the query should be
+/// contacted.
 pub(crate) struct QueryPool {
     next_id: usize,
     config: QueryConfig,
@@ -56,8 +56,8 @@ pub(crate) struct QueryPool {
 pub(crate) enum QueryPoolState<'a> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
-    /// At least one query is waiting for results. `Some(request)` indicates
-    /// that a new request is now being waited on.
+    /// At least one query is waiting for results. `Some(request)` indicates that a new request is
+    /// now being waited on.
     Waiting(Option<(&'a mut Query, PeerId)>),
     /// A query has finished.
     Finished(Query),
@@ -163,8 +163,7 @@ impl QueryPool {
             QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers))
         };
 
-        let query = Query::new(id, peer_iter, info);
-        self.queries.insert(id, query);
+        self.queries.insert(id, Query::new(id, peer_iter, info));
     }
 
     fn next_query_id(&mut self) -> QueryId {

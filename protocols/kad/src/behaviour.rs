@@ -847,45 +847,50 @@ where
         id
     }
 
-    /// Stores a record in the DHT, locally as well as at the nodes
-    /// closest to the key as per the xor distance metric.
+    /// Stores a record in the DHT, locally as well as at the nodes closest to the key as per the
+    /// xor distance metric.
     ///
-    /// Returns `Ok` if a record has been stored locally, providing the
-    /// `QueryId` of the initial query that replicates the record in the DHT.
-    /// The result of the query is eventually reported as a
-    /// [`Event::OutboundQueryProgressed{QueryResult::PutRecord}`].
+    /// Returns `Ok` if a record has been stored locally, providing the [`QueryId`] of the initial
+    /// query that replicates the record in the DHT. The result of the query is eventually
+    /// reported as a [`Event::OutboundQueryProgressed{QueryResult::PutRecord}`].
     ///
-    /// The record is always stored locally with the given expiration. If the record's
-    /// expiration is `None`, the common case, it does not expire in local storage
-    /// but is still replicated with the configured record TTL. To remove the record
-    /// locally and stop it from being re-published in the DHT, see [`Behaviour::remove_record`].
+    /// The record is always stored locally with the given expiration. If the record's expiration is
+    /// `None`, the common case, it does not expire in local storage but is still replicated
+    /// with the configured record TTL. To remove the record locally and stop it from being
+    /// re-published in the DHT, see [`Behaviour::remove_record`].
     ///
-    /// After the initial publication of the record, it is subject to (re-)replication
-    /// and (re-)publication as per the configured intervals. Periodic (re-)publication
-    /// does not update the record's expiration in local storage, thus a given record
-    /// with an explicit expiration will always expire at that instant and until then
-    /// is subject to regular (re-)replication and (re-)publication.
+    /// After the initial publication of the record, it is subject to (re-)replication and
+    /// (re-)publication as per the configured intervals. Periodic (re-)publication does not
+    /// update the record's expiration in local storage, thus a given record with an explicit
+    /// expiration will always expire at that instant and until then is subject to regular
+    /// (re-)replication and (re-)publication.
+    ///
+    /// `None` for `publisher` field of `Record` makes the record anonymous; this entails it won't
+    /// be republished (like a foreign `Record`).
+    /// `Some` will be ensured to be equal `.local_key()` `kad` has.
     pub fn put_record(
         &mut self,
         mut record: Record,
         quorum: Quorum,
     ) -> Result<QueryId, store::Error> {
-        record.publisher = Some(*self.kbuckets.local_key().preimage());
+        if record.publisher.is_some() {
+            record.publisher = Some(*self.kbuckets.local_key().preimage())
+        }
         self.store.put(record.clone())?;
         record.expires = record
             .expires
             .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
-        let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
-        let peers = self.kbuckets.closest_keys(&target);
-        let context = PutRecordContext::Publish;
-        let info = QueryInfo::PutRecord {
-            context,
-            record,
-            quorum,
-            phase: PutRecordPhase::GetClosestPeers,
-        };
-        Ok(self.queries.add_iter_closest(target.clone(), peers, info))
+        Ok(self.queries.add_iter_closest(
+            target.clone(),
+            self.kbuckets.closest_keys(&target),
+            QueryInfo::PutRecord {
+                context: PutRecordContext::Publish,
+                record,
+                quorum: quorum.eval(self.queries.config().replication_factor),
+                phase: PutRecordPhase::GetClosestPeers,
+            },
+        ))
     }
 
     /// Stores a record at specific peers, without storing it locally.
@@ -921,16 +926,18 @@ where
             .expires
             .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
         let context = PutRecordContext::Custom;
-        let info = QueryInfo::PutRecord {
-            context,
-            record,
-            quorum,
-            phase: PutRecordPhase::PutRecord {
-                success: Vec::new(),
-                get_closest_peers_stats: QueryStats::empty(),
+        self.queries.add_fixed(
+            peers,
+            QueryInfo::PutRecord {
+                context,
+                record,
+                quorum,
+                phase: PutRecordPhase::PutRecord {
+                    success: Vec::new(),
+                    get_closest_peers_stats: QueryStats::empty(),
+                },
             },
-        };
-        self.queries.add_fixed(peers, info)
+        )
     }
 
     /// Removes the record with the given key from _local_ storage,
@@ -1306,16 +1313,17 @@ where
 
     /// Starts an iterative `PUT_VALUE` query for the given record.
     fn start_put_record(&mut self, record: Record, quorum: Quorum, context: PutRecordContext) {
-        let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
-        let peers = self.kbuckets.closest_keys(&target);
-        let info = QueryInfo::PutRecord {
-            record,
-            quorum,
-            context,
-            phase: PutRecordPhase::GetClosestPeers,
-        };
-        self.queries.add_iter_closest(target.clone(), peers, info);
+        self.queries.add_iter_closest(
+            target.clone(),
+            self.kbuckets.closest_keys(&target),
+            QueryInfo::PutRecord {
+                record,
+                quorum: quorum.eval(self.queries.config().replication_factor),
+                context,
+                phase: PutRecordPhase::GetClosestPeers,
+            },
+        );
     }
 
     /// Updates the routing table with a new connection status and address of a peer.
@@ -1625,17 +1633,19 @@ where
                 quorum,
                 phase: PutRecordPhase::GetClosestPeers,
             } => {
-                let info = QueryInfo::PutRecord {
-                    context,
-                    record,
-                    quorum,
-                    phase: PutRecordPhase::PutRecord {
-                        success: vec![],
-                        get_closest_peers_stats: q.stats,
+                self.queries.continue_fixed(
+                    query_id,
+                    q.peers.into_peerids_iter(),
+                    QueryInfo::PutRecord {
+                        context,
+                        record,
+                        quorum,
+                        phase: PutRecordPhase::PutRecord {
+                            success: vec![],
+                            get_closest_peers_stats: q.stats,
+                        },
                     },
-                };
-                self.queries
-                    .continue_fixed(query_id, q.peers.into_peerids_iter(), info);
+                );
                 None
             }
 
@@ -1832,118 +1842,90 @@ where
         request_id: RequestId,
         mut record: Record,
     ) {
-        if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-            // If the (alleged) publisher is the local node, do nothing. The record of
-            // the original publisher should never change as a result of replication
-            // and the publisher is always assumed to have the "right" value.
-            self.queued_events.push_back(ToSwarm::NotifyHandler {
-                peer_id: source,
-                handler: NotifyHandler::One(connection),
-                event: HandlerIn::PutRecordRes {
-                    key: record.key,
-                    value: record.value,
-                    request_id,
-                },
-            });
-            return;
-        }
+        let mut event_reset = None;
 
-        let now = Instant::now();
+        // If the (alleged) publisher is the local node, do nothing. The record of the
+        // original publisher should never change as a result of replication
+        // and the publisher is always assumed to have the "right" value.
+        if record.publisher.as_ref() != Some(self.kbuckets.local_key().preimage()) {
+            let now = Instant::now();
+            // Calculate the expiration exponentially inversely proportional to the number of nodes
+            // between the local node and the closest node to the key (beyond the
+            // replication factor). This ensures avoiding over-caching outside of the k closest
+            // nodes to a key.
+            let target = kbucket::Key::new(record.key.clone());
+            let num_between = self.kbuckets.count_nodes_between(&target);
+            let k = self.queries.config().replication_factor.get();
+            let num_beyond_k = (usize::max(k, num_between) - k) as u32;
+            let expiration = self
+                .record_ttl
+                .map(|ttl| now + exp_decrease(ttl, num_beyond_k));
+            // The smaller TTL prevails. Only if neither TTL is set is the record stored "forever".
+            record.expires = record.expires.or(expiration).min(expiration);
 
-        // Calculate the expiration exponentially inversely proportional to the
-        // number of nodes between the local node and the closest node to the key
-        // (beyond the replication factor). This ensures avoiding over-caching
-        // outside of the k closest nodes to a key.
-        let target = kbucket::Key::new(record.key.clone());
-        let num_between = self.kbuckets.count_nodes_between(&target);
-        let k = self.queries.config().replication_factor.get();
-        let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = self
-            .record_ttl
-            .map(|ttl| now + exp_decrease(ttl, num_beyond_k));
-        // The smaller TTL prevails. Only if neither TTL is set is the record
-        // stored "forever".
-        record.expires = record.expires.or(expiration).min(expiration);
+            // Ignore the record in the next run of the replication job, since we can assume the
+            // sender replicated the record to the k closest peers. Effectively, only
+            // one of the k closest peers performs a replication in the configured
+            // interval, assuming a shared interval.
+            if let Some(job) = self.put_record_job.as_mut() {
+                job.skip(record.key.clone())
+            }
 
-        if let Some(job) = self.put_record_job.as_mut() {
-            // Ignore the record in the next run of the replication
-            // job, since we can assume the sender replicated the
-            // record to the k closest peers. Effectively, only
-            // one of the k closest peers performs a replication
-            // in the configured interval, assuming a shared interval.
-            job.skip(record.key.clone())
-        }
+            // While records received from a publisher, as well as records that do not exist locally
+            // should always (attempted to) be stored, there is a choice here w.r.t. the
+            // handling of replicated records whose keys refer to records that exist locally: The
+            // value and/or the publisher may either be overridden or left unchanged. At
+            // the moment and in the absence of a decisive argument for another option, both are
+            // always overridden as it avoids having to load the existing record in the
+            // first place.
 
-        // While records received from a publisher, as well as records that do
-        // not exist locally should always (attempted to) be stored, there is a
-        // choice here w.r.t. the handling of replicated records whose keys refer
-        // to records that exist locally: The value and / or the publisher may
-        // either be overridden or left unchanged. At the moment and in the
-        // absence of a decisive argument for another option, both are always
-        // overridden as it avoids having to load the existing record in the
-        // first place.
+            if !record.is_expired(now) {
+                // The record is cloned because of the weird libp2p protocol requirement to send
+                // back the value in the response, although this is a waste of resources.
 
-        if !record.is_expired(now) {
-            // The record is cloned because of the weird libp2p protocol
-            // requirement to send back the value in the response, although this
-            // is a waste of resources.
-            match self.record_filtering {
-                StoreInserts::Unfiltered => match self.store.put(record.clone()) {
-                    Ok(()) => {
-                        tracing::debug!(
+                if self.record_filtering == StoreInserts::Unfiltered {
+                    match self.store.put(record.clone()) {
+                        Ok(()) => tracing::debug!(
                             record=?record.key,
-                            "Record stored: {} bytes",
+                            "`Record` stored: {} bytes",
                             record.value.len()
-                        );
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            Event::InboundRequest {
-                                request: InboundRequest::PutRecord {
-                                    source,
-                                    connection,
-                                    record: None,
-                                },
-                            },
-                        ));
+                        ),
+                        Err(e) => {
+                            tracing::info!("`Record` not stored: {:?}", e);
+                            event_reset = Some(HandlerIn::Reset(request_id))
+                        }
                     }
-                    Err(e) => {
-                        tracing::info!("Record not stored: {:?}", e);
-                        self.queued_events.push_back(ToSwarm::NotifyHandler {
-                            peer_id: source,
-                            handler: NotifyHandler::One(connection),
-                            event: HandlerIn::Reset(request_id),
-                        });
-
-                        return;
-                    }
-                },
-                StoreInserts::FilterBoth => {
+                }
+                if event_reset.is_none() {
                     self.queued_events
-                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                            request: InboundRequest::PutRecord {
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                            InboundRequest::PutRecord {
                                 source,
                                 connection,
-                                record: Some(record.clone()),
+                                record: match self.record_filtering {
+                                    StoreInserts::Unfiltered => None,
+                                    StoreInserts::FilterBoth => Some(record.clone()),
+                                },
                             },
-                        }));
+                        )))
                 }
             }
         }
 
-        // The remote receives a [`HandlerIn::PutRecordRes`] even in the
-        // case where the record is discarded due to being expired. Given that
-        // the remote sent the local node a [`HandlerEvent::PutRecord`]
-        // request, the remote perceives the local node as one node among the k
-        // closest nodes to the target. In addition returning
-        // [`HandlerIn::PutRecordRes`] does not reveal any internal
-        // information to a possibly malicious remote node.
+        // The remote receives a [`HandlerIn::PutRecordRes`] even in the case where the record is
+        // discarded due to being expired. Given that the remote sent the local node a
+        // [`HandlerEvent::PutRecord`] request, the remote perceives the local node as one node
+        // among the k closest nodes to the target. In addition returning
+        // [`HandlerIn::PutRecordRes`] does not reveal any internal information to a possibly
+        // malicious remote node.
         self.queued_events.push_back(ToSwarm::NotifyHandler {
             peer_id: source,
             handler: NotifyHandler::One(connection),
-            event: HandlerIn::PutRecordRes {
+            event: event_reset.unwrap_or(HandlerIn::PutRecordRes {
                 key: record.key,
                 value: record.value,
                 request_id,
-            },
+            }),
         })
     }
 
@@ -1964,17 +1946,15 @@ where
                     }
 
                     self.queued_events
-                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                            request: InboundRequest::AddProvider { record: None },
-                        }));
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                            InboundRequest::AddProvider(None),
+                        )))
                 }
                 StoreInserts::FilterBoth => {
                     self.queued_events
-                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                            request: InboundRequest::AddProvider {
-                                record: Some(record),
-                            },
-                        }));
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                            InboundRequest::AddProvider(Some(record)),
+                        )))
                 }
             }
         }
@@ -2311,11 +2291,11 @@ where
                     .collect::<Vec<_>>();
 
                 self.queued_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                        request: InboundRequest::FindNode {
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                        InboundRequest::FindNode {
                             num_closer_peers: closer_peers.len(),
                         },
-                    }));
+                    )));
 
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
@@ -2324,7 +2304,7 @@ where
                         closer_peers,
                         request_id,
                     },
-                });
+                })
             }
 
             HandlerEvent::FindNodeRes {
@@ -2341,12 +2321,12 @@ where
                     .collect::<Vec<_>>();
 
                 self.queued_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                        request: InboundRequest::GetProvider {
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                        InboundRequest::GetProvider {
                             num_closer_peers: closer_peers.len(),
                             num_provider_peers: provider_peers.len(),
                         },
-                    }));
+                    )));
 
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
@@ -2356,7 +2336,7 @@ where
                         provider_peers,
                         request_id,
                     },
-                });
+                })
             }
 
             HandlerEvent::GetProvidersRes {
@@ -2437,12 +2417,12 @@ where
                     .collect::<Vec<_>>();
 
                 self.queued_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                        request: InboundRequest::GetRecord {
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest(
+                        InboundRequest::GetRecord {
                             num_closer_peers: closer_peers.len(),
                             present_locally: record.is_some(),
                         },
-                    }));
+                    )));
 
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
@@ -2452,7 +2432,7 @@ where
                         closer_peers,
                         request_id,
                     },
-                });
+                })
             }
 
             HandlerEvent::GetRecordRes {
@@ -2507,7 +2487,7 @@ where
             }
 
             HandlerEvent::PutRecord { record, request_id } => {
-                self.record_received(source, connection, request_id, record);
+                self.record_received(source, connection, request_id, record)
             }
 
             HandlerEvent::PutRecordRes { query_id, .. } => {
@@ -2566,10 +2546,9 @@ where
             self.add_provider_job = Some(job);
         }
 
-        // Run the periodic record replication / publication job.
+        // Run the periodic record replication/publication job.
         if let Some(mut job) = self.put_record_job.take() {
-            let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
-            for _ in 0..num {
+            for _ in 0..JOBS_MAX_NEW_QUERIES.min(jobs_query_capacity) {
                 if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
                     let context =
                         if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
@@ -2758,7 +2737,7 @@ pub enum Event {
     // Note on the difference between 'request' and 'query': A request is a
     // single request-response style exchange with a single remote peer. A query
     // is made of multiple requests across multiple remote peers.
-    InboundRequest { request: InboundRequest },
+    InboundRequest(InboundRequest),
 
     /// An outbound query has made progress.
     OutboundQueryProgressed {
@@ -2875,8 +2854,8 @@ pub enum InboundRequest {
     /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
-    /// See [`StoreInserts`] and [`Config::set_record_filtering`] for details..
-    AddProvider { record: Option<ProviderRecord> },
+    /// See [`StoreInserts`] and [`Config::set_record_filtering`] for details.
+    AddProvider(Option<ProviderRecord>),
     /// Request to retrieve a record.
     GetRecord {
         num_closer_peers: usize,
@@ -3178,14 +3157,14 @@ pub enum AddProviderContext {
 pub enum PutRecordContext {
     /// The context is a [`Behaviour::put_record`] operation.
     Publish,
-    /// The context is periodic republishing of records stored
-    /// earlier via [`Behaviour::put_record`].
+    /// The context is periodic republishing of records stored earlier via
+    /// [`Behaviour::put_record`].
     Republish,
-    /// The context is periodic replication (i.e. without extending
-    /// the record TTL) of stored records received earlier from another peer.
+    /// The context is periodic replication (i.e. without extending the record TTL) of stored
+    /// records received earlier from another peer.
     Replicate,
-    /// The context is a custom store operation targeting specific
-    /// peers initiated by [`Behaviour::put_record_to`].
+    /// The context is a custom store operation targeting specific peers initiated by
+    /// [`Behaviour::put_record_to`].
     Custom,
 }
 

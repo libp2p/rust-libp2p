@@ -562,7 +562,11 @@ fn get_record_not_found() {
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
+    fn prop(mut records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
+        tracing::trace!("remove records without a publisher");
+        // this test relies on counting republished `Record` against `records.len()`
+        records.retain(|r| r.publisher.is_some());
+
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
@@ -611,15 +615,15 @@ fn put_record() {
             .into_iter()
             .take(num_total)
             .map(|mut r| {
-                // We don't want records to expire prematurely, as they would
-                // be removed from storage and no longer replicated, but we still
-                // want to check that an explicitly set expiration is preserved.
+                // We don't want records to expire prematurely, as they would be removed from
+                // storage and no longer replicated, but we still want to check that
+                // an explicitly set expiration is preserved.
                 r.expires = r.expires.map(|t| t + Duration::from_secs(60));
                 (r.key.clone(), r)
             })
             .collect::<HashMap<_, _>>();
 
-        // Initiate put_record queries.
+        // Initiate `put_record` queries.
         let mut qids = HashSet::new();
         for r in records.values() {
             let qid = swarms[0]
@@ -635,7 +639,7 @@ fn put_record() {
                         assert!(record.expires.is_some());
                         qids.insert(qid);
                     }
-                    i => panic!("Unexpected query info: {i:?}"),
+                    unexpected => panic!("Unexpected query info: {unexpected:?}"),
                 },
                 None => panic!("Query not found: {qid:?}"),
             }
@@ -684,9 +688,9 @@ fn put_record() {
                                 }
                             }
                         }
-                        Poll::Ready(Some(SwarmEvent::Behaviour(Event::InboundRequest {
-                            request: InboundRequest::PutRecord { record, .. },
-                        }))) => {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(Event::InboundRequest(
+                            InboundRequest::PutRecord { record, .. },
+                        )))) => {
                             if !drop_records {
                                 if let Some(record) = record {
                                     assert_eq!(
@@ -715,14 +719,14 @@ fn put_record() {
                 }
             }
 
-            // All swarms are Pending and not enough results have been collected
-            // so far, thus wait to be polled again for further progress.
+            // All swarms are Pending and not enough results have been collected so far, thus wait
+            // to be polled again for further progress.
             if results.len() != records.len() {
                 return Poll::Pending;
             }
 
-            // Consume the results, checking that each record was replicated
-            // correctly to the closest peers to the key.
+            // Consume the results, checking that each record was replicated correctly to the
+            // closest peers to the key.
             while let Some(r) = results.pop() {
                 let expected = records.get(&r.key).unwrap();
 
@@ -833,7 +837,15 @@ fn get_record() {
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
 
-    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    let record = Record::new(
+        random_multihash(),
+        vec![4, 5, 6],
+        if random::<bool>() {
+            None
+        } else {
+            Some(PeerId::random())
+        },
+    );
 
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
@@ -887,7 +899,15 @@ fn get_record_many() {
         .collect::<Vec<_>>();
     let num_results = 10;
 
-    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    let record = Record::new(
+        random_multihash(),
+        vec![4, 5, 6],
+        if random::<bool>() {
+            None
+        } else {
+            Some(PeerId::random())
+        },
+    );
 
     for swarm in swarms.iter_mut().take(num_nodes) {
         swarm.behaviour_mut().store.put(record.clone()).unwrap();
@@ -1191,8 +1211,24 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
-    let record_bob = Record::new(key.clone(), b"bob".to_vec());
-    let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
+    let record_bob = Record::new(
+        key.clone(),
+        b"bob".to_vec(),
+        if random::<bool>() {
+            None
+        } else {
+            Some(PeerId::random())
+        },
+    );
+    let record_trudy = Record::new(
+        key.clone(),
+        b"trudy".to_vec(),
+        if random::<bool>() {
+            None
+        } else {
+            Some(PeerId::random())
+        },
+    );
 
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
