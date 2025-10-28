@@ -23,10 +23,10 @@
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
 use std::{
-    collections::{hash_map, HashMap, HashSet, VecDeque},
+    collections::{hash_map, HashMap, VecDeque},
     num::NonZeroU32,
     ops::Add,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 
@@ -35,6 +35,7 @@ use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpo
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, FromSwarm},
+    derive_prelude::ConnectionEstablished,
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
@@ -244,6 +245,11 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: Option<std::io::Error>,
     },
+    /// Status has been changed.
+    ///
+    /// This is triggered based on if the external address
+    /// has been added or removed.
+    StatusChanged { status: Status },
 }
 
 /// [`NetworkBehaviour`] implementation of the relay server
@@ -253,13 +259,40 @@ pub struct Behaviour {
 
     local_peer_id: PeerId,
 
-    reservations: HashMap<PeerId, HashSet<ConnectionId>>,
+    connections: HashMap<PeerId, HashMap<ConnectionId, Reservation>>,
     circuits: CircuitsTracker,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, THandlerInEvent<Self>>>,
 
     external_addresses: ExternalAddresses,
+
+    status: Status,
+
+    auto_status_change: bool,
+
+    waker: Option<Waker>,
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum Status {
+    /// Enables advertisement of the HOP protocol
+    Enable,
+
+    /// Disables advertisement of the HOP protocol
+    Disable,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Reservation {
+    Active,
+    None,
+}
+
+impl Reservation {
+    pub(crate) fn is_active(&self) -> bool {
+        *self == Reservation::Active
+    }
 }
 
 impl Behaviour {
@@ -267,11 +300,103 @@ impl Behaviour {
         Self {
             config,
             local_peer_id,
-            reservations: Default::default(),
+            connections: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
             external_addresses: Default::default(),
+            status: Status::Disable,
+            auto_status_change: true,
+            waker: None,
         }
+    }
+
+    pub fn set_status(&mut self, status: Option<Status>) {
+        match status {
+            Some(status) => {
+                self.auto_status_change = false;
+                if self.status != status {
+                    self.status = status;
+                    self.reconfigure_relay_status();
+                }
+            }
+            None => {
+                self.auto_status_change = true;
+                self.determine_relay_status_from_external_address();
+            }
+        }
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+
+    fn reconfigure_relay_status(&mut self) {
+        if self.connections.is_empty() {
+            return;
+        }
+
+        for (peer_id, connections) in self.connections.iter() {
+            self.queued_actions
+                .extend(connections.keys().map(|id| ToSwarm::NotifyHandler {
+                    peer_id: *peer_id,
+                    handler: NotifyHandler::One(*id),
+                    event: Either::Left(handler::In::SetStatus {
+                        status: self.status,
+                    }),
+                }));
+        }
+    }
+
+    fn determine_relay_status_from_external_address(&mut self) {
+        let old = self.status;
+
+        self.status = match (self.external_addresses.as_slice(), self.status) {
+            ([], Status::Enable) => {
+                tracing::debug!("disabling protocol advertisement because we no longer have any confirmed external addresses");
+                Status::Disable
+            }
+            ([], Status::Disable) => {
+                // Previously disabled because of no external addresses.
+                Status::Disable
+            }
+            (confirmed_external_addresses, Status::Disable) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+                tracing::debug!("advertising protocol because we are now externally reachable");
+                Status::Enable
+            }
+            (confirmed_external_addresses, Status::Enable) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                Status::Enable
+            }
+        };
+
+        if self.status != old {
+            self.reconfigure_relay_status();
+            self.queued_actions
+                .push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                    status: self.status,
+                }));
+        }
+    }
+
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        self.connections
+            .entry(peer_id)
+            .or_default()
+            .insert(connection_id, Reservation::None);
     }
 
     fn on_connection_closed(
@@ -282,13 +407,20 @@ impl Behaviour {
             ..
         }: ConnectionClosed,
     ) {
-        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
-            if peer.get_mut().remove(&connection_id) {
+        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
+            if peer.get_mut().remove(&connection_id).is_some() {
                 self.queued_actions
                     .push_back(ToSwarm::GenerateEvent(Event::ReservationClosed {
                         src_peer_id: peer_id,
                     }));
             }
+            if peer.get().is_empty() {
+                peer.remove();
+            }
+        }
+
+        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
+            peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
                 peer.remove();
             }
@@ -337,6 +469,7 @@ impl NetworkBehaviour for Behaviour {
                 local_addr: local_addr.clone(),
                 send_back_addr: remote_addr.clone(),
             },
+            self.status,
         )))
     }
 
@@ -364,14 +497,25 @@ impl NetworkBehaviour for Behaviour {
                 role_override,
                 port_use,
             },
+            self.status,
         )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.external_addresses.on_swarm_event(&event);
+        let changed = self.external_addresses.on_swarm_event(&event);
 
-        if let FromSwarm::ConnectionClosed(connection_closed) = event {
-            self.on_connection_closed(connection_closed)
+        if self.auto_status_change && changed {
+            self.determine_relay_status_from_external_address();
+        }
+
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            _ => {}
         }
     }
 
@@ -405,16 +549,16 @@ impl NetworkBehaviour for Behaviour {
                 // `max_reservations_per_peer`.
                 (!renewed
                     && self
-                        .reservations
+                        .connections
                         .get(&event_source)
-                        .map(|cs| cs.len())
+                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
                         .unwrap_or(0)
                         > self.config.max_reservations_per_peer)
                     // Deny if it exceeds `max_reservations`.
                     || self
-                        .reservations
+                        .connections
                         .values()
-                        .map(|cs| cs.len())
+                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
                         .sum::<usize>()
                         >= self.config.max_reservations
                     // Deny if it exceeds the allowed rate of reservations.
@@ -435,10 +579,10 @@ impl NetworkBehaviour for Behaviour {
                     }
                 } else {
                     // Accept reservation.
-                    self.reservations
+                    self.connections
                         .entry(event_source)
                         .or_default()
-                        .insert(connection);
+                        .insert(connection, Reservation::Active);
 
                     ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
@@ -464,10 +608,10 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::ReservationReqAccepted { renewed } => {
                 // Ensure local eventual consistent reservation state matches handler (source of
                 // truth).
-                self.reservations
-                    .entry(event_source)
-                    .or_default()
-                    .insert(connection);
+                self.connections
+                    .get_mut(&event_source)
+                    .expect("valid connection")
+                    .insert(connection, Reservation::Active);
 
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqAccepted {
@@ -503,7 +647,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationTimedOut {} => {
-                match self.reservations.entry(event_source) {
+                match self.connections.entry(event_source) {
                     hash_map::Entry::Occupied(mut peer) => {
                         peer.get_mut().remove(&connection);
                         if peer.get().is_empty() {
@@ -556,11 +700,13 @@ impl NetworkBehaviour for Behaviour {
                             status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
-                } else if let Some(dst_conn) = self
-                    .reservations
+                } else if let Some((dst_conn, status)) = self
+                    .connections
                     .get(&inbound_circuit_req.dst())
                     .and_then(|cs| cs.iter().next())
                 {
+                    assert_eq!(*status, Reservation::Active);
+
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
@@ -718,10 +864,15 @@ impl NetworkBehaviour for Behaviour {
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
-    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(to_swarm) = self.queued_actions.pop_front() {
             return Poll::Ready(to_swarm);
         }
+
+        self.waker = Some(cx.waker().clone());
 
         Poll::Pending
     }
