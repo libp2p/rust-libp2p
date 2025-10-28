@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures::{channel::oneshot, AsyncWrite};
-use futures_bounded::FuturesMap;
+use futures_bounded::{Delay, FuturesMap};
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
@@ -91,7 +91,7 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesMap::new(Duration::from_secs(10), 10),
+            outbound: FuturesMap::new(|| Delay::futures_timer(Duration::from_secs(10)), 10),
             queued_streams: VecDeque::default(),
         }
     }

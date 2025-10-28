@@ -35,6 +35,7 @@ use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
 };
+use futures_bounded::Delay;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
@@ -111,7 +112,7 @@ where
             pending_events: VecDeque::new(),
             inbound_request_id,
             worker_streams: futures_bounded::FuturesMap::new(
-                substream_timeout,
+                move || Delay::futures_timer(substream_timeout),
                 max_concurrent_streams,
             ),
         }
