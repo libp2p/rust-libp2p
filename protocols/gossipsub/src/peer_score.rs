@@ -291,7 +291,7 @@ impl PeerScore {
             return report;
         };
 
-        // topic scores - accumulate weighted contributions per P, including topic weight.
+        // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
             // topic parameters
             if let Some(topic_params) = self.params.topics.get(topic) {
