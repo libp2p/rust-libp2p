@@ -53,5 +53,5 @@ async fn outbound_inner(
 
     tracing::debug!(peer=%peer_id, "Remote peer identified");
 
-    Ok((peer_id, Connection::new(rtc_peer_connection)))
+    Ok((peer_id, Connection::new(rtc_peer_connection, None)))
 }

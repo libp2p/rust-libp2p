@@ -25,7 +25,8 @@ pub struct Config {
     pub keypair: Keypair,
 }
 
-/// Connection request from behavior to transport
+/// Connection request from behavior to transport representing
+/// a [`PeerId`] over a [`Connection`].
 pub struct ConnectionRequest {
     pub peer_id: PeerId,
     pub connection: Connection,
@@ -41,12 +42,16 @@ pub struct Transport {
     /// Listeners for incoming WebRTC connections
     listeners: HashMap<ListenerId, Multiaddr>,
     next_listener_id: ListenerId,
-    poll_waker: Arc<AtomicWaker>
+    poll_waker: Arc<AtomicWaker>,
 }
 
 impl Transport {
     /// Constructs a new [`Transport`] with the given [`Config`] and [`Behaviour`] for Signaling.
-    pub fn new(config: Config, signaling_config: SignalingConfig, poll_waker: Arc<AtomicWaker>) -> (Self, Behaviour) {
+    pub fn new(
+        config: Config,
+        signaling_config: SignalingConfig,
+        poll_waker: Arc<AtomicWaker>,
+    ) -> (Self, Behaviour) {
         let pending_dials = Arc::new(Mutex::new(HashMap::new()));
         let established_connections = Arc::new(Mutex::new(VecDeque::new()));
 
@@ -63,7 +68,7 @@ impl Transport {
             signaling_config,
             pending_dials.clone(),
             established_connections.clone(),
-            poll_waker
+            poll_waker,
         );
 
         (transport, behaviour)
@@ -75,12 +80,12 @@ impl Transport {
             .boxed()
     }
 
-    /// Check if address is a WebRTC address
+    /// Checks if a [`Multiaddr`] is a WebRTC address
     fn is_webrtc_addr(addr: &Multiaddr) -> bool {
         addr.iter().any(|p| matches!(p, Protocol::WebRTC))
     }
 
-    /// Extract peer ID from multiaddr
+    /// Extracts peer ID from multiaddr
     fn extract_peer_id(addr: &Multiaddr) -> Option<PeerId> {
         addr.iter().find_map(|proto| {
             if let Protocol::P2p(peer_id) = proto {
@@ -103,7 +108,7 @@ impl libp2p_core::Transport for Transport {
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        // Check if this is a virtual WebRTC listener address
+        // Check if this is a WebRTC listener address
         if Self::is_webrtc_addr(&addr) {
             self.listeners.insert(id, addr.clone());
             Ok(())
@@ -117,57 +122,38 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(
-    &mut self,
-    addr: Multiaddr,
-    opts: DialOpts,
-) -> Result<Self::Dial, TransportError<Self::Error>> {
-    tracing::info!("=== WebRTC Transport.dial() called ===");
-    tracing::info!("Address: {}", addr);
-
-    // Check if address contains p2p-circuit
-    let has_circuit = addr.iter().any(|p| matches!(p, Protocol::P2pCircuit));
-    tracing::info!("Has p2p-circuit: {}", has_circuit);
-
-    if has_circuit {
-        tracing::info!("Address contains p2p-circuit - delegating to relay transport");
-        return Err(TransportError::MultiaddrNotSupported(addr));
-    }
-
-    // Check if this is a WebRTC address that should be handled by this transport
-    if !Self::is_webrtc_addr(&addr) {
-        tracing::info!("Address doesn't contain webrtc - not supported");
-        return Err(TransportError::MultiaddrNotSupported(addr));
-    }
-
-    tracing::info!("WebRTC transport accepting direct WebRTC address");
-
-    // Extract peer ID from the address
-    let peer_id = Self::extract_peer_id(&addr)
-        .ok_or_else(|| TransportError::Other(Error::InvalidMultiaddr(addr.to_string())))?;
-
-    let pending_dials = self.pending_dials.clone();
-
-    // Create a future that waits for the WebRTC connection to be established
-    Ok(Box::pin(async move {
-        tracing::info!("Creating dial future for peer {}", peer_id);
-
-        let (tx, rx) = oneshot::channel();
-        {
-            let mut dials = pending_dials.lock().await;
-            dials.insert(peer_id, tx);
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let has_circuit = addr.iter().any(|p| matches!(p, Protocol::P2pCircuit));
+        if has_circuit {
+            return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        tracing::info!("Waiting for WebRTC connection to be established via signaling");
+        if !Self::is_webrtc_addr(&addr) {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
 
-        // Wait for the connection to be established via signaling
-        let connection = rx.await.map_err(|_| {
-            Error::Signaling("WebRTC connection establishment cancelled".to_string())
-        })?;
+        let peer_id = Self::extract_peer_id(&addr)
+            .ok_or_else(|| TransportError::Other(Error::InvalidMultiaddr(addr.to_string())))?;
 
-        tracing::info!("WebRTC connection received for peer {}", peer_id);
-        Ok((peer_id, connection))
-    }))
-}
+        let pending_dials = self.pending_dials.clone();
+
+        Ok(Box::pin(async move {
+            let (tx, rx) = oneshot::channel();
+            {
+                let mut dials = pending_dials.lock().await;
+                dials.insert(peer_id, tx);
+            }
+
+            let connection = rx.await.map_err(|_| {
+                Error::Signaling("WebRTC connection establishment cancelled".to_string())
+            })?;
+
+            Ok((peer_id, connection))
+        }))
+    }
 
     fn poll(
         mut self: Pin<&mut Self>,
@@ -175,7 +161,6 @@ impl libp2p_core::Transport for Transport {
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         self.poll_waker.register(cx.waker());
 
-        // Check for established inbound connections that need to be injected
         let established_connections = self.established_connections.clone();
 
         let mut connections = match established_connections.try_lock() {
@@ -187,40 +172,21 @@ impl libp2p_core::Transport for Transport {
         };
 
         if let Some(conn_request) = connections.pop_front() {
-            // Find a suitable listener ID
             if let Some((&listener_id, listener_addr)) = self.listeners.iter().next() {
-                // let upgrade = Box::pin(async move {
-                //     Ok((conn_request.peer_id, conn_request.connection))
-                // });
-
-                // return Poll::Ready(TransportEvent::Incoming {
-                //     listener_id,
-                //     upgrade,
-                //     local_addr: listener_addr.clone(),
-                //     send_back_addr: listener_addr.clone(),
-                // });
-
                 let peer_id = conn_request.peer_id;
 
-        // ✅ Use a simple WebRTC address, not the listener address
-        let webrtc_addr = format!("/webrtc/p2p/{}", peer_id)
-            .parse::<Multiaddr>()
-            .expect("valid webrtc address");
+                let webrtc_addr = format!("/webrtc/p2p/{}", peer_id)
+                    .parse::<Multiaddr>()
+                    .expect("valid webrtc address");
 
+                let upgrade = Box::pin(async move { Ok((peer_id, conn_request.connection)) });
 
-        tracing::info!("Transport injecting WebRTC connection from {} with address {}", peer_id, webrtc_addr);
-
-
-        let upgrade = Box::pin(async move {
-            Ok((peer_id, conn_request.connection))
-        });
-
-        return Poll::Ready(TransportEvent::Incoming {
-            listener_id,
-            upgrade,
-            local_addr: webrtc_addr.clone(),
-            send_back_addr: webrtc_addr,
-        });
+                return Poll::Ready(TransportEvent::Incoming {
+                    listener_id,
+                    upgrade,
+                    local_addr: webrtc_addr.clone(),
+                    send_back_addr: webrtc_addr,
+                });
             }
         }
 

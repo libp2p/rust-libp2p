@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 use futures::{lock::Mutex, AsyncRead, AsyncWrite};
 use tracing::{info, instrument};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use wasm_bindgen_futures::{JsFuture};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState,
     RtcPeerConnectionIceEvent, RtcPeerConnectionState, RtcSdpType, RtcSessionDescriptionInit,
@@ -20,7 +20,7 @@ use crate::{
     Connection,
 };
 
-// Implementation of WebRTC signaling protocol between two peers. This implementation follows
+// Implementation of WebRTC signaling protocol. This implementation follows
 // the specification here: https://github.com/libp2p/specs/blob/master/webrtc/webrtc.md.
 
 /// Connection states for ICE connection, ICE gathering, signaling
@@ -35,14 +35,15 @@ struct ConnectionState {
 
 /// Callbacks for ICE connection, ICE gathering, peer connection signaling
 /// and ice candidate retrieval.
-struct ConnectionCallbacks {
+#[derive(Debug)]
+pub struct ConnectionCallbacks {
     _ice_connection_callback: Closure<dyn FnMut(web_sys::Event)>,
     _ice_gathering_callback: Closure<dyn FnMut(web_sys::Event)>,
     _peer_connection_callback: Closure<dyn FnMut(web_sys::Event)>,
     _signaling_callback: Closure<dyn FnMut(web_sys::Event)>,
 }
 
-/// Collected ICE candidates during the gathering phase
+/// Collected ICE candidates during the gathering phase.
 #[derive(Debug, Clone)]
 struct IceCandidateCollection {
     candidates: Vec<RtcIceCandidate>,
@@ -57,6 +58,7 @@ impl IceCandidateCollection {
         }
     }
 
+    /// Adds an ice candidate to the candidates collection.
     fn add_candidate(&mut self, candidate: Option<RtcIceCandidate>) {
         match candidate {
             Some(candidate) => {
@@ -64,16 +66,18 @@ impl IceCandidateCollection {
                 self.candidates.push(candidate);
             }
             None => {
-                tracing::info!("ICE gathering complete (null candidate received)");
+                tracing::info!("ICE gathering complete");
                 self.gathering_complete = true;
             }
         }
     }
 
+    /// Returns whether the candidate gathering is complete.
     fn is_complete(&self) -> bool {
         self.gathering_complete
     }
 
+    /// Removes and returns candidates from the candidates vector.
     fn drain_candidates(&mut self) -> Vec<RtcIceCandidate> {
         self.candidates.drain(..).collect()
     }
@@ -174,13 +178,13 @@ fn safe_signaling_state_from_js(js_val: JsValue) -> RtcSignalingState {
 }
 
 pub trait Signaling {
-    /// Performs WebRTC signaling as an initiator.
+    /// Performs WebRTC signaling as the initiator.
     async fn signaling_as_initiator(
         &self,
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error>;
 
-    /// Performs WebRTC signaling as a responder.
+    /// Performs WebRTC signaling as the responder.
     async fn signaling_as_responder(
         &self,
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
@@ -285,7 +289,8 @@ impl ProtocolHandler {
 
         connection.set_onsignalingstatechange(Some(&signaling_callback.as_ref().unchecked_ref()));
 
-        // Create the callbacks struct to keep closures alive
+        // Create the callbacks struct to keep closures alive. Callbacks will be stored in the
+        // Connection to be dropped when the Connection drops.
         ConnectionCallbacks {
             _ice_connection_callback: ice_connection_callback,
             _ice_gathering_callback: ice_gathering_callback,
@@ -319,8 +324,8 @@ impl ProtocolHandler {
     /// Waits for ICE gathering to complete
     async fn wait_for_ice_gathering_complete(&self) -> Result<(), Error> {
         let mut attempts = 0;
-        const MAX_ICE_GATHERING_ATTEMPTS: u32 = 100; // 10 seconds at 100ms intervals
-        info!("Waiting for ice gathering to complete");
+        tracing::trace("Waiting for ice gathering to complete");
+
         loop {
             let current_state = self.states.borrow().ice_gathering.clone();
 
@@ -331,7 +336,7 @@ impl ProtocolHandler {
                 }
                 RtcIceGatheringState::New | RtcIceGatheringState::Gathering => {
                     attempts += 1;
-                    if attempts >= MAX_ICE_GATHERING_ATTEMPTS {
+                    if attempts >= self.config.max_ice_gathering_attempts {
                         tracing::warn!("ICE gathering timeout, proceeding anyway");
                         break;
                     }
@@ -347,7 +352,8 @@ impl ProtocolHandler {
         Ok(())
     }
 
-    /// Waits for the RtcPeerConnection to establish
+    /// Waits for the RtcPeerConnectionState to change to a `Connected` state for a 
+    /// configurable max number of attempts.
     async fn wait_for_established_conn(&self) -> Result<(), Error> {
         let mut attempts = 0;
         info!("Waiting for connection to establish");
@@ -365,11 +371,11 @@ impl ProtocolHandler {
 
             match current_states.peer_connection {
                 RtcPeerConnectionState::Connected => {
-                    tracing::info!("Peer connection is connected");
+                    tracing::info!("Peer connection state transitioned to connected");
                     break;
                 }
                 RtcPeerConnectionState::Failed => {
-                    tracing::error!("Peer connection failed");
+                    tracing::error!("Peer connection state transitioned to failed");
                     return Err(Error::Signaling("Peer connection failed".to_string()));
                 }
                 _ => {
@@ -396,7 +402,9 @@ impl ProtocolHandler {
         let current_states = self.states.borrow().clone();
         if current_states.peer_connection != web_sys::RtcPeerConnectionState::Connected {
             tracing::error!("Rtc peer connection failed. Connection not properly established.");
-             return Err(Error::Signaling("Connection not properly established".to_string()));
+            return Err(Error::Signaling(
+                "Connection not properly established".to_string(),
+            ));
         }
 
         Ok(())
@@ -449,10 +457,10 @@ impl ProtocolHandler {
             })?;
         }
 
-        // Send end-of-candidates marker
+        // Send end-of-candidates marker as an empty JSON object
         let end_message = SignalingMessage {
             r#type: signaling_message::Type::IceCandidate as i32,
-            data: "{}".to_string(), // Empty JSON object indicates end of candidates
+            data: "{}".to_string(),
         };
 
         stream.lock().await.write(end_message).await.map_err(|_| {
@@ -496,12 +504,10 @@ impl ProtocolHandler {
                 )
                 .await
                 {
-                    Ok(_) => {
-                        tracing::trace!("Successfully added remote ICE candidate");
-                    }
                     Err(e) => {
                         tracing::error!("Failed to add remote ICE candidate: {:?}", e);
                     }
+                    _ => {}
                 }
             } else {
                 tracing::warn!("Failed to parse ICE candidate: {}", message.data);
@@ -520,7 +526,8 @@ impl Signaling for ProtocolHandler {
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as responder");
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string()).await?;
+        
+        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
@@ -578,7 +585,6 @@ impl Signaling for ProtocolHandler {
 
         let candidates = ice_candidates.borrow_mut().drain_candidates();
         Self::send_ice_candidates(&pb_stream, candidates).await?;
-
         Self::receive_ice_candidates(&pb_stream, connection).await?;
 
         self.wait_for_established_conn().await?;
@@ -587,18 +593,14 @@ impl Signaling for ProtocolHandler {
             "WebRTC connection established - Current state: {:?}",
             connection.connection_state()
         );
-        tracing::info!(
-            "ICE connection state: {:?}",
-            connection.ice_connection_state()
-        );
-
-        // Clean up callbacks and close signaling stream
-        drop(callbacks);
+        
+        // Clean up callbacks and close signaling stream. ice_callbacks is only used during the
+        // signaling process so its not saved in `ConnectionCallbacks`, but dropped immediately
         drop(_ice_callback);
         drop(pb_stream);
 
-        tracing::info!("Completed signaling as responder, returning connection.");
-        Ok(Connection::new(rtc_conn))
+        tracing::info!("Completed signaling.");
+        Ok(Connection::new(rtc_conn, Some(callbacks)))
     }
 
     #[instrument(skip(stream), fields(initiator = true))]
@@ -607,7 +609,8 @@ impl Signaling for ProtocolHandler {
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as initiator");
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string()).await?;
+        
+        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
@@ -664,7 +667,6 @@ impl Signaling for ProtocolHandler {
 
         let candidates = ice_candidates.borrow_mut().drain_candidates();
         Self::send_ice_candidates(&pb_stream, candidates).await?;
-
         Self::receive_ice_candidates(&pb_stream, connection).await?;
 
         self.wait_for_established_conn().await?;
@@ -673,18 +675,16 @@ impl Signaling for ProtocolHandler {
             "WebRTC connection established - Current state: {:?}",
             connection.connection_state()
         );
-        tracing::info!(
-            "ICE connection state: {:?}",
-            connection.ice_connection_state()
-        );
 
         // Clean up callbacks, close data channel, and close signaling stream
         data_channel.close();
-        drop(callbacks);
+
+        // Clean up callbacks and close signaling stream. ice_callbacks is only used during the
+        // signaling process so its not saved in `ConnectionCallbacks`, but dropped immediately
         drop(_ice_callback);
         drop(pb_stream);
 
-        tracing::info!("Completed signaling as initiator, returning connection.");
-        Ok(Connection::new(rtc_conn))
+        tracing::info!("Signaling complete.");
+        Ok(Connection::new(rtc_conn, Some(callbacks)))
     }
 }

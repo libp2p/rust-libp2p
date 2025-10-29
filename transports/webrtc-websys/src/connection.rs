@@ -10,15 +10,16 @@ use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
+use tracing::info;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType, RtcIceServer, RtcSessionDescriptionInit
+    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
+    RtcIceServer, RtcSessionDescriptionInit,
 };
-use tracing::info;
 
 use super::{Error, Stream};
-use crate::stream::DropListener;
+use crate::{browser::protocol::ConnectionCallbacks, stream::DropListener};
 
 /// A WebRTC Connection.
 ///
@@ -41,11 +42,17 @@ pub struct Connection {
     no_drop_listeners_waker: Option<Waker>,
 
     _ondatachannel_closure: SendWrapper<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    /// WebRTC event based callbacks which will be dropped once the Connection object has been
+    /// dropped.
+    _callbacks: Option<SendWrapper<ConnectionCallbacks>>,
 }
 
 impl Connection {
     /// Create a new inner WebRTC Connection
-    pub(crate) fn new(peer_connection: RtcPeerConnection) -> Self {
+    pub(crate) fn new(
+        peer_connection: RtcPeerConnection,
+        callbacks: Option<ConnectionCallbacks>,
+    ) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in
         // poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
@@ -75,6 +82,7 @@ impl Connection {
             no_drop_listeners_waker: None,
             inbound_data_channels: SendWrapper::new(rx_ondatachannel),
             _ondatachannel_closure: SendWrapper::new(ondatachannel_closure),
+            _callbacks: callbacks.map(SendWrapper::new),
         }
     }
 
@@ -93,7 +101,6 @@ impl Connection {
     /// This closes the data channels also and they will return an error
     /// if they are used.
     fn close_connection(&mut self) {
-        info!("Calling close connection.. closing webrtc connection");
         if !self.closed {
             self.inner.inner.close();
             self.closed = true;
@@ -103,7 +110,6 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        info!("WebRTC connection dropped. Webrtc connection will be closed");
         self.close_connection();
     }
 }
@@ -179,7 +185,10 @@ pub(crate) struct RtcPeerConnection {
 }
 
 impl RtcPeerConnection {
-    pub(crate) async fn new(algorithm: String) -> Result<Self, Error> {
+    pub(crate) async fn new(
+        algorithm: String,
+        stun_servers: Option<Vec<String>>,
+    ) -> Result<Self, Error> {
         let algo: Object = Object::new();
         Reflect::set(&algo, &"name".into(), &"ECDSA".into()).unwrap();
         Reflect::set(&algo, &"namedCurve".into(), &"P-256".into()).unwrap();
@@ -197,21 +206,24 @@ impl RtcPeerConnection {
         certificate_arr.push(&certificate);
         config.set_certificates(&certificate_arr);
 
-        let stun_server = RtcIceServer::new();
-    stun_server.set_url("stun:stun.l.google.com:19302");
+        // configure rtc configuration with stun servers, if any
+        if let Some(servers) = stun_servers {
+            let ice_servers = js_sys::Array::new();
+            for server in servers {
+                let stun_server = RtcIceServer::new();
+                stun_server.set_url(&server);
+                ice_servers.push(&stun_server);
+            }
 
-    // ✅ Wrap the STUN server in a JavaScript Array
-    let ice_servers_array = js_sys::Array::new();
-    ice_servers_array.push(&stun_server);
-
-    // ✅ Pass the Array to set_ice_servers
-    config.set_ice_servers(&ice_servers_array.into());
+            config.set_ice_servers(&ice_servers.into());
+        }
 
         let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 
         Ok(Self { inner })
     }
 
+    /// Returns a reference to the underlying RtcPeerConnection.
     pub(crate) fn inner(&self) -> &web_sys::RtcPeerConnection {
         &self.inner
     }

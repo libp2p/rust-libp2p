@@ -7,5 +7,5 @@ pub(crate) mod signaling;
 pub(crate) mod upgrade;
 
 pub use protocol::{SIGNALING_PROTOCOL_ID, SIGNALING_STREAM_PROTOCOL};
-pub use signaling::{ProtocolHandler, Signaling};
+pub use signaling::{ConnectionCallbacks, ProtocolHandler, Signaling};
 pub use upgrade::SignalingProtocolUpgrade;
