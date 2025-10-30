@@ -1,7 +1,7 @@
 ## 0.43.1
 
 - Rename Config to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
-  See [PR]().
+  See [PR 6190](https://github.com/libp2p/rust-libp2p/pull/6190).
 
 ## 0.43.0
 
