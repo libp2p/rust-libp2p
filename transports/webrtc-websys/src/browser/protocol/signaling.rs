@@ -12,7 +12,7 @@ use web_sys::{
 
 use crate::{
     browser::{
-        protocol::pb::{signaling_message, SignalingMessage},
+        protocol::proto::signaling::{mod_SignalingMessage::Type, SignalingMessage},
         SignalingConfig, SignalingStream,
     },
     connection::RtcPeerConnection,
@@ -448,7 +448,7 @@ impl ProtocolHandler {
                 .unwrap_or_default();
 
             let message = SignalingMessage {
-                r#type: signaling_message::Type::IceCandidate as i32,
+                type_pb: Type::ICE_CANDIDATE,
                 data: candidate_as_str,
             };
 
@@ -459,7 +459,7 @@ impl ProtocolHandler {
 
         // Send end-of-candidates marker as an empty JSON object
         let end_message = SignalingMessage {
-            r#type: signaling_message::Type::IceCandidate as i32,
+            type_pb: Type::ICE_CANDIDATE,
             data: "{}".to_string(),
         };
 
@@ -483,7 +483,7 @@ impl ProtocolHandler {
                 Error::ProtoSerialization("Failed to read ICE candidate".to_string())
             })?;
 
-            if message.r#type != signaling_message::Type::IceCandidate as i32 {
+            if message.type_pb != Type::ICE_CANDIDATE {
                 return Err(Error::Signaling(
                     "Expected ICE candidate message".to_string(),
                 ));
@@ -539,7 +539,7 @@ impl Signaling for ProtocolHandler {
             Error::ProtoSerialization("Failure to read SDP offer from signaling stream".to_string())
         })?;
 
-        if offer_message.r#type != signaling_message::Type::SdpOffer as i32 {
+        if offer_message.type_pb != Type::SDP_OFFER {
             return Err(Error::Signaling("Expected SDP offer".to_string()));
         }
 
@@ -566,7 +566,7 @@ impl Signaling for ProtocolHandler {
 
         // Send SDP answer
         let answer_message = SignalingMessage {
-            r#type: signaling_message::Type::SdpAnswer as i32,
+            type_pb: Type::SDP_ANSWER,
             data: answer_sdp,
         };
 
@@ -636,8 +636,8 @@ impl Signaling for ProtocolHandler {
 
         // Write SDP offer to the signaling stream
         let message = SignalingMessage {
-            r#type: signaling_message::Type::SdpOffer as i32,
-            data: offer_sdp.clone(),
+            type_pb: Type::SDP_OFFER,
+            data: offer_sdp,
         };
 
         pb_stream.lock().await.write(message).await.map_err(|_| {
@@ -651,7 +651,7 @@ impl Signaling for ProtocolHandler {
             )
         })?;
 
-        if answer_message.r#type != signaling_message::Type::SdpAnswer as i32 {
+        if answer_message.type_pb != Type::SDP_ANSWER {
             return Err(Error::Signaling("Expected SDP answer".to_string()));
         }
 
