@@ -2,6 +2,7 @@
 
 mod bandwidth_metrics;
 mod behaviour;
+mod bluetooth;
 mod build;
 mod dns;
 mod identity;
@@ -16,6 +17,7 @@ mod websocket;
 use bandwidth_metrics::*;
 pub use behaviour::BehaviourError;
 use behaviour::*;
+use bluetooth::*;
 use build::*;
 use dns::*;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};

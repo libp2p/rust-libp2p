@@ -119,7 +119,7 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
         security_upgrade: SecUpgrade,
         multiplexer_upgrade: MuxUpgrade,
     ) -> Result<
-        SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<Provider, BluetoothPhase<impl AuthenticatedMultiplexedTransport>>,
         SecUpgrade::Error,
     >
     where
@@ -165,7 +165,7 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
         <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
     {
         Ok(SwarmBuilder {
-            phase: QuicPhase {
+            phase: BluetoothPhase {
                 transport: libp2p_bluetooth::BluetoothTransport::new()
                     .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                     .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
