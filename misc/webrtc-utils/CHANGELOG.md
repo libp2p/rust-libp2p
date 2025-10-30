@@ -1,3 +1,6 @@
+## 0.4.1
+- Implements `Default` trait for `Fingerprint` type.
+
 ## 0.4.0
 
 <!-- Update to libp2p-core v0.43.0 -->

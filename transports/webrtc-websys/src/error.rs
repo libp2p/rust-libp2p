@@ -21,12 +21,6 @@ pub enum Error {
 
     #[error("Authentication error")]
     Authentication(#[from] AuthenticationError),
-
-    #[error("Serialization error: {0}")]
-    ProtoSerialization(String),
-
-    #[error("Signaling error: {0}")]
-    Signaling(String),
 }
 
 /// New-type wrapper to hide `libp2p_noise` from the public API.

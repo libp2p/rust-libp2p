@@ -1,3 +1,8 @@
+## 0.21.2
+
+- Export StatusCode type for public use.
+- Fixed early return for non-relayed multiaddrs in transport to avoid unecessary processing.
+
 ## 0.21.1
 
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
@@ -32,7 +37,7 @@
 - Fix manual closure of relayed listener.
   See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
 - Add resource limits to `CircuitReq` to be set
-  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)
 
 
 ## 0.17.2

@@ -264,7 +264,7 @@ impl ConnectionHandler for SignalingHandler {
                         }
                         Poll::Ready(Err(_)) => {
                             tracing::error!("Signaling result channel dropped");
-                            let error = crate::Error::Signaling(
+                            let error = crate::Error::Connection(
                                 "Signaling channel dropped unexpectedly".to_string(),
                             );
                             return Poll::Ready(self.handle_signaling_failure(error));

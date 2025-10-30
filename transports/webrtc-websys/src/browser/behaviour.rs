@@ -8,7 +8,7 @@ use std::{
 
 use futures::{channel::oneshot, lock::Mutex};
 use tracing::info;
-use wasm_timer::Instant;
+use web_time::Instant;
 
 use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};

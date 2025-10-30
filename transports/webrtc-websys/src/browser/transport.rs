@@ -10,7 +10,7 @@ use futures::{channel::oneshot, future::BoxFuture, lock::Mutex, task::AtomicWake
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
-    transport::{DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
+    transport::{Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
 };
 use libp2p_identity::{Keypair, PeerId};
 
@@ -74,8 +74,8 @@ impl Transport {
         (transport, behaviour)
     }
 
-    /// Wraps `Transport` in [`Boxed`] and makes it ready to be consumed by SwarmBuilder.
-    pub fn boxed(self) -> libp2p_core::transport::Boxed<(PeerId, StreamMuxerBox)> {
+    /// Wraps `Transport` in and makes it ready to be consumed by SwarmBuilder.
+    pub fn boxed(self) -> Boxed<(PeerId, StreamMuxerBox)> {
         self.map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
             .boxed()
     }
@@ -148,7 +148,7 @@ impl libp2p_core::Transport for Transport {
             }
 
             let connection = rx.await.map_err(|_| {
-                Error::Signaling("WebRTC connection establishment cancelled".to_string())
+                Error::Connection("WebRTC connection establishment cancelled".to_string())
             })?;
 
             Ok((peer_id, connection))

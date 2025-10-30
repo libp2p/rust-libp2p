@@ -376,7 +376,7 @@ impl ProtocolHandler {
                 }
                 RtcPeerConnectionState::Failed => {
                     tracing::error!("Peer connection state transitioned to failed");
-                    return Err(Error::Signaling("Peer connection failed".to_string()));
+                    return Err(Error::Connection("Peer connection failed".to_string()));
                 }
                 _ => {
                     attempts += 1;
@@ -388,7 +388,7 @@ impl ProtocolHandler {
                             current_states.signaling,
                             current_states.ice_gathering
                         );
-                        return Err(Error::Signaling("Connection timeout".to_string()));
+                        return Err(Error::Connection("Connection timeout".to_string()));
                     }
 
                     gloo_timers::future::sleep(
@@ -402,7 +402,7 @@ impl ProtocolHandler {
         let current_states = self.states.borrow().clone();
         if current_states.peer_connection != web_sys::RtcPeerConnectionState::Connected {
             tracing::error!("Rtc peer connection failed. Connection not properly established.");
-            return Err(Error::Signaling(
+            return Err(Error::Connection(
                 "Connection not properly established".to_string(),
             ));
         }
@@ -452,9 +452,12 @@ impl ProtocolHandler {
                 data: candidate_as_str,
             };
 
-            stream.lock().await.write(message).await.map_err(|_| {
-                Error::ProtoSerialization("Failed to send ICE candidate".to_string())
-            })?;
+            stream
+                .lock()
+                .await
+                .write(message)
+                .await
+                .map_err(|_| Error::Js("Failed to send ICE candidate".to_string()))?;
         }
 
         // Send end-of-candidates marker as an empty JSON object
@@ -463,9 +466,12 @@ impl ProtocolHandler {
             data: "{}".to_string(),
         };
 
-        stream.lock().await.write(end_message).await.map_err(|_| {
-            Error::ProtoSerialization("Failed to send end-of-candidates marker".to_string())
-        })?;
+        stream
+            .lock()
+            .await
+            .write(end_message)
+            .await
+            .map_err(|_| Error::Js("Failed to send end-of-candidates marker".to_string()))?;
 
         tracing::info!("ICE candidate transmission complete");
         Ok(())
@@ -479,12 +485,15 @@ impl ProtocolHandler {
         tracing::info!("Receiving ICE candidates from remote peer");
 
         loop {
-            let message = stream.lock().await.read().await.map_err(|_| {
-                Error::ProtoSerialization("Failed to read ICE candidate".to_string())
-            })?;
+            let message = stream
+                .lock()
+                .await
+                .read()
+                .await
+                .map_err(|_| Error::Js("Failed to read ICE candidate".to_string()))?;
 
             if message.type_pb != Type::ICE_CANDIDATE {
-                return Err(Error::Signaling(
+                return Err(Error::Connection(
                     "Expected ICE candidate message".to_string(),
                 ));
             }
@@ -536,11 +545,11 @@ impl Signaling for ProtocolHandler {
 
         // Read SDP offer
         let offer_message = pb_stream.lock().await.read().await.map_err(|_| {
-            Error::ProtoSerialization("Failure to read SDP offer from signaling stream".to_string())
+            Error::Js("Failure to read SDP offer from signaling stream".to_string())
         })?;
 
         if offer_message.type_pb != Type::SDP_OFFER {
-            return Err(Error::Signaling("Expected SDP offer".to_string()));
+            return Err(Error::Connection("Expected SDP offer".to_string()));
         }
 
         // Set remote description with remote offer
@@ -576,9 +585,7 @@ impl Signaling for ProtocolHandler {
             .write(answer_message)
             .await
             .map_err(|_| {
-                Error::ProtoSerialization(
-                    "Failure to write SDP answer to signaling stream".to_string(),
-                )
+                Error::Js("Failure to write SDP answer to signaling stream".to_string())
             })?;
 
         self.wait_for_ice_gathering_complete().await?;
@@ -640,19 +647,20 @@ impl Signaling for ProtocolHandler {
             data: offer_sdp,
         };
 
-        pb_stream.lock().await.write(message).await.map_err(|_| {
-            Error::ProtoSerialization("Failure to write SDP offer to signaling stream".to_string())
-        })?;
+        pb_stream
+            .lock()
+            .await
+            .write(message)
+            .await
+            .map_err(|_| Error::Js("Failure to write SDP offer to signaling stream".to_string()))?;
 
         // Read SDP answer
         let answer_message = pb_stream.lock().await.read().await.map_err(|_| {
-            Error::ProtoSerialization(
-                "Failure to read SDP answer from signaling stream".to_string(),
-            )
+            Error::Js("Failure to read SDP answer from signaling stream".to_string())
         })?;
 
         if answer_message.type_pb != Type::SDP_ANSWER {
-            return Err(Error::Signaling("Expected SDP answer".to_string()));
+            return Err(Error::Connection("Expected SDP answer".to_string()));
         }
 
         let answer_init = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
