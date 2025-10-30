@@ -95,7 +95,7 @@ libp2p-ping = { version = "0.47.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.43.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.26.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.13.0", path = "transports/quic" }
-libp2p-relay = { version = "0.21.1", path = "protocols/relay" }
+libp2p-relay = { version = "0.21.2", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.17.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.29.0", path = "protocols/request-response" }
 libp2p-swarm = { version = "0.47.0", path = "swarm" }
@@ -106,8 +106,8 @@ libp2p-tls = { version = "0.6.2", path = "transports/tls" }
 libp2p-uds = { version = "0.43.0", path = "transports/uds" }
 libp2p-upnp = { version = "0.6.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.9.0-alpha.2", path = "transports/webrtc" }
-libp2p-webrtc-utils = { version = "0.4.0", path = "misc/webrtc-utils" }
-libp2p-webrtc-websys = { version = "0.4.0", path = "transports/webrtc-websys" }
+libp2p-webrtc-utils = { version = "0.4.1", path = "misc/webrtc-utils" }
+libp2p-webrtc-websys = { version = "0.4.1", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.45.2", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.5.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.5.1", path = "transports/webtransport-websys" }
