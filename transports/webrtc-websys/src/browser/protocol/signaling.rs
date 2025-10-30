@@ -324,7 +324,7 @@ impl ProtocolHandler {
     /// Waits for ICE gathering to complete
     async fn wait_for_ice_gathering_complete(&self) -> Result<(), Error> {
         let mut attempts = 0;
-        tracing::trace("Waiting for ice gathering to complete");
+        tracing::trace!("Waiting for ice gathering to complete");
 
         loop {
             let current_state = self.states.borrow().ice_gathering.clone();
@@ -352,7 +352,7 @@ impl ProtocolHandler {
         Ok(())
     }
 
-    /// Waits for the RtcPeerConnectionState to change to a `Connected` state for a 
+    /// Waits for the RtcPeerConnectionState to change to a `Connected` state for a
     /// configurable max number of attempts.
     async fn wait_for_established_conn(&self) -> Result<(), Error> {
         let mut attempts = 0;
@@ -526,8 +526,8 @@ impl Signaling for ProtocolHandler {
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as responder");
-        
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers).await?;
+
+        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
@@ -593,7 +593,7 @@ impl Signaling for ProtocolHandler {
             "WebRTC connection established - Current state: {:?}",
             connection.connection_state()
         );
-        
+
         // Clean up callbacks and close signaling stream. ice_callbacks is only used during the
         // signaling process so its not saved in `ConnectionCallbacks`, but dropped immediately
         drop(_ice_callback);
@@ -609,8 +609,8 @@ impl Signaling for ProtocolHandler {
         stream: SignalingStream<impl AsyncRead + AsyncWrite + Unpin + 'static>,
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as initiator");
-        
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers).await?;
+
+        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));

@@ -96,10 +96,12 @@ impl BrowserTransport {
             keypair: keypair.clone(),
         };
 
-        // Configure finite signaling with appropriate timeouts
+        let stun_servers = vec!["stun:stun.l.google.com:19302"];
+
         let signaling_config = SignalingConfig::new(
-            3,                                     // max retries
-            std::time::Duration::from_millis(0),   // signaling delay
+            3, // max retries
+            100, // max ice gathering attempts
+            std::time::Duration::from_millis(0), // signaling delay
             std::time::Duration::from_millis(100), // connection check delay
             300,                                   // max connection checks (30 seconds)
             std::time::Duration::from_secs(10),    // ICE gathering timeout
