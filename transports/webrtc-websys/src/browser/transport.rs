@@ -6,7 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{channel::oneshot, future::BoxFuture, lock::Mutex, task::AtomicWaker};
+use futures::{channel::oneshot, lock::Mutex, task::AtomicWaker};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
@@ -34,6 +34,7 @@ pub struct ConnectionRequest {
 
 /// A WebTransport [`Transport`](libp2p_core::Transport) that facilitates a WebRTC [`Connection`].
 pub struct Transport {
+    #[allow(unused)]
     config: Config,
     /// Pending connection receivers waiting for WebRTC connections to be established
     pending_dials: Arc<Mutex<HashMap<PeerId, oneshot::Sender<Connection>>>>,
@@ -41,7 +42,6 @@ pub struct Transport {
     established_connections: Arc<Mutex<VecDeque<ConnectionRequest>>>,
     /// Listeners for incoming WebRTC connections
     listeners: HashMap<ListenerId, Multiaddr>,
-    next_listener_id: ListenerId,
     poll_waker: Arc<AtomicWaker>,
 }
 
@@ -61,7 +61,6 @@ impl Transport {
             established_connections: established_connections.clone(),
             listeners: HashMap::new(),
             poll_waker: poll_waker.clone(),
-            next_listener_id: ListenerId::next(),
         };
 
         let behaviour = Behaviour::new(
@@ -124,7 +123,7 @@ impl libp2p_core::Transport for Transport {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        opts: DialOpts,
+        _opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let has_circuit = addr.iter().any(|p| matches!(p, Protocol::P2pCircuit));
         if has_circuit {
@@ -156,23 +155,20 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn poll(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         self.poll_waker.register(cx.waker());
 
         let established_connections = self.established_connections.clone();
 
-        let mut connections = match established_connections.try_lock() {
-            Some(connections) => connections,
-            None => {
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
+        let Some(mut connections) = established_connections.try_lock() else {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         };
 
         if let Some(conn_request) = connections.pop_front() {
-            if let Some((&listener_id, listener_addr)) = self.listeners.iter().next() {
+            if let Some((&listener_id, _)) = self.listeners.iter().next() {
                 let peer_id = conn_request.peer_id;
 
                 let webrtc_addr = format!("/webrtc/p2p/{}", peer_id)

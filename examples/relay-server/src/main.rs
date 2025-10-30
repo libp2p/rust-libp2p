@@ -34,7 +34,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
 };
-use tracing;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

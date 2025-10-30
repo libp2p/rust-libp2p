@@ -10,7 +10,6 @@ use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
-use tracing::info;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{

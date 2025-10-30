@@ -3,7 +3,7 @@ use std::task::Poll;
 use futures::FutureExt;
 use libp2p_core::{upgrade::ReadyUpgrade, PeerId};
 use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol};
-use tracing::{info, instrument};
+use tracing::instrument;
 
 use crate::browser::{
     protocol::signaling::ProtocolHandler, Signaling, SignalingConfig, SignalingStream,
@@ -71,7 +71,6 @@ enum HandlerType {
 pub struct SignalingHandler {
     local_peer_id: PeerId,
     peer: PeerId,
-    is_dialer: bool,
     handler_type: HandlerType,
 }
 
@@ -79,7 +78,6 @@ impl SignalingHandler {
     pub fn new(
         local_peer_id: PeerId,
         peer: PeerId,
-        is_dialer: bool,
         config: SignalingConfig,
         is_noop: bool,
     ) -> Self {
@@ -98,7 +96,6 @@ impl SignalingHandler {
         Self {
             local_peer_id,
             peer,
-            is_dialer,
             handler_type,
         }
     }
@@ -108,7 +105,6 @@ impl SignalingHandler {
         Self {
             local_peer_id,
             peer,
-            is_dialer: false,
             handler_type: HandlerType::EstablishedWebRTC,
         }
     }
@@ -277,7 +273,8 @@ impl ConnectionHandler for SignalingHandler {
 
                 // If the signaling status is AwaitingInitiation request to open a new substream
                 // on the relay connection and start negotiation, i.e. signaling. This will not work
-                // if the relay connection is closed immediately after the WebRTC connection is established.
+                // if the relay connection is closed immediately after the WebRTC connection is
+                // established.
                 //
                 // In order to ensure signaling can happen the relay server will need to stay alive
                 // until signaling is complete.
@@ -298,26 +295,24 @@ impl ConnectionHandler for SignalingHandler {
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         let should_be_initiator = self.should_be_initiator(&self.peer);
-        match (&mut self.handler_type, event) {
-            (
-                HandlerType::Signaling {
-                    signaling_status, ..
-                },
-                FromBehaviourEvent::InitiateSignaling,
-            ) => {
-                if *signaling_status == SignalingStatus::Idle
-                    || *signaling_status == SignalingStatus::WaitingForRetry
-                {
-                    if should_be_initiator {
-                        *signaling_status = SignalingStatus::AwaitingInitiation;
-                        tracing::trace!("Signaling status updated to `AwaitingInitiation`");
-                    } else {
-                        *signaling_status = SignalingStatus::Negotiating;
-                        tracing::trace!("Signaling status updated to `Negotiating`");
-                    }
+        if let (
+            HandlerType::Signaling {
+                signaling_status, ..
+            },
+            FromBehaviourEvent::InitiateSignaling,
+        ) = (&mut self.handler_type, event)
+        {
+            if *signaling_status == SignalingStatus::Idle
+                || *signaling_status == SignalingStatus::WaitingForRetry
+            {
+                if should_be_initiator {
+                    *signaling_status = SignalingStatus::AwaitingInitiation;
+                    tracing::trace!("Signaling status updated to `AwaitingInitiation`");
+                } else {
+                    *signaling_status = SignalingStatus::Negotiating;
+                    tracing::trace!("Signaling status updated to `Negotiating`");
                 }
             }
-            _ => {}
         }
     }
 
@@ -331,7 +326,6 @@ impl ConnectionHandler for SignalingHandler {
             Self::OutboundOpenInfo,
         >,
     ) {
-        let should_be_initiator = self.should_be_initiator(&self.peer);
         match &mut self.handler_type {
             HandlerType::Noop | HandlerType::EstablishedWebRTC => return,
             HandlerType::Signaling {

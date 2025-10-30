@@ -8,7 +8,6 @@ mod stream;
 mod transport;
 mod upgrade;
 
-
 pub use self::{
     browser::{Config as BrowserConfig, Transport as BrowserTransport},
     connection::Connection,

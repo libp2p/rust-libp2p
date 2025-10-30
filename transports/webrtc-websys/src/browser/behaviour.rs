@@ -1,24 +1,20 @@
 use std::{
     collections::{HashMap, VecDeque},
-    str::FromStr,
     sync::Arc,
     task::Poll,
     time::Duration,
 };
 
-use futures::{channel::oneshot, lock::Mutex};
+use futures::{channel::oneshot, lock::Mutex, task::AtomicWaker};
+use libp2p_core::{multiaddr::Protocol, PeerId};
+use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 use tracing::info;
 use web_time::Instant;
-
-use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
-use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 
 use crate::browser::{
     handler::{FromBehaviourEvent, SignalingHandler, ToBehaviourEvent},
     transport::ConnectionRequest,
 };
-
-use futures::task::AtomicWaker;
 
 #[derive(Clone, Debug)]
 pub struct SignalingConfig {
@@ -27,12 +23,14 @@ pub struct SignalingConfig {
     pub(crate) signaling_delay: Duration,
     pub(crate) connection_establishment_delay_in_millis: Duration,
     pub(crate) max_connection_establishment_checks: u32,
+    #[allow(dead_code)]
     pub(crate) ice_gathering_timeout: Duration,
     pub(crate) local_peer_id: PeerId,
-    pub(crate) stun_servers: Option<Vec<String>>
+    pub(crate) stun_servers: Option<Vec<String>>,
 }
 
 impl SignalingConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         max_retries: u8,
         max_ice_gathering_attempts: u8,
@@ -41,7 +39,7 @@ impl SignalingConfig {
         max_connection_establishment_checks: u32,
         ice_gathering_timeout: Duration,
         local_peer_id: PeerId,
-        stun_servers: Option<Vec<String>>
+        stun_servers: Option<Vec<String>>,
     ) -> Self {
         Self {
             max_signaling_retries: max_retries,
@@ -51,7 +49,7 @@ impl SignalingConfig {
             max_connection_establishment_checks,
             ice_gathering_timeout,
             local_peer_id,
-            stun_servers
+            stun_servers,
         }
     }
 }
@@ -124,7 +122,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: libp2p_swarm::ConnectionId,
         peer: PeerId,
-        local_addr: &libp2p_core::Multiaddr,
+        _local_addr: &libp2p_core::Multiaddr,
         remote_addr: &libp2p_core::Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         let is_webrtc_conn = remote_addr.iter().any(|p| matches!(p, Protocol::WebRTC));
@@ -142,7 +140,6 @@ impl NetworkBehaviour for Behaviour {
             Ok(SignalingHandler::new(
                 self.signaling_config.local_peer_id,
                 peer,
-                false,
                 self.signaling_config.clone(),
                 false,
             ))
@@ -181,19 +178,18 @@ impl NetworkBehaviour for Behaviour {
             Ok(SignalingHandler::new(
                 self.signaling_config.local_peer_id,
                 peer,
-                true,
                 self.signaling_config.clone(),
                 false,
             ))
         } else {
             tracing::info!(
                 "Other outbound connection to peer {} on addr {}",
-                peer, addr
+                peer,
+                addr
             );
             Ok(SignalingHandler::new(
                 self.signaling_config.local_peer_id,
                 peer,
-                true,
                 self.signaling_config.clone(),
                 true,
             ))
@@ -206,7 +202,6 @@ impl NetworkBehaviour for Behaviour {
                 let peer_id = connection_established.peer_id;
                 let connection_id = connection_established.connection_id;
                 let endpoint = connection_established.endpoint;
-                let addr = endpoint.get_remote_address();
 
                 if endpoint.is_relayed() && !self.webrtc_connections.contains_key(&connection_id) {
                     self.established_relay_connections
@@ -232,22 +227,19 @@ impl NetworkBehaviour for Behaviour {
                         "WebRTC connection {} with peer {} closed",
                         connection_id, peer_id
                     );
-                } else {
-                    if self
-                        .peers
-                        .get(&peer_id)
-                        .map(|state| {
-                            state.connection_id == connection_id && state.is_relay_connection
-                        })
-                        .unwrap_or(false)
-                    {
-                        tracing::debug!(
-                            "Relay connection {} with peer {} closed (signaling state removed)",
-                            connection_id, peer_id
-                        );
+                } else if self
+                    .peers
+                    .get(&peer_id)
+                    .map(|state| state.connection_id == connection_id && state.is_relay_connection)
+                    .unwrap_or(false)
+                {
+                    tracing::debug!(
+                        "Relay connection {} with peer {} closed (signaling state removed)",
+                        connection_id,
+                        peer_id
+                    );
 
-                        self.peers.remove(&peer_id);
-                    }
+                    self.peers.remove(&peer_id);
                 }
             }
             _ => {}
@@ -257,7 +249,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_swarm::ConnectionId,
+        _connection_id: libp2p_swarm::ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
         match event {
@@ -317,7 +309,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>>
     {
         if let Some(event) = self.queued_events.pop_front() {

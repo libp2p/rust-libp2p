@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use futures::{lock::Mutex, AsyncRead, AsyncWrite};
 use tracing::{info, instrument};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
@@ -36,7 +37,7 @@ struct ConnectionState {
 /// Callbacks for ICE connection, ICE gathering, peer connection signaling
 /// and ice candidate retrieval.
 #[derive(Debug)]
-pub struct ConnectionCallbacks {
+pub(crate) struct ConnectionCallbacks {
     _ice_connection_callback: Closure<dyn FnMut(web_sys::Event)>,
     _ice_gathering_callback: Closure<dyn FnMut(web_sys::Event)>,
     _peer_connection_callback: Closure<dyn FnMut(web_sys::Event)>,
@@ -70,11 +71,6 @@ impl IceCandidateCollection {
                 self.gathering_complete = true;
             }
         }
-    }
-
-    /// Returns whether the candidate gathering is complete.
-    fn is_complete(&self) -> bool {
-        self.gathering_complete
     }
 
     /// Removes and returns candidates from the candidates vector.
@@ -177,6 +173,7 @@ fn safe_signaling_state_from_js(js_val: JsValue) -> RtcSignalingState {
     }
 }
 
+#[async_trait(?Send)]
 pub trait Signaling {
     /// Performs WebRTC signaling as the initiator.
     async fn signaling_as_initiator(
@@ -235,9 +232,8 @@ impl ProtocolHandler {
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
 
-        connection.set_oniceconnectionstatechange(Some(
-            &ice_connection_callback.as_ref().unchecked_ref(),
-        ));
+        connection
+            .set_oniceconnectionstatechange(Some(ice_connection_callback.as_ref().unchecked_ref()));
 
         // ICE gathering state callback
         let states = self.states.clone();
@@ -254,7 +250,7 @@ impl ProtocolHandler {
         }) as Box<dyn FnMut(web_sys::Event)>);
 
         connection
-            .set_onicegatheringstatechange(Some(&ice_gathering_callback.as_ref().unchecked_ref()));
+            .set_onicegatheringstatechange(Some(ice_gathering_callback.as_ref().unchecked_ref()));
 
         // Peer connection state callback
         let states = self.states.clone();
@@ -271,7 +267,7 @@ impl ProtocolHandler {
         }) as Box<dyn FnMut(web_sys::Event)>);
 
         connection
-            .set_onconnectionstatechange(Some(&peer_connection_callback.as_ref().unchecked_ref()));
+            .set_onconnectionstatechange(Some(peer_connection_callback.as_ref().unchecked_ref()));
 
         // Signaling state callback
         let states = self.states.clone();
@@ -287,7 +283,7 @@ impl ProtocolHandler {
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
 
-        connection.set_onsignalingstatechange(Some(&signaling_callback.as_ref().unchecked_ref()));
+        connection.set_onsignalingstatechange(Some(signaling_callback.as_ref().unchecked_ref()));
 
         // Create the callbacks struct to keep closures alive. Callbacks will be stored in the
         // Connection to be dropped when the Connection drops.
@@ -327,7 +323,7 @@ impl ProtocolHandler {
         tracing::trace!("Waiting for ice gathering to complete");
 
         loop {
-            let current_state = self.states.borrow().ice_gathering.clone();
+            let current_state = self.states.borrow().ice_gathering;
 
             match current_state {
                 RtcIceGatheringState::Complete => {
@@ -507,16 +503,13 @@ impl ProtocolHandler {
             tracing::trace!("Received remote ICE candidate: {}", message.data);
 
             if let Some(candidate_init) = Self::parse_ice_candidate(&message) {
-                match JsFuture::from(
+                if let Err(e) = JsFuture::from(
                     connection
                         .add_ice_candidate_with_opt_rtc_ice_candidate_init(Some(&candidate_init)),
                 )
                 .await
                 {
-                    Err(e) => {
-                        tracing::error!("Failed to add remote ICE candidate: {:?}", e);
-                    }
-                    _ => {}
+                    tracing::error!("Failed to add remote ICE candidate: {:?}", e);
                 }
             } else {
                 tracing::warn!("Failed to parse ICE candidate: {}", message.data);
@@ -528,6 +521,7 @@ impl ProtocolHandler {
     }
 }
 
+#[async_trait(?Send)]
 impl Signaling for ProtocolHandler {
     #[instrument(skip(stream), fields(initiator = false))]
     async fn signaling_as_responder(
@@ -536,12 +530,13 @@ impl Signaling for ProtocolHandler {
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as responder");
 
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
+        let rtc_conn =
+            RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
         let callbacks = self.setup_peer_connection_state_callbacks(connection);
-        let (ice_candidates, _ice_callback) = self.setup_ice_candidate_collection(connection);
+        let (ice_candidates, ice_callback) = self.setup_ice_candidate_collection(connection);
 
         // Read SDP offer
         let offer_message = pb_stream.lock().await.read().await.map_err(|_| {
@@ -603,7 +598,7 @@ impl Signaling for ProtocolHandler {
 
         // Clean up callbacks and close signaling stream. ice_callbacks is only used during the
         // signaling process so its not saved in `ConnectionCallbacks`, but dropped immediately
-        drop(_ice_callback);
+        drop(ice_callback);
         drop(pb_stream);
 
         tracing::info!("Completed signaling.");
@@ -617,7 +612,8 @@ impl Signaling for ProtocolHandler {
     ) -> Result<Connection, Error> {
         tracing::info!("Starting WebRTC signaling as initiator");
 
-        let rtc_conn = RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
+        let rtc_conn =
+            RtcPeerConnection::new("sha-256".to_string(), self.config.stun_servers.clone()).await?;
         let connection = rtc_conn.inner();
 
         let pb_stream = Arc::new(Mutex::new(stream));
