@@ -2423,6 +2423,7 @@ dependencies = [
  "getrandom 0.2.15",
  "libp2p-allow-block-list",
  "libp2p-autonat",
+ "libp2p-bluetooth",
  "libp2p-connection-limits",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2499,6 +2500,19 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
+]
+
+[[package]]
+name = "libp2p-bluetooth"
+version = "0.1.0"
+dependencies = [
+ "fnv",
+ "futures",
+ "libp2p-core",
+ "multiaddr",
+ "parking_lot",
+ "rand 0.8.5",
+ "rw-stream-sink",
 ]
 
 [[package]]

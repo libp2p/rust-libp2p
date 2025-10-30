@@ -2,14 +2,14 @@ use std::marker::PhantomData;
 
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(feature = "tcp", feature = "websocket")
+    any(feature = "tcp", feature = "websocket", feature = "bluetooth")
 ))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 #[cfg(all(feature = "websocket", not(target_arch = "wasm32")))]
 use libp2p_core::Transport;
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(feature = "tcp", feature = "websocket")
+    any(feature = "tcp", feature = "websocket", feature = "bluetooth")
 ))]
 use libp2p_core::{
     upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade, Negotiated, UpgradeInfo,
@@ -110,6 +110,71 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
                 transport: libp2p_core::transport::dummy::DummyTransport::new(),
             },
         }
+    }
+
+    #[cfg(all(not(target_arch = "wasm32"), feature = "bluetooth"))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_bluetooth<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+        self,
+        security_upgrade: SecUpgrade,
+        multiplexer_upgrade: MuxUpgrade,
+    ) -> Result<
+        SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+        SecUpgrade::Error,
+    >
+    where
+        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecError: std::error::Error + Send + Sync + 'static,
+        SecUpgrade: IntoSecurityUpgrade<libp2p_bluetooth::Channel<Vec<u8>>>,
+        SecUpgrade::Upgrade: InboundConnectionUpgrade<
+                Negotiated<libp2p_bluetooth::Channel<Vec<u8>>>,
+                Output = (libp2p_identity::PeerId, SecStream),
+                Error = SecError,
+            > + OutboundConnectionUpgrade<
+                Negotiated<libp2p_bluetooth::Channel<Vec<u8>>>,
+                Output = (libp2p_identity::PeerId, SecStream),
+                Error = SecError,
+            > + Clone
+            + Send
+            + 'static,
+        <SecUpgrade::Upgrade as InboundConnectionUpgrade<
+            Negotiated<libp2p_bluetooth::Channel<Vec<u8>>>>>::Future: Send,
+        <SecUpgrade::Upgrade as OutboundConnectionUpgrade<
+            Negotiated<libp2p_bluetooth::Channel<Vec<u8>>>>>::Future: Send,
+        <<<SecUpgrade as IntoSecurityUpgrade<libp2p_bluetooth::Channel<Vec<u8>>>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+        <<SecUpgrade as IntoSecurityUpgrade<libp2p_bluetooth::Channel<Vec<u8>>>>::Upgrade as UpgradeInfo>::Info: Send,
+        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream::Substream: Send + 'static,
+        MuxStream::Error: Send + Sync + 'static,
+        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+        MuxUpgrade::Upgrade: InboundConnectionUpgrade<
+                Negotiated<SecStream>,
+                Output = MuxStream,
+                Error = MuxError,
+            > + OutboundConnectionUpgrade<
+                Negotiated<SecStream>,
+                Output = MuxStream,
+                Error = MuxError,
+            > + Clone
+            + Send
+            + 'static,
+        <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
+        <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
+        MuxError: std::error::Error + Send + Sync + 'static,
+        <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+        <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    {
+        Ok(SwarmBuilder {
+            phase: QuicPhase {
+                transport: libp2p_bluetooth::BluetoothTransport::new()
+                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                    .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
+                    .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+                    .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer))),
+            },
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
     }
 }
 

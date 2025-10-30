@@ -39,6 +39,9 @@ pub use libp2p_allow_block_list as allow_block_list;
 #[cfg(feature = "autonat")]
 #[doc(inline)]
 pub use libp2p_autonat as autonat;
+#[cfg(all(feature = "bluetooth", not(target_arch = "wasm32")))]
+#[doc(inline)]
+pub use libp2p_bluetooth as bluetooth;
 #[doc(inline)]
 pub use libp2p_connection_limits as connection_limits;
 #[doc(inline)]
