@@ -153,7 +153,6 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        #[allow(unreachable_code)]
         libp2p_core::util::unreachable(error.into_inner());
     }
 

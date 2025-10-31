@@ -430,7 +430,6 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
-                        #[allow(unreachable_code)]
                         error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
                     ),
                 ));
