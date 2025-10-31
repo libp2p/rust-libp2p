@@ -16,7 +16,7 @@ release = false
 crate-type = ["cdylib"]
 
 [dependencies]
-futures = { workspace = true, default-features = false }
+futures = { workspace = true }
 console_error_panic_hook = "0.1"
 tracing = { workspace = true }
 libp2p-swarm = { workspace = true }
@@ -33,11 +33,6 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["RtcPeerConnection", "RtcDataChannel", "RtcConfiguration", "Window", "Navigator", "MediaDevices"] }
 js-sys = "0.3"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
 
 [package.metadata.wasm-pack]
 "wasm-pack" = ["cdylib"]

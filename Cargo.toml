@@ -3,6 +3,7 @@ members = [
     "core",
     "examples/autonat",
     "examples/autonatv2",
+    "examples/browser-to-browser-webrtc",
     "examples/browser-webrtc",
     "examples/chat",
     "examples/dcutr",
@@ -91,6 +92,8 @@ libp2p-memory-connection-limits = { version = "0.5.0", path = "misc/memory-conne
 libp2p-metrics = { version = "0.17.1", path = "misc/metrics" }
 libp2p-mplex = { version = "0.43.1", path = "muxers/mplex" }
 libp2p-noise = { version = "0.46.1", path = "transports/noise" }
+libp2p-peer-store = { version = "0.1.0", path = "misc/peer-store" }
+libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.47.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.43.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.26.0", path = "transports/pnet" }
@@ -98,6 +101,8 @@ libp2p-quic = { version = "0.13.0", path = "transports/quic" }
 libp2p-relay = { version = "0.21.1", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.17.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.29.0", path = "protocols/request-response" }
+libp2p-server = { version = "0.12.7", path = "misc/server" }
+libp2p-stream = { version = "0.4.0-alpha", path = "protocols/stream" }
 libp2p-swarm = { version = "0.47.0", path = "swarm" }
 libp2p-swarm-derive = { version = "=0.35.1", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
 libp2p-swarm-test = { version = "0.6.0", path = "swarm-test" }

@@ -32,7 +32,8 @@ pub struct ConnectionRequest {
     pub connection: Connection,
 }
 
-/// A WebTransport [`Transport`](libp2p_core::Transport) that facilitates a WebRTC [`Connection`].
+/// A WebRTC [`Transport`](libp2p_core::Transport) that facilitates a `RtcPeerConnection` via
+/// web-sys.
 pub struct Transport {
     #[allow(unused)]
     config: Config,

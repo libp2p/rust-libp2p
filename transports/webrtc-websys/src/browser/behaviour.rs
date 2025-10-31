@@ -319,11 +319,6 @@ impl NetworkBehaviour for Behaviour {
         let now = Instant::now();
         let delay = self.signaling_config.signaling_delay;
 
-        tracing::trace!(
-            "Poll: checking {} peers for signaling initiation",
-            self.peers.len()
-        );
-
         for (peer_id, state) in self.peers.iter_mut() {
             tracing::trace!(
                 "  Peer {}: initiated={}, is_relay={}, time_elapsed={:?}",

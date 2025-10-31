@@ -4,27 +4,19 @@ use futures::{channel::mpsc, task::AtomicWaker, StreamExt};
 use js_sys::{Object, Reflect};
 use libp2p::{
     identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, yamux,
-    Multiaddr, PeerId, Swarm, Transport,
+    Multiaddr, Swarm, Transport,
 };
 use libp2p_core::{muxing::StreamMuxerBox, upgrade::Version};
 use libp2p_swarm::NetworkBehaviour;
 use libp2p_webrtc_websys::browser::{
     self, Behaviour, SignalingConfig, Transport as BrowserWebrtcTransport,
 };
-use tracing;
-use tracing_wasm;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default_with_config(
-        tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(tracing::Level::DEBUG)
-            .set_console_config(tracing_wasm::ConsoleConfig::ReportWithConsoleColor)
-            .build(),
-    );
 }
 
 #[wasm_bindgen]
@@ -96,23 +88,26 @@ impl BrowserTransport {
             keypair: keypair.clone(),
         };
 
-        let stun_servers = vec!["stun:stun.l.google.com:19302"];
+        let stun_servers = ["stun:stun.l.google.com:19302"];
 
         let signaling_config = SignalingConfig::new(
             3, // max retries
-            100, // max ice gathering attempts
+            100, /* max ice gathering
+                * attempts */
             std::time::Duration::from_millis(0), // signaling delay
             std::time::Duration::from_millis(100), // connection check delay
-            300,                                   // max connection checks (30 seconds)
-            std::time::Duration::from_secs(10),    // ICE gathering timeout
-            keypair.public().to_peer_id(),         // The local peer's peer_id
+            300,                                 // max connection checks (30 seconds)
+            std::time::Duration::from_secs(10),  // ICE gathering timeout
+            keypair.public().to_peer_id(),       // The local peer's peer_id
+            Some(stun_servers.iter().map(ToString::to_string).collect()), // stun servers
         );
 
         let (webrtc_transport, webrtc_behaviour) =
             BrowserWebrtcTransport::new(webrtc_config, signaling_config, transport_waker.clone());
         let webrtc_transport_boxed = webrtc_transport.boxed();
 
-        // A WebRTC behaviour facilitating coordination between the relay connection and webrtc signaling
+        // A WebRTC behaviour facilitating coordination between the relay connection and webrtc
+        // signaling
         let behaviour = WebRTCBehaviour {
             relay: relay_behaviour,
             webrtc: webrtc_behaviour,
@@ -130,14 +125,14 @@ impl BrowserTransport {
             .or_transport(relay_transport_upgraded)
             .or_transport(ws_transport)
             .map(|either_output, _| match either_output {
-                // WebRTC output (leftmost left)
+                // WebRTC output
                 futures::future::Either::Left(futures::future::Either::Left((
                     peer_id,
                     connection,
                 ))) => (peer_id, StreamMuxerBox::new(connection)),
-                // Relay output (leftmost right)
+                // Relay output
                 futures::future::Either::Left(futures::future::Either::Right(output)) => output,
-                // WebSocket output (right)
+                // WebSocket output
                 futures::future::Either::Right(output) => output,
             })
             .boxed();
@@ -152,7 +147,9 @@ impl BrowserTransport {
             .with_idle_connection_timeout(std::time::Duration::from_secs(300)),
         );
 
+        #[allow(clippy::disallowed_methods)]
         let (cmd_sender, mut cmd_receiver) = mpsc::unbounded();
+        #[allow(clippy::disallowed_methods)]
         let (event_sender, event_receiver) = mpsc::unbounded();
 
         spawn_local(async move {
@@ -187,7 +184,6 @@ impl BrowserTransport {
                     if addr_str.contains("/p2p-circuit") && addr_str.contains("/webrtc") {
                         tracing::info!("Dialing peer: {}", addr);
 
-                        // Step 1: Dial the relay circuit (for signaling)
                         let relay_circuit_addr_str = addr_str.replace("/webrtc", "");
                         tracing::info!("Transformed to relay circuit address: {}", relay_circuit_addr_str);
 
@@ -201,8 +197,7 @@ impl BrowserTransport {
                                     continue;
                                 }
 
-                                // ✅ Step 2: ALSO dial the WebRTC address (creates Future waiting for connection)
-                                // Extract just the target peer for the WebRTC dial
+                                // Also dial the WebRTC address (creates Future waiting for connection)
                                 let peer_id_str = addr_str.split("/p2p/").last().unwrap_or("");
                                 let webrtc_addr_str = format!("/webrtc/p2p/{}", peer_id_str);
 
@@ -228,7 +223,6 @@ impl BrowserTransport {
                 }
                                                                 Command::ListenForWebRTC => {
                                                                     if !webrtc_listening {
-                                                                        // Create a virtual WebRTC listener address
                                                                          let webrtc_listen_addr = "/webrtc".parse::<Multiaddr>().unwrap();
 
                                                                         match swarm.listen_on(webrtc_listen_addr.clone()) {
@@ -275,17 +269,8 @@ impl BrowserTransport {
                                                             SwarmEvent::ConnectionClosed { peer_id, cause, endpoint, connection_id, .. } => {
                                                                 tracing::info!("Connection on endpoint {:?} closed with cause: {:?}", endpoint, cause);
 
-                                                                // let addr = endpoint.get_remote_address().to_string();
-                                                                // if addr.contains("/p2p-circuit") && !addr.contains("/webrtc") {
-                                                                //     tracing::info!("Relay connection closed with {}: {:?}", peer_id, cause);
-                                                                // } else if addr.contains("/webrtc") {
-                                                                //     tracing::info!("WebRTC connection closed with {}: {:?}", peer_id, cause);
-                                                                // }
-
-                                                                  // Query the swarm for remaining connections to this peer
                                     let remaining = swarm.network_info().num_peers();
 
-                                    // Better: Check if we still have ANY connection to this specific peer
                                     let still_connected = swarm.is_connected(&peer_id);
 
                                     tracing::info!(
@@ -329,7 +314,6 @@ impl BrowserTransport {
                                                                         match webrtc_event {
                                                                             browser::SignalingEvent::NewWebRTCConnection { peer_id } => {
                                                                                 tracing::info!("WebRTC connection established with peer: {}", peer_id);
-                                                                                // Connection is now managed by the swarm
                                                                             }
                                                                             browser::SignalingEvent::WebRTCConnectionError { peer_id, error } => {
                                                                                 tracing::error!("Failed to establish WebRTC connection with {}: {:?}", peer_id, error);
@@ -381,7 +365,6 @@ impl BrowserTransport {
             .unbounded_send(Command::ListenOnRelay { addr })
             .map_err(|e| JsValue::from_str(&format!("Failed to send command: {}", e)))?;
 
-        // Also setup WebRTC listener
         self.cmd_sender
             .unbounded_send(Command::ListenForWebRTC)
             .map_err(|e| JsValue::from_str(&format!("Failed to setup WebRTC listener: {}", e)))?;
@@ -420,20 +403,20 @@ impl BrowserTransport {
                 }
                 Event::RelayConnectionEstablished { peer_id } => {
                     Reflect::set(&obj, &"type".into(), &"relayConnectionEstablished".into())?;
-                    Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
+                    Reflect::set(&obj, &"peer_id".into(), &peer_id.into())?;
                 }
                 Event::WebRTCConnectionEstablished { peer_id } => {
                     Reflect::set(&obj, &"type".into(), &"webrtcConnectionEstablished".into())?;
-                    Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
+                    Reflect::set(&obj, &"peer_id".into(), &peer_id.into())?;
                 }
                 Event::PingSuccess { peer_id, rtt_ms } => {
                     Reflect::set(&obj, &"type".into(), &"pingSuccess".into())?;
-                    Reflect::set(&obj, &"peerId".into(), &peer_id.into())?;
-                    Reflect::set(&obj, &"rttMs".into(), &rtt_ms.into())?;
+                    Reflect::set(&obj, &"peer_id".into(), &peer_id.into())?;
+                    Reflect::set(&obj, &"rtt_ms".into(), &rtt_ms.into())?;
                 }
                 Event::Error { msg } => {
                     Reflect::set(&obj, &"type".into(), &"error".into())?;
-                    Reflect::set(&obj, &"message".into(), &msg.into())?;
+                    Reflect::set(&obj, &"msg".into(), &msg.into())?;
                 }
             }
 

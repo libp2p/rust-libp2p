@@ -48,7 +48,7 @@ enum SignalingRole {
     Responder,
 }
 
-/// Defines a HandlerType for the various situations in which the SignalingHandler must exist.
+/// Defines a HandlerType for the various situations in which the SignalingHandler can exist.
 #[derive(Debug)]
 enum HandlerType {
     /// Handler for signaling over relay

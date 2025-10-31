@@ -681,10 +681,11 @@ impl Signaling for ProtocolHandler {
         );
 
         // Clean up callbacks, close data channel, and close signaling stream
-        data_channel.close();
 
-        // Clean up callbacks and close signaling stream. ice_callbacks is only used during the
-        // signaling process so its not saved in `ConnectionCallbacks`, but dropped immediately
+        // Clean up callbacks, close data channel and close signaling stream. ice_callbacks is only
+        // used during the signaling process so its not saved in `ConnectionCallbacks`, but
+        // dropped immediately
+        data_channel.close();
         drop(_ice_callback);
         drop(pb_stream);
 
