@@ -166,6 +166,7 @@ impl libp2p_core::Transport for Transport {
             is_closed: false,
             waker: None,
         };
+
         self.listeners.push(listener);
         Ok(())
     }
@@ -189,6 +190,11 @@ impl libp2p_core::Transport for Transport {
             // traversal. One would coordinate such traversal via a previously
             // established relayed connection, but never using a relayed connection
             // itself.
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
+        if !addr.is_relayed() {
+            // This is not a relay address at all, pass it to next transport
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
