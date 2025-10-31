@@ -3,7 +3,7 @@ use quick_protobuf::{BytesReader, Error, MessageRead, MessageWrite, Writer};
 
 use crate::browser::protocol::proto::signaling::SignalingMessage;
 
-/// A wrapper over an async stream for reading and writing a [`SignalingMessage`].
+/// A wrapper over an async stream for reading and writing a SignalingMessage.
 pub struct SignalingStream<T> {
     inner: T,
 }
