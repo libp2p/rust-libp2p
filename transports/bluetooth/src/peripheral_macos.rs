@@ -41,6 +41,7 @@ struct PeripheralState {
     rx_characteristic: Option<Retained<CBMutableCharacteristic>>,
     ready_to_send: bool,
     frame_codec: FrameCodec,
+    peripheral_manager: Option<Retained<CBPeripheralManager>>,
 }
 
 pub(crate) struct PeripheralManagerDelegateIvars {
@@ -74,6 +75,27 @@ declare_class!(
                     self.setup_service(peripheral);
                 }
             }
+        }
+
+        #[method(peripheralManager:didReceiveConnectionRequest:)]
+        fn peripheral_manager_did_receive_connection_request(
+            &self,
+            _peripheral: &CBPeripheralManager,
+            central: &CBCentral,
+        ) {
+            unsafe {
+                log::info!("🟢 Received connection request from central: {}",
+                    central.identifier().UUIDString());
+            }
+        }
+
+        #[method(peripheralManager:willRestoreState:)]
+        fn peripheral_manager_will_restore_state(
+            &self,
+            _peripheral: &CBPeripheralManager,
+            _dict: &objc2_foundation::NSDictionary,
+        ) {
+            log::info!("Peripheral manager will restore state");
         }
 
         #[method(peripheralManager:didAddService:error:)]
@@ -126,8 +148,8 @@ declare_class!(
                 state.ready_to_send = true;
                 drop(state);
 
-                // Try to send any queued data
-                self.send_queued_data(peripheral);
+                // Check for new data and try to send any queued data
+                self.check_and_send_data();
             }
         }
 
@@ -174,32 +196,43 @@ declare_class!(
             requests: &NSArray<CBATTRequest>,
         ) {
             unsafe {
-                log::debug!("Received {} write request(s)", requests.count());
+                log::info!("🔵 Peripheral received {} write request(s)", requests.count());
 
                 for i in 0..requests.count() {
                     let request = requests.objectAtIndex(i);
+                    log::info!("  Request {} - characteristic: {}", i, request.characteristic().UUID().UUIDString());
+
                     if let Some(value) = request.value() {
                         let bytes: &[u8] = value.bytes();
 
-                        log::debug!("Received write: {} bytes", bytes.len());
+                        log::info!("  Request {} - received {} bytes", i, bytes.len());
 
                         // Process the data through frame codec
                         let mut state = self.ivars().state.lock();
                         state.frame_codec.push_data(bytes);
 
                         while let Ok(Some(frame)) = state.frame_codec.decode_next() {
-                            log::debug!("Decoded frame: {} bytes", frame.len());
+                            log::info!("  ✓ Decoded frame: {} bytes", frame.len());
                             let _ = state.incoming_tx.try_send(frame);
                         }
+                    } else {
+                        log::warn!("  Request {} has no value", i);
                     }
                 }
 
                 // Respond success to all requests
                 if requests.count() > 0 {
                     if let Some(first_request) = requests.firstObject() {
+                        log::info!("  Responding with Success to request");
                         peripheral.respondToRequest_withResult(first_request.as_ref(), CBATTError::Success);
                     }
+                } else {
+                    log::warn!("  No requests to respond to!");
                 }
+
+                // Check for and send any pending outgoing data
+                // We do this after receiving data since it indicates an active connection
+                self.check_and_send_data();
             }
         }
 
@@ -213,7 +246,8 @@ declare_class!(
             state.ready_to_send = true;
             drop(state);
 
-            self.send_queued_data(peripheral);
+            // Check for new data and send
+            self.check_and_send_data();
         }
     }
 );
@@ -230,9 +264,15 @@ impl PeripheralManagerDelegate {
                 rx_characteristic: None,
                 ready_to_send: false,
                 frame_codec: FrameCodec::new(),
+                peripheral_manager: None,
             }),
         });
         unsafe { msg_send_id![super(this), init] }
+    }
+
+    pub(crate) fn set_peripheral_manager(&self, peripheral: Retained<CBPeripheralManager>) {
+        let mut state = self.ivars().state.lock();
+        state.peripheral_manager = Some(peripheral);
     }
 
     fn setup_service(&self, peripheral: &CBPeripheralManager) {
@@ -245,9 +285,10 @@ impl PeripheralManagerDelegate {
         };
 
         // Create RX characteristic (central writes to this)
+        // Use ONLY Write property (with response) to trigger didReceiveWriteRequests
+        // WriteWithoutResponse does NOT trigger callbacks in peripheral mode
         let rx_uuid = uuid_to_cbuuid(&RX_CHARACTERISTIC_UUID);
-        let rx_properties = CBCharacteristicProperties::CBCharacteristicPropertyWrite
-            | CBCharacteristicProperties::CBCharacteristicPropertyWriteWithoutResponse;
+        let rx_properties = CBCharacteristicProperties::CBCharacteristicPropertyWrite;
         let rx_char = unsafe {
             CBMutableCharacteristic::initWithType_properties_value_permissions(
                 CBMutableCharacteristic::alloc(),
@@ -316,13 +357,13 @@ impl PeripheralManagerDelegate {
     }
 
     /// Process any pending outgoing data from the channel
-    fn process_outgoing_channel(&self) {
+    fn process_outgoing_channel(&self) -> bool {
         // Collect all pending data from the channel first
         let mut pending_data = Vec::new();
         {
             let mut state = self.ivars().state.lock();
             let Some(outgoing_rx) = state.outgoing_data_rx.as_mut() else {
-                return;
+                return false;
             };
 
             // Drain all available data from the channel without blocking
@@ -349,6 +390,27 @@ impl PeripheralManagerDelegate {
                     }
                 }
             }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check for and send any pending outgoing data
+    /// This should be called periodically to ensure data is sent
+    pub(crate) fn check_and_send_data(&self) {
+        // Process any pending data from the channel
+        self.process_outgoing_channel();
+
+        // Always try to send queued data, not just when there's new data
+        // This ensures we retry sending when the peripheral manager becomes ready
+        let peripheral = {
+            let state = self.ivars().state.lock();
+            state.peripheral_manager.clone()
+        };
+
+        if let Some(peripheral) = peripheral {
+            self.send_queued_data(&peripheral);
         }
     }
 
@@ -359,12 +421,24 @@ impl PeripheralManagerDelegate {
         let mut state = self.ivars().state.lock();
 
         if !state.ready_to_send || state.subscribed_centrals.is_empty() {
+            // Only log if there's actually data waiting to be sent
+            if !state.outgoing_queue.is_empty() {
+                log::debug!("Cannot send: ready={}, subscribers={}, queue={}",
+                    state.ready_to_send, state.subscribed_centrals.len(), state.outgoing_queue.len());
+            }
             return;
         }
 
         let Some(tx_char) = state.tx_characteristic.clone() else {
+            if !state.outgoing_queue.is_empty() {
+                log::debug!("No TX characteristic available, {} items queued", state.outgoing_queue.len());
+            }
             return;
         };
+
+        if !state.outgoing_queue.is_empty() {
+            log::debug!("Attempting to send {} queued items", state.outgoing_queue.len());
+        }
 
         while let Some(data) = state.outgoing_queue.first() {
             let ns_data = NSData::from_vec(data.clone());
@@ -429,12 +503,81 @@ impl BlePeripheralManager {
             ]
         };
 
+        // Set the peripheral manager reference in the delegate so it can trigger sends
+        delegate.set_peripheral_manager(peripheral.clone());
+
         let manager = Arc::new(Self {
             peripheral,
-            delegate,
+            delegate: delegate.clone(),
         });
 
+        // Set up a GCD timer to periodically check for outgoing data
+        // This ensures we don't miss data due to timing issues
+        unsafe {
+            use std::ffi::c_void;
+            extern "C" {
+                fn dispatch_source_create(
+                    type_: *const c_void,
+                    handle: usize,
+                    mask: usize,
+                    queue: *mut objc2::runtime::AnyObject,
+                ) -> *mut c_void;
+                fn dispatch_source_set_timer(
+                    source: *mut c_void,
+                    start: u64,
+                    interval: u64,
+                    leeway: u64,
+                );
+                fn dispatch_source_set_event_handler_f(
+                    source: *mut c_void,
+                    handler: extern "C" fn(*mut c_void),
+                );
+                fn dispatch_set_context(object: *mut c_void, context: *mut c_void);
+                fn dispatch_resume(object: *mut c_void);
+                fn dispatch_get_global_queue(identifier: i64, flags: usize) -> *mut objc2::runtime::AnyObject;
+
+                static _dispatch_source_type_timer: c_void;
+            }
+
+            // Create a timer on a global queue
+            let timer_queue = dispatch_get_global_queue(0, 0);
+            let timer = dispatch_source_create(
+                &_dispatch_source_type_timer as *const _,
+                0,
+                0,
+                timer_queue,
+            );
+
+            // Set timer to fire every 10ms
+            let start = 0u64; // DISPATCH_TIME_NOW
+            let interval = 10_000_000u64; // 10ms in nanoseconds
+            let leeway = 1_000_000u64; // 1ms leeway
+            dispatch_source_set_timer(timer, start, interval, leeway);
+
+            // Store delegate as context
+            let delegate_ptr = Box::into_raw(Box::new(delegate.clone())) as *mut c_void;
+            dispatch_set_context(timer, delegate_ptr);
+
+            // Set event handler
+            extern "C" fn timer_handler(context: *mut c_void) {
+                unsafe {
+                    let delegate_ptr = context as *const Retained<PeripheralManagerDelegate>;
+                    if !delegate_ptr.is_null() {
+                        (*delegate_ptr).check_and_send_data();
+                    }
+                }
+            }
+            dispatch_source_set_event_handler_f(timer, timer_handler);
+
+            // Start the timer
+            dispatch_resume(timer);
+
+            // Leak the timer - it will run for the lifetime of the program
+            std::mem::forget(timer);
+        }
+
         log::info!("Peripheral manager created with outgoing data handling");
+        log::info!("Note: Outgoing data is sent reactively and polled every 10ms");
 
         Ok(manager)
     }

@@ -522,6 +522,10 @@ impl Transport for BluetoothTransport {
             let rx_char_uuid_for_write = rx_char_uuid.clone();
 
             tokio::spawn(async move {
+                // Longer delay to ensure connection and services are fully ready
+                // SimpleBLE write_request needs everything to be stable
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
                 while let Some(data) = out_rx.next().await {
                     log::debug!("Sending {} bytes", data.len());
 
@@ -535,15 +539,30 @@ impl Transport for BluetoothTransport {
                     };
 
                     // Write the data to RX characteristic (peripheral receives)
-                    // Use write_command (without acknowledgment) since the characteristic has WriteWithoutResponse
-                    if let Err(e) = peripheral_for_write.write_command(
-                        &service_uuid_for_write,
-                        &rx_char_uuid_for_write,
-                        &encoded,
-                    ) {
-                        log::error!("Failed to write: {:?}", e);
-                    } else {
-                        log::debug!("Wrote {} bytes", encoded.len());
+                    // Use write_request (with response) to trigger didReceiveWriteRequests on peripheral
+                    let mut retry_count = 0;
+                    let max_retries = 3;
+
+                    loop {
+                        match peripheral_for_write.write_request(
+                            &service_uuid_for_write,
+                            &rx_char_uuid_for_write,
+                            &encoded,
+                        ) {
+                            Ok(_) => {
+                                log::debug!("Wrote {} bytes", encoded.len());
+                                break;
+                            }
+                            Err(e) => {
+                                retry_count += 1;
+                                if retry_count >= max_retries {
+                                    log::error!("Failed to write after {} attempts: {:?}", max_retries, e);
+                                    break;
+                                }
+                                log::warn!("Write attempt {} failed, retrying: {:?}", retry_count, e);
+                                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                            }
+                        }
                     }
                 }
 
