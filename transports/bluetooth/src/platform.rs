@@ -217,9 +217,15 @@ impl Transport for BluetoothTransport {
                     .await
                     {
                         Ok(peripheral) => {
-                            let mut state = inner.lock();
-                            state.peripheral_manager = Some(peripheral);
-                            log::info!("Started BLE peripheral manager");
+                            {
+                                let mut state = inner.lock();
+                                state.peripheral_manager = Some(peripheral);
+                                log::info!("Started BLE peripheral manager");
+                            }
+
+                            // Give CoreBluetooth time to initialize and start advertising
+                            // The peripheral manager needs its dispatch queue to process callbacks
+                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
                         }
                         Err(e) => {
                             log::error!("Failed to start peripheral: {:?}", e);
@@ -288,7 +294,7 @@ impl Transport for BluetoothTransport {
             // Get scan events stream
             let mut scan_stream = adapter.on_scan_event();
 
-            // Wait for a peripheral advertising our service
+            // Wait for peripherals advertising our service
             log::info!(
                 "Scanning for peripherals with service {}...",
                 LIBP2P_SERVICE_UUID
@@ -297,20 +303,24 @@ impl Transport for BluetoothTransport {
             let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(10));
             tokio::pin!(timeout);
 
-            let found_peripheral;
+            let mut discovered_peripherals: Vec<Peripheral> = Vec::new();
+            let mut found_peripheral: Option<Peripheral> = None;
 
+            // Collect peripherals for a bit to avoid connecting to ourselves
+            let collection_time = tokio::time::sleep(tokio::time::Duration::from_millis(2000));
+            tokio::pin!(collection_time);
+
+            // First, collect all peripherals for 2 seconds
             loop {
                 tokio::select! {
                     Some(event) = scan_stream.next() => {
                         match event {
                             Ok(ScanEvent::Found(peripheral)) => {
                                 let id = peripheral.identifier().unwrap_or_else(|_| "unknown".to_string());
-                                log::debug!("Found peripheral: {}", id);
+                                let address = peripheral.address().unwrap_or_else(|_| "unknown".to_string());
 
-                                // Try to connect to see if it has our service
-                                log::info!("Attempting to connect to peripheral: {}", id);
-                                found_peripheral = peripheral;
-                                break;
+                                log::debug!("Found peripheral - ID: '{}', Address: '{}'", id, address);
+                                discovered_peripherals.push(peripheral);
                             }
                             Ok(ScanEvent::Updated(_)) => {
                                 // Ignore updates
@@ -326,6 +336,10 @@ impl Transport for BluetoothTransport {
                             }
                         }
                     }
+                    _ = &mut collection_time => {
+                        log::info!("Collected {} peripherals", discovered_peripherals.len());
+                        break;
+                    }
                     _ = &mut timeout => {
                         adapter.scan_stop().ok();
                         log::error!("Scan timeout - no peripherals found");
@@ -334,29 +348,79 @@ impl Transport for BluetoothTransport {
                 }
             }
 
-            // Stop scanning
-            adapter.scan_stop().ok();
+            // Try to connect to each peripheral until we find one with our service
+            for peripheral in discovered_peripherals {
+                let id = peripheral.identifier().unwrap_or_else(|_| "unknown".to_string());
+                let address = peripheral.address().unwrap_or_else(|_| "unknown".to_string());
 
-            let peripheral = found_peripheral;
+                log::info!("Trying peripheral - ID: '{}', Address: '{}'", id, address);
 
-            // Connect to the peripheral
-            let id = peripheral
-                .identifier()
-                .unwrap_or_else(|_| "unknown".to_string());
-            log::info!("Connecting to peripheral {}...", id);
-            peripheral.connect().map_err(|e| {
-                log::error!("Failed to connect: {:?}", e);
+                // Check if peripheral is already connected
+                if peripheral.is_connected().unwrap_or(false) {
+                    log::warn!("Peripheral is already connected, skipping...");
+                    continue;
+                }
+
+                // Try to connect
+                match peripheral.connect() {
+                    Ok(_) => {
+                        log::info!("Successfully connected to peripheral! Checking services...");
+
+                        // Get services to verify this peripheral has our service
+                        match peripheral.services() {
+                            Ok(services) => {
+                                log::info!("Found {} service(s) on peripheral {}", services.len(), address);
+
+                                // Log all services for debugging
+                                for s in &services {
+                                    log::info!("  Service on {}: {}", address, s.uuid());
+                                }
+
+                                // Check if this peripheral has our libp2p service
+                                let has_libp2p_service = services.iter().any(|s| {
+                                    let uuid = s.uuid().to_lowercase();
+                                    uuid == LIBP2P_SERVICE_UUID.to_lowercase()
+                                });
+
+                                if has_libp2p_service {
+                                    log::info!("✓ Peripheral {} has the libp2p service {}!", address, LIBP2P_SERVICE_UUID);
+                                    found_peripheral = Some(peripheral);
+                                    break;
+                                } else {
+                                    log::info!("✗ Peripheral {} doesn't have libp2p service (expected {}), disconnecting...", address, LIBP2P_SERVICE_UUID);
+                                    peripheral.disconnect().ok();
+                                    continue;
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to get services from peripheral {}: {:?}, disconnecting...", address, e);
+                                peripheral.disconnect().ok();
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to connect to peripheral {}: {:?}, trying next...", address, e);
+                        continue;
+                    }
+                }
+            }
+
+            let peripheral = found_peripheral.ok_or_else(|| {
+                log::error!("Could not find any peripherals with the libp2p service");
                 BluetoothTransportError::ConnectionFailed
             })?;
 
-            log::info!("Connected! Discovering services...");
+            // Stop scanning after successful connection
+            adapter.scan_stop().ok();
 
-            // Get services
+            log::info!("Connected to peripheral with libp2p service! Discovering characteristics...");
+
+            // Get services (we already checked it has our service above)
             let services = peripheral.services().map_err(|e| {
                 log::error!("Failed to get services: {:?}", e);
                 BluetoothTransportError::ConnectionFailed
             })?;
-            log::info!("Found {} services", services.len());
 
             // Find our service
             let service = services
@@ -366,11 +430,7 @@ impl Transport for BluetoothTransport {
                     uuid == LIBP2P_SERVICE_UUID.to_lowercase()
                 })
                 .ok_or_else(|| {
-                    log::error!("Service {} not found", LIBP2P_SERVICE_UUID);
-                    log::info!("Available services:");
-                    for s in &services {
-                        log::info!("  - {}", s.uuid());
-                    }
+                    log::error!("Service {} not found (this shouldn't happen)", LIBP2P_SERVICE_UUID);
                     BluetoothTransportError::ConnectionFailed
                 })?;
 
@@ -412,7 +472,7 @@ impl Transport for BluetoothTransport {
             let (in_tx, in_rx) = mpsc::channel::<Vec<u8>>(32);
             let (out_tx, mut out_rx) = mpsc::channel::<Vec<u8>>(32);
 
-            // Subscribe to notifications on RX characteristic
+            // Subscribe to notifications on TX characteristic (peripheral transmits, we receive)
             let service_uuid = service.uuid();
             let rx_char_uuid = rx_char.uuid();
             let tx_char_uuid = tx_char.uuid();
@@ -421,11 +481,11 @@ impl Transport for BluetoothTransport {
             let peripheral_for_notify = peripheral.clone();
             let in_tx_clone = in_tx.clone();
             let service_uuid_for_notify = service_uuid.clone();
-            let rx_char_uuid_for_notify = rx_char_uuid.clone();
+            let tx_char_uuid_for_notify = tx_char_uuid.clone();
 
             tokio::spawn(async move {
                 match peripheral_for_notify
-                    .notify(&service_uuid_for_notify, &rx_char_uuid_for_notify)
+                    .notify(&service_uuid_for_notify, &tx_char_uuid_for_notify)
                 {
                     Ok(mut notification_stream) => {
                         let mut frame_codec = FrameCodec::new();
@@ -456,10 +516,10 @@ impl Transport for BluetoothTransport {
                 }
             });
 
-            // Spawn task to handle outgoing writes
+            // Spawn task to handle outgoing writes to RX characteristic (peripheral receives, we write)
             let peripheral_for_write = peripheral.clone();
             let service_uuid_for_write = service_uuid.clone();
-            let tx_char_uuid_for_write = tx_char_uuid.clone();
+            let rx_char_uuid_for_write = rx_char_uuid.clone();
 
             tokio::spawn(async move {
                 while let Some(data) = out_rx.next().await {
@@ -474,10 +534,11 @@ impl Transport for BluetoothTransport {
                         }
                     };
 
-                    // Write the data using write_request (with acknowledgment)
-                    if let Err(e) = peripheral_for_write.write_request(
+                    // Write the data to RX characteristic (peripheral receives)
+                    // Use write_command (without acknowledgment) since the characteristic has WriteWithoutResponse
+                    if let Err(e) = peripheral_for_write.write_command(
                         &service_uuid_for_write,
-                        &tx_char_uuid_for_write,
+                        &rx_char_uuid_for_write,
                         &encoded,
                     ) {
                         log::error!("Failed to write: {:?}", e);

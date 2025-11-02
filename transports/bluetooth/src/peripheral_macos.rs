@@ -294,7 +294,7 @@ impl PeripheralManagerDelegate {
     }
 
     fn start_advertising(&self, peripheral: &CBPeripheralManager) {
-        log::info!("Starting BLE advertising");
+        log::info!("Starting BLE advertising with service UUID: {}", LIBP2P_SERVICE_UUID);
 
         unsafe {
             let service_uuid = uuid_to_cbuuid(&LIBP2P_SERVICE_UUID);
@@ -313,7 +313,7 @@ impl PeripheralManagerDelegate {
         }
     }
 
-    fn send_queued_data(&self, peripheral: &CBPeripheralManager) {
+    pub(crate) fn send_queued_data(&self, peripheral: &CBPeripheralManager) {
         let mut state = self.ivars().state.lock();
 
         if !state.ready_to_send || state.subscribed_centrals.is_empty() {
@@ -360,16 +360,27 @@ impl BlePeripheralManager {
     pub(crate) async fn new(
         incoming_tx: mpsc::Sender<Vec<u8>>,
         outgoing_rx: mpsc::Receiver<Vec<u8>>,
-    ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<Self>, String> {
         log::info!("Creating BLE peripheral manager");
 
         let delegate = PeripheralManagerDelegate::new(incoming_tx);
+
+        // Use dispatch_get_global_queue to get a concurrent queue for CoreBluetooth
+        // Using nil queue would use the main thread, which doesn't work well with Tokio
+        let queue: *mut objc2::runtime::AnyObject = unsafe {
+            use std::ffi::c_long;
+            extern "C" {
+                fn dispatch_get_global_queue(identifier: c_long, flags: usize) -> *mut objc2::runtime::AnyObject;
+            }
+            // QOS_CLASS_USER_INTERACTIVE = 0x21
+            dispatch_get_global_queue(0x21, 0)
+        };
 
         let peripheral: Retained<CBPeripheralManager> = unsafe {
             msg_send_id![
                 CBPeripheralManager::alloc(),
                 initWithDelegate: Some(ProtocolObject::<dyn CBPeripheralManagerDelegate>::from_ref(&*delegate)),
-                queue: std::ptr::null::<objc2::runtime::AnyObject>()
+                queue: queue
             ]
         };
 
@@ -379,10 +390,10 @@ impl BlePeripheralManager {
             _outgoing_rx: Mutex::new(outgoing_rx),
         });
 
-        // Note: We cannot spawn a task for outgoing data because CBPeripheralManager
-        // is not Send. The outgoing data handling happens in the delegate callbacks.
-        // For a production implementation, we would need to use dispatch_queue_t
-        // or ensure all CoreBluetooth operations happen on the main thread.
+        // TODO: Spawn a task to handle outgoing data
+        // For now, outgoing data is not implemented - the peripheral won't send data back
+        // This needs to poll outgoing_rx and add data to the delegate's outgoing_queue
+        log::warn!("Peripheral outgoing data handling not yet implemented");
 
         Ok(manager)
     }
