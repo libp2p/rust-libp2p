@@ -35,6 +35,7 @@ const TX_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(0x00001236_0000_1000_8000_0
 struct PeripheralState {
     incoming_tx: mpsc::Sender<Vec<u8>>,
     outgoing_queue: Vec<Vec<u8>>,
+    outgoing_data_rx: Option<mpsc::Receiver<Vec<u8>>>,
     subscribed_centrals: Vec<Retained<CBCentral>>,
     tx_characteristic: Option<Retained<CBMutableCharacteristic>>,
     rx_characteristic: Option<Retained<CBMutableCharacteristic>>,
@@ -218,11 +219,12 @@ declare_class!(
 );
 
 impl PeripheralManagerDelegate {
-    pub(crate) fn new(incoming_tx: mpsc::Sender<Vec<u8>>) -> Retained<Self> {
+    pub(crate) fn new(incoming_tx: mpsc::Sender<Vec<u8>>, outgoing_data_rx: mpsc::Receiver<Vec<u8>>) -> Retained<Self> {
         let this = Self::alloc().set_ivars(PeripheralManagerDelegateIvars {
             state: Mutex::new(PeripheralState {
                 incoming_tx,
                 outgoing_queue: Vec::new(),
+                outgoing_data_rx: Some(outgoing_data_rx),
                 subscribed_centrals: Vec::new(),
                 tx_characteristic: None,
                 rx_characteristic: None,
@@ -313,7 +315,47 @@ impl PeripheralManagerDelegate {
         }
     }
 
+    /// Process any pending outgoing data from the channel
+    fn process_outgoing_channel(&self) {
+        // Collect all pending data from the channel first
+        let mut pending_data = Vec::new();
+        {
+            let mut state = self.ivars().state.lock();
+            let Some(outgoing_rx) = state.outgoing_data_rx.as_mut() else {
+                return;
+            };
+
+            // Drain all available data from the channel without blocking
+            while let Ok(Some(data)) = outgoing_rx.try_next() {
+                pending_data.push(data);
+            }
+        }
+
+        // Now process and encode the data
+        if !pending_data.is_empty() {
+            let mut state = self.ivars().state.lock();
+
+            for data in pending_data {
+                log::debug!("Processing outgoing data from channel: {} bytes", data.len());
+
+                // Encode the data into a frame with length prefix
+                match state.frame_codec.encode(&data) {
+                    Ok(encoded_frame) => {
+                        log::debug!("Queueing encoded frame: {} bytes", encoded_frame.len());
+                        state.outgoing_queue.push(encoded_frame);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to encode outgoing data: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn send_queued_data(&self, peripheral: &CBPeripheralManager) {
+        // First, process any new data from the channel
+        self.process_outgoing_channel();
+
         let mut state = self.ivars().state.lock();
 
         if !state.ready_to_send || state.subscribed_centrals.is_empty() {
@@ -350,9 +392,12 @@ impl PeripheralManagerDelegate {
 
 /// BLE Peripheral manager for macOS
 pub(crate) struct BlePeripheralManager {
-    _peripheral: Retained<CBPeripheralManager>,
-    _delegate: Retained<PeripheralManagerDelegate>,
-    _outgoing_rx: Mutex<mpsc::Receiver<Vec<u8>>>,
+    /// Keep peripheral alive - needed to maintain the BLE connection
+    #[allow(dead_code)]
+    peripheral: Retained<CBPeripheralManager>,
+    /// Keep delegate alive - needed to receive callbacks
+    #[allow(dead_code)]
+    delegate: Retained<PeripheralManagerDelegate>,
 }
 
 impl BlePeripheralManager {
@@ -363,7 +408,7 @@ impl BlePeripheralManager {
     ) -> Result<Arc<Self>, String> {
         log::info!("Creating BLE peripheral manager");
 
-        let delegate = PeripheralManagerDelegate::new(incoming_tx);
+        let delegate = PeripheralManagerDelegate::new(incoming_tx, outgoing_rx);
 
         // Use dispatch_get_global_queue to get a concurrent queue for CoreBluetooth
         // Using nil queue would use the main thread, which doesn't work well with Tokio
@@ -385,15 +430,11 @@ impl BlePeripheralManager {
         };
 
         let manager = Arc::new(Self {
-            _peripheral: peripheral,
-            _delegate: delegate,
-            _outgoing_rx: Mutex::new(outgoing_rx),
+            peripheral,
+            delegate,
         });
 
-        // TODO: Spawn a task to handle outgoing data
-        // For now, outgoing data is not implemented - the peripheral won't send data back
-        // This needs to poll outgoing_rx and add data to the delegate's outgoing_queue
-        log::warn!("Peripheral outgoing data handling not yet implemented");
+        log::info!("Peripheral manager created with outgoing data handling");
 
         Ok(manager)
     }
