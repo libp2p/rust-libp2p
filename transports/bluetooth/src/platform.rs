@@ -623,65 +623,73 @@ impl Transport for BluetoothTransport {
             }
 
             // Check for incoming data from peripheral side
+            // Process ALL available data, not just one packet
             if let Some(ref mut peripheral_rx) = listener.peripheral_incoming_rx {
-                match peripheral_rx.poll_next_unpin(cx) {
-                    Poll::Ready(Some(data)) => {
-                        // Check if we have an active connection
-                        if let Some(ref active_tx) = listener.active_connection_tx {
-                            // Forward data to existing connection
-                            if active_tx.clone().try_send(data).is_err() {
-                                log::warn!("Active connection closed, removing it");
-                                listener.active_connection_tx = None;
-                            }
-                        } else {
-                            // No active connection, this is the first data - create a new connection
-                            log::info!(
-                                "Received incoming peripheral connection with {} bytes",
-                                data.len()
-                            );
-
-                            // Get the outgoing sender for this listener
-                            let outgoing_tx = listener.peripheral_outgoing_tx.clone().unwrap();
-
-                            // Create new channels for libp2p
-                            let (in_tx, in_rx) = mpsc::channel::<Vec<u8>>(32);
-                            let (out_tx, out_rx) = mpsc::channel::<Vec<u8>>(32);
-
-                            // Forward the first data
-                            let _ = in_tx.clone().try_send(data);
-
-                            // Store the connection's incoming sender for future data forwarding
-                            listener.active_connection_tx = Some(in_tx);
-
-                            // Spawn task to forward outgoing data from connection to peripheral
-                            let mut out_rx_stream = out_rx;
-                            tokio::spawn(async move {
-                                while let Some(data) = out_rx_stream.next().await {
-                                    let _ = outgoing_tx.clone().try_send(data);
+                loop {
+                    match peripheral_rx.poll_next_unpin(cx) {
+                        Poll::Ready(Some(data)) => {
+                            // Check if we have an active connection
+                            if let Some(ref active_tx) = listener.active_connection_tx {
+                                // Forward data to existing connection
+                                log::debug!("Forwarding {} bytes to active connection", data.len());
+                                if active_tx.clone().try_send(data).is_err() {
+                                    log::warn!("Active connection closed, removing it");
+                                    listener.active_connection_tx = None;
                                 }
-                                log::info!("Peripheral outgoing data forwarding task ended");
-                            });
+                            } else {
+                                // No active connection, this is the first data - create a new connection
+                                log::info!(
+                                    "Received incoming peripheral connection with {} bytes",
+                                    data.len()
+                                );
 
-                            // Create the channel
-                            let channel = Channel::new(Chan {
-                                incoming: in_rx,
-                                outgoing: out_tx,
-                            });
+                                // Get the outgoing sender for this listener
+                                let outgoing_tx = listener.peripheral_outgoing_tx.clone().unwrap();
 
-                            // Create a fake send_back_addr (peripheral connections don't have addresses)
-                            let send_back_addr = listener.addr.clone();
+                                // Create new channels for libp2p
+                                let (in_tx, in_rx) = mpsc::channel::<Vec<u8>>(32);
+                                let (out_tx, out_rx) = mpsc::channel::<Vec<u8>>(32);
 
-                            listener.incoming.push_back((channel, send_back_addr));
+                                // Forward the first data
+                                let _ = in_tx.clone().try_send(data);
+
+                                // Store the connection's incoming sender for future data forwarding
+                                listener.active_connection_tx = Some(in_tx);
+
+                                // Spawn task to forward outgoing data from connection to peripheral
+                                let mut out_rx_stream = out_rx;
+                                tokio::spawn(async move {
+                                    while let Some(data) = out_rx_stream.next().await {
+                                        let _ = outgoing_tx.clone().try_send(data);
+                                    }
+                                    log::info!("Peripheral outgoing data forwarding task ended");
+                                });
+
+                                // Create the channel
+                                let channel = Channel::new(Chan {
+                                    incoming: in_rx,
+                                    outgoing: out_tx,
+                                });
+
+                                // Create a fake send_back_addr (peripheral connections don't have addresses)
+                                let send_back_addr = listener.addr.clone();
+
+                                listener.incoming.push_back((channel, send_back_addr));
+
+                                // After creating connection, continue to process any buffered data
+                                continue;
+                            }
                         }
-
-                        // Wake to process more data
-                        cx.waker().wake_by_ref();
+                        Poll::Ready(None) => {
+                            // Peripheral channel closed
+                            log::warn!("Peripheral incoming channel closed");
+                            break;
+                        }
+                        Poll::Pending => {
+                            // No more data available right now
+                            break;
+                        }
                     }
-                    Poll::Ready(None) => {
-                        // Peripheral channel closed
-                        log::warn!("Peripheral incoming channel closed");
-                    }
-                    Poll::Pending => {}
                 }
             }
 

@@ -594,8 +594,10 @@ impl BlePeripheralManager {
 
 impl Drop for BlePeripheralManager {
     fn drop(&mut self) {
-        log::info!("Dropping BLE peripheral manager - stopping advertising");
-        self.stop();
+        log::info!("Dropping BLE peripheral manager");
+        // Note: We don't call stopAdvertising() here to avoid potential deadlocks
+        // CoreBluetooth will clean up advertising when the peripheral manager is deallocated
+        // If you need explicit cleanup, call stop() before dropping
     }
 }
 
