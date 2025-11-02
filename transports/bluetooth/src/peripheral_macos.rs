@@ -581,6 +581,22 @@ impl BlePeripheralManager {
 
         Ok(manager)
     }
+
+    /// Stop advertising and clean up the peripheral
+    pub(crate) fn stop(&self) {
+        log::info!("Stopping BLE peripheral manager");
+        unsafe {
+            self.peripheral.stopAdvertising();
+            log::info!("Stopped BLE advertising");
+        }
+    }
+}
+
+impl Drop for BlePeripheralManager {
+    fn drop(&mut self) {
+        log::info!("Dropping BLE peripheral manager - stopping advertising");
+        self.stop();
+    }
 }
 
 unsafe impl Send for BlePeripheralManager {}
