@@ -353,8 +353,12 @@ impl Transport for BluetoothTransport {
 
             // Try to connect to each peripheral until we find one with our service
             for peripheral in discovered_peripherals {
-                let id = peripheral.identifier().unwrap_or_else(|_| "unknown".to_string());
-                let address = peripheral.address().unwrap_or_else(|_| "unknown".to_string());
+                let id = peripheral
+                    .identifier()
+                    .unwrap_or_else(|_| "unknown".to_string());
+                let address = peripheral
+                    .address()
+                    .unwrap_or_else(|_| "unknown".to_string());
 
                 log::info!("Trying peripheral - ID: '{}', Address: '{}'", id, address);
 
@@ -372,7 +376,11 @@ impl Transport for BluetoothTransport {
                         // Get services to verify this peripheral has our service
                         match peripheral.services() {
                             Ok(services) => {
-                                log::info!("Found {} service(s) on peripheral {}", services.len(), address);
+                                log::info!(
+                                    "Found {} service(s) on peripheral {}",
+                                    services.len(),
+                                    address
+                                );
 
                                 // Log all services for debugging
                                 for s in &services {
@@ -386,7 +394,11 @@ impl Transport for BluetoothTransport {
                                 });
 
                                 if has_libp2p_service {
-                                    log::info!("✓ Peripheral {} has the libp2p service {}!", address, LIBP2P_SERVICE_UUID);
+                                    log::info!(
+                                        "✓ Peripheral {} has the libp2p service {}!",
+                                        address,
+                                        LIBP2P_SERVICE_UUID
+                                    );
                                     found_peripheral = Some(peripheral);
                                     break;
                                 } else {
@@ -403,7 +415,11 @@ impl Transport for BluetoothTransport {
                         }
                     }
                     Err(e) => {
-                        log::warn!("Failed to connect to peripheral {}: {:?}, trying next...", address, e);
+                        log::warn!(
+                            "Failed to connect to peripheral {}: {:?}, trying next...",
+                            address,
+                            e
+                        );
                         continue;
                     }
                 }
@@ -417,7 +433,9 @@ impl Transport for BluetoothTransport {
             // Stop scanning after successful connection
             adapter.scan_stop().ok();
 
-            log::info!("Connected to peripheral with libp2p service! Discovering characteristics...");
+            log::info!(
+                "Connected to peripheral with libp2p service! Discovering characteristics..."
+            );
 
             // Get services (we already checked it has our service above)
             let services = peripheral.services().map_err(|e| {
@@ -433,7 +451,10 @@ impl Transport for BluetoothTransport {
                     uuid == LIBP2P_SERVICE_UUID.to_lowercase()
                 })
                 .ok_or_else(|| {
-                    log::error!("Service {} not found (this shouldn't happen)", LIBP2P_SERVICE_UUID);
+                    log::error!(
+                        "Service {} not found (this shouldn't happen)",
+                        LIBP2P_SERVICE_UUID
+                    );
                     BluetoothTransportError::ConnectionFailed
                 })?;
 
@@ -559,10 +580,18 @@ impl Transport for BluetoothTransport {
                             Err(e) => {
                                 retry_count += 1;
                                 if retry_count >= max_retries {
-                                    log::error!("Failed to write after {} attempts: {:?}", max_retries, e);
+                                    log::error!(
+                                        "Failed to write after {} attempts: {:?}",
+                                        max_retries,
+                                        e
+                                    );
                                     break;
                                 }
-                                log::warn!("Write attempt {} failed, retrying: {:?}", retry_count, e);
+                                log::warn!(
+                                    "Write attempt {} failed, retrying: {:?}",
+                                    retry_count,
+                                    e
+                                );
                                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                             }
                         }

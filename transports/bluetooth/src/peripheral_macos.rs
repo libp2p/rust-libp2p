@@ -77,18 +77,6 @@ declare_class!(
             }
         }
 
-        #[method(peripheralManager:didReceiveConnectionRequest:)]
-        fn peripheral_manager_did_receive_connection_request(
-            &self,
-            _peripheral: &CBPeripheralManager,
-            central: &CBCentral,
-        ) {
-            unsafe {
-                log::info!("🟢 Received connection request from central: {}",
-                    central.identifier().UUIDString());
-            }
-        }
-
         #[method(peripheralManager:willRestoreState:)]
         fn peripheral_manager_will_restore_state(
             &self,
@@ -253,7 +241,10 @@ declare_class!(
 );
 
 impl PeripheralManagerDelegate {
-    pub(crate) fn new(incoming_tx: mpsc::Sender<Vec<u8>>, outgoing_data_rx: mpsc::Receiver<Vec<u8>>) -> Retained<Self> {
+    pub(crate) fn new(
+        incoming_tx: mpsc::Sender<Vec<u8>>,
+        outgoing_data_rx: mpsc::Receiver<Vec<u8>>,
+    ) -> Retained<Self> {
         let this = Self::alloc().set_ivars(PeripheralManagerDelegateIvars {
             state: Mutex::new(PeripheralState {
                 incoming_tx,
@@ -337,7 +328,10 @@ impl PeripheralManagerDelegate {
     }
 
     fn start_advertising(&self, peripheral: &CBPeripheralManager) {
-        log::info!("Starting BLE advertising with service UUID: {}", LIBP2P_SERVICE_UUID);
+        log::info!(
+            "Starting BLE advertising with service UUID: {}",
+            LIBP2P_SERVICE_UUID
+        );
 
         unsafe {
             let service_uuid = uuid_to_cbuuid(&LIBP2P_SERVICE_UUID);
@@ -377,7 +371,10 @@ impl PeripheralManagerDelegate {
             let mut state = self.ivars().state.lock();
 
             for data in pending_data {
-                log::debug!("Processing outgoing data from channel: {} bytes", data.len());
+                log::debug!(
+                    "Processing outgoing data from channel: {} bytes",
+                    data.len()
+                );
 
                 // Encode the data into a frame with length prefix
                 match state.frame_codec.encode(&data) {
@@ -423,21 +420,31 @@ impl PeripheralManagerDelegate {
         if !state.ready_to_send || state.subscribed_centrals.is_empty() {
             // Only log if there's actually data waiting to be sent
             if !state.outgoing_queue.is_empty() {
-                log::debug!("Cannot send: ready={}, subscribers={}, queue={}",
-                    state.ready_to_send, state.subscribed_centrals.len(), state.outgoing_queue.len());
+                log::debug!(
+                    "Cannot send: ready={}, subscribers={}, queue={}",
+                    state.ready_to_send,
+                    state.subscribed_centrals.len(),
+                    state.outgoing_queue.len()
+                );
             }
             return;
         }
 
         let Some(tx_char) = state.tx_characteristic.clone() else {
             if !state.outgoing_queue.is_empty() {
-                log::debug!("No TX characteristic available, {} items queued", state.outgoing_queue.len());
+                log::debug!(
+                    "No TX characteristic available, {} items queued",
+                    state.outgoing_queue.len()
+                );
             }
             return;
         };
 
         if !state.outgoing_queue.is_empty() {
-            log::debug!("Attempting to send {} queued items", state.outgoing_queue.len());
+            log::debug!(
+                "Attempting to send {} queued items",
+                state.outgoing_queue.len()
+            );
         }
 
         while let Some(data) = state.outgoing_queue.first() {
@@ -489,7 +496,10 @@ impl BlePeripheralManager {
         let queue: *mut objc2::runtime::AnyObject = unsafe {
             use std::ffi::c_long;
             extern "C" {
-                fn dispatch_get_global_queue(identifier: c_long, flags: usize) -> *mut objc2::runtime::AnyObject;
+                fn dispatch_get_global_queue(
+                    identifier: c_long,
+                    flags: usize,
+                ) -> *mut objc2::runtime::AnyObject;
             }
             // QOS_CLASS_USER_INTERACTIVE = 0x21
             dispatch_get_global_queue(0x21, 0)
@@ -534,19 +544,18 @@ impl BlePeripheralManager {
                 );
                 fn dispatch_set_context(object: *mut c_void, context: *mut c_void);
                 fn dispatch_resume(object: *mut c_void);
-                fn dispatch_get_global_queue(identifier: i64, flags: usize) -> *mut objc2::runtime::AnyObject;
+                fn dispatch_get_global_queue(
+                    identifier: i64,
+                    flags: usize,
+                ) -> *mut objc2::runtime::AnyObject;
 
                 static _dispatch_source_type_timer: c_void;
             }
 
             // Create a timer on a global queue
             let timer_queue = dispatch_get_global_queue(0, 0);
-            let timer = dispatch_source_create(
-                &_dispatch_source_type_timer as *const _,
-                0,
-                0,
-                timer_queue,
-            );
+            let timer =
+                dispatch_source_create(&_dispatch_source_type_timer as *const _, 0, 0, timer_queue);
 
             // Set timer to fire every 10ms
             let start = 0u64; // DISPATCH_TIME_NOW
