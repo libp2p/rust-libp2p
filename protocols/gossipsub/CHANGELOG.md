@@ -1,4 +1,7 @@
 ## 0.50.0
+- Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 - Prevent mesh exceeding mesh_n_high.
   See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
 
@@ -19,7 +22,7 @@
 
 - Fix incorrect default values in ConfigBuilder
   See [PR 6113](https://github.com/libp2p/rust-libp2p/pull/6113)
-  
+
 - Remove duplicated config `set_topic_max_transmit_size` method, prefer `max_transmit_size_for_topic`.
   See [PR 6173](https://github.com/libp2p/rust-libp2p/pull/6173).
 
