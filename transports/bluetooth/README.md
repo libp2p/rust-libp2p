@@ -91,7 +91,7 @@ The application will:
 - Check both peers are using the same service UUID
 - Verify Bluetooth permissions are granted on both machines
 - Try restarting both peers
-- Increase scan timeout if needed
+- Increase the scan window if needed by setting `LIBP2P_BLUETOOTH_SCAN_TIMEOUT_SECS` (seconds) or `LIBP2P_BLUETOOTH_SCAN_COLLECTION_MS` (milliseconds)
 
 **"Connection failed"**
 - Check Bluetooth signal strength (peers need to be within range)

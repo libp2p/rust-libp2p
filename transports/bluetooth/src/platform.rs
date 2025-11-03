@@ -9,6 +9,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll, Waker},
+    time::Duration,
 };
 
 use futures::{
@@ -41,6 +42,60 @@ const RX_CHARACTERISTIC_UUID: &str = "00001235-0000-1000-8000-00805f9b34fb";
 const TX_CHARACTERISTIC_UUID: &str = "00001236-0000-1000-8000-00805f9b34fb";
 
 pub type Channel<T> = RwStreamSink<Chan<T>>;
+
+fn scan_timeout_duration() -> Duration {
+    const ENV_VAR: &str = "LIBP2P_BLUETOOTH_SCAN_TIMEOUT_SECS";
+    match std::env::var(ENV_VAR) {
+        Ok(value) => match value.parse::<u64>() {
+            Ok(secs) => Duration::from_secs(secs),
+            Err(err) => {
+                log::warn!(
+                    "Failed to parse {}='{}' as seconds: {}. Falling back to default.",
+                    ENV_VAR,
+                    value,
+                    err
+                );
+                Duration::from_secs(20)
+            }
+        },
+        Err(std::env::VarError::NotPresent) => Duration::from_secs(20),
+        Err(err) => {
+            log::warn!(
+                "Could not read {}: {}. Falling back to default.",
+                ENV_VAR,
+                err
+            );
+            Duration::from_secs(20)
+        }
+    }
+}
+
+fn scan_collection_duration() -> Duration {
+    const ENV_VAR: &str = "LIBP2P_BLUETOOTH_SCAN_COLLECTION_MS";
+    match std::env::var(ENV_VAR) {
+        Ok(value) => match value.parse::<u64>() {
+            Ok(ms) => Duration::from_millis(ms),
+            Err(err) => {
+                log::warn!(
+                    "Failed to parse {}='{}' as milliseconds: {}. Falling back to default.",
+                    ENV_VAR,
+                    value,
+                    err
+                );
+                Duration::from_millis(5_000)
+            }
+        },
+        Err(std::env::VarError::NotPresent) => Duration::from_millis(5_000),
+        Err(err) => {
+            log::warn!(
+                "Could not read {}: {}. Falling back to default.",
+                ENV_VAR,
+                err
+            );
+            Duration::from_millis(5_000)
+        }
+    }
+}
 
 /// Channel implementation for BLE connections
 pub struct Chan<T = Vec<u8>> {
@@ -297,23 +352,28 @@ impl Transport for BluetoothTransport {
             // Get scan events stream
             let mut scan_stream = adapter.on_scan_event();
 
+            let scan_timeout = scan_timeout_duration();
+            let collection_window = scan_collection_duration();
+
             // Wait for peripherals advertising our service
             log::info!(
-                "Scanning for peripherals with service {}...",
-                LIBP2P_SERVICE_UUID
+                "Scanning for peripherals with service {} (timeout: {:?}, warmup: {:?})...",
+                LIBP2P_SERVICE_UUID,
+                scan_timeout,
+                collection_window
             );
 
-            let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(10));
-            tokio::pin!(timeout);
+            let timeout_sleep = tokio::time::sleep(scan_timeout);
+            tokio::pin!(timeout_sleep);
 
             let mut discovered_peripherals: Vec<Peripheral> = Vec::new();
             let mut found_peripheral: Option<Peripheral> = None;
 
             // Collect peripherals for a bit to avoid connecting to ourselves
-            let collection_time = tokio::time::sleep(tokio::time::Duration::from_millis(2000));
-            tokio::pin!(collection_time);
+            let collection_sleep = tokio::time::sleep(collection_window);
+            tokio::pin!(collection_sleep);
 
-            // First, collect all peripherals for 2 seconds
+            // First, collect all peripherals for the warmup duration
             loop {
                 tokio::select! {
                     Some(event) = scan_stream.next() => {
@@ -339,11 +399,11 @@ impl Transport for BluetoothTransport {
                             }
                         }
                     }
-                    _ = &mut collection_time => {
+                    _ = &mut collection_sleep => {
                         log::info!("Collected {} peripherals", discovered_peripherals.len());
                         break;
                     }
-                    _ = &mut timeout => {
+                    _ = &mut timeout_sleep => {
                         adapter.scan_stop().ok();
                         log::error!("Scan timeout - no peripherals found");
                         return Err(BluetoothTransportError::ConnectionFailed);
