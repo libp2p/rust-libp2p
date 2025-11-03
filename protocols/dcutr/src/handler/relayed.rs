@@ -148,12 +148,11 @@ impl Handler {
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError { .. }: ListenUpgradeError<
             (),
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        libp2p_core::util::unreachable(error.into_inner());
     }
 
     fn on_dial_upgrade_error(
