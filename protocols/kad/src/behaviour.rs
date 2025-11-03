@@ -2297,6 +2297,18 @@ where
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
+            HandlerEvent::AddProviderSent { query_id } => {
+                if let Some(query) = self.queries.get_mut(&query_id) {
+                    if let QueryInfo::AddProvider {
+                        phase: AddProviderPhase::AddProvider { .. },
+                        ..
+                    } = &query.info
+                    {
+                        query.on_success(&source, vec![]);
+                    }
+                }
+            }
+
             HandlerEvent::ProtocolNotSupported { endpoint } => {
                 let address = match endpoint {
                     ConnectedPoint::Dialer { address, .. } => Some(address),
@@ -2636,31 +2648,12 @@ where
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
                         let event = query.info.to_request(query.id());
-                        // TODO: AddProvider requests yield no response, so the query completes
-                        // as soon as all requests have been sent. However, the handler should
-                        // better emit an event when the request has been sent (and report
-                        // an error if sending fails), instead of immediately reporting
-                        // "success" somewhat prematurely here.
-                        if let QueryInfo::AddProvider {
-                            phase: AddProviderPhase::AddProvider { .. },
-                            ..
-                        } = &query.info
-                        {
-                            query.on_success(&peer_id, vec![])
-                        }
-
-                        if self.connected_peers.contains(&peer_id) {
-                            self.queued_events.push_back(ToSwarm::NotifyHandler {
-                                peer_id,
-                                event,
-                                handler: NotifyHandler::Any,
-                            });
-                        } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            query.pending_rpcs.push((peer_id, event));
-                            self.queued_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id).build(),
-                            });
-                        }
+                        let event = ToSwarm::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::Any,
+                            event,
+                        };
+                        return Poll::Ready(event);
                     }
                     QueryPoolState::Waiting(None) | QueryPoolState::Idle => break,
                 }
