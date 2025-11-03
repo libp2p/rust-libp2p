@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 #![allow(clippy::manual_div_ceil)]
+#![allow(clippy::double_parens)]
 
 use std::{
     borrow::Borrow,
