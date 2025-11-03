@@ -248,9 +248,8 @@ mod tests {
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use crate::Config;
-
     use super::multiaddr_to_path;
+    use crate::Config;
 
     #[test]
     fn multiaddr_to_path_conversion() {
