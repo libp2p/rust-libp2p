@@ -303,12 +303,12 @@ impl Metrics {
         );
 
         let topic_msg_last_recv_bytes = register_family!(
-            "topic_msg_last_recv_bytes_unfiltered",
+            "topic_msg_last_recv_bytes",
             "Bytes received from last gossip message for each topic (after duplicates being filtered)"
         );
 
         let topic_msg_recv_bytes_unfiltered = register_family!(
-            "topic_msg_recv_bytes",
+            "topic_msg_recv_bytes_unfiltered",
             "Bytes received from gossip messages for each topic (without duplicates being filtered)"
         );
 
