@@ -511,8 +511,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked. Returns [`Ok(false)`](Ok) if we were
+    /// already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
