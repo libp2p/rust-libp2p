@@ -148,10 +148,7 @@ impl Handler {
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { .. }: ListenUpgradeError<
-            (),
-            <Self as ConnectionHandler>::InboundProtocol,
-        >,
+        _: ListenUpgradeError<(), <Self as ConnectionHandler>::InboundProtocol>,
     ) {
     }
 

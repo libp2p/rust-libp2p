@@ -171,10 +171,10 @@ pub trait ConnectionHandler: Send + 'static {
     /// This is also called when the shutdown was initiated due to an error on the connection.
     /// We therefore cannot guarantee that performing IO within here will succeed.
     ///
-    /// To signal completion, [`Poll::Ready(None)`] should be returned.
+    /// To signal completion, [`Poll::Ready(None)`](Poll::Ready) should be returned.
     ///
     /// Implementations MUST have a [`fuse`](futures::StreamExt::fuse)-like behaviour.
-    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to
+    /// That is, [`Poll::Ready(None)`](Poll::Ready) MUST be returned on repeated calls to
     /// [`ConnectionHandler::poll_close`].
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         Poll::Ready(None)
