@@ -521,6 +521,33 @@ mod tests {
     }
 
     #[test]
+    fn build_individual_query_txt_response_correct() {
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().unwrap();
+
+        let packet = build_individual_query_txt_response(
+            0x5678,
+            "testpeer",
+            peer_id,
+            std::iter::once(&addr),
+            Duration::from_secs(60),
+        );
+        assert!(Message::from_vec(&packet).is_ok());
+    }
+
+    #[test]
+    fn build_individual_query_srv_response_correct() {
+        let packet = build_individual_query_srv_response(
+            0x1234,
+            "my-peer-abc123",
+            30333,
+            Duration::from_secs(120),
+        );
+
+        assert!(Message::from_vec(&packet).is_ok());
+    }
+
+    #[test]
     fn test_random_string() {
         let varsize = thread_rng().gen_range(0..32);
         let size = 32 + varsize;
