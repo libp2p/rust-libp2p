@@ -59,6 +59,9 @@ pub struct Config {
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets.
     nodelay: bool,
+    /// `SO_LINGER` to set for opened sockets,
+    /// by default is `None`.
+    linger: Option<Duration>,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
 }
@@ -137,6 +140,7 @@ impl Config {
         Self {
             ttl: None,
             nodelay: true, // Disable Nagle's algorithm by default.
+            linger: None,
             backlog: 1024,
         }
     }
@@ -156,6 +160,12 @@ impl Config {
     /// Configures the listen backlog for new listen sockets.
     pub fn listen_backlog(mut self, backlog: u32) -> Self {
         self.backlog = backlog;
+        self
+    }
+
+    /// Configures the `SO_LINGER` option for new sockets.
+    pub fn linger(mut self, duration: Option<Duration>) -> Self {
+        self.linger = duration;
         self
     }
 
@@ -196,6 +206,8 @@ impl Config {
         if let Some(ttl) = self.ttl {
             socket.set_ttl_v4(ttl)?;
         }
+
+        socket.set_linger(self.linger)?;
         socket.set_tcp_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
