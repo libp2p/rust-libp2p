@@ -2414,7 +2414,7 @@ checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
 
 [[package]]
 name = "libp2p"
-version = "0.56.1"
+version = "0.56.2"
 dependencies = [
  "bytes",
  "either",
@@ -2519,7 +2519,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.43.1"
+version = "0.44.0"
 dependencies = [
  "either",
  "fnv",
@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2760,7 +2760,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.17.1"
+version = "0.17.2"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -2933,7 +2933,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -2959,7 +2959,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3068,7 +3068,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.47.0"
+version = "0.47.1"
 dependencies = [
  "criterion",
  "either",
@@ -3125,7 +3125,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3161,7 +3161,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-uds"
-version = "0.43.1"
+version = "0.44.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3185,7 +3185,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.9.0-alpha.2"
+version = "0.10.0-alpha"
 dependencies = [
  "async-trait",
  "futures",
@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytes",
  "futures",
@@ -3252,7 +3252,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.45.2"
+version = "0.46.0"
 dependencies = [
  "either",
  "futures",
@@ -3275,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytes",
  "futures",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "futures",
  "js-sys",

@@ -343,7 +343,7 @@ async fn new_connection_to_echo_server() -> Connection {
 
     let mut transport = Transport::new(Config::new(&keypair));
 
-    let (_peer_id, conn) = transport
+    let ((_peer_id, conn), _port_use) = transport
         .dial(
             addr,
             DialOpts {

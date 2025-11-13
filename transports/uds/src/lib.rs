@@ -49,7 +49,7 @@ use futures::{
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
     Transport,
 };
 
@@ -87,7 +87,7 @@ macro_rules! codegen {
             type Output = $unix_stream;
             type Error = io::Error;
             type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
             fn listen_on(
                 &mut self,
@@ -162,7 +162,12 @@ macro_rules! codegen {
                 // TODO: Should we dial at all?
                 if let Ok(path) = multiaddr_to_path(&addr) {
                     tracing::debug!(address=%addr, "Dialing address");
-                    Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
+                    Ok(async move {
+                        let stream = <$unix_stream>::connect(&path).await?;
+                        // Unix domain sockets always use a new socket file descriptor for each connection
+                        // PortUse::New should be appropriate here
+                        Ok((stream, PortUse::New))
+                    }.boxed())
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))
                 }
@@ -304,7 +309,7 @@ mod tests {
         let dialer = async move {
             let mut uds = Config::new();
             let addr = rx.await.unwrap();
-            let mut socket = uds
+            let (mut socket, _port_use) = uds
                 .dial(
                     addr,
                     DialOpts {

@@ -26,7 +26,7 @@ use std::iter::{Chain, Map};
 use either::Either;
 use futures::{future, future::MapOk, TryFutureExt};
 use libp2p_core::{
-    either::EitherFuture,
+    either::EitherUpgradeFuture,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
 };
 use libp2p_identity::PeerId;
@@ -83,14 +83,14 @@ where
     type Output = (PeerId, future::Either<TA, TB>);
     type Error = Either<EA, EB>;
     type Future = MapOk<
-        EitherFuture<A::Future, B::Future>,
+        EitherUpgradeFuture<A::Future, B::Future>,
         fn(future::Either<(PeerId, TA), (PeerId, TB)>) -> (PeerId, future::Either<TA, TB>),
     >;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
         .map_ok(future::Either::factor_first)
     }
@@ -104,14 +104,14 @@ where
     type Output = (PeerId, future::Either<TA, TB>);
     type Error = Either<EA, EB>;
     type Future = MapOk<
-        EitherFuture<A::Future, B::Future>,
+        EitherUpgradeFuture<A::Future, B::Future>,
         fn(future::Either<(PeerId, TA), (PeerId, TB)>) -> (PeerId, future::Either<TA, TB>),
     >;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
         .map_ok(future::Either::factor_first)
     }

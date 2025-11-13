@@ -8,7 +8,9 @@ use futures::future::FutureExt;
 use libp2p_core::{
     multiaddr::Multiaddr,
     muxing::StreamMuxerBox,
-    transport::{Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
+    transport::{
+        Boxed, DialOpts, ListenerId, PortUse, Transport as _, TransportError, TransportEvent,
+    },
 };
 use libp2p_identity::{Keypair, PeerId};
 
@@ -52,7 +54,7 @@ impl libp2p_core::Transport for Transport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<(Self::Output, PortUse), Self::Error>> + Send>>;
 
     fn listen_on(
         &mut self,
@@ -96,7 +98,8 @@ impl libp2p_core::Transport for Transport {
             let (peer_id, connection) =
                 upgrade::outbound(sock_addr, server_fingerprint, config.keypair.clone()).await?;
 
-            Ok((peer_id, connection))
+            // Browser WebRTC creates a new RTCPeerConnection for each dial attempt
+            Ok(((peer_id, connection), PortUse::New))
         }
         .boxed())
     }

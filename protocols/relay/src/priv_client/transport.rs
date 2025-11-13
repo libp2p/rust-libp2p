@@ -33,7 +33,7 @@ use futures::{
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use libp2p_identity::PeerId;
 use thiserror::Error;
@@ -126,7 +126,7 @@ impl libp2p_core::Transport for Transport {
     type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Connection, Error>>;
+    type Dial = BoxFuture<'static, Result<(Connection, PortUse), Error>>;
 
     fn listen_on(
         &mut self,
@@ -217,9 +217,9 @@ impl libp2p_core::Transport for Transport {
                     send_back: tx,
                 })
                 .await?;
-            let stream = rx.await??;
+            let (stream, port_use) = rx.await??;
 
-            Ok(stream)
+            Ok((stream, port_use))
         }
         .boxed())
     }
@@ -455,7 +455,7 @@ pub(crate) enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<Connection, outbound_hop::ConnectError>>,
+        send_back: oneshot::Sender<Result<(Connection, PortUse), outbound_hop::ConnectError>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {

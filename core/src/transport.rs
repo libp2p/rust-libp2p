@@ -132,9 +132,11 @@ pub trait Transport {
     /// of the connection setup process.
     type ListenerUpgrade: Future<Output = Result<Self::Output, Self::Error>>;
 
-    /// A pending [`Output`](Transport::Output) for an outbound connection,
-    /// obtained from [dialing](Transport::dial).
-    type Dial: Future<Output = Result<Self::Output, Self::Error>>;
+    /// A pending future for an outbound connection obtained from [dialing](Transport::dial).
+    ///
+    /// On success, the future yields a tuple containing the [`Output`](Transport::Output)
+    /// of the connection setup process and the [`PortUse`] policy of the connection.
+    type Dial: Future<Output = Result<(Self::Output, PortUse), Self::Error>>;
 
     /// Listens on the given [`Multiaddr`] for inbound connections with a provided [`ListenerId`].
     fn listen_on(
