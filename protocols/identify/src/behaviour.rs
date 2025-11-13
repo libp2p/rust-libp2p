@@ -87,6 +87,42 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
+/// Extract the port from a multiaddr if it contains TCP or UDP protocols.
+/// This works for QUIC addresses since they use UDP underneath.
+fn extract_port(addr: &Multiaddr) -> Option<u16> {
+    use Protocol::*;
+
+    for protocol in addr.iter() {
+        match protocol {
+            Tcp(port) | Udp(port) => return Some(port),
+            _ => continue,
+        }
+    }
+
+    None
+}
+
+/// Check if the observed port matches any of our current listening ports.
+fn observed_port_matches_listening_port(
+    observed: &Multiaddr,
+    listen_addresses: &ListenAddresses,
+) -> bool {
+    let Some(observed_port) = extract_port(observed) else {
+        return false;
+    };
+
+    // Check if the observed port matches any of our listening ports
+    for listen_addr in listen_addresses.iter() {
+        if let Some(listen_port) = extract_port(listen_addr) {
+            if observed_port == listen_port {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
 ///
@@ -99,9 +135,6 @@ pub struct Behaviour {
 
     /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
-
-    /// The outbound connections established without port reuse (require translation)
-    outbound_connections_with_ephemeral_port: HashSet<ConnectionId>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -268,7 +301,6 @@ impl Behaviour {
             config,
             connected: HashMap::new(),
             our_observed_addresses: Default::default(),
-            outbound_connections_with_ephemeral_port: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -332,16 +364,18 @@ impl Behaviour {
 
     fn emit_new_external_addr_candidate_event(
         &mut self,
-        connection_id: ConnectionId,
+        _connection_id: ConnectionId,
         observed: &Multiaddr,
     ) {
-        if self
-            .outbound_connections_with_ephemeral_port
-            .contains(&connection_id)
-        {
-            // Apply address translation to the candidate address.
-            // For TCP without port-reuse, the observed address contains an ephemeral port which
-            // needs to be replaced by the port of a listen address.
+        if observed_port_matches_listening_port(observed, &self.listen_addresses) {
+            // If the observed port matches any of our listening ports,
+            // then port reuse actually worked. Use the original observed address.
+            self.events
+                .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+        } else {
+            // The observed port doesn't match any listening port, which means
+            // either this is an inbound connection or an outbound connection
+            // that used an ephemeral port. Apply address translation.
             let translated_addresses = {
                 let mut addrs: Vec<_> = self
                     .listen_addresses
@@ -374,13 +408,7 @@ impl Behaviour {
                         .push_back(ToSwarm::NewExternalAddrCandidate(addr));
                 }
             }
-            return;
         }
-
-        // outgoing connection dialed with port reuse
-        // incoming connection
-        self.events
-            .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
     }
 }
 
@@ -408,11 +436,11 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        connection_id: ConnectionId,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
-        port_use: PortUse,
+        _port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         // Contrary to inbound events, outbound events are full-p2p qualified
         // so we remove /p2p/ in order to be homogeneous
@@ -421,11 +449,6 @@ impl NetworkBehaviour for Behaviour {
         let mut addr = addr.clone();
         if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
             addr.pop();
-        }
-
-        if port_use == PortUse::New {
-            self.outbound_connections_with_ephemeral_port
-                .insert(connection_id);
         }
 
         Ok(Handler::new(
@@ -586,8 +609,6 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.our_observed_addresses.remove(&connection_id);
-                self.outbound_connections_with_ephemeral_port
-                    .remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
@@ -732,6 +753,7 @@ impl KeyType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p_swarm::behaviour::ListenAddresses;
 
     #[test]
     fn check_multiaddr_matches_peer_id() {
@@ -753,5 +775,176 @@ mod tests {
             &peer_id
         ));
         assert!(multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id));
+    }
+
+    #[test]
+    fn test_extract_port() {
+        // TCP and UDP addresses
+        let tcp_addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+        assert_eq!(extract_port(&tcp_addr), Some(8080));
+
+        let udp_addr: Multiaddr = "/ip4/127.0.0.1/udp/9090".parse().unwrap();
+        assert_eq!(extract_port(&udp_addr), Some(9090));
+
+        // Addresses without ports
+        let no_port_addr: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
+        assert_eq!(extract_port(&no_port_addr), None);
+    }
+
+    #[test]
+    fn test_observed_port_matches_listening_port() {
+        use libp2p_swarm::behaviour::FromSwarm;
+
+        let mut listen_addresses = ListenAddresses::default();
+
+        // Add listening addresses
+        let listen_addr: Multiaddr = "/ip4/0.0.0.0/tcp/8080".parse().unwrap();
+        listen_addresses.on_swarm_event(&FromSwarm::NewListenAddr(
+            libp2p_swarm::behaviour::NewListenAddr {
+                listener_id: libp2p_core::transport::ListenerId::next(),
+                addr: &listen_addr,
+            },
+        ));
+
+        // Test matching port
+        let observed_match: Multiaddr = "/ip4/192.168.1.100/tcp/8080".parse().unwrap();
+        assert!(observed_port_matches_listening_port(
+            &observed_match,
+            &listen_addresses
+        ));
+
+        // Test non-matching port
+        let observed_no_match: Multiaddr = "/ip4/192.168.1.100/tcp/8888".parse().unwrap();
+        assert!(!observed_port_matches_listening_port(
+            &observed_no_match,
+            &listen_addresses
+        ));
+
+        // Test with no listening addresses
+        let empty_listen_addresses = ListenAddresses::default();
+        assert!(!observed_port_matches_listening_port(
+            &observed_match,
+            &empty_listen_addresses
+        ));
+    }
+
+    #[test]
+    fn test_address_translation_when_port_matches() {
+        use libp2p_identity::Keypair;
+        use libp2p_swarm::behaviour::FromSwarm;
+
+        // Create a behavior with some listening addresses
+        let keypair = Keypair::generate_ed25519();
+        let config = Config::new("test/1.0.0".to_string(), keypair.public());
+        let mut behaviour = Behaviour::new(config);
+
+        // Add a listening address
+        let listen_addr: Multiaddr = "/ip4/0.0.0.0/tcp/8080".parse().unwrap();
+        behaviour
+            .listen_addresses
+            .on_swarm_event(&FromSwarm::NewListenAddr(
+                libp2p_swarm::behaviour::NewListenAddr {
+                    listener_id: libp2p_core::transport::ListenerId::next(),
+                    addr: &listen_addr,
+                },
+            ));
+
+        // Clear any existing events
+        behaviour.events.clear();
+
+        // Test case: observed address has matching port (port reuse worked)
+        let observed_matching: Multiaddr = "/ip4/203.0.113.1/tcp/8080".parse().unwrap();
+        behaviour.emit_new_external_addr_candidate_event(
+            libp2p_swarm::ConnectionId::new_unchecked(1),
+            &observed_matching,
+        );
+
+        // Should emit the original observed address without translation
+        assert_eq!(behaviour.events.len(), 1);
+        if let ToSwarm::NewExternalAddrCandidate(addr) = &behaviour.events[0] {
+            assert_eq!(addr, &observed_matching);
+        } else {
+            panic!("Expected NewExternalAddrCandidate event");
+        }
+    }
+
+    #[test]
+    fn test_address_translation_when_port_differs() {
+        use libp2p_identity::Keypair;
+        use libp2p_swarm::behaviour::FromSwarm;
+
+        // Create a behavior with some listening addresses
+        let keypair = Keypair::generate_ed25519();
+        let config = Config::new("test/1.0.0".to_string(), keypair.public());
+        let mut behaviour = Behaviour::new(config);
+
+        // Add a listening address
+        let listen_addr: Multiaddr = "/ip4/0.0.0.0/tcp/8080".parse().unwrap();
+        behaviour
+            .listen_addresses
+            .on_swarm_event(&FromSwarm::NewListenAddr(
+                libp2p_swarm::behaviour::NewListenAddr {
+                    listener_id: libp2p_core::transport::ListenerId::next(),
+                    addr: &listen_addr,
+                },
+            ));
+
+        // Clear any existing events
+        behaviour.events.clear();
+
+        // Test case: observed address has different port (ephemeral port used)
+        let observed_different: Multiaddr = "/ip4/203.0.113.1/tcp/54321".parse().unwrap();
+        behaviour.emit_new_external_addr_candidate_event(
+            libp2p_swarm::ConnectionId::new_unchecked(1),
+            &observed_different,
+        );
+
+        // Should emit translated address(es) using the listening port
+        assert!(!behaviour.events.is_empty());
+
+        // Find the translated address
+        let mut found_translated = false;
+        for event in &behaviour.events {
+            if let ToSwarm::NewExternalAddrCandidate(addr) = event {
+                // The translated address should have the same IP as observed but port from listener
+                if addr.to_string().contains("203.0.113.1") && addr.to_string().contains("tcp/8080")
+                {
+                    found_translated = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_translated,
+            "Should have found a translated address with listening port"
+        );
+    }
+
+    #[test]
+    fn test_no_listening_addresses() {
+        use libp2p_identity::Keypair;
+
+        // Create a behavior with no listening addresses
+        let keypair = Keypair::generate_ed25519();
+        let config = Config::new("test/1.0.0".to_string(), keypair.public());
+        let mut behaviour = Behaviour::new(config);
+
+        // Clear any existing events
+        behaviour.events.clear();
+
+        // Test with any observed address
+        let observed: Multiaddr = "/ip4/203.0.113.1/tcp/54321".parse().unwrap();
+        behaviour.emit_new_external_addr_candidate_event(
+            libp2p_swarm::ConnectionId::new_unchecked(1),
+            &observed,
+        );
+
+        // Should emit the original observed address since no listening addresses to match
+        assert_eq!(behaviour.events.len(), 1);
+        if let ToSwarm::NewExternalAddrCandidate(addr) = &behaviour.events[0] {
+            assert_eq!(addr, &observed);
+        } else {
+            panic!("Expected NewExternalAddrCandidate event");
+        }
     }
 }
