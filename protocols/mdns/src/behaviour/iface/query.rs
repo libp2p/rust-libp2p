@@ -45,6 +45,8 @@ pub(crate) enum MdnsPacket {
     Response(MdnsResponse),
     /// A request for service discovery.
     ServiceDiscovery(MdnsServiceDiscovery),
+    /// A query made by a remote for an individual peer.
+    IndividualPeerResponse(MdnsIndividualPeerQuery),
 }
 
 impl MdnsPacket {
@@ -82,6 +84,45 @@ impl MdnsPacket {
             })));
         }
 
+        for query in packet.queries() {
+            let query_name = query.name().to_utf8();
+
+            if query_name.ends_with("._p2p._udp.local.") || query_name.ends_with("._p2p._udp.local")
+            {
+                let peer_and_query_parts = query_name.splitn(2, '.').collect::<Vec<&str>>();
+                if peer_and_query_parts.is_empty() {
+                    continue;
+                }
+
+                let peer_str = peer_and_query_parts[0];
+
+                // Check what type of record is being asked for
+                match query.query_type() {
+                    hickory_proto::rr::RecordType::SRV => {
+                        return Ok(Some(MdnsPacket::IndividualPeerResponse(
+                            MdnsIndividualPeerQuery {
+                                from,
+                                query_id: packet.header().id(),
+                                query_type: hickory_proto::rr::RecordType::SRV,
+                                peer_name: peer_str.to_string(),
+                            },
+                        )));
+                    }
+                    hickory_proto::rr::RecordType::TXT => {
+                        return Ok(Some(MdnsPacket::IndividualPeerResponse(
+                            MdnsIndividualPeerQuery {
+                                from,
+                                query_id: packet.header().id(),
+                                query_type: hickory_proto::rr::RecordType::TXT,
+                                peer_name: peer_str.to_string(),
+                            },
+                        )))
+                    }
+                    _ => continue,
+                }
+            }
+        }
+
         Ok(None)
     }
 }
@@ -112,6 +153,46 @@ impl fmt::Debug for MdnsQuery {
             .field("from", self.remote_addr())
             .field("query_id", &self.query_id)
             .finish()
+    }
+}
+
+pub(crate) struct MdnsIndividualPeerQuery {
+    /// Sender of the address.
+    from: SocketAddr,
+    /// Id of the received DNS query. We need to pass this ID back in the results.
+    query_id: u16,
+    /// The RecordType of the query
+    query_type: hickory_proto::rr::RecordType,
+    /// The name of the peer being queried
+    peer_name: String,
+}
+
+impl fmt::Debug for MdnsIndividualPeerQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MdnsIndividualPeerQuery")
+            .field("from", self.remote_addr())
+            .field("query_id", &self.query_id())
+            .field("query_type", self.query_type())
+            .field("peer_name", self.peer_name())
+            .finish()
+    }
+}
+
+impl MdnsIndividualPeerQuery {
+    pub(crate) fn remote_addr(&self) -> &SocketAddr {
+        &self.from
+    }
+
+    pub(crate) fn query_id(&self) -> u16 {
+        self.query_id
+    }
+
+    pub(crate) fn query_type(&self) -> &hickory_proto::rr::RecordType {
+        &self.query_type
+    }
+
+    pub(crate) fn peer_name(&self) -> &String {
+        &self.peer_name
     }
 }
 
