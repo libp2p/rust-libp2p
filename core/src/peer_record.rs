@@ -4,8 +4,14 @@ use web_time::SystemTime;
 
 use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
-const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
-const DOMAIN_SEP: &str = "libp2p-routing-state";
+// The type hint used to identify peer records in an Envelope.
+// Defined in https://github.com/multiformats/multicodec/blob/master/table.csv
+// with name "libp2p-peer-record"
+const PAYLOAD_TYPE: &[u8] = &[0x03, 0x01];
+
+// The domain string used for peer records contained in a Envelope.
+// See https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+const DOMAIN_SEP: &str = "libp2p-peer-record";
 
 /// Represents a peer routing record.
 ///
@@ -33,7 +39,7 @@ impl PeerRecord {
         use quick_protobuf::MessageRead;
 
         let (payload, signing_key) =
-            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE)?;
         let mut reader = BytesReader::from_bytes(payload);
         let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
 
@@ -95,7 +101,7 @@ impl PeerRecord {
         let envelope = SignedEnvelope::new(
             key,
             String::from(DOMAIN_SEP),
-            PAYLOAD_TYPE.as_bytes().to_vec(),
+            PAYLOAD_TYPE.to_vec(),
             payload,
         )?;
 
@@ -196,7 +202,7 @@ mod tests {
             SignedEnvelope::new(
                 &identity_b,
                 String::from(DOMAIN_SEP),
-                PAYLOAD_TYPE.as_bytes().to_vec(),
+                PAYLOAD_TYPE.to_vec(),
                 payload,
             )
             .unwrap()
