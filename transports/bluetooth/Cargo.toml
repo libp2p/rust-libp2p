@@ -1,0 +1,39 @@
+[package]
+name = "libp2p-bluetooth"
+edition.workspace = true
+rust-version = { workspace = true }
+description = "Bluetooth transport protocol for libp2p"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[features]
+default = []
+
+[dependencies]
+fnv = "1.0"
+futures = { workspace = true }
+libp2p-core = { workspace = true }
+multiaddr = { workspace = true }
+parking_lot = "0.12.3"
+rand = "0.8"
+rw-stream-sink = { workspace = true }
+log = "0.4"
+uuid = "1.0"
+simplersble = "0.10"
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+tokio-stream = "0.1"
+bytes = "1.0"
+async-trait = "0.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-core-bluetooth = { version = "0.2", features = ["all"] }
+objc2-foundation = { version = "0.2", features = ["all"] }
+block2 = "0.5"
+
+[lints]
+workspace = true
