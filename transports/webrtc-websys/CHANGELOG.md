@@ -1,3 +1,10 @@
+## 0.4.1
+- Implement browser-to-browser WebRTC connection establishment over circuit relay v2.
+- Add `SignalingBehaviour` for coordinating WebRTC signaling between browser peers.
+- Add `SignalingHandler` for managing WebRTC offer/answer exchange over relay connections.
+- Add support for automatic WebRTC connection upgrade from relay connections.
+- Add configurable signaling parameters (retry attempts, timeouts, ICE gathering).
+
 ## 0.4.0
 
 - Cut stable release.

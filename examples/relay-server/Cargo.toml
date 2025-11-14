@@ -12,8 +12,10 @@ release = false
 clap = { version = "4.5.6", features = ["derive"] }
 tokio = { version = "1.37.0", features = ["full"] }
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic"] }
+libp2p = { path = "../../libp2p", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "websocket", "dns"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = "0.1"
+rand = "0.8"
 
 [lints]
 workspace = true

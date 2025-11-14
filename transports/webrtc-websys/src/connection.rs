@@ -14,16 +14,17 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
-    RtcSessionDescriptionInit,
+    RtcIceServer, RtcSessionDescriptionInit,
 };
 
 use super::{Error, Stream};
-use crate::stream::DropListener;
+use crate::{browser::protocol::ConnectionCallbacks, stream::DropListener};
 
 /// A WebRTC Connection.
 ///
 /// All connections need to be [`Send`] which is why some fields are wrapped in [`SendWrapper`].
 /// This is safe because WASM is single-threaded.
+#[derive(Debug)]
 pub struct Connection {
     /// The [RtcPeerConnection] that is used for the WebRTC Connection
     inner: SendWrapper<RtcPeerConnection>,
@@ -40,11 +41,17 @@ pub struct Connection {
     no_drop_listeners_waker: Option<Waker>,
 
     _ondatachannel_closure: SendWrapper<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    /// WebRTC event based callbacks which will be dropped once the Connection object has been
+    /// dropped.
+    _callbacks: Option<SendWrapper<ConnectionCallbacks>>,
 }
 
 impl Connection {
     /// Create a new inner WebRTC Connection
-    pub(crate) fn new(peer_connection: RtcPeerConnection) -> Self {
+    pub(crate) fn new(
+        peer_connection: RtcPeerConnection,
+        callbacks: Option<ConnectionCallbacks>,
+    ) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in
         // poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
@@ -74,6 +81,7 @@ impl Connection {
             no_drop_listeners_waker: None,
             inbound_data_channels: SendWrapper::new(rx_ondatachannel),
             _ondatachannel_closure: SendWrapper::new(ondatachannel_closure),
+            _callbacks: callbacks.map(SendWrapper::new),
         }
     }
 
@@ -93,7 +101,6 @@ impl Connection {
     /// if they are used.
     fn close_connection(&mut self) {
         if !self.closed {
-            tracing::trace!("connection::close_connection");
             self.inner.inner.close();
             self.closed = true;
         }
@@ -148,8 +155,6 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        tracing::trace!("connection::poll_close");
-
         self.close_connection();
         Poll::Ready(Ok(()))
     }
@@ -173,12 +178,16 @@ impl StreamMuxer for Connection {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RtcPeerConnection {
     inner: web_sys::RtcPeerConnection,
 }
 
 impl RtcPeerConnection {
-    pub(crate) async fn new(algorithm: String) -> Result<Self, Error> {
+    pub(crate) async fn new(
+        algorithm: String,
+        stun_servers: Option<Vec<String>>,
+    ) -> Result<Self, Error> {
         let algo: Object = Object::new();
         Reflect::set(&algo, &"name".into(), &"ECDSA".into()).unwrap();
         Reflect::set(&algo, &"namedCurve".into(), &"P-256".into()).unwrap();
@@ -196,9 +205,26 @@ impl RtcPeerConnection {
         certificate_arr.push(&certificate);
         config.set_certificates(&certificate_arr);
 
+        // configure rtc configuration with stun servers, if any
+        if let Some(servers) = stun_servers {
+            let ice_servers = js_sys::Array::new();
+            for server in servers {
+                let stun_server = RtcIceServer::new();
+                stun_server.set_url(&server);
+                ice_servers.push(&stun_server);
+            }
+
+            config.set_ice_servers(&ice_servers.into());
+        }
+
         let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 
         Ok(Self { inner })
+    }
+
+    /// Returns a reference to the underlying RtcPeerConnection.
+    pub(crate) fn inner(&self) -> &web_sys::RtcPeerConnection {
+        &self.inner
     }
 
     /// Creates the stream for the initial noise handshake.
