@@ -12,14 +12,6 @@ impl BluetoothAddr {
         Self(bytes)
     }
 
-    pub fn as_bytes(&self) -> &[u8; 6] {
-        &self.0
-    }
-
-    pub fn is_unspecified(&self) -> bool {
-        self.0.iter().all(|b| *b == 0)
-    }
-
     pub(crate) fn into_u64(self) -> u64 {
         let mut bytes = [0u8; 8];
         bytes[2..].copy_from_slice(&self.0);

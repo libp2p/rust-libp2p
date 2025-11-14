@@ -581,8 +581,7 @@ impl BlePeripheralManager {
             // Start the timer
             dispatch_resume(timer);
 
-            // Leak the timer - it will run for the lifetime of the program
-            std::mem::forget(timer);
+            // Note: We intentionally don't store the timer - it will run for the lifetime of the program
         }
 
         log::info!("Peripheral manager created with outgoing data handling");
@@ -590,23 +589,12 @@ impl BlePeripheralManager {
 
         Ok(manager)
     }
-
-    /// Stop advertising and clean up the peripheral
-    pub(crate) fn stop(&self) {
-        log::info!("Stopping BLE peripheral manager");
-        unsafe {
-            self.peripheral.stopAdvertising();
-            log::info!("Stopped BLE advertising");
-        }
-    }
 }
 
 impl Drop for BlePeripheralManager {
     fn drop(&mut self) {
         log::info!("Dropping BLE peripheral manager");
-        // Note: We don't call stopAdvertising() here to avoid potential deadlocks
-        // CoreBluetooth will clean up advertising when the peripheral manager is deallocated
-        // If you need explicit cleanup, call stop() before dropping
+        // Note: CoreBluetooth will clean up advertising when the peripheral manager is deallocated
     }
 }
 
