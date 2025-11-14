@@ -1,3 +1,6 @@
+## 0.16.0
+- Fix `DialBackError` visibility so downstream could differentiate between `NoConnection` and `StreamFailed`.
+  See [PR 6168](https://github.com/libp2p/rust-libp2p/pull/6168).
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.
