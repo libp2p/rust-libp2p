@@ -1,3 +1,7 @@
+## 0.43.2
+- Update `libp2p::core::peer_record` Fix peer record domain and payload type to match Go/JS implementations.
+  See [PR 6205](https://github.com/libp2p/rust-libp2p/pull/6205).
+
 ## 0.43.1
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
