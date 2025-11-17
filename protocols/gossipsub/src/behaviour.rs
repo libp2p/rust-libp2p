@@ -2135,11 +2135,11 @@ where
             let mesh_n_high = self.config.mesh_n_high_for_topic(topic_hash);
             let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic_hash);
 
-            // drop all peers with negative score, without PX
-            // if there is at some point a stable retain method for BTreeSet the following can be
-            // written more efficiently with retain.
-            let mut to_remove_peers = Vec::new();
-            for peer_id in peers.iter() {
+            #[cfg(feature = "metrics")]
+            let mut removed_peers_count = 0;
+
+            // Drop all peers with negative score, without PX
+            peers.retain(|peer_id| {
                 let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
                 // Record the score per mesh
@@ -2159,17 +2159,20 @@ where
                     let current_topic = to_prune.entry(*peer_id).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                     no_px.insert(*peer_id);
-                    to_remove_peers.push(*peer_id);
+
+                    #[cfg(feature = "metrics")]
+                    {
+                        removed_peers_count += 1;
+                    }
+
+                    return false;
                 }
-            }
+                true
+            });
 
             #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
-                m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
-            }
-
-            for peer_id in to_remove_peers {
-                peers.remove(&peer_id);
+                m.peers_removed(topic_hash, Churn::BadScore, removed_peers_count)
             }
 
             // too little peers - add some
