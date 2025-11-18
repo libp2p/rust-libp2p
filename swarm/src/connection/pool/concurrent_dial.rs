@@ -44,7 +44,7 @@ type Dial = BoxFuture<
 
 pub(crate) struct ConcurrentDial {
     dials: FuturesUnordered<Dial>,
-    pending_dials: Box<dyn Iterator<Item = Dial> + Send>,
+    pending_dials: std::vec::IntoIter<Dial>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
 }
 
@@ -65,7 +65,7 @@ impl ConcurrentDial {
         Self {
             dials,
             errors: Default::default(),
-            pending_dials: Box::new(pending_dials),
+            pending_dials,
         }
     }
 }
