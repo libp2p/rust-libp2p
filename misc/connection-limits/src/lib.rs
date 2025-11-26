@@ -349,10 +349,12 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 self.established_inbound_connections.remove(&connection_id);
                 self.established_outbound_connections.remove(&connection_id);
-                self.established_per_peer
-                    .entry(peer_id)
-                    .or_default()
-                    .remove(&connection_id);
+                if let Some(connections) = self.established_per_peer.get_mut(&peer_id) {
+                    connections.remove(&connection_id);
+                    if connections.is_empty() {
+                        self.established_per_peer.remove(&peer_id);
+                    }
+                }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -360,19 +362,21 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                match endpoint {
-                    ConnectedPoint::Listener { .. } => {
-                        self.established_inbound_connections.insert(connection_id);
+                if !self.is_bypassed(&peer_id) {
+                    match endpoint {
+                        ConnectedPoint::Listener { .. } => {
+                            self.established_inbound_connections.insert(connection_id);
+                        }
+                        ConnectedPoint::Dialer { .. } => {
+                            self.established_outbound_connections.insert(connection_id);
+                        }
                     }
-                    ConnectedPoint::Dialer { .. } => {
-                        self.established_outbound_connections.insert(connection_id);
-                    }
-                }
 
-                self.established_per_peer
-                    .entry(peer_id)
-                    .or_default()
-                    .insert(connection_id);
+                    self.established_per_peer
+                        .entry(peer_id)
+                        .or_default()
+                        .insert(connection_id);
+                }
             }
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.pending_outbound_connections.remove(&connection_id);
