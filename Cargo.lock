@@ -1373,9 +1373,8 @@ dependencies = [
 
 [[package]]
 name = "futures-bounded"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91f328e7fb845fc832912fb6a34f40cf6d1888c92f974d1893a54e97b5ff542e"
+version = "0.3.0"
+source = "git+https://github.com/thomaseizinger/rust-futures-bounded?rev=012803d343b5c604e65d3c238a8cd7a145616447#012803d343b5c604e65d3c238a8cd7a145616447"
 dependencies = [
  "futures-timer",
  "futures-util",
@@ -2692,7 +2691,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.49.0"
+version = "0.49.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",

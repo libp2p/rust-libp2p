@@ -10,7 +10,7 @@ use futures::{
     channel::{mpsc, oneshot},
     AsyncRead, AsyncWrite, SinkExt, StreamExt,
 };
-use futures_bounded::FuturesSet;
+use futures_bounded::{Delay, FuturesSet};
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
@@ -64,7 +64,7 @@ where
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            inbound: FuturesSet::new(Duration::from_secs(10), 10),
+            inbound: FuturesSet::new(|| Delay::futures_timer(Duration::from_secs(10)), 10),
             rng,
         }
     }

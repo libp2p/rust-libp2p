@@ -29,6 +29,7 @@ use std::{
 
 use either::Either;
 use futures::future;
+use futures_bounded::Delay;
 use libp2p_core::{
     multiaddr::Multiaddr,
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -87,8 +88,14 @@ impl Handler {
         Self {
             endpoint,
             queued_events: Default::default(),
-            inbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
-            outbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
+            inbound_stream: futures_bounded::FuturesSet::new(
+                || Delay::futures_timer(Duration::from_secs(10)),
+                1,
+            ),
+            outbound_stream: futures_bounded::FuturesSet::new(
+                || Delay::futures_timer(Duration::from_secs(10)),
+                1,
+            ),
             holepunch_candidates,
             attempts: 0,
         }
