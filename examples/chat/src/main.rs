@@ -103,11 +103,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            Ok(Some(line)) = stdin.next_line() => {
-                if let Err(e) = swarm
-                    .behaviour_mut().gossipsub
-                    .publish(topic.clone(), line.as_bytes()) {
-                    println!("Publish error: {e:?}");
+            line_result = stdin.next_line() => {
+                match line_result {
+                    Ok(Some(line)) => {
+                        if let Err(e) = swarm
+                            .behaviour_mut().gossipsub
+                            .publish(topic.clone(), line.as_bytes()) {
+                            println!("Publish error: {e:?}");
+                        }
+                    }
+                    Ok(None) => {
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        println!("Stdin error: {e}");
+                        return Err(e.into());
+                    }
                 }
             }
             event = swarm.select_next_some() => match event {
