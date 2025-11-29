@@ -13,14 +13,21 @@ To run the example, follow these steps:
    ```
 
    Replace `<port>` with the port number on which the relay node will listen for incoming connections.
+   
    Replace `<seed>` with a seed value used to generate a deterministic peer ID for the relay node.
+   
+   Replace `<ws-port>` with the port number on which the relay node will listen for websocket incoming connections.
+   
+   Replace `<wrtc-port>` with the port number on which the relay node will listen for webrtc incoming connections.
+   
+   If you do **not** provide `--websocket-port` or `--webrtc-port`, the relay will **not** listen on those transports.
 
-2. The relay node will start listening for incoming connections.
+3. The relay node will start listening for incoming connections.
    It will print the listening address once it is ready.
 
-3. Connect other **libp2p** nodes to the relay node by specifying the relay's listening address as one of the bootstrap nodes in their configuration.
+4. Connect other **libp2p** nodes to the relay node by specifying the relay's listening address as one of the bootstrap nodes in their configuration.
 
-4. Once the connections are established, the relay node will facilitate communication between the connected peers, allowing them to exchange messages and data.
+5. Once the connections are established, the relay node will facilitate communication between the connected peers, allowing them to exchange messages and data.
 
 ## Conclusion
 
