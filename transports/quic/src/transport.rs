@@ -914,6 +914,25 @@ mod tests {
 
     use super::*;
 
+    // Helper to create an IPv4 address
+    fn ipv4(a: u8, b: u8, c: u8, d: u8) -> IpAddr {
+        IpAddr::V4(Ipv4Addr::new(a, b, c, d))
+    }
+
+    // Helper to create an IPv6 address
+    fn ipv6(segments: [u16; 8]) -> IpAddr {
+        IpAddr::V6(Ipv6Addr::new(
+            segments[0],
+            segments[1],
+            segments[2],
+            segments[3],
+            segments[4],
+            segments[5],
+            segments[6],
+            segments[7],
+        ))
+    }
+
     #[test]
     fn multiaddr_to_udp_conversion() {
         assert!(multiaddr_to_socketaddr(
@@ -1113,5 +1132,151 @@ mod tests {
                 format!("/ip6/::/udp/{port}/quic-v1").parse().unwrap(),
             )
             .unwrap();
+    }
+
+    #[test]
+    fn test_port_reuse_separation() {
+        // Test Ipv4 and IPv6 separation
+        let mut registry = PortReuse::default();
+        let ipv4_addr = ipv4(192, 168, 1, 100);
+        let ipv6_addr = ipv6([0x2001, 0xdb8, 0, 0, 0, 0, 0, 1]);
+        let ipv4_port = 9000;
+        let ipv6_port = 9001;
+
+        // Register both IPv4 and IPv6
+        assert!(registry.register(ipv4_addr, ipv4_port).is_ok());
+        assert!(registry.register(ipv6_addr, ipv6_port).is_ok());
+
+        // IPv4 lookup should only find IPv4 port
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(ipv4_port));
+
+        // IPv6 lookup should only find IPv6 port
+        let result = registry.local_dial_port(&ipv6([0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111]));
+        assert_eq!(result.unwrap(), Some(ipv6_port));
+
+        // Test loopback and non-loopback separation
+        let loopback = ipv4(127, 0, 0, 1);
+        let non_loopback = ipv4(192, 168, 1, 100);
+        let loopback_port = 9000;
+        let non_loopback_port = 9001;
+
+        // Register both loopback and non-loopback
+        assert!(registry.register(loopback, loopback_port).is_ok());
+        assert!(registry.register(non_loopback, non_loopback_port).is_ok());
+
+        // Loopback lookup should find loopback port
+        let result = registry.local_dial_port(&ipv4(127, 0, 0, 2));
+        assert_eq!(result.unwrap(), Some(loopback_port));
+
+        // Non-loopback lookup should find non-loopback port
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(non_loopback_port));
+    }
+
+    #[test]
+    fn test_port_reuse_unregister() {
+        let mut registry = PortReuse::default();
+        let ip = ipv4(192, 168, 1, 100);
+        let port = 9000;
+
+        // Register
+        assert!(registry.register(ip, port).is_ok());
+        assert_eq!(registry.local_dial_port(&ip).unwrap(), Some(port));
+
+        // Unregister
+        assert!(registry.unregister(ip, port).is_ok());
+        assert_eq!(registry.local_dial_port(&ip).unwrap(), None);
+
+        // Test non-existent unregistere
+        let ip = ipv4(192, 168, 1, 200);
+        let port = 19000;
+        assert!(registry.unregister(ip, port).is_ok());
+
+        // Should still be empty
+        assert_eq!(registry.local_dial_port(&ip).unwrap(), None);
+    }
+
+    #[test]
+    fn test_port_reuse_multiple_ports_same_ip() {
+        let mut registry = PortReuse::default();
+        let ip = ipv4(192, 168, 1, 100);
+        let port1 = 9000;
+        let port2 = 9001;
+
+        // Register same IP with different ports
+        assert!(registry.register(ip, port1).is_ok());
+        assert!(registry.register(ip, port2).is_ok());
+
+        // Should find one of them (which one is implementation-dependent)
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        let found_port = result.unwrap().unwrap();
+        assert!(found_port == port1 || found_port == port2);
+
+        // Unregister one
+        assert!(registry.unregister(ip, port1).is_ok());
+
+        // Should now find the other one
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(port2));
+    }
+
+    #[test]
+    fn test_port_reuse_multiple_ips_same_port() {
+        let mut registry = PortReuse::default();
+        let ip1 = ipv4(192, 168, 1, 100);
+        let ip2 = ipv4(192, 168, 1, 101);
+        let port = 9000;
+
+        // Register different IPs with same port
+        assert!(registry.register(ip1, port).is_ok());
+        assert!(registry.register(ip2, port).is_ok());
+
+        // Should find the port
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(port));
+    }
+
+    #[test]
+    fn test_port_reuse_scenario() {
+        let mut registry = PortReuse::default();
+        let port = 9000;
+
+        // Simulate listening on 0.0.0.0:9000
+        // if-watch discovers these addresses:
+        let discovered_addrs = vec![
+            ipv4(127, 0, 0, 1),     // Loopback
+            ipv4(192, 168, 1, 100), // WiFi
+            ipv4(10, 8, 0, 5),      // VPN
+            ipv4(172, 17, 0, 1),    // Docker
+        ];
+
+        // Register all discovered addresses
+        for ip in &discovered_addrs {
+            assert!(registry.register(*ip, port).is_ok());
+        }
+
+        // Dial to loopback -> should find loopback port
+        let result = registry.local_dial_port(&ipv4(127, 0, 0, 2));
+        assert_eq!(result.unwrap(), Some(port));
+
+        // Dial to internet -> should find non-loopback port
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(port));
+
+        // VPN disconnects - unregister VPN address
+        assert!(registry.unregister(ipv4(10, 8, 0, 5), port).is_ok());
+
+        // Should still work with remaining addresses
+        let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
+        assert_eq!(result.unwrap(), Some(port));
+
+        // All interfaces go down
+        for ip in &discovered_addrs {
+            let _ = registry.unregister(*ip, port);
+        }
+
+        // Should return None now
+        assert_eq!(registry.local_dial_port(&ipv4(8, 8, 8, 8)).unwrap(), None);
     }
 }
