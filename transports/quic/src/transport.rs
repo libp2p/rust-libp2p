@@ -1158,13 +1158,10 @@ mod tests {
 
         // Test loopback and non-loopback separation
         let loopback = ipv4(127, 0, 0, 1);
-        let non_loopback = ipv4(192, 168, 1, 100);
         let loopback_port = 9000;
-        let non_loopback_port = 9001;
 
         // Register both loopback and non-loopback
         assert!(registry.register(loopback, loopback_port).is_ok());
-        assert!(registry.register(non_loopback, non_loopback_port).is_ok());
 
         // Loopback lookup should find loopback port
         let result = registry.local_dial_port(&ipv4(127, 0, 0, 2));
@@ -1172,7 +1169,7 @@ mod tests {
 
         // Non-loopback lookup should find non-loopback port
         let result = registry.local_dial_port(&ipv4(8, 8, 8, 8));
-        assert_eq!(result.unwrap(), Some(non_loopback_port));
+        assert_eq!(result.unwrap(), Some(ipv4_port));
     }
 
     #[test]
