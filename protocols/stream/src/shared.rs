@@ -122,7 +122,7 @@ impl Shared {
         }
     }
 
-    pub(crate) fn sender(&mut self, peer: PeerId) -> mpsc::Sender<NewStream> {
+    pub(crate) fn sender(&mut self, peer: PeerId) -> (mpsc::Sender<NewStream>, Option<(PeerId, mpsc::Sender<PeerId>)>) {
         let maybe_sender = self
             .connections
             .iter()
@@ -134,7 +134,7 @@ impl Shared {
             Some(sender) => {
                 tracing::debug!("Returning sender to existing connection");
 
-                sender.clone()
+                (sender.clone(), None)
             }
             None => {
                 tracing::debug!(%peer, "Not connected to peer, initiating dial");
@@ -144,9 +144,8 @@ impl Shared {
                     .entry(peer)
                     .or_insert_with(|| mpsc::channel(0));
 
-                let _ = self.dial_sender.try_send(peer);
-
-                sender.clone()
+                // Return both the pending channel sender and the dial_sender for async use
+                (sender.clone(), Some((peer, self.dial_sender.clone())))
             }
         }
     }

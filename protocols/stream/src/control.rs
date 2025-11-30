@@ -48,7 +48,17 @@ impl Control {
     ) -> Result<Stream, OpenStreamError> {
         tracing::debug!(%peer, "Requesting new stream");
 
-        let mut new_stream_sender = Shared::lock(&self.shared).sender(peer);
+        let (mut new_stream_sender, dial_info) = {
+            let mut shared = Shared::lock(&self.shared);
+            shared.sender(peer)
+        };
+
+        // If we need to dial, do it outside the lock with backpressure
+        if let Some((peer_to_dial, mut dial_sender)) = dial_info {
+            // Propagate backpressure by awaiting the send instead of try_send
+            dial_sender.send(peer_to_dial).await
+                .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
+        }
 
         let (sender, receiver) = oneshot::channel();
 

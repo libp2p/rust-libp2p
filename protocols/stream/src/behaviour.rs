@@ -32,7 +32,7 @@ impl Default for Behaviour {
 
 impl Behaviour {
     pub fn new() -> Self {
-        let (dial_sender, dial_receiver) = mpsc::channel(0);
+        let (dial_sender, dial_receiver) = mpsc::channel(32);
 
         Self {
             shared: Arc::new(Mutex::new(Shared::new(dial_sender))),
