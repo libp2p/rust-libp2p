@@ -94,7 +94,8 @@ impl PortReuse {
                 tracing::error!(%ip, %port, error=%poisoned,
                     "Port reuse registry lock is poisoned, refusing to use potentially inconsistent data"
                 );
-                return Err(PortReuseError::LockPoisoned); // could recover here, if availability over consistency is more important
+                return Err(PortReuseError::LockPoisoned); // could recover here, if availability
+                                                          // over consistency is more important
             }
         };
 
