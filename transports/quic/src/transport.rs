@@ -19,15 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{
-        hash_map::{DefaultHasher, Entry},
-        HashMap, HashSet,
-    },
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
-    hash::{Hash, Hasher},
+    hash::Hash,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     pin::Pin,
+    sync::{Arc, PoisonError, RwLock},
     task::{Context, Poll, Waker},
     time::Duration,
 };
@@ -54,6 +52,113 @@ use crate::{
     provider::Provider,
     ConnectError, Connecting, Connection, Error,
 };
+
+type Port = u16;
+
+/// Error that can occur when accessing the PortReuse registry.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum PortReuseError {
+    /// The lock was poisoned, indicating a panic occurred in another thread
+    /// while holding the lock.
+    #[error("port reuse registry lock is poisoned")]
+    LockPoisoned,
+}
+
+impl<T> From<PoisonError<T>> for PortReuseError {
+    fn from(_: PoisonError<T>) -> Self {
+        PortReuseError::LockPoisoned
+    }
+}
+
+/// The configuration for port reuse of listening sockets.
+// Note: This mimics the same logic as [`libp2p_tcp::PortReuse`], should optimize to use OS routing.
+#[derive(Debug, Clone, Default)]
+struct PortReuse {
+    /// The addresses and ports of the registered listener sockets
+    /// whose ports could be reused while dialing.
+    listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
+}
+
+impl PortReuse {
+    /// Registers a socket address for port reuse.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(PortReuseError::LockPoisoned)` if the lock is poisoned.
+    fn register(&mut self, ip: IpAddr, port: u16) -> Result<(), PortReuseError> {
+        tracing::trace!(%ip, %port, "Registering QUIC address for port reuse");
+
+        let mut addrs = match self.listen_addrs.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::error!(%ip, %port, error=%poisoned,
+                    "Port reuse registry lock is poisoned, refusing to use potentially inconsistent data"
+                );
+                return Err(PortReuseError::LockPoisoned); // could recover here, if availability over consistency is more important
+            }
+        };
+
+        addrs.insert((ip, port));
+        Ok(())
+    }
+
+    /// Unregisters a socket address for port reuse.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(PortReuseError::LockPoisoned)` if the lock was poisoned.
+    fn unregister(&mut self, ip: IpAddr, port: u16) -> Result<(), PortReuseError> {
+        tracing::trace!(%ip, %port, "Unregistering QUIC address from port reuse");
+
+        let mut addrs = match self.listen_addrs.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::error!(%ip, %port, error=%poisoned,
+                    "Port reuse registry lock is poisoned during unregister, refusing to use potentially inconsistent data"
+                );
+                return Err(PortReuseError::LockPoisoned); // recover possible here
+            }
+        };
+
+        addrs.remove(&(ip, port));
+        Ok(())
+    }
+
+    /// Selects a listening port suitable for re-use
+    /// with the local address when dialing.
+    ///
+    /// If multiple listening addresses with ports are registered for
+    /// reuse, one port is chosen where IP protocol version and
+    /// loopback status is the same as that of `remote_ip`.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some((ip, port)))` if a suitable address is found
+    /// - `Ok(None)` if no suitable address is found
+    /// - `Err(PortReuseError::LockPoisoned)` if the lock is poisoned
+    fn local_dial_port(&self, remote_ip: &IpAddr) -> Result<Option<Port>, PortReuseError> {
+        let addrs = match self.listen_addrs.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::error!(
+                    remote_ip = %remote_ip,
+                    "Port reuse registry lock poisoned during lookup: {poisoned}"
+                );
+                return Err(PortReuseError::LockPoisoned); // and also recover here
+            }
+        };
+
+        let result = addrs
+            .iter()
+            .find(|(ip, _port)| {
+                ip.is_ipv4() == remote_ip.is_ipv4() && ip.is_loopback() == remote_ip.is_loopback()
+            })
+            .map(|(_ip, port)| port)
+            .copied();
+
+        Ok(result)
+    }
+}
 
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
@@ -82,6 +187,8 @@ pub struct GenTransport<P: Provider> {
     waker: Option<Waker>,
     /// Holepunching attempts
     hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
+    /// Registry for port reuse
+    port_reuse: PortReuse,
 }
 
 #[expect(deprecated)]
@@ -99,6 +206,7 @@ impl<P: Provider> GenTransport<P> {
             waker: None,
             support_draft_29,
             hole_punch_attempts: Default::default(),
+            port_reuse: PortReuse::default(),
         }
     }
 
@@ -145,38 +253,38 @@ impl<P: Provider> GenTransport<P> {
         Ok((socket_addr, version, peer_id))
     }
 
-    /// Pick any listener to use for dialing.
+    /// Find eligible listener using PortReuse registry
     fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
-        let mut listeners: Vec<_> = self
-            .listeners
-            .iter_mut()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
-            })
-            .filter(|l| {
-                if socket_addr.ip().is_loopback() {
-                    l.listening_addresses
-                        .iter()
-                        .any(|ip_addr| ip_addr.is_loopback())
-                } else {
-                    true
-                }
-            })
-            .collect();
-        match listeners.len() {
-            0 => None,
-            1 => listeners.pop(),
-            _ => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                Some(listeners.swap_remove(index))
+        // Query the PortReuse registry for a suitable listening address
+        let local_port = match self.port_reuse.local_dial_port(&socket_addr.ip()) {
+            Ok(Some(port)) => port,
+            Ok(None) => return None,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    remote_addr = %socket_addr,
+                    "Failed to query port reuse registry"
+                );
+                return None;
             }
+        };
+
+        // Find the listener with this port
+        self.listeners.iter_mut().find(|l| {
+            !l.is_closed
+                && l.socket_addr().port() == local_port
+                && SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
+        })
+    }
+
+    fn get_or_create_dialer(&mut self, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+        let socket_family = socket_addr.ip().into();
+        if let Some(occupied) = self.dialer.get(&socket_family) {
+            Ok(occupied.clone())
+        } else {
+            let endpoint = self.bound_socket(socket_addr)?;
+            self.dialer.insert(socket_family, endpoint.clone());
+            Ok(endpoint)
         }
     }
 
@@ -235,6 +343,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             endpoint,
             self.handshake_timeout,
             version,
+            self.port_reuse.clone(),
         )?;
         self.listeners.push(listener);
 
@@ -271,28 +380,21 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         match (dial_opts.role, dial_opts.port_use) {
             (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::Reuse) => {
-                let endpoint = if let Some(listener) = dial_opts
-                    .port_use
-                    .eq(&PortUse::Reuse)
-                    .then(|| self.eligible_listener(&socket_addr))
-                    .flatten()
-                {
-                    listener.endpoint.clone()
-                } else {
-                    let socket_family = socket_addr.ip().into();
-                    let dialer = if dial_opts.port_use == PortUse::Reuse {
-                        if let Some(occupied) = self.dialer.get(&socket_family) {
-                            occupied.clone()
-                        } else {
-                            let endpoint = self.bound_socket(socket_addr)?;
-                            self.dialer.insert(socket_family, endpoint.clone());
-                            endpoint
-                        }
+                let endpoint = if dial_opts.port_use == PortUse::Reuse {
+                    if let Some(listener) = self.eligible_listener(&socket_addr) {
+                        tracing::debug!(
+                            local_addr=%listener.socket_addr(),
+                            remote_addr=%socket_addr,
+                            "Reusing listener socket for dial"
+                        );
+                        listener.endpoint.clone()
                     } else {
-                        self.bound_socket(socket_addr)?
-                    };
-                    dialer
+                        self.get_or_create_dialer(socket_addr)?
+                    }
+                } else {
+                    self.bound_socket(socket_addr)?
                 };
+
                 let handshake_timeout = self.handshake_timeout;
                 let mut client_config = self.quinn_config.client_config.clone();
                 if version == ProtocolVersion::Draft29 {
@@ -448,7 +550,14 @@ struct Listener<P: Provider> {
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
 
-    listening_addresses: HashSet<IpAddr>,
+    /// Registry for port reuse
+    port_reuse: PortReuse,
+
+    /// Track registered addresses for cleanup
+    ///
+    /// We maintain this separate from the shared PortReuse registry so we know
+    /// exactly which addresses to unregister when this listener closes.
+    registered_addrs: HashSet<IpAddr>,
 }
 
 impl<P: Provider> Listener<P> {
@@ -458,17 +567,33 @@ impl<P: Provider> Listener<P> {
         endpoint: quinn::Endpoint,
         handshake_timeout: Duration,
         version: ProtocolVersion,
+        mut port_reuse: PortReuse,
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
-        let mut listening_addresses = HashSet::new();
+        let mut registered_addrs = HashSet::new();
         let local_addr = socket.local_addr()?;
+
         if local_addr.ip().is_unspecified() {
+            // Wildcard address - use if-watch to discover concrete addresses
             if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
+            // Specific address - register immediately
             if_watcher = None;
-            listening_addresses.insert(local_addr.ip());
+
+            // Register in PortReuse
+            if let Err(e) = port_reuse.register(local_addr.ip(), local_addr.port()) {
+                tracing::error!(
+                    error = %e,
+                    ip = %local_addr.ip(),
+                    port = local_addr.port(),
+                    "Failed to register address in port reuse registry during listener creation"
+                );
+                // Continue anyway - port reuse just won't work for this address
+            }
+            registered_addrs.insert(local_addr.ip());
+
             let ma = socketaddr_to_multiaddr(&local_addr, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
@@ -490,7 +615,8 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             close_listener_waker: None,
-            listening_addresses,
+            port_reuse,
+            registered_addrs,
         })
     }
 
@@ -501,6 +627,20 @@ impl<P: Provider> Listener<P> {
             return;
         }
         self.endpoint.close(From::from(0u32), &[]);
+
+        // Unregister all addresses for this listener
+        let port = self.socket_addr().port();
+        for ip in self.registered_addrs.drain() {
+            if let Err(e) = self.port_reuse.unregister(ip, port) {
+                tracing::warn!(
+                    error = %e,
+                    ip = %ip,
+                    port = port,
+                    "Failed to unregister address during listener close"
+                );
+            }
+        }
+
         self.pending_event = Some(TransportEvent::ListenerClosed {
             listener_id: self.listener_id,
             reason,
@@ -540,7 +680,20 @@ impl<P: Provider> Listener<P> {
                             address=%listen_addr,
                             "New listen address"
                         );
-                        self.listening_addresses.insert(inet.addr());
+
+                        // Register the new address for port reuse
+                        if let Err(e) = self.port_reuse.register(inet.addr(), endpoint_addr.port())
+                        {
+                            tracing::error!(
+                                error = %e,
+                                address = %listen_addr,
+                                "Failed to register new address in port reuse registry"
+                            );
+                            // Continue anyway - just won't be able to reuse this address
+                        } else {
+                            self.registered_addrs.insert(inet.addr());
+                        }
+
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -555,7 +708,21 @@ impl<P: Provider> Listener<P> {
                             address=%listen_addr,
                             "Expired listen address"
                         );
-                        self.listening_addresses.remove(&inet.addr());
+
+                        // Unregister the address from port reuse
+                        if let Err(e) = self
+                            .port_reuse
+                            .unregister(inet.addr(), endpoint_addr.port())
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                address = %listen_addr,
+                                "Failed to unregister expired address from port reuse registry"
+                            );
+                        } else {
+                            self.registered_addrs.remove(&inet.addr());
+                        }
+
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -575,6 +742,7 @@ impl<P: Provider> Listener<P> {
 
 impl<P: Provider> Stream for Listener<P> {
     type Item = TransportEvent<<GenTransport<P> as Transport>::ListenerUpgrade, Error>;
+
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
