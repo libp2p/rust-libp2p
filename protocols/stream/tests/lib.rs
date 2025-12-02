@@ -113,12 +113,9 @@ async fn backpressure_on_many_concurrent_dials() {
 
     // All tasks should complete (not hang indefinitely)
     for handle in handles {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            handle,
-        )
-        .await
-        .expect("Task should not hang - backpressure should work")
-        .expect("Task should complete successfully");
+        tokio::time::timeout(std::time::Duration::from_secs(5), handle)
+            .await
+            .expect("Task should not hang - backpressure should work")
+            .expect("Task should complete successfully");
     }
 }

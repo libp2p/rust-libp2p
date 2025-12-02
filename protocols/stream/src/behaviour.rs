@@ -21,7 +21,7 @@ use crate::{handler::Handler, shared::Shared, Control};
 /// A generic behaviour for stream-oriented protocols.
 pub struct Behaviour {
     shared: Arc<Mutex<Shared>>,
-    dial_receiver: mpsc::Receiver<PeerId>,
+    dial_receiver: mpsc::UnboundedReceiver<PeerId>,
 }
 
 impl Default for Behaviour {
@@ -32,7 +32,7 @@ impl Default for Behaviour {
 
 impl Behaviour {
     pub fn new() -> Self {
-        let (dial_sender, dial_receiver) = mpsc::channel(32);
+        let (dial_sender, dial_receiver) = mpsc::unbounded();
 
         Self {
             shared: Arc::new(Mutex::new(Shared::new(dial_sender))),
