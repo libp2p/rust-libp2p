@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use futures::channel::mpsc;
+use futures::{channel::mpsc, SinkExt as _};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, Stream, StreamProtocol};
 use rand::seq::IteratorRandom as _;
@@ -29,7 +29,7 @@ pub(crate) struct Shared {
     ///
     /// We manage this through a channel to avoid locks as part of
     /// [`NetworkBehaviour::poll`](libp2p_swarm::NetworkBehaviour::poll).
-    dial_sender: mpsc::UnboundedSender<PeerId>,
+    dial_sender: mpsc::Sender<PeerId>,
 }
 
 impl Shared {
@@ -39,7 +39,7 @@ impl Shared {
 }
 
 impl Shared {
-    pub(crate) fn new(dial_sender: mpsc::UnboundedSender<PeerId>) -> Self {
+    pub(crate) fn new(dial_sender: mpsc::Sender<PeerId>) -> Self {
         Self {
             dial_sender,
             connections: Default::default(),
@@ -122,11 +122,7 @@ impl Shared {
         }
     }
 
-    /// Returns a sender for the given peer, initiating a dial if necessary.
-    ///
-    /// Uses an unbounded channel for dial requests to avoid holding the mutex
-    /// across await points while still tracking all dial attempts.
-    pub(crate) fn sender(&mut self, peer: PeerId) -> mpsc::Sender<NewStream> {
+    fn prepare_sender(&mut self, peer: PeerId) -> SenderAction {
         let maybe_sender = self
             .connections
             .iter()
@@ -137,7 +133,10 @@ impl Shared {
         match maybe_sender {
             Some(sender) => {
                 tracing::debug!("Returning sender to existing connection");
-                sender.clone()
+
+                SenderAction::Connected {
+                    sender: sender.clone(),
+                }
             }
             None => {
                 tracing::debug!(%peer, "Not connected to peer, initiating dial");
@@ -147,11 +146,44 @@ impl Shared {
                     .entry(peer)
                     .or_insert_with(|| mpsc::channel(0));
 
-                // Send dial request through unbounded channel
-                // This never blocks, never fails (unless disconnected), and properly tracks all dial attempts
-                let _ = self.dial_sender.unbounded_send(peer);
+                SenderAction::Dial {
+                    pending_sender: sender.clone(),
+                    dial_sender: self.dial_sender.clone(),
+                    peer_to_dial: peer,
+                }
+            }
+        }
+    }
 
-                sender.clone()
+    pub(crate) async fn send_new_stream(
+        shared: &Arc<Mutex<Shared>>,
+        peer: PeerId,
+        new_stream: NewStream,
+    ) -> io::Result<()> {
+        let action = {
+            let mut shared = Shared::lock(shared);
+            shared.prepare_sender(peer)
+        };
+
+        match action {
+            SenderAction::Connected { mut sender } => sender
+                .send(new_stream)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e)),
+            SenderAction::Dial {
+                mut pending_sender,
+                mut dial_sender,
+                peer_to_dial,
+            } => {
+                dial_sender
+                    .send(peer_to_dial)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e.clone()))?;
+
+                pending_sender
+                    .send(new_stream)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))
             }
         }
     }
@@ -175,4 +207,15 @@ impl Shared {
 
         receiver
     }
+}
+
+enum SenderAction {
+    Connected {
+        sender: mpsc::Sender<NewStream>,
+    },
+    Dial {
+        pending_sender: mpsc::Sender<NewStream>,
+        dial_sender: mpsc::Sender<PeerId>,
+        peer_to_dial: PeerId,
+    },
 }
