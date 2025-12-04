@@ -1,7 +1,7 @@
-## 0.2.12
+## 0.2.13
 
 - Turn the `quick-protobuf` dependency optional to only the features which require it.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 6226](https://github.com/libp2p/rust-libp2p/pull/6226)
 
 ## 0.2.12
 
