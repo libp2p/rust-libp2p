@@ -1,5 +1,10 @@
 ## 0.2.12
 
+- Turn the `quick-protobuf` dependency optional to only the features which require it.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
+## 0.2.12
+
 - Avoid depending on the `rand_core` feature in `ed25519-dalek` crate.
   See [PR 6070](https://github.com/libp2p/rust-libp2p/pull/6070)
 
