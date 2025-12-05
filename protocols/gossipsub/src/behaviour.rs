@@ -2139,6 +2139,9 @@ where
             let mut removed_peers_count = 0;
 
             // Drop all peers with negative score, without PX
+            //
+            // TODO: Use `extract_if` once MSRV is raised to a version that includes its
+            // stabilization.
             peers.retain(|peer_id| {
                 let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
