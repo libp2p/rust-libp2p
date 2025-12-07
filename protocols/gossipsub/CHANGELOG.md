@@ -29,6 +29,9 @@
 - gossipsub: do early return in for an empty input
   See [PR 6208](https://github.com/libp2p/rust-libp2p/pull/6208).
 
+- Refactor gossipsub with in-place negative-score peer removal.
+  See [PR 6209](https://github.com/libp2p/rust-libp2p/pull/6209).
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
