@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+//! Libp2p websocket transports built on [web-sys](https://wasm-bindgen.github.io/wasm-bindgen/contributing/web-sys/index.html).
 
 #![allow(unexpected_cfgs)]
 
