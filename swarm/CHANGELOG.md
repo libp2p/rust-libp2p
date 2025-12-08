@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Add `PeerAddressesConfig` and the possibility to configure the number of addresses cached per peer.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
+
 ## 0.47.0
 
 - Remove `async-std` support.
