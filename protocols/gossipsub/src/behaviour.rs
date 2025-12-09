@@ -847,12 +847,23 @@ where
 
         let group_id = partial_message.group_id();
 
-        let recipient_peers = self.get_publish_peers(&topic_hash, |_, peer| {
+        let mut recipient_peers = self.get_publish_peers(&topic_hash, |_, peer| {
             peer.partial_opts
                 .get(&topic_hash)
                 .map(|opts| opts.supports_partial)
                 .unwrap_or_default()
         });
+
+        // We add the peers which also have the same group_id to the publish peers,
+        // this allows us to reply to peers whom may not be on our mesh but still want the partial update.
+        let transient_peers = self.connected_peers.iter().filter_map(|(peer_id, peer)| {
+            let topic_partials = peer.partial_messages.get(&topic_hash)?;
+            topic_partials.get(&group_id)?;
+            Some(peer_id)
+        });
+
+        recipient_peers.extend(transient_peers);
+
         let publish_metadata = partial_message.metadata();
         for peer_id in recipient_peers.iter() {
             // TODO: this can be optimized, we are going to get the peer again on `send_message`
