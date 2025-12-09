@@ -2665,7 +2665,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "asn1_der",
  "bs58",
@@ -3161,7 +3161,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-uds"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "futures",
  "js-sys",
@@ -6612,7 +6612,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

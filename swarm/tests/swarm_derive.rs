@@ -84,8 +84,8 @@ fn two_fields() {
         let _out_event: <Foo as NetworkBehaviour>::ToSwarm = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
-            FooEvent::Identify(event) => {
-                let _: identify::Event = event;
+            FooEvent::Identify(_event) => {
+                let _: identify::Event = _event;
             }
         }
     }
@@ -112,11 +112,11 @@ fn three_fields() {
         let _out_event: <Foo as NetworkBehaviour>::ToSwarm = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
-            FooEvent::Identify(event) => {
-                let _: identify::Event = event;
+            FooEvent::Identify(_event) => {
+                let _: identify::Event = _event;
             }
-            FooEvent::Kad(event) => {
-                let _: libp2p_kad::Event = event;
+            FooEvent::Kad(_event) => {
+                let _: libp2p_kad::Event = _event;
             }
         }
     }
