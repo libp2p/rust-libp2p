@@ -4,14 +4,45 @@ use web_time::SystemTime;
 
 use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
+// ## Cross-Implementation Compatibility
+//
+// By default, this implementation uses legacy constants for backward compatibility with existing
+// Rust libp2p peer records. To enable interoperability with Go and JavaScript libp2p implementations,
+// enable the `peer-record-interop` feature in your Cargo.toml:
+//
+// ```toml
+// libp2p-core = { version = "0.43.2", features = ["peer-record-interop"] }
+// ```
+//
+// The legacy format is deprecated and will become opt-in in a future release.
+
 // The type hint used to identify peer records in an Envelope.
-// Defined in https://github.com/multiformats/multicodec/blob/master/table.csv
-// with name "libp2p-peer-record"
+// With the `peer-record-interop` feature, uses the standard libp2p-peer-record
+// multicodec identifier as defined in https://github.com/multiformats/multicodec/blob/master/table.csv
+// Without the feature (default), uses the legacy routing-state-record format.
+#[cfg(feature = "peer-record-interop")]
 const PAYLOAD_TYPE: &[u8] = &[0x03, 0x01];
 
+#[cfg(not(feature = "peer-record-interop"))]
+#[deprecated(
+    since = "0.43.2",
+    note = "Legacy routing-state-record format. Enable the `peer-record-interop` feature for cross-implementation compatibility with Go/JS libp2p"
+)]
+const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
+
 // The domain string used for peer records contained in a Envelope.
-// See https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+// With the `peer-record-interop` feature, uses the standard domain string
+// as defined in https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+// Without the feature (default), uses the legacy domain string.
+#[cfg(feature = "peer-record-interop")]
 const DOMAIN_SEP: &str = "libp2p-peer-record";
+
+#[cfg(not(feature = "peer-record-interop"))]
+#[deprecated(
+    since = "0.43.2",
+    note = "Legacy routing-state domain. Enable the `peer-record-interop` feature for cross-implementation compatibility with Go/JS libp2p"
+)]
+const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 /// Represents a peer routing record.
 ///
@@ -35,11 +66,17 @@ impl PeerRecord {
     ///
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
     /// signature and can hence be considered authenticated.
+    #[cfg_attr(not(feature = "peer-record-interop"), allow(deprecated))]
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         use quick_protobuf::MessageRead;
 
+        #[cfg(feature = "peer-record-interop")]
+        let payload_type = PAYLOAD_TYPE;
+        #[cfg(not(feature = "peer-record-interop"))]
+        let payload_type = PAYLOAD_TYPE.as_bytes();
+
         let (payload, signing_key) =
-            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE)?;
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), payload_type)?;
         let mut reader = BytesReader::from_bytes(payload);
         let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
 
@@ -68,6 +105,7 @@ impl PeerRecord {
     ///
     /// This is the same key that is used for authenticating every libp2p connection of your
     /// application, i.e. what you use when setting up your [`crate::transport::Transport`].
+    #[cfg_attr(not(feature = "peer-record-interop"), allow(deprecated))]
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
         use quick_protobuf::MessageWrite;
 
@@ -98,10 +136,15 @@ impl PeerRecord {
             buf
         };
 
+        #[cfg(feature = "peer-record-interop")]
+        let payload_type = PAYLOAD_TYPE.to_vec();
+        #[cfg(not(feature = "peer-record-interop"))]
+        let payload_type = PAYLOAD_TYPE.as_bytes().to_vec();
+
         let envelope = SignedEnvelope::new(
             key,
             String::from(DOMAIN_SEP),
-            PAYLOAD_TYPE.to_vec(),
+            payload_type,
             payload,
         )?;
 
@@ -172,6 +215,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "peer-record-interop"), allow(deprecated))]
     fn mismatched_signature() {
         use quick_protobuf::MessageWrite;
 
@@ -199,10 +243,15 @@ mod tests {
                 buf
             };
 
+            #[cfg(feature = "peer-record-interop")]
+            let payload_type = PAYLOAD_TYPE.to_vec();
+            #[cfg(not(feature = "peer-record-interop"))]
+            let payload_type = PAYLOAD_TYPE.as_bytes().to_vec();
+
             SignedEnvelope::new(
                 &identity_b,
                 String::from(DOMAIN_SEP),
-                PAYLOAD_TYPE.to_vec(),
+                payload_type,
                 payload,
             )
             .unwrap()

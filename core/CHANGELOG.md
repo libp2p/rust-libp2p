@@ -1,5 +1,13 @@
-## 0.44.0
-- Update `libp2p::core::peer_record` Fix peer record domain and payload type to match Go/JS implementations.
+## 0.43.2
+
+- Add `peer-record-interop` feature for cross-implementation compatibility with Go and JavaScript libp2p.
+  When enabled, uses standard libp2p-peer-record domain and payload type constants for interoperability.
+  When disabled (default), maintains backward compatibility with existing Rust libp2p peer records using legacy routing-state-record constants.
+  
+  To enable: Add `features = ["peer-record-interop"]` to your `libp2p-core` dependency.
+  
+  **Note:** Legacy constants are deprecated and will become opt-in in a future version.
+  
   See [PR 6205](https://github.com/libp2p/rust-libp2p/pull/6205).
 
 ## 0.43.1

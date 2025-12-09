@@ -1,4 +1,6 @@
-#[cfg(test)]
+// These tests verify interoperability with Go and JS libp2p implementations
+// and require the peer-record-interop feature to use the standard constants.
+#[cfg(all(test, feature = "peer-record-interop"))]
 mod tests {
     use libp2p_core::{PeerRecord, SignedEnvelope};
 
