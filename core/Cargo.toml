@@ -39,13 +39,6 @@ libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 [features]
 serde = ["multihash/serde-codec", "libp2p-identity/serde"]
 
-# Enable standard libp2p peer-record format for cross-implementation compatibility.
-# When enabled, peer records use the standard multicodec identifier (0x0301) and
-# "libp2p-peer-record" domain, ensuring compatibility with Go and JavaScript implementations.
-# When disabled (default), uses legacy "libp2p-routing-state" format for backward compatibility
-# with existing Rust libp2p deployments. The legacy format is deprecated.
-peer-record-interop = []
-
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]

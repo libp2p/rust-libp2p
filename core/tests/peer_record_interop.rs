@@ -1,6 +1,6 @@
 // These tests verify interoperability with Go and JS libp2p implementations
-// and require the peer-record-interop feature to use the standard constants.
-#[cfg(all(test, feature = "peer-record-interop"))]
+// using the standard peer-record format.
+#[cfg(test)]
 mod tests {
     use libp2p_core::{PeerRecord, SignedEnvelope};
 
@@ -13,7 +13,7 @@ mod tests {
             .expect("Failed to decode envelope from JS");
 
         let peer_record =
-            PeerRecord::from_signed_envelope(envelope).expect("Failed to verify JS peer record");
+            PeerRecord::from_signed_envelope_interop(envelope).expect("Failed to verify JS peer record");
 
         assert!(!peer_record.addresses().is_empty());
     }
@@ -24,7 +24,7 @@ mod tests {
             .expect("Failed to decode envelope from Go");
 
         let peer_record =
-            PeerRecord::from_signed_envelope(envelope).expect("Failed to verify Go peer record");
+            PeerRecord::from_signed_envelope_interop(envelope).expect("Failed to verify Go peer record");
 
         assert!(!peer_record.addresses().is_empty());
     }
