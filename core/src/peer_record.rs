@@ -61,7 +61,9 @@ impl PeerRecord {
     ///
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
     /// signature and can hence be considered authenticated.
-    pub fn from_signed_envelope_interop(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
+    pub fn from_signed_envelope_interop(
+        envelope: SignedEnvelope,
+    ) -> Result<Self, FromEnvelopeError> {
         Self::from_signed_envelope_impl(envelope, STANDARD_DOMAIN_SEP, STANDARD_PAYLOAD_TYPE)
     }
 
@@ -108,7 +110,12 @@ impl PeerRecord {
     ///
     /// For cross-implementation compatibility with Go/JS libp2p, use [`Self::new_interop`].
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
-        Self::new_impl(key, addresses, LEGACY_DOMAIN_SEP, LEGACY_PAYLOAD_TYPE.as_bytes())
+        Self::new_impl(
+            key,
+            addresses,
+            LEGACY_DOMAIN_SEP,
+            LEGACY_PAYLOAD_TYPE.as_bytes(),
+        )
     }
 
     /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key using standard interop format.
@@ -157,12 +164,8 @@ impl PeerRecord {
             buf
         };
 
-        let envelope = SignedEnvelope::new(
-            key,
-            String::from(domain),
-            payload_type.to_vec(),
-            payload,
-        )?;
+        let envelope =
+            SignedEnvelope::new(key, String::from(domain), payload_type.to_vec(), payload)?;
 
         Ok(Self {
             peer_id,
