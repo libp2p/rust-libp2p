@@ -814,20 +814,23 @@ where
                     .copied()
                     .collect::<Vec<PeerId>>();
 
+                let needed_extra_peers = mesh_n.saturating_sub(fanout_peers.len());
+                recipient_peers.extend(fanout_peers);
+
                 // If we have fanout peers add them to the map.
-                if !fanout_peers.is_empty() {
-                    recipient_peers.extend(fanout_peers);
-                } else {
+                if needed_extra_peers > 0 {
                     // We have no fanout peers, select mesh_n of them and add them to the fanout
                     let new_peers =
-                        get_random_peers(peers_on_topic, topic_hash, mesh_n, |_, _| true);
+                        get_random_peers(peers_on_topic, topic_hash, needed_extra_peers, |_, _| {
+                            true
+                        });
                     // Add the new peers to the fanout and recipient peers
+                    tracing::debug!(?new_peers, "Peers added to fanout");
                     self.fanout.insert(topic_hash.clone(), new_peers.clone());
-                    for peer in new_peers {
-                        tracing::debug!(%peer, "Peer added to fanout");
-                        recipient_peers.insert(peer);
-                    }
+                    recipient_peers.extend(new_peers);
                 }
+
+                // recipient_peers.extend(self.fanout);
                 // We are publishing to fanout peers - update the time we published
                 self.fanout_last_pub
                     .insert(topic_hash.clone(), Instant::now());
