@@ -815,11 +815,11 @@ where
                     .collect::<Vec<PeerId>>();
 
                 let needed_extra_peers = mesh_n.saturating_sub(fanout_peers.len());
+                // If we have fanout peers add them to the map.
                 recipient_peers.extend(fanout_peers);
 
-                // If we have fanout peers add them to the map.
                 if needed_extra_peers > 0 {
-                    // We have no fanout peers, select mesh_n of them and add them to the fanout
+                    // We have insufficient fanout peers, select mesh_n of them and add them to the fanout
                     let new_peers =
                         get_random_peers(peers_on_topic, topic_hash, needed_extra_peers, |_, _| {
                             true
