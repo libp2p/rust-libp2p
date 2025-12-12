@@ -1777,7 +1777,7 @@ where
             (Some(_), None) | (None, None) => false,
         };
 
-        if !metadata_updated {
+        if !metadata_updated && partial_message.message.is_none() {
             return;
         }
 
