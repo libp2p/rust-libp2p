@@ -911,17 +911,23 @@ where
             };
 
             // Check if we have new data for the peer.
-            let Some((message, peer_updated_metadata)) = action.send else {
+            let message = if let Some((message, peer_updated_metadata)) = action.send {
+                // We have something to send, update the peer's metadata.
+                group_partials.metadata =
+                    Some(crate::types::PeerMetadata::Local(peer_updated_metadata));
+                Some(message)
+            } else if group_partials.metadata.is_none() || action.need {
+                // We have no data to eagerly send, but we want to transmit our metadata anyway, to
+                // let the peer know of our metadata so that it sends us its data.
+                None
+            } else {
                 continue;
             };
-
-            group_partials.metadata =
-                Some(crate::types::PeerMetadata::Local(peer_updated_metadata));
 
             self.send_message(
                 *peer_id,
                 RpcOut::PartialMessage {
-                    message: Some(message),
+                    message,
                     metadata: publish_metadata.clone(),
                     group_id: group_id.clone(),
                     topic_id: topic_hash.clone(),
