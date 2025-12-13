@@ -183,7 +183,7 @@ enum PublishConfig {
 
 /// A strictly linearly increasing sequence number.
 ///
-/// We start from the current time as unix timestamp in milliseconds.
+/// We start from the current time as unix timestamp in nanoseconds.
 #[derive(Debug)]
 struct SequenceNumber(u64);
 
@@ -194,7 +194,10 @@ impl SequenceNumber {
             .expect("time to be linear")
             .as_nanos();
 
-        Self(unix_timestamp as u64)
+        Self(
+            u64::try_from(unix_timestamp)
+                .expect("timestamp in nanos since UNIX_EPOCH should fit in u64"),
+        )
     }
 
     fn next(&mut self) -> u64 {
