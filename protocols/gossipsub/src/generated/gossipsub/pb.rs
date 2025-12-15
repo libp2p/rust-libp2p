@@ -19,8 +19,8 @@ pub struct RPC {
     pub subscriptions: Vec<gossipsub::pb::mod_RPC::SubOpts>,
     pub publish: Vec<gossipsub::pb::Message>,
     pub control: Option<gossipsub::pb::ControlMessage>,
-    pub testExtension: Option<gossipsub::pb::TestExtension>,
     pub partial: Option<gossipsub::pb::PartialMessagesExtension>,
+    pub testExtension: Option<gossipsub::pb::TestExtension>,
 }
 
 impl<'a> MessageRead<'a> for RPC {
@@ -31,8 +31,8 @@ impl<'a> MessageRead<'a> for RPC {
                 Ok(10) => msg.subscriptions.push(r.read_message::<gossipsub::pb::mod_RPC::SubOpts>(bytes)?),
                 Ok(18) => msg.publish.push(r.read_message::<gossipsub::pb::Message>(bytes)?),
                 Ok(26) => msg.control = Some(r.read_message::<gossipsub::pb::ControlMessage>(bytes)?),
+                Ok(82) => msg.partial = Some(r.read_message::<gossipsub::pb::PartialMessagesExtension>(bytes)?),
                 Ok(51939474) => msg.testExtension = Some(r.read_message::<gossipsub::pb::TestExtension>(bytes)?),
-                Ok(131350034) => msg.partial = Some(r.read_message::<gossipsub::pb::PartialMessagesExtension>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -47,16 +47,16 @@ impl MessageWrite for RPC {
         + self.subscriptions.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.publish.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.control.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.partial.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.testExtension.as_ref().map_or(0, |m| 4 + sizeof_len((m).get_size()))
-        + self.partial.as_ref().map_or(0, |m| 4 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.subscriptions { w.write_with_tag(10, |w| w.write_message(s))?; }
         for s in &self.publish { w.write_with_tag(18, |w| w.write_message(s))?; }
         if let Some(ref s) = self.control { w.write_with_tag(26, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.partial { w.write_with_tag(82, |w| w.write_message(s))?; }
         if let Some(ref s) = self.testExtension { w.write_with_tag(51939474, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.partial { w.write_with_tag(131350034, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -390,8 +390,8 @@ impl MessageWrite for ControlIDontWant {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlExtensions {
-    pub testExtension: Option<bool>,
     pub partialMessages: Option<bool>,
+    pub testExtension: Option<bool>,
 }
 
 impl<'a> MessageRead<'a> for ControlExtensions {
@@ -399,8 +399,8 @@ impl<'a> MessageRead<'a> for ControlExtensions {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
+                Ok(80) => msg.partialMessages = Some(r.read_bool(bytes)?),
                 Ok(51939472) => msg.testExtension = Some(r.read_bool(bytes)?),
-                Ok(131350032) => msg.partialMessages = Some(r.read_bool(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -412,13 +412,13 @@ impl<'a> MessageRead<'a> for ControlExtensions {
 impl MessageWrite for ControlExtensions {
     fn get_size(&self) -> usize {
         0
+        + self.partialMessages.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
         + self.testExtension.as_ref().map_or(0, |m| 4 + sizeof_varint(*(m) as u64))
-        + self.partialMessages.as_ref().map_or(0, |m| 4 + sizeof_varint(*(m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.partialMessages { w.write_with_tag(80, |w| w.write_bool(*s))?; }
         if let Some(ref s) = self.testExtension { w.write_with_tag(51939472, |w| w.write_bool(*s))?; }
-        if let Some(ref s) = self.partialMessages { w.write_with_tag(131350032, |w| w.write_bool(*s))?; }
         Ok(())
     }
 }
