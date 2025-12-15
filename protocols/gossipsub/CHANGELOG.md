@@ -32,6 +32,9 @@
 - Refactor gossipsub with in-place negative-score peer removal.
   See [PR 6209](https://github.com/libp2p/rust-libp2p/pull/6209).
 
+- Avoid direct casting from u128 to u64.
+  See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default

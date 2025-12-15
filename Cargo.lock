@@ -2683,7 +2683,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "asn1_der",
  "bs58",
