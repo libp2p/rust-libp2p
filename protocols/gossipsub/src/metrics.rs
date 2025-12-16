@@ -148,6 +148,8 @@ pub(crate) struct Metrics {
     topic_msg_sent_counts: Family<TopicHash, Counter>,
     /// Bytes from gossip messages sent to each topic.
     topic_msg_sent_bytes: Family<TopicHash, Counter>,
+    /// Bytes from the last gossip messages sent to each topic.
+    topic_msg_last_sent_bytes: Family<TopicHash, Gauge>,
     /// Number of gossipsub messages published to each topic.
     topic_msg_published: Family<TopicHash, Counter>,
 
@@ -155,8 +157,14 @@ pub(crate) struct Metrics {
     topic_msg_recv_counts_unfiltered: Family<TopicHash, Counter>,
     /// Number of gossipsub messages received on each topic (after filtering duplicates).
     topic_msg_recv_counts: Family<TopicHash, Counter>,
-    /// Bytes received from gossip messages for each topic.
+    /// Bytes received from gossip messages for each topic (after filtering duplicates).
     topic_msg_recv_bytes: Family<TopicHash, Counter>,
+    /// Bytes received from last gossip message for each topic (after filtering duplicates).
+    topic_msg_last_recv_bytes: Family<TopicHash, Gauge>,
+    /// Bytes received from gossip messages for each topic (without filtering duplicates).
+    topic_msg_recv_bytes_unfiltered: Family<TopicHash, Counter>,
+    /// Bytes received from last gossip message for each topic (without filtering duplicates).
+    topic_msg_last_recv_bytes_unfiltered: Family<TopicHash, Gauge>,
 
     // Metrics related to scoring
     /// Histogram of the scores for each mesh topic.
@@ -248,25 +256,35 @@ impl Metrics {
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
         );
+
         let mesh_peer_inclusion_events = register_family!(
             "mesh_peer_inclusion_events",
             "Number of times a peer gets added to our mesh for different reasons"
         );
+
         let mesh_peer_churn_events = register_family!(
             "mesh_peer_churn_events",
             "Number of times a peer gets removed from our mesh for different reasons"
         );
+
         let topic_msg_sent_counts = register_family!(
             "topic_msg_sent_counts",
             "Number of gossip messages sent to each topic"
         );
+
         let topic_msg_published = register_family!(
             "topic_msg_published",
             "Number of gossip messages published to each topic"
         );
+
         let topic_msg_sent_bytes = register_family!(
             "topic_msg_sent_bytes",
-            "Bytes from gossip messages sent to each topic"
+            "bytes from gossip messages sent to each topic (after duplicates being filtered)"
+        );
+
+        let topic_msg_last_sent_bytes = register_family!(
+            "topic_msg_sent_bytes",
+            "bytes from the last gossip message sent to each topic (after duplicates being filtered)"
         );
 
         let topic_msg_recv_counts_unfiltered = register_family!(
@@ -278,9 +296,25 @@ impl Metrics {
             "topic_msg_recv_counts",
             "Number of gossip messages received on each topic (after duplicates have been filtered)"
         );
+
         let topic_msg_recv_bytes = register_family!(
             "topic_msg_recv_bytes",
-            "Bytes received from gossip messages for each topic"
+            "Bytes received from gossip messages for each topic (after duplicates being filtered)"
+        );
+
+        let topic_msg_last_recv_bytes = register_family!(
+            "topic_msg_last_recv_bytes",
+            "Bytes received from last gossip message for each topic (after duplicates being filtered)"
+        );
+
+        let topic_msg_recv_bytes_unfiltered = register_family!(
+            "topic_msg_recv_bytes_unfiltered",
+            "Bytes received from gossip messages for each topic (without duplicates being filtered)"
+        );
+
+        let topic_msg_last_recv_bytes_unfiltered = register_family!(
+            "topic_msg_last_recv_bytes_unfiltered",
+            "Bytes received from last gossip message for each topic (without duplicates being filtered)"
         );
 
         let hist_builder = HistBuilder {
@@ -390,10 +424,14 @@ impl Metrics {
             mesh_peer_churn_events,
             topic_msg_sent_counts,
             topic_msg_sent_bytes,
+            topic_msg_last_sent_bytes,
             topic_msg_published,
             topic_msg_recv_counts_unfiltered,
             topic_msg_recv_counts,
             topic_msg_recv_bytes,
+            topic_msg_last_recv_bytes,
+            topic_msg_recv_bytes_unfiltered,
+            topic_msg_last_recv_bytes_unfiltered,
             score_per_mesh,
             scoring_penalties,
             peers_per_protocol,
@@ -532,13 +570,22 @@ impl Metrics {
             self.topic_msg_sent_bytes
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
+            self.topic_msg_last_sent_bytes
+                .get_or_create(topic)
+                .set(bytes as i64);
         }
     }
 
     /// Register that a message was received (and was not a duplicate).
-    pub(crate) fn msg_recvd(&mut self, topic: &TopicHash) {
+    pub(crate) fn msg_recvd(&mut self, topic: &TopicHash, bytes: usize) {
         if self.register_topic(topic).is_ok() {
             self.topic_msg_recv_counts.get_or_create(topic).inc();
+            self.topic_msg_recv_bytes
+                .get_or_create(topic)
+                .inc_by(bytes as u64);
+            self.topic_msg_last_recv_bytes
+                .get_or_create(topic)
+                .set(bytes as i64);
         }
     }
 
@@ -548,9 +595,12 @@ impl Metrics {
             self.topic_msg_recv_counts_unfiltered
                 .get_or_create(topic)
                 .inc();
-            self.topic_msg_recv_bytes
+            self.topic_msg_recv_bytes_unfiltered
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
+            self.topic_msg_last_recv_bytes_unfiltered
+                .get_or_create(topic)
+                .set(bytes as i64);
         }
     }
 

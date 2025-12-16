@@ -1,4 +1,7 @@
 ## 0.50.0
+- Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
+  See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
+
 - Prevent mesh exceeding mesh_n_high.
   See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
 

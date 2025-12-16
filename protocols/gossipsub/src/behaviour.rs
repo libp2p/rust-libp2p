@@ -1808,7 +1808,7 @@ where
         // Record the received message with the metrics
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
-            metrics.msg_recvd(&message.topic);
+            metrics.msg_recvd(&message.topic, raw_message.raw_protobuf_len());
         }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
