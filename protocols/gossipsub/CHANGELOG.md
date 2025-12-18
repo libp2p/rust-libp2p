@@ -1,6 +1,6 @@
 ## 0.50.0
 - Log when sending and receiving messages.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
 
 - Prevent mesh exceeding mesh_n_high.
   See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
