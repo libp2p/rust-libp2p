@@ -115,29 +115,34 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
-impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<
-        super::provider::Tokio,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic()
-    }
+macro_rules! impl_tcp_phase_with_quic {
+    ($providerKebabCase:literal, $providerPascalCase:ty) => {
+        #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = $providerKebabCase))]
+        impl SwarmBuilder<$providerPascalCase, TcpPhase> {
+            pub fn with_quic(
+                self,
+            ) -> SwarmBuilder<
+                $providerPascalCase,
+                OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+            > {
+                self.without_tcp().with_quic()
+            }
+
+            pub fn with_quic_config(
+                self,
+                constructor: impl FnOnce(libp2p_quic::Config) -> libp2p_quic::Config,
+            ) -> SwarmBuilder<
+                $providerPascalCase,
+                OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+            > {
+                self.without_tcp().with_quic_config(constructor)
+            }
+        }
+    };
 }
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
-impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
-    pub fn with_quic_config(
-        self,
-        constructor: impl FnOnce(libp2p_quic::Config) -> libp2p_quic::Config,
-    ) -> SwarmBuilder<
-        super::provider::Tokio,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic_config(constructor)
-    }
-}
+
+impl_tcp_phase_with_quic!("tokio", super::provider::Tokio);
+impl_tcp_phase_with_quic!("smol", super::provider::Smol);
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_other_transport<
         Muxer: libp2p_core::muxing::StreamMuxer + Send + 'static,
