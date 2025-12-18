@@ -117,6 +117,13 @@ impl<P: Provider> GenTransport<P> {
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
                 Ok(endpoint)
             }
+            #[cfg(feature = "smol")]
+            Runtime::Smol => {
+                let runtime = std::sync::Arc::new(quinn::SmolRuntime);
+                let endpoint =
+                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
+                Ok(endpoint)
+            }
             Runtime::Dummy => {
                 let _ = endpoint_config;
                 let _ = server_config;

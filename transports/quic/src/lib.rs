@@ -70,6 +70,8 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
+#[cfg(feature = "smol")]
+pub use provider::smol;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 pub use provider::Provider;

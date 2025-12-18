@@ -25,47 +25,50 @@ use std::{
     time::Duration,
 };
 
-use futures::future::BoxFuture;
-use if_watch::IfEvent;
+use futures::{future::BoxFuture, FutureExt};
 
-#[cfg(feature = "tokio")]
-pub mod tokio;
+use crate::GenTransport;
 
-#[cfg(feature = "smol")]
-pub mod smol;
+/// Transport with [`smol`] runtime.
+pub type Transport = GenTransport<Provider>;
 
-pub enum Runtime {
-    #[cfg(feature = "tokio")]
-    Tokio,
-    #[cfg(feature = "smol")]
-    Smol,
-    Dummy,
-}
+/// Provider for quinn runtime and spawning tasks using [`smol`].
+pub struct Provider;
 
-/// Provider for a corresponding quinn runtime and spawning tasks.
-pub trait Provider: Unpin + Send + Sized + 'static {
-    type IfWatcher: Unpin + Send;
+impl super::Provider for Provider {
+    type IfWatcher = if_watch::smol::IfWatcher;
 
-    /// Run the corresponding runtime
-    fn runtime() -> Runtime;
+    fn runtime() -> super::Runtime {
+        super::Runtime::Smol
+    }
 
-    /// Create a new [`if_watch`] watcher that reports [`IfEvent`]s for network interface changes.
-    fn new_if_watcher() -> io::Result<Self::IfWatcher>;
+    fn new_if_watcher() -> io::Result<Self::IfWatcher> {
+        if_watch::smol::IfWatcher::new()
+    }
 
-    /// Poll for an address change event.
     fn poll_if_event(
         watcher: &mut Self::IfWatcher,
         cx: &mut Context<'_>,
-    ) -> Poll<io::Result<IfEvent>>;
+    ) -> Poll<io::Result<if_watch::IfEvent>> {
+        watcher.poll_if_event(cx)
+    }
 
-    /// Sleep for specified amount of time.
-    fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        async move {
+            async_io::Timer::after(duration).await;
+        }
+        .boxed()
+    }
 
-    /// Sends data on the socket to the given address. On success,
-    /// returns the number of bytes written.
     fn send_to<'a>(
         udp_socket: &'a UdpSocket,
         buf: &'a [u8],
         target: SocketAddr,
-    ) -> BoxFuture<'a, io::Result<usize>>;
+    ) -> BoxFuture<'a, io::Result<usize>> {
+        Box::pin(async move {
+            async_io::Async::new(udp_socket.try_clone()?)?
+                .send_to(buf, target)
+                .await
+        })
+    }
 }

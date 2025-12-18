@@ -20,12 +20,14 @@ rand = "0.8.5"
 rustls = { version = "0.23.9", default-features = false }
 thiserror = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
+async-io = { version = "2.0", optional = true }
 tracing = { workspace = true }
 socket2 = "0.6.0"
 ring = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
+smol = ["dep:async-io", "if-watch/smol", "quinn/runtime-smol"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
