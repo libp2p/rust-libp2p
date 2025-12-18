@@ -23,6 +23,9 @@
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
+#[cfg(feature = "smol")]
+pub mod smol;
+
 use std::{
     fmt, io,
     net::{SocketAddr, TcpListener, TcpStream},

@@ -47,6 +47,8 @@ use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
+#[cfg(feature = "smol")]
+pub use provider::smol;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 use provider::{Incoming, Provider};

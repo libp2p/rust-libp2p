@@ -99,6 +99,8 @@ macro_rules! impl_tcp_builder {
 
 impl_tcp_builder!("tokio", super::provider::Tokio, tokio);
 
+impl_tcp_builder!("smol", super::provider::Smol, smol);
+
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub(crate) fn without_tcp(
         self,

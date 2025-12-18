@@ -252,6 +252,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-global-executor"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05b1b633a2115cd122d73b955eadd9916c18c8f510ec9cd1686404c60ad1c29c"
+dependencies = [
+ "async-channel",
+ "async-executor",
+ "async-io",
+ "async-lock",
+ "blocking",
+ "futures-lite",
+ "once_cell",
+]
+
+[[package]]
 name = "async-io"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,6 +2251,7 @@ dependencies = [
  "netlink-proto",
  "netlink-sys",
  "rtnetlink",
+ "smol",
  "system-configuration",
  "tokio",
  "windows 0.53.0",
@@ -3240,6 +3256,7 @@ dependencies = [
 name = "libp2p-tcp"
 version = "0.44.0"
 dependencies = [
+ "async-io",
  "futures",
  "futures-timer",
  "if-watch",
@@ -3770,6 +3787,7 @@ version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16c903aa70590cb93691bf97a767c8d1d6122d2cc9070433deb3bbf36ce8bd23"
 dependencies = [
+ "async-io",
  "bytes",
  "futures",
  "libc",
@@ -4889,6 +4907,7 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a552eb82d19f38c3beed3f786bd23aa434ceb9ac43ab44419ca6d67a7e186c0"
 dependencies = [
+ "async-global-executor",
  "futures",
  "log",
  "netlink-packet-core",
