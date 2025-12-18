@@ -202,7 +202,7 @@ enum PublishConfig {
 
 /// A strictly linearly increasing sequence number.
 ///
-/// We start from the current time as unix timestamp in milliseconds.
+/// We start from the current time as unix timestamp in nanoseconds.
 #[derive(Debug)]
 struct SequenceNumber(u64);
 
@@ -213,7 +213,10 @@ impl SequenceNumber {
             .expect("time to be linear")
             .as_nanos();
 
-        Self(unix_timestamp as u64)
+        Self(
+            u64::try_from(unix_timestamp)
+                .expect("timestamp in nanos since UNIX_EPOCH should fit in u64"),
+        )
     }
 
     fn next(&mut self) -> u64 {
@@ -544,7 +547,35 @@ where
     ///
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
-    pub fn subscribe<H: Hasher>(
+    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
+        self.subscribe_inner(
+            topic,
+            #[cfg(feature = "partial_messages")]
+            false,
+            #[cfg(feature = "partial_messages")]
+            false,
+        )
+    }
+
+    /// Subscribe to a topic with partial options.
+    ///
+    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
+    /// subscribed.
+    #[cfg(feature = "partial_messages")]
+    pub fn subscribe_partial<H: Hasher>(
+        &mut self,
+        topic: &Topic<H>,
+        requests_partial: bool,
+        supports_partial: bool,
+    ) -> Result<bool, SubscriptionError> {
+        self.subscribe_inner(topic, requests_partial, supports_partial)
+    }
+
+    /// Subscribe to a topic.
+    ///
+    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
+    /// subscribed.
+    fn subscribe_inner<H: Hasher>(
         &mut self,
         topic: &Topic<H>,
         #[cfg(feature = "partial_messages")] requests_partial: bool,
