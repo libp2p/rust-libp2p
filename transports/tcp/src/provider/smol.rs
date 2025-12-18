@@ -160,4 +160,12 @@ impl AsyncWrite for TcpStream {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.0).poll_close(cx)
     }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
 }
