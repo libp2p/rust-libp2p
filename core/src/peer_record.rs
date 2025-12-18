@@ -25,8 +25,9 @@ const STANDARD_DOMAIN_SEP: &str = "libp2p-peer-record";
 /// - **Legacy format** (default methods): Compatible with existing Rust libp2p deployments
 /// - **Standard format** (`*_interop` methods): Compatible with Go and JavaScript implementations
 ///
-/// Use the `*_interop` variants (e.g., [`PeerRecord::new_interop`], [`PeerRecord::from_signed_envelope_interop`])
-/// when you need to exchange peer records with non-Rust libp2p implementations.
+/// Use the `*_interop` variants (e.g., [`PeerRecord::new_interop`],
+/// [`PeerRecord::from_signed_envelope_interop`]) when you need to exchange peer records with
+/// non-Rust libp2p implementations.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PeerRecord {
     peer_id: PeerId,
@@ -49,12 +50,14 @@ impl PeerRecord {
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
     /// signature and can hence be considered authenticated.
     ///
-    /// For cross-implementation compatibility with Go/JS libp2p, use [`Self::from_signed_envelope_interop`].
+    /// For cross-implementation compatibility with Go/JS libp2p, use
+    /// [`Self::from_signed_envelope_interop`].
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         Self::from_signed_envelope_impl(envelope, LEGACY_DOMAIN_SEP, LEGACY_PAYLOAD_TYPE.as_bytes())
     }
 
-    /// Attempt to re-construct a [`PeerRecord`] from a [`SignedEnvelope`] using standard interop format.
+    /// Attempt to re-construct a [`PeerRecord`] from a [`SignedEnvelope`] using standard interop
+    /// format.
     ///
     /// Uses the standard libp2p-peer-record format for cross-implementation compatibility
     /// with Go and JavaScript libp2p implementations.
@@ -100,7 +103,8 @@ impl PeerRecord {
         })
     }
 
-    /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key using legacy format.
+    /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key
+    /// using legacy format.
     ///
     /// Uses the legacy routing-state-record format for backward compatibility with existing
     /// Rust libp2p deployments.
@@ -118,7 +122,8 @@ impl PeerRecord {
         )
     }
 
-    /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key using standard interop format.
+    /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key
+    /// using standard interop format.
     ///
     /// Uses the standard libp2p-peer-record format for cross-implementation compatibility
     /// with Go and JavaScript libp2p implementations.
