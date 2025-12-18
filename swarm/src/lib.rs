@@ -1420,6 +1420,15 @@ impl Config {
         Self::with_executor(crate::executor::TokioExecutor)
     }
 
+    /// Builds a new [`Config`] from the `smol` executor.
+    #[cfg(all(
+        feature = "smol",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_smol_executor() -> Self {
+        Self::with_executor(crate::executor::SmolExecutor)
+    }
+
     /// Configures the number of events from the [`NetworkBehaviour`] in
     /// destination to the [`ConnectionHandler`] that can be buffered before
     /// the [`Swarm`] has to wait. An individual buffer with this number of
