@@ -25,7 +25,7 @@ use std::{
 
 use asynchronous_codec::Framed;
 use futures::{future::Either, prelude::*, StreamExt};
-use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_core::{upgrade::DeniedUpgrade, PeerId};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
@@ -89,6 +89,9 @@ pub enum Handler {
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
 pub struct EnabledHandler {
+    /// Remote `PeerId` for this `ConnectionHandler`.
+    peer_id: PeerId,
+
     /// Upgrade configuration for the gossipsub protocol.
     listen_protocol: ProtocolConfig,
 
@@ -162,8 +165,13 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub(crate) fn new(protocol_config: ProtocolConfig, message_queue: Queue) -> Self {
+    pub(crate) fn new(
+        peer_id: PeerId,
+        protocol_config: ProtocolConfig,
+        message_queue: Queue,
+    ) -> Self {
         Handler::Enabled(EnabledHandler {
+            peer_id,
             listen_protocol: protocol_config,
             inbound_substream: None,
             outbound_substream: None,
@@ -254,6 +262,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
+                        tracing::debug!(peer=%self.peer_id, message=?message, "Sending gossipsub message");
                         match message {
                             RpcOut::Publish {
                                 message: _,

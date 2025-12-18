@@ -3140,6 +3140,7 @@ where
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
             connected_peer.messages.clone(),
         ))
@@ -3169,6 +3170,7 @@ where
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
             connected_peer.messages.clone(),
         ))
@@ -3228,6 +3230,7 @@ where
                 rpc,
                 invalid_messages,
             } => {
+                tracing::debug!(peer=%propagation_source, message=?rpc, "Received gossipsub message");
                 // Handle the gossipsub RPC
 
                 // Handle subscriptions
