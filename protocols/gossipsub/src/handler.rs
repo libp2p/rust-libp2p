@@ -262,7 +262,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
-                        tracing::debug!(peer=%self.peer_id, message=?message, "Sending gossipsub message");
+                        tracing::debug!(peer=%self.peer_id, ?message, "Sending gossipsub message");
                         match message {
                             RpcOut::Publish {
                                 message: _,
