@@ -31,7 +31,7 @@ use futures::{
     future::FutureExt,
 };
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, upgrade::ReadyUpgrade, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, upgrade::ReadyUpgrade, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound},
@@ -63,7 +63,9 @@ pub enum In {
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
-        to_dial: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
+        port_use: PortUse,
+        to_dial:
+            oneshot::Sender<Result<(priv_client::Connection, PortUse), outbound_hop::ConnectError>>,
     },
 }
 
@@ -74,6 +76,7 @@ impl fmt::Debug for In {
             In::EstablishCircuit {
                 dst_peer_id,
                 to_dial: _,
+                port_use: _,
             } => f
                 .debug_struct("In::EstablishCircuit")
                 .field("dst_peer_id", dst_peer_id)
@@ -120,8 +123,8 @@ pub struct Handler {
     >,
 
     inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet<
-        Result<outbound_hop::Circuit, outbound_hop::ConnectError>,
-        oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
+        Result<(outbound_hop::Circuit, PortUse), outbound_hop::ConnectError>,
+        oneshot::Sender<Result<(priv_client::Connection, PortUse), outbound_hop::ConnectError>>,
     >,
 
     inflight_inbound_circuit_requests:
@@ -205,8 +208,9 @@ impl Handler {
 
     fn establish_new_circuit(
         &mut self,
-        to_dial: oneshot::Sender<Result<Connection, outbound_hop::ConnectError>>,
+        to_dial: oneshot::Sender<Result<(Connection, PortUse), outbound_hop::ConnectError>>,
         dst_peer_id: PeerId,
+        port_use: PortUse,
     ) {
         let (sender, receiver) = oneshot::channel();
 
@@ -222,7 +226,9 @@ impl Handler {
                     .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))?
                     .map_err(into_connect_error)?;
 
-                outbound_hop::open_circuit(stream, dst_peer_id).await
+                let circuit = outbound_hop::open_circuit(stream, dst_peer_id).await?;
+
+                Ok((circuit, port_use))
             },
             to_dial,
         );
@@ -253,8 +259,9 @@ impl ConnectionHandler for Handler {
             In::EstablishCircuit {
                 to_dial,
                 dst_peer_id,
+                port_use,
             } => {
-                self.establish_new_circuit(to_dial, dst_peer_id);
+                self.establish_new_circuit(to_dial, dst_peer_id, port_use);
             }
         }
     }
@@ -315,17 +322,26 @@ impl ConnectionHandler for Handler {
             // Circuits
             match self.inflight_outbound_connect_requests.poll_unpin(cx) {
                 Poll::Ready((
-                    Ok(Ok(outbound_hop::Circuit {
-                        limit,
-                        read_buffer,
-                        stream,
-                    })),
+                    Ok(Ok((
+                        outbound_hop::Circuit {
+                            limit,
+                            read_buffer,
+                            stream,
+                        },
+                        port_use,
+                    ))),
                     to_dialer,
                 )) => {
                     if to_dialer
-                        .send(Ok(priv_client::Connection {
-                            state: priv_client::ConnectionState::new_outbound(stream, read_buffer),
-                        }))
+                        .send(Ok((
+                            priv_client::Connection {
+                                state: priv_client::ConnectionState::new_outbound(
+                                    stream,
+                                    read_buffer,
+                                ),
+                            },
+                            port_use,
+                        )))
                         .is_err()
                     {
                         tracing::debug!(

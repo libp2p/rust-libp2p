@@ -215,7 +215,7 @@ impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Connecting;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<(Self::Output, PortUse), Self::Error>>;
 
     fn listen_on(
         &mut self,
@@ -271,27 +271,31 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         match (dial_opts.role, dial_opts.port_use) {
             (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::Reuse) => {
-                let endpoint = if let Some(listener) = dial_opts
+                // Determine if we're actually reusing a port
+                let (endpoint, actual_port_use) = if let Some(listener) = dial_opts
                     .port_use
                     .eq(&PortUse::Reuse)
                     .then(|| self.eligible_listener(&socket_addr))
                     .flatten()
                 {
-                    listener.endpoint.clone()
+                    // Successfully reusing listener endpoint
+                    (listener.endpoint.clone(), PortUse::Reuse)
                 } else {
                     let socket_family = socket_addr.ip().into();
-                    let dialer = if dial_opts.port_use == PortUse::Reuse {
+                    if dial_opts.port_use == PortUse::Reuse {
+                        // Try to reuse existing dialer endpoint
                         if let Some(occupied) = self.dialer.get(&socket_family) {
-                            occupied.clone()
+                            (occupied.clone(), PortUse::Reuse)
                         } else {
+                            // Create new dialer endpoint
                             let endpoint = self.bound_socket(socket_addr)?;
                             self.dialer.insert(socket_family, endpoint.clone());
-                            endpoint
+                            (endpoint, PortUse::Reuse)
                         }
                     } else {
-                        self.bound_socket(socket_addr)?
-                    };
-                    dialer
+                        // Explicitly requested new port
+                        (self.bound_socket(socket_addr)?, PortUse::New)
+                    }
                 };
                 let handshake_timeout = self.handshake_timeout;
                 let mut client_config = self.quinn_config.client_config.clone();
@@ -305,7 +309,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                     let connecting = endpoint
                         .connect_with(client_config, socket_addr, "l")
                         .map_err(ConnectError)?;
-                    Connecting::new(connecting, handshake_timeout).await
+                    let (peer_id, connection) =
+                        Connecting::new(connecting, handshake_timeout).await?;
+                    Ok(((peer_id, connection), actual_port_use))
                 }))
             }
             (Endpoint::Listener, _) => {
@@ -358,7 +364,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                                     "expected inbound connection from socket_address to resolve to peer but got inbound peer"
                                 );
                             }
-                            Ok((inbound_peer_id, connection))
+                            // Hole-punching always reuses the listener's port
+                            Ok(((inbound_peer_id, connection), PortUse::Reuse))
                         }
                         Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
                     }

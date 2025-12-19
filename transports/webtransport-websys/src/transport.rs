@@ -7,7 +7,9 @@ use std::{
 use futures::future::FutureExt;
 use libp2p_core::{
     muxing::StreamMuxerBox,
-    transport::{Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
+    transport::{
+        Boxed, DialOpts, ListenerId, PortUse, Transport as _, TransportError, TransportEvent,
+    },
 };
 use libp2p_identity::{Keypair, PeerId};
 use multiaddr::Multiaddr;
@@ -51,7 +53,7 @@ impl libp2p_core::Transport for Transport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<(Self::Output, PortUse), Self::Error>> + Send>>;
 
     fn listen_on(
         &mut self,
@@ -89,7 +91,10 @@ impl libp2p_core::Transport for Transport {
             let peer_id = session
                 .authenticate(&keypair, endpoint.remote_peer, endpoint.certhashes)
                 .await?;
-            Ok((peer_id, session))
+
+            // WebTransport in browser (WASM) doesn't support port reuse
+            // The browser controls the local port, so we always use a new one
+            Ok(((peer_id, session), PortUse::New))
         }
         .boxed())
     }

@@ -325,7 +325,7 @@ impl<'a> ListenUpgrade<'a> {
 
 struct Dial<'a> {
     dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
-    dial_task: BoxFuture<'static, (PeerId, StreamMuxerBox)>,
+    dial_task: BoxFuture<'static, ((PeerId, StreamMuxerBox), PortUse)>,
 }
 
 impl<'a> Dial<'a> {
@@ -359,7 +359,7 @@ impl Future for Dial<'_> {
                 Poll::Pending => {}
             }
 
-            let conn = ready!(self.dial_task.poll_unpin(cx));
+            let (conn, _port_use) = ready!(self.dial_task.poll_unpin(cx));
             return Poll::Ready(conn);
         }
     }

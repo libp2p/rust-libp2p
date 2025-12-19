@@ -24,7 +24,7 @@ use either::Either;
 use futures::future;
 
 use crate::{
-    either::EitherFuture,
+    either::EitherUpgradeFuture,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 
@@ -54,15 +54,15 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
             (Either::Left(a), Either::Left(info)) => {
-                EitherFuture::First(a.upgrade_inbound(sock, info))
+                EitherUpgradeFuture::First(a.upgrade_inbound(sock, info))
             }
             (Either::Right(b), Either::Right(info)) => {
-                EitherFuture::Second(b.upgrade_inbound(sock, info))
+                EitherUpgradeFuture::Second(b.upgrade_inbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound"),
         }
@@ -76,15 +76,15 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
             (Either::Left(a), Either::Left(info)) => {
-                EitherFuture::First(a.upgrade_outbound(sock, info))
+                EitherUpgradeFuture::First(a.upgrade_outbound(sock, info))
             }
             (Either::Right(b), Either::Right(info)) => {
-                EitherFuture::Second(b.upgrade_outbound(sock, info))
+                EitherUpgradeFuture::Second(b.upgrade_outbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),
         }

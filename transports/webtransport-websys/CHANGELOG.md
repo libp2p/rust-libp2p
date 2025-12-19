@@ -1,3 +1,9 @@
+## 0.6.0
+
+- Implement changed `Transport::Dial` future.
+- For outgoing connections, on successful dial calls, actual used port reuse policy is returned.
+  See [PR 6187](https://github.com/libp2p/rust-libp2p/pull/6187)
+
 ## 0.5.2
 
 - Remove `poll_flush called after poll_close` assertion.
@@ -20,7 +26,7 @@
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
 - Bump version of web-sys and wasm-bindgen.
-  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569) 
+  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569)
 
 ## 0.3.0
 

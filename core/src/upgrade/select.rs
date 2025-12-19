@@ -24,7 +24,7 @@ use either::Either;
 use futures::future;
 
 use crate::{
-    either::EitherFuture,
+    either::EitherUpgradeFuture,
     upgrade::{
         InboundConnectionUpgrade, InboundUpgrade, OutboundConnectionUpgrade, OutboundUpgrade,
         UpgradeInfo,
@@ -81,12 +81,12 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
     }
 }
@@ -98,12 +98,12 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
     }
 }
@@ -115,12 +115,12 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
     }
 }
@@ -132,12 +132,12 @@ where
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture<A::Future, B::Future>;
+    type Future = EitherUpgradeFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
-            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
+            Either::Left(info) => EitherUpgradeFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherUpgradeFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
     }
 }

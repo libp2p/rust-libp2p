@@ -110,7 +110,7 @@ mod tests {
             recv_ping(conn).await.unwrap();
         });
 
-        let c = MemoryTransport::new()
+        let (c, _p) = MemoryTransport::new()
             .dial(
                 listener_addr,
                 DialOpts {

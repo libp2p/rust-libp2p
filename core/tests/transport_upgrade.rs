@@ -123,7 +123,7 @@ async fn upgrade_pipeline() {
     };
 
     let client = async move {
-        let (peer, _mplex) = dialer_transport
+        let ((peer, _mplex), port_use) = dialer_transport
             .dial(
                 listen_addr2,
                 DialOpts {
@@ -135,6 +135,7 @@ async fn upgrade_pipeline() {
             .await
             .unwrap();
         assert_eq!(peer, listener_id);
+        assert_eq!(port_use, PortUse::New);
     };
 
     tokio::spawn(server);
