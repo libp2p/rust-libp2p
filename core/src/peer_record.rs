@@ -22,8 +22,8 @@ const STANDARD_DOMAIN_SEP: &str = "libp2p-peer-record";
 /// ## Cross-Implementation Compatibility
 ///
 /// This implementation provides two formats:
-/// - **Legacy format** (default methods): Compatible with existing Rust libp2p deployments
-/// - **Standard format** (`*_interop` methods): Compatible with Go and JavaScript implementations
+/// - **Legacy format** (default methods): Compatible with existing Rust libp2p deployments.
+/// - **Standard format** (`*_interop` methods): Compatible with Go and JavaScript implementations.
 ///
 /// Use the `*_interop` variants (e.g., [`PeerRecord::new_interop`],
 /// [`PeerRecord::from_signed_envelope_interop`]) when you need to exchange peer records with
