@@ -4,7 +4,7 @@ use web_time::SystemTime;
 
 use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
-// Legacy constants for backward compatibility with existing Rust libp2p deployments
+// Legacy constants for backward compatibility with existing Rust libp2p deployments.
 const LEGACY_PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const LEGACY_DOMAIN_SEP: &str = "libp2p-routing-state";
 
