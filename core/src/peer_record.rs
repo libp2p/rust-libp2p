@@ -8,9 +8,9 @@ use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError
 const LEGACY_PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const LEGACY_DOMAIN_SEP: &str = "libp2p-routing-state";
 
-// Standard constants for cross-implementation compatibility with Go/JS libp2p
+// Standard constants for cross-implementation compatibility with Go/JS libp2p.
 // Defined in https://github.com/multiformats/multicodec/blob/master/table.csv
-// and https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md
+// and https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md.
 const STANDARD_PAYLOAD_TYPE: &[u8] = &[0x03, 0x01];
 const STANDARD_DOMAIN_SEP: &str = "libp2p-peer-record";
 
