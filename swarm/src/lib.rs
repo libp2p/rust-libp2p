@@ -97,6 +97,7 @@ use std::{
     error, fmt, io,
     num::{NonZeroU32, NonZeroU8, NonZeroUsize},
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -109,7 +110,10 @@ pub use behaviour::{
 };
 pub use connection::{pool::ConnectionCounters, ConnectionError, ConnectionId, SupportedProtocols};
 use connection::{
-    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
+    pool::{
+        dial_ranker::{smart_dial_ranker, DialRanker},
+        EstablishedConnection, Pool, PoolConfig, PoolEvent,
+    },
     IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 use dial_opts::{DialOpts, PeerCondition};
@@ -515,7 +519,7 @@ where
 
         let dials = addresses
             .into_iter()
-            .map(|a| match peer_id.map_or(Ok(a.clone()), |p| a.with_p2p(p)) {
+            .map(|a| (a.clone(), match peer_id.map_or(Ok(a.clone()), |p| a.with_p2p(p)) {
                 Ok(address) => {
                     let dial = self.transport.dial(
                         address.clone(),
@@ -539,7 +543,7 @@ where
                     Err(TransportError::MultiaddrNotSupported(address)),
                 ))
                 .boxed(),
-            })
+            },))
             .collect();
 
         self.pool.add_outgoing(
@@ -1509,6 +1513,17 @@ impl Config {
         self.pool_config.idle_connection_timeout = timeout;
         self
     }
+
+    /// Sets a dial ranker that determines the ranking of outgoing connection attempts.
+    pub fn with_dial_ranker(mut self, dial_ranker: DialRanker) -> Self {
+        self.pool_config.dial_ranker = Some(Arc::new(dial_ranker));
+        self
+    }
+
+    /// Enables smart dialing.
+    pub fn with_smart_dial_ranker(self) -> Self {
+        self.with_dial_ranker(smart_dial_ranker)
+    }
 }
 
 /// Possible errors when trying to establish or upgrade an outbound connection.
@@ -2058,6 +2073,79 @@ mod tests {
             tokio::runtime::Runtime::new().unwrap().block_on(async {
                 let mut swarm = new_test_swarm(
                     Config::with_tokio_executor()
+                        .with_dial_concurrency_factor(concurrency_factor.0),
+                );
+
+                // Listen on `concurrency_factor + 1` addresses.
+                //
+                // `+ 2` to ensure a subset of addresses is dialed by network_2.
+                let num_listen_addrs = concurrency_factor.0.get() + 2;
+                let mut listen_addresses = Vec::new();
+                let mut transports = Vec::new();
+                for _ in 0..num_listen_addrs {
+                    let mut transport = transport::MemoryTransport::default().boxed();
+                    transport
+                        .listen_on(ListenerId::next(), "/memory/0".parse().unwrap())
+                        .unwrap();
+
+                    match transport.select_next_some().await {
+                        TransportEvent::NewAddress { listen_addr, .. } => {
+                            listen_addresses.push(listen_addr);
+                        }
+                        _ => panic!("Expected `NewListenAddr` event."),
+                    }
+
+                    transports.push(transport);
+                }
+
+                // Have swarm dial each listener and wait for each listener to receive the incoming
+                // connections.
+                swarm
+                    .dial(
+                        DialOpts::peer_id(PeerId::random())
+                            .addresses(listen_addresses)
+                            .build(),
+                    )
+                    .unwrap();
+                for mut transport in transports.into_iter() {
+                    match futures::future::select(transport.select_next_some(), swarm.next()).await
+                    {
+                        future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
+                        future::Either::Left(_) => {
+                            panic!("Unexpected transport event.")
+                        }
+                        future::Either::Right((e, _)) => {
+                            panic!("Expect swarm to not emit any event {e:?}")
+                        }
+                    }
+                }
+
+                match swarm.next().await.unwrap() {
+                    SwarmEvent::OutgoingConnectionError { .. } => {}
+                    e => panic!("Unexpected swarm event {e:?}"),
+                }
+            })
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _);
+    }
+
+    #[test]
+    fn concurrent_smart_dialing() {
+        #[derive(Clone, Debug)]
+        struct DialConcurrencyFactor(NonZeroU8);
+
+        impl Arbitrary for DialConcurrencyFactor {
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(NonZeroU8::new(g.gen_range(1..11)).unwrap())
+            }
+        }
+
+        fn prop(concurrency_factor: DialConcurrencyFactor) {
+            tokio::runtime::Runtime::new().unwrap().block_on(async {
+                let mut swarm = new_test_swarm(
+                    Config::with_tokio_executor()
+                        .with_smart_dial_ranker()
                         .with_dial_concurrency_factor(concurrency_factor.0),
                 );
 

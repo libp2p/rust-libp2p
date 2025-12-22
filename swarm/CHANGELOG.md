@@ -1,3 +1,7 @@
+## 0.47.1
+
+- Add smart dialing support.
+
 ## 0.47.0
 
 - Remove `async-std` support.
