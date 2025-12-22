@@ -61,6 +61,8 @@ macro_rules! impl_quic_builder {
 
 impl_quic_builder!("tokio", super::provider::Tokio, tokio);
 
+impl_quic_builder!("smol", super::provider::Smol, smol);
+
 impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
     pub(crate) fn without_quic(self) -> SwarmBuilder<Provider, OtherTransportPhase<T>> {
         SwarmBuilder {

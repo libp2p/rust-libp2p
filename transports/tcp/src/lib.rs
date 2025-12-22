@@ -28,6 +28,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+// Ensure `tokio` and `smol` features are not enabled at the same time.
+// See: https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
+#[cfg(all(feature = "tokio", feature = "smol"))]
+compile_error!(
+    "features `tokio` and `smol` are mutually exclusive; \
+     please enable only one async runtime feature"
+);
+
 mod provider;
 
 use std::{
@@ -47,6 +55,8 @@ use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
+#[cfg(feature = "smol")]
+pub use provider::smol;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 use provider::{Incoming, Provider};

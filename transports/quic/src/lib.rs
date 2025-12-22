@@ -60,6 +60,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+// Ensure `tokio` and `smol` features are not enabled at the same time.
+// See: https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
+#[cfg(all(feature = "tokio", feature = "smol"))]
+compile_error!(
+    "features `tokio` and `smol` are mutually exclusive; \
+     please enable only one async runtime feature"
+);
+
 mod config;
 mod connection;
 mod hole_punching;
@@ -70,6 +78,8 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
+#[cfg(feature = "smol")]
+pub use provider::smol;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 pub use provider::Provider;

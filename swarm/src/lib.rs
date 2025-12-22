@@ -53,6 +53,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+// Ensure `tokio` and `smol` features are not enabled at the same time.
+// See: https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
+#[cfg(all(feature = "tokio", feature = "smol"))]
+compile_error!(
+    "features `tokio` and `smol` are mutually exclusive; \
+     please enable only one async runtime feature"
+);
+
 mod connection;
 mod executor;
 mod stream;
@@ -1418,6 +1426,15 @@ impl Config {
     ))]
     pub fn with_tokio_executor() -> Self {
         Self::with_executor(crate::executor::TokioExecutor)
+    }
+
+    /// Builds a new [`Config`] from the `smol` executor.
+    #[cfg(all(
+        feature = "smol",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_smol_executor() -> Self {
+        Self::with_executor(crate::executor::SmolExecutor)
     }
 
     /// Configures the number of events from the [`NetworkBehaviour`] in

@@ -15,6 +15,10 @@ pub enum NoProviderSpecified {}
 /// Represents the Tokio runtime environment.
 pub enum Tokio {}
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "smol"))]
+/// Represents the Smol runtime environment.
+pub enum Smol {}
+
 #[cfg(feature = "wasm-bindgen")]
 /// Represents the WasmBindgen environment for WebAssembly.
 pub enum WasmBindgen {}
@@ -28,6 +32,18 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     /// targets with the `tokio` feature enabled
     #[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
     pub fn with_tokio(self) -> SwarmBuilder<Tokio, TcpPhase> {
+        SwarmBuilder {
+            keypair: self.keypair,
+            phantom: PhantomData,
+            phase: TcpPhase {},
+        }
+    }
+
+    /// Configures the SwarmBuilder to use the Smol runtime.
+    /// This method is only available when compiling for non-Wasm
+    /// targets with the `smol` feature enabled.
+    #[cfg(all(not(target_arch = "wasm32"), feature = "smol"))]
+    pub fn with_smol(self) -> SwarmBuilder<Smol, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,

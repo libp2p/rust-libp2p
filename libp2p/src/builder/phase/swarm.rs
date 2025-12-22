@@ -49,6 +49,13 @@ impl_with_swarm_config!(
     libp2p_swarm::Config::with_tokio_executor()
 );
 
+#[cfg(not(target_arch = "wasm32"))]
+impl_with_swarm_config!(
+    "smol",
+    super::provider::Smol,
+    libp2p_swarm::Config::with_smol_executor()
+);
+
 #[cfg(target_arch = "wasm32")]
 impl_with_swarm_config!(
     "wasm-bindgen",
