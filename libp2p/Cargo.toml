@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [features]
 full = [
     "autonat",
+    "bluetooth",
     "cbor",
     "dcutr",
     "dns",
@@ -52,6 +53,7 @@ full = [
 ]
 
 autonat = ["dep:libp2p-autonat"]
+bluetooth = ["dep:libp2p-bluetooth"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 dns = ["dep:libp2p-dns"]
@@ -128,6 +130,7 @@ libp2p-webtransport-websys = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-dns = { workspace = true, optional = true }
+libp2p-bluetooth = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }
 libp2p-quic = { workspace = true, optional = true }
