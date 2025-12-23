@@ -24,6 +24,36 @@ use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
 };
+use quinn_proto::congestion;
+
+/// Congestion controller algorithm selection with algorithm-specific parameters
+#[derive(Debug, Clone, PartialEq)]
+pub enum CongestionController {
+    /// CUBIC congestion control algorithm (default)
+    Cubic {
+        /// Initial congestion window in bytes.
+        /// Default: None, which uses Quinn's default (~14720 bytes).
+        initial_window: Option<u64>,
+    },
+    /// NewReno congestion control algorithm
+    NewReno {
+        /// Initial congestion window in bytes.
+        /// Default: None, which uses Quinn's default (~14720 bytes).
+        initial_window: Option<u64>,
+        /// Reduction in congestion window when a new loss event is detected.
+        /// Value should be between 0.0 and 1.0.
+        /// Default: None, which uses Quinn's default (0.5).
+        loss_reduction_factor: Option<f32>,
+    },
+    /// BBR (Bottleneck Bandwidth and Round-trip propagation time) congestion control.
+    /// Experimental! Aims for reduced buffer bloat and improved performance over
+    /// high bandwidth-delay product networks.
+    Bbr {
+        /// Initial congestion window in bytes.
+        /// Default: None, which uses Quinn's default (~14720 bytes).
+        initial_window: Option<u64>,
+    },
+}
 
 /// Config for the transport.
 #[derive(Clone)]
@@ -50,6 +80,49 @@ pub struct Config {
     /// Max unacknowledged data in bytes that may be sent in total on all streams
     /// of a connection.
     pub max_connection_data: u32,
+
+    /// Initial round-trip time (RTT) estimate for new connections.
+    /// This is used before the actual RTT is measured.
+    /// Default is None, which uses Quinn's default (333ms).
+    pub initial_rtt: Option<Duration>,
+
+    /// Maximum amount of data the peer may send without acknowledgement on
+    /// any single stream before becoming blocked.
+    /// Default is None, which uses the value of max_stream_data.
+    pub send_window: Option<u64>,
+
+    /// Whether to enable send stream fairness. When true, streams with the same priority
+    /// share bandwidth fairly. When false, a single stream can monopolize the connection.
+    /// Default is None, which uses Quinn's default (true).
+    pub send_fairness: Option<bool>,
+
+    /// Packet threshold for triggering fast retransmit.
+    /// Default is None, which uses Quinn's default (3).
+    pub packet_threshold: Option<u32>,
+
+    /// Time threshold for triggering fast retransmit, as a fraction of RTT.
+    /// Default is None, which uses Quinn's default (9/8).
+    pub time_threshold: Option<f32>,
+
+    /// Minimum MTU size guaranteed to be supported by the network.
+    /// Must be at least 1200 bytes (QUIC minimum).
+    /// Default is None, which uses Quinn's default (1200).
+    pub min_mtu: Option<u16>,
+
+    /// Number of consecutive PTOs after which the network is considered to be experiencing
+    /// persistent congestion.
+    /// Default is None, which uses Quinn's default (3).
+    pub persistent_congestion_threshold: Option<u32>,
+
+    /// Whether to enable Generic Segmentation Offload (GSO) for improved performance.
+    /// GSO can reduce CPU usage when sending large amounts of data by offloading
+    /// segmentation to the NIC.
+    /// Default is None, which uses Quinn's default (true on supported platforms).
+    pub enable_segmentation_offload: Option<bool>,
+
+    /// Congestion controller algorithm to use with its specific parameters.
+    /// Default is None, which uses CUBIC with default settings.
+    pub congestion_controller: Option<CongestionController>,
 
     /// Support QUIC version draft-29 for dialing and listening.
     ///
@@ -98,6 +171,17 @@ impl Config {
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
             mtu_discovery_config: Some(Default::default()),
+
+            // Quinn defaults
+            initial_rtt: None,
+            send_window: None,
+            send_fairness: None,
+            packet_threshold: None,
+            time_threshold: None,
+            min_mtu: None,
+            persistent_congestion_threshold: None,
+            enable_segmentation_offload: None,
+            congestion_controller: None,
         }
     }
 
@@ -112,6 +196,61 @@ impl Config {
     /// Disable MTU path discovery (it is enabled by default).
     pub fn disable_path_mtu_discovery(mut self) -> Self {
         self.mtu_discovery_config = None;
+        self
+    }
+
+    /// Set the initial RTT estimate for new connections.
+    pub fn initial_rtt(mut self, value: Duration) -> Self {
+        self.initial_rtt = Some(value);
+        self
+    }
+
+    /// Set the maximum amount of data the peer may send without acknowledgement on any single
+    /// stream.
+    pub fn send_window(mut self, value: u64) -> Self {
+        self.send_window = Some(value);
+        self
+    }
+
+    /// Enable or disable send stream fairness.
+    pub fn send_fairness(mut self, value: bool) -> Self {
+        self.send_fairness = Some(value);
+        self
+    }
+
+    /// Set the packet threshold for triggering fast retransmit.
+    pub fn packet_threshold(mut self, value: u32) -> Self {
+        self.packet_threshold = Some(value);
+        self
+    }
+
+    /// Set the time threshold for triggering fast retransmit, as a fraction of RTT.
+    pub fn time_threshold(mut self, value: f32) -> Self {
+        self.time_threshold = Some(value);
+        self
+    }
+
+    /// Set the minimum MTU size. Must be at least 1200 bytes.
+    pub fn min_mtu(mut self, value: u16) -> Self {
+        self.min_mtu = Some(value);
+        self
+    }
+
+    /// Set the persistent congestion threshold (number of consecutive PTOs).
+    pub fn persistent_congestion_threshold(mut self, value: u32) -> Self {
+        self.persistent_congestion_threshold = Some(value);
+        self
+    }
+
+    /// Enable or disable Generic Segmentation Offload (GSO).
+    pub fn enable_segmentation_offload(mut self, value: bool) -> Self {
+        self.enable_segmentation_offload = Some(value);
+        self
+    }
+
+    /// Set the congestion controller algorithm with its parameters.
+    pub fn congestion_controller(mut self, value: CongestionController) -> Self {
+        self.congestion_controller = Some(value);
         self
     }
 }
@@ -139,6 +278,15 @@ impl From<Config> for QuinnConfig {
             handshake_timeout: _,
             keypair,
             mtu_discovery_config,
+            initial_rtt,
+            send_window,
+            send_fairness,
+            packet_threshold,
+            time_threshold,
+            min_mtu,
+            persistent_congestion_threshold,
+            enable_segmentation_offload,
+            congestion_controller,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -152,6 +300,75 @@ impl From<Config> for QuinnConfig {
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
         transport.mtu_discovery_config(mtu_discovery_config);
+
+        // Apply additional transport configurations
+        if let Some(initial_rtt) = initial_rtt {
+            transport.initial_rtt(initial_rtt);
+        }
+
+        if let Some(send_window) = send_window {
+            transport.send_window(send_window);
+        }
+
+        if let Some(send_fairness) = send_fairness {
+            transport.send_fairness(send_fairness);
+        }
+
+        if let Some(packet_threshold) = packet_threshold {
+            transport.packet_threshold(packet_threshold);
+        }
+
+        if let Some(time_threshold) = time_threshold {
+            transport.time_threshold(time_threshold);
+        }
+
+        if let Some(min_mtu) = min_mtu {
+            transport.min_mtu(min_mtu);
+        }
+
+        if let Some(persistent_congestion_threshold) = persistent_congestion_threshold {
+            transport.persistent_congestion_threshold(persistent_congestion_threshold);
+        }
+
+        if let Some(enable_segmentation_offload) = enable_segmentation_offload {
+            transport.enable_segmentation_offload(enable_segmentation_offload);
+        }
+
+        // Configure congestion controller if specified
+        if let Some(congestion_controller) = congestion_controller {
+            let controller: Arc<dyn congestion::ControllerFactory + Send + Sync> =
+                match congestion_controller {
+                    CongestionController::Cubic { initial_window } => {
+                        let mut cubic_config = congestion::CubicConfig::default();
+                        if let Some(window) = initial_window {
+                            cubic_config.initial_window(window);
+                        }
+                        Arc::new(cubic_config)
+                    }
+                    CongestionController::NewReno {
+                        initial_window,
+                        loss_reduction_factor,
+                    } => {
+                        let mut new_reno_config = congestion::NewRenoConfig::default();
+                        if let Some(window) = initial_window {
+                            new_reno_config.initial_window(window);
+                        }
+                        if let Some(factor) = loss_reduction_factor {
+                            new_reno_config.loss_reduction_factor(factor);
+                        }
+                        Arc::new(new_reno_config)
+                    }
+                    CongestionController::Bbr { initial_window } => {
+                        let mut bbr_config = congestion::BbrConfig::default();
+                        if let Some(window) = initial_window {
+                            bbr_config.initial_window(window);
+                        }
+                        Arc::new(bbr_config)
+                    }
+                };
+            transport.congestion_controller_factory(controller);
+        }
+
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
