@@ -64,7 +64,10 @@ where
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            inbound: FuturesSet::new(Duration::from_secs(10), 10),
+            inbound: FuturesSet::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                10,
+            ),
             rng,
         }
     }
