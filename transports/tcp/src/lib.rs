@@ -207,7 +207,10 @@ impl Config {
             socket.set_ttl_v4(ttl)?;
         }
 
-        socket.set_linger(self.linger)?;
+        if self.linger.is_some() {
+            socket.set_linger(self.linger)?;
+        }
+
         socket.set_tcp_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
