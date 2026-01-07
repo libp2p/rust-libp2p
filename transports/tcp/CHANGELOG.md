@@ -1,6 +1,6 @@
 ## 0.44.1
 - Expose `socket2`'s `set_linger` config option.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/5955)
+  See [PR 6225](https://github.com/libp2p/rust-libp2p/pull/5955)
 
 ## 0.44.0
 
