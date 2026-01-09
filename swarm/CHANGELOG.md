@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Fix `src/lib.rs:tracing::debug!(%local_peer_id)`.
+  See [PR 6123](https://github.com/libp2p/rust-libp2p/pull/6123)
+
 ## 0.47.0
 
 - Remove `async-std` support.
