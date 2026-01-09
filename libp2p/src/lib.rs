@@ -90,6 +90,9 @@ pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "propeller")]
+#[doc(inline)]
+pub use libp2p_propeller as propeller;
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
 pub use libp2p_quic as quic;

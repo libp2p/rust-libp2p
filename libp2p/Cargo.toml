@@ -49,6 +49,7 @@ full = [
     "webtransport-websys",
     "yamux",
     "upnp",
+    "propeller",
 ]
 
 autonat = ["dep:libp2p-autonat"]
@@ -88,6 +89,7 @@ websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
 upnp = ["dep:libp2p-upnp"]
+propeller = ["dep:libp2p-propeller"]
 
 [dependencies]
 bytes = "1"
@@ -112,6 +114,7 @@ libp2p-noise = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
 libp2p-pnet = { workspace = true, optional = true }
+libp2p-propeller = { workspace = true, optional = true }
 libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
