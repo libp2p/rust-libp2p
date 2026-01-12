@@ -1515,14 +1515,14 @@ impl Config {
     }
 
     /// Sets a dial ranker that determines the ranking of outgoing connection attempts.
-    pub fn with_dial_ranker(mut self, dial_ranker: DialRanker) -> Self {
-        self.pool_config.dial_ranker = Some(Arc::new(dial_ranker));
+    pub fn with_dial_ranker(mut self, dial_ranker: Arc<DialRanker>) -> Self {
+        self.pool_config.dial_ranker = Some(dial_ranker);
         self
     }
 
     /// Enables smart dialing.
     pub fn with_smart_dial_ranker(self) -> Self {
-        self.with_dial_ranker(smart_dial_ranker)
+        self.with_dial_ranker(Arc::new(smart_dial_ranker))
     }
 }
 

@@ -43,7 +43,8 @@ const RELAY_DELAY: Duration = Duration::from_millis(250);
 const PUBLIC_OTHER_DELAY: Duration = Duration::from_millis(1000);
 const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 
-pub(crate) type DialRanker = fn(Vec<Multiaddr>) -> Vec<(Multiaddr, Option<Duration>)>;
+pub(crate) type DialRanker =
+    dyn Fn(Vec<Multiaddr>) -> Vec<(Multiaddr, Option<Duration>)> + Send + Sync;
 
 // Ported from <https://github.com/libp2p/go-libp2p/blob/v0.45.0/p2p/net/swarm/dial_ranker.go#L81>
 pub(crate) fn smart_dial_ranker(
