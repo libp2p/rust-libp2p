@@ -98,6 +98,7 @@ mod backoff;
 mod behaviour;
 mod config;
 mod error;
+mod extensions;
 mod gossip_promises;
 mod handler;
 mod mcache;
@@ -112,9 +113,6 @@ mod time_cache;
 mod topic;
 mod transform;
 mod types;
-
-#[cfg(feature = "partial_messages")]
-pub mod partial;
 
 #[cfg(feature = "metrics")]
 pub use metrics::Config as MetricsConfig;
@@ -136,8 +134,9 @@ pub use self::{
     transform::{DataTransform, IdentityTransform},
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
+
 #[cfg(feature = "partial_messages")]
-pub use self::{error::PartialMessageError, partial::Partial};
+pub use self::{error::PartialMessageError, extensions::partial_messages::Partial};
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

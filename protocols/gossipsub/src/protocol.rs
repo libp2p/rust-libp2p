@@ -30,7 +30,7 @@ use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
 #[cfg(feature = "partial_messages")]
-use crate::types::{PartialMessage, PartialSubOpts};
+use crate::extensions::partial_messages::PartialMessage;
 use crate::{
     config::ValidationMode,
     handler::HandlerEvent,
@@ -594,7 +594,7 @@ impl Decoder for GossipsubCodec {
                 topic_id,
                 group_id,
                 metadata: partial_proto.partsMetadata,
-                message: partial_proto.partialMessage,
+                body: partial_proto.partialMessage,
             })
         });
 
@@ -611,11 +611,8 @@ impl Decoder for GossipsubCodec {
                             SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
-                        #[cfg(feature = "partial_messages")]
-                        partial_opts: PartialSubOpts {
-                            requests_partial: sub.requestsPartial.unwrap_or_default(),
-                            supports_partial: sub.supportsPartial.unwrap_or_default(),
-                        },
+                        requests_partial: sub.requestsPartial.unwrap_or_default(),
+                        supports_partial: sub.supportsPartial.unwrap_or_default(),
                     })
                     .collect(),
                 control_msgs,

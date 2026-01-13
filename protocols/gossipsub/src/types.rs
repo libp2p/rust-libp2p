@@ -19,8 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-#[cfg(feature = "partial_messages")]
-use std::collections::HashMap;
 use std::{
     collections::BTreeSet,
     fmt::{self, Debug},
@@ -103,66 +101,8 @@ pub(crate) struct PeerDetails {
     pub(crate) topics: BTreeSet<TopicHash>,
     /// Don't send messages.
     pub(crate) dont_send: LinkedHashMap<MessageId, Instant>,
-
     /// Message queue consumed by the connection handler.
     pub(crate) messages: Queue,
-
-    /// Peer Partial messages.
-    #[cfg(feature = "partial_messages")]
-    pub(crate) partial_messages: HashMap<TopicHash, HashMap<Vec<u8>, PartialData>>,
-
-    /// Partial options for subscribed topics
-    #[cfg(feature = "partial_messages")]
-    pub(crate) partial_opts: HashMap<TopicHash, PartialSubOpts>,
-}
-
-/// Partial ptions when subscribing a topic.
-#[cfg(feature = "partial_messages")]
-#[derive(Debug, Clone, Copy, Default, Eq, Hash, PartialEq)]
-pub struct PartialSubOpts {
-    pub(crate) requests_partial: bool,
-    pub(crate) supports_partial: bool,
-}
-
-/// Stored `Metadata` for a peer,
-/// `Remote` or `Local` depends on who last updated it.
-#[cfg(feature = "partial_messages")]
-#[derive(Debug)]
-pub(crate) enum PeerMetadata {
-    /// The metadata was updated with data from a remote peer.
-    Remote(Vec<u8>),
-    /// The metadata was updated by us when publishing a partial message.
-    Local(Box<dyn crate::partial::Metadata>),
-}
-
-#[cfg(feature = "partial_messages")]
-impl AsRef<[u8]> for PeerMetadata {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            PeerMetadata::Remote(metadata) => metadata,
-            PeerMetadata::Local(metadata) => metadata.as_slice(),
-        }
-    }
-}
-
-/// The partial message data the peer has.
-#[cfg(feature = "partial_messages")]
-#[derive(Debug)]
-pub(crate) struct PartialData {
-    /// The current peer partial metadata.
-    pub(crate) metadata: Option<PeerMetadata>,
-    /// The remaining heartbeats for this message to be deleted.
-    pub(crate) ttl: usize,
-}
-
-#[cfg(feature = "partial_messages")]
-impl Default for PartialData {
-    fn default() -> Self {
-        Self {
-            metadata: Default::default(),
-            ttl: 5,
-        }
-    }
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
@@ -288,8 +228,8 @@ pub struct Subscription {
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
     /// Partial options.
-    #[cfg(feature = "partial_messages")]
-    pub partial_opts: PartialSubOpts,
+    pub requests_partial: bool,
+    pub supports_partial: bool,
 }
 
 /// Action that a subscription wants to perform.
@@ -369,20 +309,6 @@ pub struct IDontWant {
     pub(crate) message_ids: Vec<MessageId>,
 }
 
-/// A received partial message.
-#[cfg(feature = "partial_messages")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PartialMessage {
-    /// The topic ID this partial message belongs to.
-    pub topic_id: TopicHash,
-    /// The group ID that identifies the complete logical message.
-    pub group_id: Vec<u8>,
-    /// The partial metadata we have and we want.
-    pub metadata: Option<Vec<u8>>,
-    /// The partial message itself.
-    pub message: Option<Vec<u8>>,
-}
-
 /// The node has sent us the supported Gossipsub Extensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Extensions {
@@ -413,8 +339,8 @@ pub enum RpcOut {
     /// Subscribe a topic.
     Subscribe {
         topic: TopicHash,
-        #[cfg(feature = "partial_messages")]
-        partial_opts: PartialSubOpts,
+        requests_partial: Option<bool>,
+        supports_partial: Option<bool>,
     },
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
@@ -486,21 +412,15 @@ impl From<RpcOut> for proto::RPC {
             },
             RpcOut::Subscribe {
                 topic,
-                #[cfg(feature = "partial_messages")]
-                partial_opts,
+                requests_partial,
+                supports_partial,
             } => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: vec![proto::SubOpts {
                     subscribe: Some(true),
                     topic_id: Some(topic.into_string()),
-                    #[cfg(feature = "partial_messages")]
-                    requestsPartial: Some(partial_opts.requests_partial),
-                    #[cfg(not(feature = "partial_messages"))]
-                    requestsPartial: None,
-                    #[cfg(feature = "partial_messages")]
-                    supportsPartial: Some(partial_opts.supports_partial),
-                    #[cfg(not(feature = "partial_messages"))]
-                    supportsPartial: None,
+                    requestsPartial: requests_partial,
+                    supportsPartial: supports_partial,
                 }],
                 control: None,
                 testExtension: None,
@@ -678,7 +598,7 @@ pub struct RpcIn {
     pub test_extension: Option<TestExtension>,
     /// Partial messages extension.
     #[cfg(feature = "partial_messages")]
-    pub partial_message: Option<PartialMessage>,
+    pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,
 }
 
 impl fmt::Debug for RpcIn {
