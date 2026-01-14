@@ -57,10 +57,6 @@ fn test_handle_extensions_message() {
             messages,
             dont_send: LinkedHashMap::new(),
             extensions: None,
-            #[cfg(feature = "partial_messages")]
-            partial_messages: Default::default(),
-            #[cfg(feature = "partial_messages")]
-            partial_opts: Default::default(),
         },
     );
 

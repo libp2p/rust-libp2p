@@ -664,6 +664,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     let subscription = Subscription {
         action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
+        requests_partial: false,
+        supports_partial: false,
     };
 
     let control_action = ControlAction::IHave(IHave {
