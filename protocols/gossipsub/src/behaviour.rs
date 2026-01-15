@@ -3600,6 +3600,14 @@ where
 
                 #[cfg(feature = "partial_messages")]
                 if let Some(partial_message) = rpc.partial_message {
+                    if self
+                        .peer_score
+                        .below_threshold(&propagation_source, |ts| ts.graylist_threshold)
+                        .0
+                    {
+                        tracing::debug!("Peer below threshold, ignoring partial message");
+                    }
+
                     let results = self
                         .partial_messages_extension
                         .handle_received(propagation_source, partial_message);
