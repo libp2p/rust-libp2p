@@ -54,15 +54,16 @@ pub trait Partial: Send + Sync {
     /// available and wanted parts to peers.
     fn metadata(&self) -> Vec<u8>;
 
-    /// Generates partial message bytes from the given metadata.
+    /// Generates an action from the given metadata.
     ///
     /// When a peer requests specific parts (via PartialIWANT), this method
     /// generates the actual message data to send back. The `metadata` parameter
     /// describes what parts are being requested.
     ///
     /// Returns a [`PublishAction`] for the given metadata, or an error.
-    fn partial_message_bytes_from_metadata(
+    fn partial_action_from_metadata(
         &self,
+        peer_id: PeerId,
         metadata: Option<&[u8]>,
     ) -> Result<PartialAction, PartialError>;
 }
@@ -249,7 +250,7 @@ impl State {
         };
 
         let action = match local_partial
-            .partial_message_bytes_from_metadata(message.metadata.as_deref())
+            .partial_action_from_metadata(peer_id, message.metadata.as_deref())
         {
             Ok(action) => action,
             Err(err) => {
@@ -347,7 +348,8 @@ impl State {
                 continue;
             }
 
-            let Ok(action) = partial_message.partial_message_bytes_from_metadata(
+            let Ok(action) = partial_message.partial_action_from_metadata(
+                peer_id,
                 group_partials.metadata.as_ref().map(|p| p.as_ref()),
             ) else {
                 tracing::error!(peer = %peer_id, group_id = ?group_id,
@@ -431,7 +433,7 @@ pub struct PartialMessage {
 
 /// Partial options when subscribing a topic.
 #[derive(Debug, Clone, Copy, Default, Eq, Hash, PartialEq)]
-pub struct SubscriptionOpts {
+pub(crate) struct SubscriptionOpts {
     pub(crate) requests_partial: bool,
     pub(crate) supports_partial: bool,
 }
