@@ -706,6 +706,10 @@ where
 
         let recipients = self.filter_publish_candidates(&topic_hash, candidates);
 
+        if recipients.is_empty() {
+            return Err(PublishError::NoPeersSubscribedToTopic);
+        }
+
         // If the message isn't a duplicate and we have sent it to some peers add it to the
         // duplicate cache and memcache.
         self.duplicate_cache.insert(msg_id.clone());
@@ -741,10 +745,6 @@ where
             ) {
                 publish_failed = false
             }
-        }
-
-        if recipients.is_empty() {
-            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         if publish_failed {

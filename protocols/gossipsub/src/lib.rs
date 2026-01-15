@@ -136,7 +136,10 @@ pub use self::{
 };
 
 #[cfg(feature = "partial_messages")]
-pub use self::{error::PartialMessageError, extensions::partial_messages::Partial};
+pub use self::{
+    error::PartialMessageError, extensions::partial_messages::Metadata,
+    extensions::partial_messages::Partial, extensions::partial_messages::PartialAction,
+};
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
