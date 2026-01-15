@@ -339,8 +339,8 @@ pub enum RpcOut {
     /// Subscribe a topic.
     Subscribe {
         topic: TopicHash,
-        requests_partial: Option<bool>,
-        supports_partial: Option<bool>,
+        requests_partial: bool,
+        supports_partial: bool,
     },
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
@@ -419,8 +419,8 @@ impl From<RpcOut> for proto::RPC {
                 subscriptions: vec![proto::SubOpts {
                     subscribe: Some(true),
                     topic_id: Some(topic.into_string()),
-                    requestsPartial: requests_partial,
-                    supportsPartial: supports_partial,
+                    requestsPartial: Some(requests_partial),
+                    supportsPartial: Some(supports_partial),
                 }],
                 control: None,
                 testExtension: None,

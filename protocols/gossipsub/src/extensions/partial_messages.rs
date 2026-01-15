@@ -103,8 +103,14 @@ pub(crate) struct PeerPartialState {
 
 impl State {
     /// Called by the [`Behaviour`] when we subscribed to the topic.
-    pub(crate) fn subscribe(&mut self, topic_hash: TopicHash, opts: SubscriptionOpts) {
-        self.opts.insert(topic_hash, opts);
+    pub(crate) fn subscribe(&mut self, topic_hash: TopicHash, requests_partial: bool) {
+        self.opts.insert(
+            topic_hash,
+            SubscriptionOpts {
+                requests_partial,
+                supports_partial: true,
+            },
+        );
     }
 
     /// Called by the [`Behaviour`] when we unsubscribed from the topic.

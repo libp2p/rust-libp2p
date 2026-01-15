@@ -541,11 +541,7 @@ where
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
     /// subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(
-            topic,
-            #[cfg(feature = "partial_messages")]
-            Default::default(),
-        )
+        self.subscribe_inner(topic, false, false)
     }
 
     /// Subscribe to a topic with partial options.
@@ -556,9 +552,9 @@ where
     pub fn subscribe_partial<H: Hasher>(
         &mut self,
         topic: &Topic<H>,
-        opts: SubscriptionOpts,
+        requests_partial: bool,
     ) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, opts)
+        self.subscribe_inner(topic, true, requests_partial)
     }
 
     /// Subscribe to a topic.
@@ -568,7 +564,8 @@ where
     fn subscribe_inner<H: Hasher>(
         &mut self,
         topic: &Topic<H>,
-        #[cfg(feature = "partial_messages")] partial_opts: SubscriptionOpts,
+        supports_partial: bool,
+        requests_partial: bool,
     ) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
@@ -584,14 +581,6 @@ where
         for peer_id in self.connected_peers.keys().copied().collect::<Vec<_>>() {
             tracing::debug!(%peer_id, "Sending SUBSCRIBE to peer");
 
-            #[cfg(not(feature = "partial_messages"))]
-            let (requests_partial, supports_partial) = (None, None);
-            #[cfg(feature = "partial_messages")]
-            let (requests_partial, supports_partial) = (
-                Some(partial_opts.requests_partial),
-                Some(partial_opts.supports_partial),
-            );
-
             let event = RpcOut::Subscribe {
                 topic: topic_hash.clone(),
                 requests_partial,
@@ -606,7 +595,7 @@ where
 
         #[cfg(feature = "partial_messages")]
         self.partial_messages_extension
-            .subscribe(topic_hash, partial_opts);
+            .subscribe(topic_hash, requests_partial);
 
         tracing::debug!(%topic, "Subscribed to topic");
         Ok(true)
@@ -3146,17 +3135,12 @@ where
         // We need to send our subscriptions to the newly-connected node.
         for topic_hash in self.mesh.clone().into_keys() {
             #[cfg(not(feature = "partial_messages"))]
-            let (requests_partial, supports_partial) = (None, None);
+            let (requests_partial, supports_partial) = (false, false);
             #[cfg(feature = "partial_messages")]
-            let Some((requests_partial, supports_partial)) = self
-                .partial_messages_extension
-                .opts(&topic_hash)
-                .map(|partial_opts| {
-                    (
-                        Some(partial_opts.requests_partial),
-                        Some(partial_opts.requests_partial),
-                    )
-                })
+            let Some(SubscriptionOpts {
+                requests_partial,
+                supports_partial,
+            }) = self.partial_messages_extension.opts(&topic_hash).copied()
             else {
                 tracing::error!("Partial subscription options should exist for subscribed topic");
                 return;
