@@ -25,7 +25,7 @@ use std::{
 
 use libp2p_core::PeerId;
 
-use crate::{error::PartialMessageError, types::RpcOut, TopicHash};
+use crate::{types::RpcOut, TopicHash};
 
 /// PartialMessage is a message that can be broken up into parts.
 /// This trait allows applications to define custom strategies for splitting large messages
@@ -64,7 +64,7 @@ pub trait Partial: Send + Sync {
     fn partial_message_bytes_from_metadata(
         &self,
         metadata: Option<&[u8]>,
-    ) -> Result<PartialAction, PartialMessageError>;
+    ) -> Result<PartialAction, PartialError>;
 }
 
 pub trait Metadata: Debug + Send + Sync {
@@ -72,7 +72,7 @@ pub trait Metadata: Debug + Send + Sync {
     fn as_slice(&self) -> &[u8];
     /// try to Update the `Metadata` with the remote data,
     /// return true if it was updated.
-    fn update(&mut self, data: &[u8]) -> Result<bool, PartialMessageError>;
+    fn update(&mut self, data: &[u8]) -> Result<bool, PartialError>;
 }
 
 /// Indicates the action to take for the given metadata.
@@ -463,6 +463,73 @@ impl Default for PartialData {
         Self {
             metadata: Default::default(),
             ttl: 5,
+        }
+    }
+}
+
+/// Errors that can occur during partial message processing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartialError {
+    /// The received data is too short to contain required headers/metadata.
+    InsufficientData {
+        /// Expected minimum number of bytes.
+        expected: usize,
+        /// Actual number of bytes received.
+        received: usize,
+    },
+
+    /// The data format is invalid or corrupted.
+    InvalidFormat,
+
+    /// The partial data doesn't belong to this message group.
+    WrongGroup {
+        /// Group Id of the received message.
+        received: Vec<u8>,
+    },
+
+    /// The partial data is a duplicate of already received data.
+    DuplicateData(Vec<u8>),
+
+    /// The partial data is out of the expected range or sequence.
+    OutOfRange,
+
+    /// The message is already complete and cannot accept more data.
+    AlreadyComplete,
+
+    /// Application-specific validation failed.
+    ValidationFailed,
+}
+
+impl std::error::Error for PartialError {}
+
+impl std::fmt::Display for PartialError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InsufficientData { expected, received } => {
+                write!(
+                    f,
+                    "Insufficient data: expected at least {} bytes, got {}",
+                    expected, received
+                )
+            }
+            Self::InvalidFormat => {
+                write!(f, "Invalid data format")
+            }
+            Self::WrongGroup { received } => {
+                write!(f, "Wrong group ID: got {:?}", received)
+            }
+            Self::DuplicateData(part_id) => {
+                write!(f, "Duplicate data for part {:?}", part_id)
+            }
+            Self::OutOfRange => {
+                write!(f, "Data out of range")
+            }
+            Self::AlreadyComplete => {
+                write!(f, "Message is already complete")
+            }
+            Self::ValidationFailed => {
+                write!(f, "Validation failed")
+            }
         }
     }
 }

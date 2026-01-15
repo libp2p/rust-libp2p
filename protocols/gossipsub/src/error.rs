@@ -42,7 +42,8 @@ pub enum PublishError {
     AllQueuesFull(usize),
 
     /// An Error while trying to publish a partial message.
-    Partial(PartialMessageError),
+    #[cfg(feature = "partial_messages")]
+    Partial(crate::extensions::partial_messages::PartialError),
 }
 
 impl std::fmt::Display for PublishError {
@@ -160,73 +161,6 @@ impl std::fmt::Display for ConfigBuilderError {
             Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
             Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
             Self::InvalidProtocol => write!(f, "Invalid protocol"),
-        }
-    }
-}
-
-/// Errors that can occur during partial message processing.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PartialMessageError {
-    /// The received data is too short to contain required headers/metadata.
-    InsufficientData {
-        /// Expected minimum number of bytes.
-        expected: usize,
-        /// Actual number of bytes received.
-        received: usize,
-    },
-
-    /// The data format is invalid or corrupted.
-    InvalidFormat,
-
-    /// The partial data doesn't belong to this message group.
-    WrongGroup {
-        /// Group Id of the received message.
-        received: Vec<u8>,
-    },
-
-    /// The partial data is a duplicate of already received data.
-    DuplicateData(Vec<u8>),
-
-    /// The partial data is out of the expected range or sequence.
-    OutOfRange,
-
-    /// The message is already complete and cannot accept more data.
-    AlreadyComplete,
-
-    /// Application-specific validation failed.
-    ValidationFailed,
-}
-
-impl std::error::Error for PartialMessageError {}
-
-impl std::fmt::Display for PartialMessageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InsufficientData { expected, received } => {
-                write!(
-                    f,
-                    "Insufficient data: expected at least {} bytes, got {}",
-                    expected, received
-                )
-            }
-            Self::InvalidFormat => {
-                write!(f, "Invalid data format")
-            }
-            Self::WrongGroup { received } => {
-                write!(f, "Wrong group ID: got {:?}", received)
-            }
-            Self::DuplicateData(part_id) => {
-                write!(f, "Duplicate data for part {:?}", part_id)
-            }
-            Self::OutOfRange => {
-                write!(f, "Data out of range")
-            }
-            Self::AlreadyComplete => {
-                write!(f, "Message is already complete")
-            }
-            Self::ValidationFailed => {
-                write!(f, "Validation failed")
-            }
         }
     }
 }
