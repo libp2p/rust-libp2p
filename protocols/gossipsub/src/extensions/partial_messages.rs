@@ -286,19 +286,19 @@ impl State {
     }
 
     /// Check if the peer requests partial messages for the topic.
-    pub(crate) fn requests_partial(&self, peer_id: &PeerId, topic: &TopicHash) -> bool {
+    pub(crate) fn requests_partial(&self, peer_id: &PeerId, topic_hash: &TopicHash) -> bool {
         self.peers
             .get(peer_id)
-            .and_then(|p| p.partial_opts.get(topic))
+            .and_then(|p| p.partial_opts.get(topic_hash))
             .map(|opts| opts.requests_partial)
             .unwrap_or(false)
     }
 
     /// Check if the peer supports partial messages for the topic.
-    pub(crate) fn supports_partial(&self, peer_id: &PeerId, topic: &TopicHash) -> bool {
+    pub(crate) fn supports_partial(&self, peer_id: &PeerId, topic_hash: &TopicHash) -> bool {
         self.peers
             .get(peer_id)
-            .and_then(|p| p.partial_opts.get(topic))
+            .and_then(|p| p.partial_opts.get(topic_hash))
             .map(|opts| opts.supports_partial)
             .unwrap_or(false)
     }

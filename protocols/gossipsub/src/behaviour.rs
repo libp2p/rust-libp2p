@@ -881,9 +881,11 @@ where
             return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
-        let publish_actions =
-            self.partial_messages_extension
-                .handle_publish(topic_hash, partial_message, recipients);
+        let publish_actions = self.partial_messages_extension.handle_publish(
+            topic_hash.clone(),
+            partial_message,
+            recipients,
+        );
 
         for action in publish_actions {
             match action {
@@ -1190,14 +1192,6 @@ where
                 &mut self.events,
                 &self.connected_peers,
             );
-        }
-
-        #[cfg(feature = "metrics")]
-        {
-            let mesh_peers = self.mesh_peers(topic_hash).count();
-            if let Some(m) = self.metrics.as_mut() {
-                m.set_mesh_peers(topic_hash, mesh_peers)
-            }
         }
 
         tracing::debug!(topic=%topic_hash, "Completed JOIN for topic");
@@ -2566,10 +2560,25 @@ where
                     }
                 }
             }
-            // Register the final count of peers in the mesh
             #[cfg(feature = "metrics")]
-            if let Some(m) = self.metrics.as_mut() {
-                m.set_mesh_peers(topic_hash, peers.len())
+            {
+                if let Some(m) = self.metrics.as_mut() {
+                    #[cfg(not(feature = "partial_messages"))]
+                    {
+                        let mesh_peers = peers.count();
+                        m.set_mesh_peers(topic_hash, mesh_peers, false);
+                    }
+                    #[cfg(feature = "partial_messages")]
+                    {
+                        let (full, partial): (Vec<PeerId>, Vec<PeerId>) =
+                            peers.iter().partition(|peer_id| {
+                                self.partial_messages_extension
+                                    .supports_partial(peer_id, topic_hash)
+                            });
+                        m.set_mesh_peers(topic_hash, full.len(), false);
+                        m.set_mesh_peers(topic_hash, partial.len(), true);
+                    }
+                }
             }
         }
 
@@ -3052,9 +3061,20 @@ where
     fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) -> bool {
         #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
-            if let RpcOut::Publish { ref message, .. } | RpcOut::Forward { ref message, .. } = rpc {
-                // register bytes sent on the internal metrics.
-                m.msg_sent(&message.topic, message.raw_protobuf_len());
+            // register bytes sent on the internal metrics.
+            match &rpc {
+                RpcOut::Publish { message, .. } => {
+                    m.msg_sent(&message.topic, false, message.raw_protobuf_len())
+                }
+
+                RpcOut::PartialMessage {
+                    topic_id, message, ..
+                } => m.msg_sent(
+                    topic_id,
+                    true,
+                    message.as_ref().map(|m| m.len()).unwrap_or_default(),
+                ),
+                _ => {}
             }
         }
 
@@ -3224,7 +3244,6 @@ where
                         #[cfg(feature = "metrics")]
                         if let Some(m) = self.metrics.as_mut() {
                             m.peers_removed(topic, Churn::Dc, 1);
-                            m.set_mesh_peers(topic, mesh_peers.len());
                         }
                     };
                 }
