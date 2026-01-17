@@ -188,7 +188,8 @@ impl MdnsResponse {
                 let new_expiration = match now.checked_add(peer.ttl()) {
                     Some(expiration) => expiration,
                     None => {
-                        now.checked_add(MAX_TTL).unwrap_or(now) // Fallback to now if even that overflows (extremely unlikely)
+                        now.checked_add(MAX_TTL).unwrap_or(now) // Fallback to now if even that
+                                                                                                    // overflows (extremely unlikely).
                     }
                 };
 
@@ -439,9 +440,9 @@ mod tests {
         let huge_ttl_duration = Duration::from_secs(u64::from(u32::MAX));
         let overflow_check = now.checked_add(huge_ttl_duration);
 
-        if overflow_check.is_some() {
+        if let Some(check) = overflow_check {
             // If no overflow, should be exact expiration
-            assert_eq!(*huge_expiration, overflow_check.unwrap());
+            assert_eq!(*huge_expiration, check);
         } else {
             // If overflow would occur, should be capped
             let one_day = Duration::from_secs(24 * 60 * 60);
