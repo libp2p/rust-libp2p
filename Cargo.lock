@@ -2563,7 +2563,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.47.0"
+version = "0.47.1"
 dependencies = [
  "criterion",
  "either",

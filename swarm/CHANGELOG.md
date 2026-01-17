@@ -1,3 +1,7 @@
+## 0.47.1
+
+<!-- Remove lru dependency -->
+
 ## 0.47.0
 
 - Remove `async-std` support.
