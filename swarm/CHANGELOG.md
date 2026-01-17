@@ -1,6 +1,7 @@
 ## 0.47.1
 
-<!-- Remove lru dependency -->
+- Replace `lru::LruCache` with `hashlink::LruCache`.
+  See [PR #6138](https://github.com/libp2p/rust-libp2p/pull/6138)
 
 ## 0.47.0
 
