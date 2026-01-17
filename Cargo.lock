@@ -2669,7 +2669,6 @@ version = "0.2.13"
 dependencies = [
  "asn1_der",
  "bs58",
- "cfg_aliases",
  "criterion",
  "ed25519-dalek",
  "hex-literal",

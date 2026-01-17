@@ -49,9 +49,6 @@ rmp-serde = "1.3"
 criterion = "0.5"
 hex-literal = "0.4.1"
 
-[build-dependencies]
-cfg_aliases = "0.2.1"
-
 [[bench]]
 name = "peer_id"
 harness = false
