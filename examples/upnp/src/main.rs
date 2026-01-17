@@ -57,8 +57,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(upnp::Event::NewExternalAddr(addr)) => {
-                println!("New external address: {addr}");
+            SwarmEvent::Behaviour(upnp::Event::NewExternalAddr {
+                external_addr,
+                local_addr: _,
+            }) => {
+                println!("New external address: {external_addr}");
             }
             SwarmEvent::Behaviour(upnp::Event::GatewayNotFound) => {
                 println!("Gateway does not support UPnP");

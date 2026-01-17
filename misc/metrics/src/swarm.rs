@@ -228,15 +228,20 @@ impl<TBvEv> super::Recorder<SwarmEvent<TBvEv>> for Metrics {
                     },
                     cause: cause.as_ref().map(Into::into),
                 };
-                self.connections_duration.get_or_create(&labels).observe(
-                    self.connections
-                        .lock()
-                        .expect("lock not to be poisoned")
-                        .remove(connection_id)
-                        .expect("closed connection to previously be established")
-                        .elapsed()
-                        .as_secs_f64(),
-                );
+
+                // Only record connection duration if we have a record of when it was established.
+                // This gracefully handles cases where ConnectionClosed events are received
+                // for connections that were established before metrics collection started.
+                if let Some(established_time) = self
+                    .connections
+                    .lock()
+                    .expect("lock not to be poisoned")
+                    .remove(connection_id)
+                {
+                    self.connections_duration
+                        .get_or_create(&labels)
+                        .observe(established_time.elapsed().as_secs_f64());
+                }
             }
             SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
@@ -451,5 +456,92 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
             libp2p_swarm::ListenError::Aborted => IncomingConnectionError::Aborted,
             libp2p_swarm::ListenError::Denied { .. } => IncomingConnectionError::Denied,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use libp2p_core::ConnectedPoint;
+    use libp2p_swarm::{ConnectionId, SwarmEvent};
+    use prometheus_client::registry::Registry;
+
+    use super::*;
+    use crate::Recorder;
+
+    #[test]
+    fn test_connection_closed_without_established() {
+        let mut registry = Registry::default();
+        let metrics = Metrics::new(&mut registry);
+
+        // Create a fake ConnectionClosed event for a connection that was never tracked.
+        let connection_id = ConnectionId::new_unchecked(1);
+        let endpoint = ConnectedPoint::Dialer {
+            address: "/ip4/127.0.0.1/tcp/8080".parse().unwrap(),
+            role_override: libp2p_core::Endpoint::Dialer,
+            port_use: libp2p_core::transport::PortUse::New,
+        };
+
+        let event = SwarmEvent::<()>::ConnectionClosed {
+            peer_id: libp2p_identity::PeerId::random(),
+            connection_id,
+            endpoint,
+            num_established: 0,
+            cause: None,
+        };
+
+        // This should NOT panic.
+        metrics.record(&event);
+
+        // Verify that the connections map is still empty (no connection was removed).
+        let connections = metrics.connections.lock().expect("lock not to be poisoned");
+        assert!(connections.is_empty());
+    }
+
+    #[test]
+    fn test_connection_established_then_closed() {
+        let mut registry = Registry::default();
+        let metrics = Metrics::new(&mut registry);
+
+        let connection_id = ConnectionId::new_unchecked(1);
+        let endpoint = ConnectedPoint::Dialer {
+            address: "/ip4/127.0.0.1/tcp/8080".parse().unwrap(),
+            role_override: libp2p_core::Endpoint::Dialer,
+            port_use: libp2p_core::transport::PortUse::New,
+        };
+
+        // First, establish a connection.
+        let established_event = SwarmEvent::<()>::ConnectionEstablished {
+            peer_id: libp2p_identity::PeerId::random(),
+            connection_id,
+            endpoint: endpoint.clone(),
+            num_established: std::num::NonZeroU32::new(1).unwrap(),
+            concurrent_dial_errors: None,
+            established_in: Duration::from_millis(100),
+        };
+
+        metrics.record(&established_event);
+
+        // Verify connection was added.
+        {
+            let connections = metrics.connections.lock().expect("lock not to be poisoned");
+            assert!(connections.contains_key(&connection_id));
+        }
+
+        // Now close the connection.
+        let closed_event = SwarmEvent::<()>::ConnectionClosed {
+            peer_id: libp2p_identity::PeerId::random(),
+            connection_id,
+            endpoint,
+            num_established: 0,
+            cause: None,
+        };
+
+        metrics.record(&closed_event);
+
+        // Verify connection was removed.
+        let connections = metrics.connections.lock().expect("lock not to be poisoned");
+        assert!(!connections.contains_key(&connection_id));
     }
 }
