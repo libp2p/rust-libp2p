@@ -189,7 +189,7 @@ impl MdnsResponse {
                     Some(expiration) => expiration,
                     None => {
                         now.checked_add(MAX_TTL).unwrap_or(now) // Fallback to now if even that
-                                                                                                    // overflows (extremely unlikely).
+                                                                // overflows (extremely unlikely).
                     }
                 };
 
