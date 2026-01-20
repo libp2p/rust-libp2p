@@ -869,8 +869,7 @@ where
             .publish_peers(&topic_hash)
             .into_iter()
             .filter(|peer_id| {
-                !self
-                    .partial_messages_extension
+                self.partial_messages_extension
                     .supports_partial(peer_id, &topic_hash)
             })
             .collect();
