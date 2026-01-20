@@ -245,7 +245,7 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: Option<std::io::Error>,
     },
-    /// Status has been changed.
+    /// Own [`Status`] changed.
     ///
     /// This is triggered based on if the external address
     /// has been added or removed.
@@ -267,19 +267,22 @@ pub struct Behaviour {
 
     external_addresses: ExternalAddresses,
 
-    status: Status,
-
+    /// Advertisement status.
+    status: Status.
     auto_status_change: bool,
 
     waker: Option<Waker>,
 }
-
+/// Own relay server advertisement status.
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Status {
-    /// Enables advertisement of the HOP protocol
+    /// Enables advertisement of the HOP protocol.
+    /// This allows other nodes to use us a relay server.
     Enable,
 
-    /// Disables advertisement of the HOP protocol
+    /// Disables advertisement of the HOP protocol.
+    /// New nodes won't be able to use us a relay server anymore.
+    /// Existing circuits are kept alive until they time out.
     Disable,
 }
 
@@ -296,6 +299,11 @@ impl Reservation {
 }
 
 impl Behaviour {
+    /// Create a new relay server behavior.
+    ///
+    /// By default, the node with determine its advertisement [`Status`] automatically
+    /// based on info about its own external addresses.
+    /// Alternatively, the advertisement status can be fixed with [`Behavior::set_status`].
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
@@ -310,6 +318,10 @@ impl Behaviour {
         }
     }
 
+    /// Sets the advertisement status of the local node as relay server.
+    ///
+    /// If the `status` is set to `None`, the node will configure its status automatically
+    /// depending on whether it has any external addresses or not.
     pub fn set_status(&mut self, status: Option<Status>) {
         match status {
             Some(status) => {
