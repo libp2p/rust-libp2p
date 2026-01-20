@@ -19,4 +19,4 @@
 // DEALINGS IN THE SOFTWARE.
 
 #[cfg(feature = "partial_messages")]
-pub(crate) mod partial_messages;
+pub mod partial_messages;
