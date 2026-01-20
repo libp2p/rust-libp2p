@@ -338,9 +338,6 @@ impl Behaviour {
                 self.determine_relay_status_from_external_address();
             }
         }
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
     }
 
     fn reconfigure_relay_status(&mut self) {
@@ -357,6 +354,10 @@ impl Behaviour {
                         status: self.status,
                     }),
                 }));
+        }
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
         }
     }
 
