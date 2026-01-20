@@ -268,7 +268,9 @@ pub struct Behaviour {
     external_addresses: ExternalAddresses,
 
     /// Advertisement status.
-    status: Status.
+    status: Status,
+
+    /// Indication of whether the status should automatically change based on the external addresses.
     auto_status_change: bool,
 
     waker: Option<Waker>,
