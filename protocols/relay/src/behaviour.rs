@@ -271,6 +271,8 @@ pub struct Behaviour {
     status: Status,
 
     /// Indication of whether the status should automatically change based on the external addresses.
+    ///
+    /// By default is true unless [`Status`] is explicitly set in [`Behaviour::set_status`].
     auto_status_change: bool,
 
     waker: Option<Waker>,
