@@ -1075,15 +1075,6 @@ impl ConfigBuilder {
         self
     }
 
-    /// The topic max size sets message sizes for a given topic.
-    pub fn set_topic_max_transmit_size(&mut self, topic: TopicHash, max_size: usize) -> &mut Self {
-        self.config
-            .protocol
-            .max_transmit_sizes
-            .insert(topic, max_size);
-        self
-    }
-
     /// Constructs a [`Config`] from the given configuration and validates the settings.
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config

@@ -61,7 +61,7 @@ use crate::{
     mcache::MessageCache,
     peer_score::{PeerScore, PeerScoreParams, PeerScoreState, PeerScoreThresholds, RejectReason},
     protocol::SIGNING_PREFIX,
-    rpc::Sender,
+    queue::Queue,
     rpc_proto::proto,
     subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
     time_cache::DuplicateCache,
@@ -183,7 +183,7 @@ enum PublishConfig {
 
 /// A strictly linearly increasing sequence number.
 ///
-/// We start from the current time as unix timestamp in milliseconds.
+/// We start from the current time as unix timestamp in nanoseconds.
 #[derive(Debug)]
 struct SequenceNumber(u64);
 
@@ -194,7 +194,10 @@ impl SequenceNumber {
             .expect("time to be linear")
             .as_nanos();
 
-        Self(unix_timestamp as u64)
+        Self(
+            u64::try_from(unix_timestamp)
+                .expect("timestamp in nanos since UNIX_EPOCH should fit in u64"),
+        )
     }
 
     fn next(&mut self) -> u64 {
@@ -511,8 +514,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked. Returns [`Ok(false)`](Ok) if we were
+    /// already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
@@ -751,6 +754,7 @@ where
             if self.send_message(
                 *peer_id,
                 RpcOut::Publish {
+                    message_id: msg_id.clone(),
                     message: raw_message.clone(),
                     timeout: Delay::new(self.config.publish_queue_duration()),
                 },
@@ -1341,6 +1345,7 @@ where
                     self.send_message(
                         *peer_id,
                         RpcOut::Forward {
+                            message_id: id.clone(),
                             message: msg,
                             timeout: Delay::new(self.config.forward_queue_duration()),
                         },
@@ -1364,8 +1369,6 @@ where
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-        // Needs to be here to comply with the borrow checker.
-        let is_outbound = connected_peer.outbound;
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
@@ -1417,8 +1420,6 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
-                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
-                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
@@ -1453,10 +1454,9 @@ where
                     }
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
-                    // or if it is an outbound peer
                     let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
 
-                    if peers.len() >= mesh_n_high && !is_outbound {
+                    if peers.len() >= mesh_n_high {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -2081,9 +2081,9 @@ where
         // steady-state size of the queues.
         #[cfg(feature = "metrics")]
         if let Some(m) = &mut self.metrics {
-            for sender_queue in self.connected_peers.values().map(|v| &v.sender) {
-                m.observe_priority_queue_size(sender_queue.priority_queue_len());
-                m.observe_non_priority_queue_size(sender_queue.non_priority_queue_len());
+            for sender_queue in self.connected_peers.values().map(|v| &v.messages) {
+                m.observe_priority_queue_size(sender_queue.priority_len());
+                m.observe_non_priority_queue_size(sender_queue.non_priority_len());
             }
         }
 
@@ -2138,11 +2138,14 @@ where
             let mesh_n_high = self.config.mesh_n_high_for_topic(topic_hash);
             let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic_hash);
 
-            // drop all peers with negative score, without PX
-            // if there is at some point a stable retain method for BTreeSet the following can be
-            // written more efficiently with retain.
-            let mut to_remove_peers = Vec::new();
-            for peer_id in peers.iter() {
+            #[cfg(feature = "metrics")]
+            let mut removed_peers_count = 0;
+
+            // Drop all peers with negative score, without PX
+            //
+            // TODO: Use `extract_if` once MSRV is raised to a version that includes its
+            // stabilization.
+            peers.retain(|peer_id| {
                 let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
                 // Record the score per mesh
@@ -2162,17 +2165,20 @@ where
                     let current_topic = to_prune.entry(*peer_id).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                     no_px.insert(*peer_id);
-                    to_remove_peers.push(*peer_id);
+
+                    #[cfg(feature = "metrics")]
+                    {
+                        removed_peers_count += 1;
+                    }
+
+                    return false;
                 }
-            }
+                true
+            });
 
             #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
-                m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
-            }
-
-            for peer_id in to_remove_peers {
-                peers.remove(&peer_id);
+                m.peers_removed(topic_hash, Churn::BadScore, removed_peers_count)
             }
 
             // too little peers - add some
@@ -2206,7 +2212,7 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > mesh_n_high {
+            if peers.len() >= mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",
@@ -2226,7 +2232,9 @@ where
                     score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
                 // shuffle everything except the last retain_scores many peers (the best ones)
-                shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                if peers.len() > self.config.retain_scores() {
+                    shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                }
 
                 // count total number of outbound peers
                 let mut outbound = shuffled
@@ -2499,6 +2507,11 @@ where
         // Report expired messages
         for (peer_id, failed_messages) in self.failed_messages.drain() {
             tracing::debug!("Peer couldn't consume messages: {:?}", failed_messages);
+            #[cfg(feature = "metrics")]
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.observe_failed_priority_messages(failed_messages.priority);
+                metrics.observe_failed_non_priority_messages(failed_messages.non_priority);
+            }
             self.events
                 .push_back(ToSwarm::GenerateEvent(Event::SlowPeer {
                     peer_id,
@@ -2746,6 +2759,7 @@ where
                 self.send_message(
                     *peer_id,
                     RpcOut::Forward {
+                        message_id: msg_id.clone(),
                         message: message.clone(),
                         timeout: Delay::new(self.config.forward_queue_duration()),
                     },
@@ -2874,8 +2888,9 @@ where
             return false;
         }
 
-        // Try sending the message to the connection handler.
-        match peer.sender.send_message(rpc) {
+        // Try sending the message to the connection handler,
+        // High priority messages should not fail.
+        match peer.messages.try_push(rpc) {
             Ok(()) => true,
             Err(rpc) => {
                 // Sending failed because the channel is full.
@@ -2883,24 +2898,10 @@ where
 
                 // Update failed message counter.
                 let failed_messages = self.failed_messages.entry(peer_id).or_default();
-                match rpc {
-                    RpcOut::Publish { .. } => {
-                        failed_messages.priority += 1;
-                        failed_messages.publish += 1;
-                    }
-                    RpcOut::Forward { .. } => {
-                        failed_messages.non_priority += 1;
-                        failed_messages.forward += 1;
-                    }
-                    RpcOut::IWant(_) | RpcOut::IHave(_) | RpcOut::IDontWant(_) => {
-                        failed_messages.non_priority += 1;
-                    }
-                    RpcOut::Graft(_)
-                    | RpcOut::Prune(_)
-                    | RpcOut::Subscribe(_)
-                    | RpcOut::Unsubscribe(_) => {
-                        unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
-                    }
+                if rpc.priority() {
+                    failed_messages.priority += 1;
+                } else {
+                    failed_messages.non_priority += 1;
                 }
 
                 // Update peer score.
@@ -3125,23 +3126,23 @@ where
         // The protocol negotiation occurs once a message is sent/received. Once this happens we
         // update the type of peer that this is in order to determine which kind of routing should
         // occur.
-        let connected_peer = self
-            .connected_peers
-            .entry(peer_id)
-            .or_insert_with(|| PeerDetails {
-                kind: PeerKind::Floodsub,
-                connections: vec![],
-                outbound: false,
-                sender: Sender::new(self.config.connection_handler_queue_len()),
-                topics: Default::default(),
-                dont_send: LinkedHashMap::new(),
-            });
+        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
+            kind: PeerKind::Floodsub,
+            connections: vec![],
+            outbound: false,
+            messages: Queue::new(self.config.connection_handler_queue_len()),
+            topics: Default::default(),
+            dont_send: LinkedHashMap::new(),
+        });
         // Add the new connection
         connected_peer.connections.push(connection_id);
 
+        // This clones a reference to the Queue so any new handlers reference the same underlying
+        // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
-            connected_peer.sender.new_receiver(),
+            connected_peer.messages.clone(),
         ))
     }
 
@@ -3153,25 +3154,25 @@ where
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let connected_peer = self
-            .connected_peers
-            .entry(peer_id)
-            .or_insert_with(|| PeerDetails {
-                kind: PeerKind::Floodsub,
-                connections: vec![],
-                // Diverging from the go implementation we only want to consider a peer as outbound
-                // peer if its first connection is outbound.
-                outbound: !self.px_peers.contains(&peer_id),
-                sender: Sender::new(self.config.connection_handler_queue_len()),
-                topics: Default::default(),
-                dont_send: LinkedHashMap::new(),
-            });
+        let connected_peer = self.connected_peers.entry(peer_id).or_insert(PeerDetails {
+            kind: PeerKind::Floodsub,
+            connections: vec![],
+            // Diverging from the go implementation we only want to consider a peer as outbound peer
+            // if its first connection is outbound.
+            outbound: !self.px_peers.contains(&peer_id),
+            messages: Queue::new(self.config.connection_handler_queue_len()),
+            topics: Default::default(),
+            dont_send: LinkedHashMap::new(),
+        });
         // Add the new connection
         connected_peer.connections.push(connection_id);
 
+        // This clones a reference to the Queue so any new handlers reference the same underlying
+        // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
-            connected_peer.sender.new_receiver(),
+            connected_peer.messages.clone(),
         ))
     }
 
@@ -3213,6 +3214,8 @@ where
                     }
                 }
             }
+            // rpc is only used for metrics code.
+            #[allow(unused_variables)]
             HandlerEvent::MessageDropped(rpc) => {
                 // Account for this in the scoring logic
                 if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
@@ -3221,37 +3224,13 @@ where
 
                 // Keep track of expired messages for the application layer.
                 let failed_messages = self.failed_messages.entry(propagation_source).or_default();
-                failed_messages.timeout += 1;
-                match rpc {
-                    RpcOut::Publish { .. } => {
-                        failed_messages.publish += 1;
-                    }
-                    RpcOut::Forward { .. } => {
-                        failed_messages.forward += 1;
-                    }
-                    _ => {}
-                }
-
-                // Record metrics on the failure.
-                #[cfg(feature = "metrics")]
-                if let Some(metrics) = self.metrics.as_mut() {
-                    match rpc {
-                        RpcOut::Publish { message, .. } => {
-                            metrics.publish_msg_dropped(&message.topic);
-                            metrics.timeout_msg_dropped(&message.topic);
-                        }
-                        RpcOut::Forward { message, .. } => {
-                            metrics.forward_msg_dropped(&message.topic);
-                            metrics.timeout_msg_dropped(&message.topic);
-                        }
-                        _ => {}
-                    }
-                }
+                failed_messages.non_priority += 1;
             }
             HandlerEvent::Message {
                 rpc,
                 invalid_messages,
             } => {
+                tracing::debug!(peer=%propagation_source, message=?rpc, "Received gossipsub message");
                 // Handle the gossipsub RPC
 
                 // Handle subscriptions
@@ -3345,10 +3324,17 @@ where
                                     "Could not handle IDONTWANT, peer doesn't exist in connected peer list");
                                 continue;
                             };
+
+                            // Remove messages from the queue.
+                            #[allow(unused)]
+                            let removed = peer.messages.remove_data_messages(&message_ids);
+
                             #[cfg(feature = "metrics")]
                             if let Some(metrics) = self.metrics.as_mut() {
                                 metrics.register_idontwant(message_ids.len());
+                                metrics.register_removed_messages(removed);
                             }
+
                             for message_id in message_ids {
                                 peer.dont_send.insert(message_id, Instant::now());
                                 // Don't exceed capacity.
