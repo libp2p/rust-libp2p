@@ -270,7 +270,8 @@ pub struct Behaviour {
     /// Advertisement status.
     status: Status,
 
-    /// Indication of whether the status should automatically change based on the external addresses.
+    /// Indication of whether the status should automatically change based on the external
+    /// addresses.
     ///
     /// By default is true unless [`Status`] is explicitly set in [`Behaviour::set_status`].
     auto_status_change: bool,
@@ -307,7 +308,7 @@ impl Behaviour {
     ///
     /// By default, the node with determine its advertisement [`Status`] automatically
     /// based on info about its own external addresses.
-    /// Alternatively, the advertisement status can be fixed with [`Behavior::set_status`].
+    /// Alternatively, the advertisement status can be fixed with [`Behaviour::set_status`].
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
