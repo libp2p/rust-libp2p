@@ -875,7 +875,17 @@ where
             })
             .collect();
 
-        let recipients = self.filter_publish_candidates(&topic_hash, candidates);
+        let mut recipients = self.filter_publish_candidates(&topic_hash, candidates);
+
+        // We add the peers which also have the same group_id to the publish peers,
+        // this allows us to reply to peers whom may not be on our mesh but still want the partial update.
+        let group_id = partial_message.group_id();
+        let transient_peers = self.connected_peers.keys().filter(|peer_id| {
+            self.partial_messages_extension
+                .group_id(peer_id, &topic_hash, &group_id)
+        });
+
+        recipients.extend(transient_peers);
 
         if recipients.is_empty() {
             return Err(PublishError::NoPeersSubscribedToTopic);

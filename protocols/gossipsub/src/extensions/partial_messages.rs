@@ -303,6 +303,25 @@ impl State {
             .unwrap_or(false)
     }
 
+    /// Get our partial opts for a topic (used by Behaviour when sending Subscribe)
+    pub(crate) fn opts(&self, topic: &TopicHash) -> Option<&SubscriptionOpts> {
+        self.opts.get(topic)
+    }
+
+    /// Check if the peer has sent us message on the provided topic and group_id.
+    pub(crate) fn group_id(
+        &self,
+        peer_id: &PeerId,
+        topic_hash: &TopicHash,
+        group_id: &[u8],
+    ) -> bool {
+        self.peers
+            .get(peer_id)
+            .and_then(|peer| peer.partial_messages.get(topic_hash))
+            .and_then(|topic_partials| topic_partials.get(group_id))
+            .is_some()
+    }
+
     /// Determines the actions to take based on the provided recipients and partial.
     /// Returns the actions for the Behaviour to execute.
     pub(crate) fn handle_publish<P: Partial + 'static>(
@@ -386,10 +405,6 @@ impl State {
             });
         }
         actions
-    }
-    /// Get our partial opts for a topic (used by Behaviour when sending Subscribe)
-    pub(crate) fn opts(&self, topic: &TopicHash) -> Option<&SubscriptionOpts> {
-        self.opts.get(topic)
     }
 }
 
