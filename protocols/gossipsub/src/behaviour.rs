@@ -51,10 +51,6 @@ use quick_protobuf::{MessageWrite, Writer};
 use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
-#[cfg(feature = "partial_messages")]
-use crate::extensions::partial_messages::{
-    self, Partial, PublishAction, ReceivedAction, SubscriptionOpts,
-};
 #[cfg(feature = "metrics")]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
@@ -77,6 +73,11 @@ use crate::{
         SubscriptionAction,
     },
     FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
+};
+#[cfg(feature = "partial_messages")]
+use crate::{
+    extensions::partial_messages::{self, Partial, PublishAction, ReceivedAction},
+    types::SubscriptionOpts,
 };
 
 #[cfg(test)]
@@ -595,7 +596,7 @@ where
 
         #[cfg(feature = "partial_messages")]
         self.partial_messages_extension
-            .subscribe(topic_hash, requests_partial);
+            .subscribe(topic_hash, supports_partial, requests_partial);
 
         tracing::debug!(%topic, "Subscribed to topic");
         Ok(true)
@@ -2093,8 +2094,7 @@ where
                     self.partial_messages_extension.peer_subscribed(
                         propagation_source,
                         topic_hash.clone(),
-                        subscription.requests_partial,
-                        subscription.supports_partial,
+                        subscription.options,
                     );
 
                     if peer.topics.insert(topic_hash.clone()) {
@@ -2574,7 +2574,7 @@ where
                 if let Some(m) = self.metrics.as_mut() {
                     #[cfg(not(feature = "partial_messages"))]
                     {
-                        let mesh_peers = peers.count();
+                        let mesh_peers = peers.len();
                         m.set_mesh_peers(topic_hash, mesh_peers, false);
                     }
                     #[cfg(feature = "partial_messages")]
@@ -3076,12 +3076,15 @@ where
                     m.msg_sent(&message.topic, false, message.raw_protobuf_len())
                 }
 
-                RpcOut::PartialMessage {
-                    topic_id, message, ..
-                } => m.msg_sent(
-                    topic_id,
+                #[cfg(feature = "partial_messages")]
+                RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
+                    topic_hash,
+                    body,
+                    ..
+                }) => m.msg_sent(
+                    topic_hash,
                     true,
-                    message.as_ref().map(|m| m.len()).unwrap_or_default(),
+                    body.as_ref().map(|m| m.len()).unwrap_or_default(),
                 ),
                 _ => {}
             }
@@ -3169,7 +3172,7 @@ where
             let Some(SubscriptionOpts {
                 requests_partial,
                 supports_partial,
-            }) = self.partial_messages_extension.opts(&topic_hash).copied()
+            }) = self.partial_messages_extension.opts(&topic_hash)
             else {
                 tracing::error!("Partial subscription options should exist for subscribed topic");
                 return;
@@ -3636,42 +3639,38 @@ where
                         tracing::debug!("Peer below threshold, ignoring partial message");
                     }
 
-                    let results = self
+                    let result = self
                         .partial_messages_extension
                         .handle_received(propagation_source, partial_message);
-                    for result in results {
-                        match result {
-                            ReceivedAction::Publish(PublishAction::SendMessage {
-                                peer_id,
-                                rpc,
-                            }) => {
-                                self.send_message(peer_id, rpc);
-                            }
-                            partial_messages::ReceivedAction::EmitEvent {
-                                topic_hash,
-                                peer_id,
-                                group_id,
-                                message,
-                                metadata,
-                            } => {
-                                self.events
-                                    .push_back(ToSwarm::GenerateEvent(Event::Partial {
-                                        topic_hash,
-                                        peer_id,
-                                        group_id,
-                                        message,
-                                        metadata,
-                                    }));
-                            }
-                            ReceivedAction::Publish(PublishAction::PenalizePeer {
-                                peer_id,
-                                topic_hash,
-                            }) => {
-                                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                                    peer_score.reject_invalid_partial(peer_id, &topic_hash);
-                                }
+                    match result {
+                        ReceivedAction::Publish(PublishAction::SendMessage { peer_id, rpc }) => {
+                            self.send_message(peer_id, rpc);
+                        }
+                        partial_messages::ReceivedAction::EmitEvent {
+                            topic_hash,
+                            peer_id,
+                            group_id,
+                            message,
+                            metadata,
+                        } => {
+                            self.events
+                                .push_back(ToSwarm::GenerateEvent(Event::Partial {
+                                    topic_hash,
+                                    peer_id,
+                                    group_id,
+                                    message,
+                                    metadata,
+                                }));
+                        }
+                        ReceivedAction::Publish(PublishAction::PenalizePeer {
+                            peer_id,
+                            topic_hash,
+                        }) => {
+                            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                                peer_score.reject_invalid_partial(peer_id, &topic_hash);
                             }
                         }
+                        partial_messages::ReceivedAction::None => {}
                     }
                 }
             }

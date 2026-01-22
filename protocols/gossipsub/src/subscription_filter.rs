@@ -225,32 +225,27 @@ mod test {
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t2.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -272,14 +267,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -305,20 +298,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -344,14 +334,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -377,32 +365,27 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[4].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[0].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[1].clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -424,14 +407,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 
@@ -454,20 +435,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t3,
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             },
         ];
 

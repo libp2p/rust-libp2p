@@ -264,8 +264,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             }],
             peer,
         );
@@ -314,8 +313,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             }],
             peer,
         );

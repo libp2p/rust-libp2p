@@ -228,8 +228,7 @@ pub struct Subscription {
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
     /// Partial options.
-    pub requests_partial: bool,
-    pub supports_partial: bool,
+    pub options: SubscriptionOpts,
 }
 
 /// Action that a subscription wants to perform.
@@ -239,6 +238,13 @@ pub enum SubscriptionAction {
     Subscribe,
     /// The remote wants to unsubscribe from the given topic.
     Unsubscribe,
+}
+
+/// Partial options when subscribing a topic.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct SubscriptionOpts {
+    pub(crate) requests_partial: bool,
+    pub(crate) supports_partial: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -360,16 +366,8 @@ pub enum RpcOut {
     /// Send a test extension message.
     TestExtension,
     /// Send a partial messages extension.
-    PartialMessage {
-        /// The group ID that identifies the complete logical message.
-        group_id: Vec<u8>,
-        /// The topic ID this partial message belongs to.
-        topic_id: TopicHash,
-        /// The partial message itself.
-        message: Option<Vec<u8>>,
-        /// The partial metadata we have and want.
-        metadata: Vec<u8>,
-    },
+    #[cfg(feature = "partial_messages")]
+    PartialMessage(crate::partial_messages::PartialMessage),
 }
 
 impl RpcOut {
@@ -564,21 +562,22 @@ impl From<RpcOut> for proto::RPC {
                 testExtension: Some(proto::TestExtension {}),
                 partial: None,
             },
-            RpcOut::PartialMessage {
-                topic_id,
+            #[cfg(feature = "partial_messages")]
+            RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
+                topic_hash,
                 group_id,
                 metadata,
-                message,
-            } => proto::RPC {
+                body,
+            }) => proto::RPC {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
                 testExtension: None,
                 partial: Some(proto::PartialMessagesExtension {
-                    topicID: Some(topic_id.as_str().as_bytes().to_vec()),
+                    topicID: Some(topic_hash.as_str().as_bytes().to_vec()),
                     groupID: Some(group_id),
-                    partialMessage: message,
-                    partsMetadata: Some(metadata),
+                    partialMessage: body,
+                    partsMetadata: metadata,
                 }),
             },
         }

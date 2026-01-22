@@ -38,7 +38,8 @@ use crate::{
     topic::TopicHash,
     types::{
         ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
-        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, TestExtension,
+        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, SubscriptionOpts,
+        TestExtension,
     },
     ValidationError,
 };
@@ -583,7 +584,7 @@ impl Decoder for GossipsubCodec {
                 tracing::debug!("Partial message without topic_id, discarding");
                 return None;
             };
-            let topic_id = TopicHash::from_raw(String::from_utf8_lossy(&topic_id_bytes));
+            let topic_hash = TopicHash::from_raw(String::from_utf8_lossy(&topic_id_bytes));
 
             let Some(group_id) = partial_proto.groupID else {
                 tracing::debug!("Partial message without group_id, discarding");
@@ -591,7 +592,7 @@ impl Decoder for GossipsubCodec {
             };
 
             Some(PartialMessage {
-                topic_id,
+                topic_hash,
                 group_id,
                 metadata: partial_proto.partsMetadata,
                 body: partial_proto.partialMessage,
@@ -611,8 +612,10 @@ impl Decoder for GossipsubCodec {
                             SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
-                        requests_partial: sub.requestsPartial.unwrap_or_default(),
-                        supports_partial: sub.supportsPartial.unwrap_or_default(),
+                        options: SubscriptionOpts {
+                            requests_partial: sub.requestsPartial.unwrap_or_default(),
+                            supports_partial: sub.supportsPartial.unwrap_or_default(),
+                        },
                     })
                     .collect(),
                 control_msgs,

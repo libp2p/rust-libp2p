@@ -358,8 +358,7 @@ where
                 .map(|t| Subscription {
                     action: SubscriptionAction::Subscribe,
                     topic_hash: t,
-                    requests_partial: false,
-                    supports_partial: false,
+                    options: Default::default(),
                 })
                 .collect::<Vec<_>>(),
             &peer,
@@ -506,8 +505,7 @@ pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
                     SubscriptionAction::Unsubscribe
                 },
                 topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
-                requests_partial: false,
-                supports_partial: false,
+                options: Default::default(),
             })
             .collect(),
         control_msgs,

@@ -368,16 +368,14 @@ fn test_handle_received_subscriptions() {
         .map(|topic_hash| Subscription {
             action: SubscriptionAction::Subscribe,
             topic_hash: topic_hash.clone(),
-            requests_partial: false,
-            supports_partial: false,
+            options: Default::default(),
         })
         .collect::<Vec<Subscription>>();
 
     subscriptions.push(Subscription {
         action: SubscriptionAction::Unsubscribe,
         topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
-        requests_partial: false,
-        supports_partial: false,
+        options: Default::default(),
     });
 
     let unknown_peer = PeerId::random();
@@ -435,8 +433,7 @@ fn test_handle_received_subscriptions() {
         &[Subscription {
             action: SubscriptionAction::Unsubscribe,
             topic_hash: topic_hashes[0].clone(),
-            requests_partial: false,
-            supports_partial: false,
+            options: Default::default(),
         }],
         &peers[0],
     );

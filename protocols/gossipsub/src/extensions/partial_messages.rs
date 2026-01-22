@@ -25,7 +25,13 @@ use std::{
 
 use libp2p_core::PeerId;
 
-use crate::{types::RpcOut, TopicHash};
+use crate::{
+    types::{RpcOut, SubscriptionOpts},
+    TopicHash,
+};
+
+/// Default TTL for partial messages kept.
+const DEFAULT_PARTIAL_TTL: usize = 5;
 
 /// PartialMessage is a message that can be broken up into parts.
 /// This trait allows applications to define custom strategies for splitting large messages
@@ -87,46 +93,45 @@ pub struct PartialAction {
 /// Partial message state for sent and received messages.
 #[derive(Default)]
 pub(crate) struct State {
-    /// Our subscription options per topic
-    pub(crate) opts: HashMap<TopicHash, SubscriptionOpts>,
-    /// Cached partial messages we're publishing
-    pub(crate) cached: HashMap<TopicHash, HashMap<Vec<u8>, Box<dyn Partial>>>,
+    /// Our subscription options per topic and respective cached partial messages we're publishing.
+    pub(crate) subscriptions: HashMap<TopicHash, LocalSubscription>,
     /// Per-peer partial state
-    pub(crate) peers: HashMap<PeerId, PeerPartialState>,
-}
-
-/// Partial state of the remote peers.
-#[derive(Default)]
-pub(crate) struct PeerPartialState {
-    pub(crate) partial_opts: HashMap<TopicHash, SubscriptionOpts>,
-    pub(crate) partial_messages: HashMap<TopicHash, HashMap<Vec<u8>, PartialData>>,
+    pub(crate) peer_subscriptions: HashMap<PeerId, HashMap<TopicHash, RemoteSubscription>>,
 }
 
 impl State {
     /// Called by the [`Behaviour`] when we subscribed to the topic.
-    pub(crate) fn subscribe(&mut self, topic_hash: TopicHash, requests_partial: bool) {
-        self.opts.insert(
+    pub(crate) fn subscribe(
+        &mut self,
+        topic_hash: TopicHash,
+        supports_partial: bool,
+        requests_partial: bool,
+    ) {
+        self.subscriptions.insert(
             topic_hash,
-            SubscriptionOpts {
-                requests_partial,
-                supports_partial: true,
+            LocalSubscription {
+                options: Some(SubscriptionOpts {
+                    requests_partial,
+                    supports_partial,
+                }),
+                partial_messages: Default::default(),
             },
         );
     }
 
     /// Called by the [`Behaviour`] when we unsubscribed from the topic.
     pub(crate) fn unsubscribe(&mut self, topic_hash: &TopicHash) {
-        self.opts.remove(&topic_hash.clone());
+        self.subscriptions.remove(&topic_hash.clone());
     }
 
     /// Called by the [`Behaviour`] when a peer has connected.
     pub(crate) fn peer_connected(&mut self, peer_id: PeerId) {
-        self.peers.insert(peer_id, Default::default());
+        self.peer_subscriptions.insert(peer_id, Default::default());
     }
 
     /// Called by the [`Behaviour`] when a peer has disconnected.
     pub(crate) fn peer_disconnected(&mut self, peer_id: PeerId) {
-        self.peers.remove(&peer_id);
+        self.peer_subscriptions.remove(&peer_id);
     }
 
     /// Called by the [`Behaviour`] when a remote peer unsubscribed from the topic.
@@ -134,72 +139,88 @@ impl State {
         &mut self,
         peer_id: &PeerId,
         topic_hash: TopicHash,
-        requests_partial: bool,
-        supports_partial: bool,
+        options: SubscriptionOpts,
     ) {
-        let Some(peer) = self.peers.get_mut(peer_id) else {
+        let Some(peer) = self.peer_subscriptions.get_mut(peer_id) else {
             tracing::error!(
                 %peer_id,
                 "Partial subscription by unknown peer"
             );
             return;
         };
-        peer.partial_opts.insert(
+        peer.insert(
             topic_hash,
-            SubscriptionOpts {
-                requests_partial,
-                supports_partial,
+            RemoteSubscription {
+                options: Some(options),
+                partial_messages: Default::default(),
             },
         );
     }
 
     pub(crate) fn peer_unsubscribed(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
-        let Some(peer) = self.peers.get_mut(&peer_id) else {
+        let Some(peer) = self.peer_subscriptions.get_mut(&peer_id) else {
             tracing::error!(
                 %peer_id,
                 "Partial unsubscription by unknown peer"
             );
             return;
         };
-        peer.partial_opts.remove(topic_hash);
+        peer.remove(topic_hash);
     }
 
     /// Called by the [`Behaviour`] during heartbeat.
+    /// Returns the list of the peers and respective partial metadata to send.
     pub(crate) fn heartbeat(&mut self) {
-        for peer_state in self.peers.values_mut() {
-            for topics in peer_state.partial_messages.values_mut() {
-                topics.retain(|_, partial| {
+        for peer_state in self.peer_subscriptions.values_mut() {
+            for topics in peer_state.values_mut() {
+                topics.partial_messages.retain(|_, partial| {
                     partial.ttl -= 1;
-                    partial.ttl == 0
+                    partial.ttl != 0
                 });
             }
         }
+
+        for subscription in self.subscriptions.values_mut() {
+            subscription.partial_messages.retain(|_, partial| {
+                partial.ttl -= 1;
+                partial.ttl != 0
+            });
+        }
     }
 
-    /// Called by the [`Behaviour`] when a partial message is rceived.
+    /// Called by the [`Behaviour`] when a partial message is received.
     pub(crate) fn handle_received(
         &mut self,
         peer_id: PeerId,
         message: PartialMessage,
-    ) -> Vec<ReceivedAction> {
-        let mut results = vec![];
-        let peer_partials = self.peers.entry(peer_id).or_default();
-        let topic_partials = peer_partials
-            .partial_messages
-            .entry(message.topic_id.clone())
+    ) -> ReceivedAction {
+        let Some(peer_subscriptions) = self.peer_subscriptions.get_mut(&peer_id) else {
+            tracing::error!(peer = %peer_id,
+                topic_hash = ?message.topic_hash,
+                    "Partial message received from an unknown peer");
+            return ReceivedAction::None;
+        };
+
+        // If the peer has sent us a partial message without a subscription message first,
+        // insert it on the list with the defaults, supports_partial = false.
+        let peer_partials = peer_subscriptions
+            .entry(message.topic_hash.clone())
             .or_default();
 
-        let group_partials = topic_partials.entry(message.group_id.clone()).or_default();
+        let peer_partial = peer_partials
+            .partial_messages
+            .entry(message.group_id.clone())
+            .or_default();
 
         // Check if the local partial data we have from the peer is oudated.
-        let metadata_updated = match (&mut group_partials.metadata, &message.metadata) {
+        let metadata_updated = match (&mut peer_partial.metadata, &message.metadata) {
             (None, Some(remote_metadata)) => {
-                group_partials.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
+                peer_partial.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                 true
             }
             (Some(PeerMetadata::Remote(ref metadata)), Some(remote_metadata)) => {
                 if metadata != remote_metadata {
-                    group_partials.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
+                    peer_partial.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                     true
                 } else {
                     false
@@ -211,16 +232,15 @@ impl State {
                     Err(err) => {
                         tracing::debug!(
                             peer=%peer_id,
-                            topic=%message.topic_id,
+                            topic=%message.topic_hash,
                             group_id=?message.group_id,
                             err=%err,
                             "Error updating Partial metadata"
                         );
-                        results.push(ReceivedAction::Publish(PublishAction::PenalizePeer {
+                        return ReceivedAction::Publish(PublishAction::PenalizePeer {
                             peer_id,
-                            topic_hash: message.topic_id.clone(),
-                        }));
-                        false
+                            topic_hash: message.topic_hash.clone(),
+                        });
                     }
                 }
             }
@@ -228,28 +248,28 @@ impl State {
         };
 
         if !metadata_updated && message.body.is_none() {
-            return results;
+            return ReceivedAction::None;
         }
 
         // We may have already received other partials from this and other peers,
         // but haven't responded to them yet, in those situations just return
         // the partial to the application layer.
         let Some(local_partial) = self
-            .cached
-            .get_mut(&message.topic_id)
-            .and_then(|t| t.get(&message.group_id))
+            .subscriptions
+            .get_mut(&message.topic_hash)
+            .and_then(|t| t.partial_messages.get(&message.group_id))
         else {
-            results.push(ReceivedAction::EmitEvent {
-                topic_hash: message.topic_id,
+            return ReceivedAction::EmitEvent {
+                topic_hash: message.topic_hash,
                 peer_id,
                 group_id: message.group_id,
                 message: message.body,
                 metadata: message.metadata,
-            });
-            return results;
+            };
         };
 
         let action = match local_partial
+            .partial
             .partial_action_from_metadata(peer_id, message.metadata.as_deref())
         {
             Ok(action) => action,
@@ -257,55 +277,57 @@ impl State {
                 tracing::debug!(peer = %peer_id, group_id = ?message.group_id,err = %err,
                     "Could not reconstruct message bytes for peer metadata from a received partial");
                 // Should we remove the partial from the peer?
-                topic_partials.remove(&message.group_id);
-                results.push(ReceivedAction::Publish(PublishAction::PenalizePeer {
+                peer_partials.partial_messages.remove(&message.group_id);
+                return ReceivedAction::Publish(PublishAction::PenalizePeer {
                     peer_id,
-                    topic_hash: message.topic_id.clone(),
-                }));
-                return results;
+                    topic_hash: message.topic_hash.clone(),
+                });
             }
         };
 
-        // We have new data for that peer.
-        if let Some((body, peer_updated_metadata)) = action.send {
-            group_partials.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+        // check if we have new data for that peer.
+        let Some((body, peer_updated_metadata)) = action.send else {
+            return ReceivedAction::None;
+        };
+        peer_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
 
-            let cached_metadata = local_partial.metadata().as_slice().to_vec();
-            results.push(ReceivedAction::Publish(PublishAction::SendMessage {
-                peer_id,
-                rpc: RpcOut::PartialMessage {
-                    message: Some(body),
-                    metadata: cached_metadata,
-                    group_id: message.group_id.clone(),
-                    topic_id: message.topic_id.clone(),
-                },
-            }));
-        }
-
-        results
+        let cached_metadata = local_partial.partial.metadata().as_slice().to_vec();
+        ReceivedAction::Publish(PublishAction::SendMessage {
+            peer_id,
+            rpc: RpcOut::PartialMessage(PartialMessage {
+                body: Some(body),
+                metadata: Some(cached_metadata),
+                group_id: message.group_id.clone(),
+                topic_hash: message.topic_hash.clone(),
+            }),
+        })
     }
 
     /// Check if the peer requests partial messages for the topic.
     pub(crate) fn requests_partial(&self, peer_id: &PeerId, topic_hash: &TopicHash) -> bool {
-        self.peers
+        self.peer_subscriptions
             .get(peer_id)
-            .and_then(|p| p.partial_opts.get(topic_hash))
-            .map(|opts| opts.requests_partial)
+            .and_then(|subscription| subscription.get(topic_hash))
+            .and_then(|s| s.options)
+            .map(|options| options.requests_partial)
             .unwrap_or(false)
     }
 
     /// Check if the peer supports partial messages for the topic.
     pub(crate) fn supports_partial(&self, peer_id: &PeerId, topic_hash: &TopicHash) -> bool {
-        self.peers
+        self.peer_subscriptions
             .get(peer_id)
-            .and_then(|p| p.partial_opts.get(topic_hash))
-            .map(|opts| opts.supports_partial)
-            .unwrap_or(false)
+            .and_then(|subscriptions| subscriptions.get(topic_hash))
+            .and_then(|s| s.options)
+            .map(|options| options.supports_partial)
+            .unwrap_or_default()
     }
 
     /// Get our partial opts for a topic (used by Behaviour when sending Subscribe)
-    pub(crate) fn opts(&self, topic: &TopicHash) -> Option<&SubscriptionOpts> {
-        self.opts.get(topic)
+    pub(crate) fn opts(&self, topic: &TopicHash) -> Option<SubscriptionOpts> {
+        self.subscriptions
+            .get(topic)
+            .and_then(|subscription| subscription.options)
     }
 
     /// Check if the peer has sent us message on the provided topic and group_id.
@@ -315,10 +337,10 @@ impl State {
         topic_hash: &TopicHash,
         group_id: &[u8],
     ) -> bool {
-        self.peers
+        self.peer_subscriptions
             .get(peer_id)
-            .and_then(|peer| peer.partial_messages.get(topic_hash))
-            .and_then(|topic_partials| topic_partials.get(group_id))
+            .and_then(|peer| peer.get(topic_hash))
+            .and_then(|subscription| subscription.partial_messages.get(group_id))
             .is_some()
     }
 
@@ -335,34 +357,33 @@ impl State {
 
         let publish_metadata = partial_message.metadata();
         for peer_id in recipients {
-            let Some(partial_opts) = self
-                .peers
-                .get(&peer_id)
-                .and_then(|peer| peer.partial_opts.get(&topic_hash))
-                .copied()
+            let Some(subscription) = self
+                .peer_subscriptions
+                .get_mut(&peer_id)
+                .and_then(|subscriptions| subscriptions.get_mut(&topic_hash))
             else {
                 tracing::error!(peer = %peer_id,
-                    "Could not get partial subscripion options from peer which subscribed for partial messages");
+                    "Could not get partial subscripion from peer which subscribed for partial messages");
                 continue;
             };
 
-            let peer_partials = self.peers.entry(peer_id).or_default();
-            let topic_partials = peer_partials
+            let group_partials = subscription
                 .partial_messages
-                .entry(topic_hash.clone())
+                .entry(group_id.clone())
                 .or_default();
-            let group_partials = topic_partials.entry(group_id.clone()).or_default();
 
             // Peer `supports_partial` but doesn't `requests_partial`.
-            if !partial_opts.requests_partial {
+            // We assume peer requests_partial is true as that has already been filtered
+            // by the behavior.
+            if !subscription.options.unwrap_or_default().requests_partial {
                 actions.push(PublishAction::SendMessage {
                     peer_id,
-                    rpc: RpcOut::PartialMessage {
-                        message: None,
-                        metadata: publish_metadata.clone(),
+                    rpc: RpcOut::PartialMessage(PartialMessage {
+                        body: None,
+                        metadata: Some(publish_metadata.clone()),
                         group_id: group_id.clone(),
-                        topic_id: topic_hash.clone(),
-                    },
+                        topic_hash: topic_hash.clone(),
+                    }),
                 });
                 continue;
             }
@@ -373,7 +394,7 @@ impl State {
             ) else {
                 tracing::error!(peer = %peer_id, group_id = ?group_id,
                     "Could not reconstruct message bytes for peer metadata");
-                topic_partials.remove(&group_id);
+                subscription.partial_messages.remove(&group_id);
                 actions.push(PublishAction::PenalizePeer {
                     peer_id,
                     topic_hash: topic_hash.clone(),
@@ -382,10 +403,10 @@ impl State {
             };
 
             // Check if we have new data for the peer.
-            let message = if let Some((message, peer_updated_metadata)) = action.send {
+            let body = if let Some((body, peer_updated_metadata)) = action.send {
                 // We have something to send, update the peer's metadata.
                 group_partials.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
-                Some(message)
+                Some(body)
             } else if group_partials.metadata.is_none() || action.need {
                 // We have no data to eagerly send, but we want to transmit our metadata anyway, to
                 // let the peer know of our metadata so that it sends us its data.
@@ -396,14 +417,25 @@ impl State {
 
             actions.push(PublishAction::SendMessage {
                 peer_id,
-                rpc: RpcOut::PartialMessage {
+                rpc: RpcOut::PartialMessage(PartialMessage {
                     group_id: group_id.clone(),
-                    topic_id: topic_hash.clone(),
-                    message,
-                    metadata: publish_metadata.clone(),
-                },
+                    topic_hash: topic_hash.clone(),
+                    body,
+                    metadata: Some(publish_metadata.clone()),
+                }),
             });
         }
+
+        // Cache the sent partial
+        let topic_partials = self.subscriptions.entry(topic_hash).or_default();
+        topic_partials.partial_messages.insert(
+            partial_message.group_id(),
+            LocalPartial {
+                partial: Box::new(partial_message),
+                ttl: DEFAULT_PARTIAL_TTL,
+            },
+        );
+
         actions
     }
 }
@@ -422,6 +454,8 @@ pub(crate) enum PublishAction {
 
 /// Action returned by `State::handle_received`.
 pub(crate) enum ReceivedAction {
+    /// Do not do anything.
+    None,
     /// Emit a Partial event to the application
     EmitEvent {
         topic_hash: TopicHash,
@@ -433,24 +467,17 @@ pub(crate) enum ReceivedAction {
     Publish(PublishAction),
 }
 
-/// A received partial message.
+/// A Partial message sent and received from remote peers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PartialMessage {
-    /// The topic ID this partial message belongs to.
-    pub topic_id: TopicHash,
     /// The group ID that identifies the complete logical message.
     pub group_id: Vec<u8>,
-    /// The partial metadata we have and we want.
-    pub metadata: Option<Vec<u8>>,
+    /// The topic ID this partial message belongs to.
+    pub topic_hash: TopicHash,
     /// The partial message itself.
     pub body: Option<Vec<u8>>,
-}
-
-/// Partial options when subscribing a topic.
-#[derive(Debug, Clone, Copy, Default, Eq, Hash, PartialEq)]
-pub(crate) struct SubscriptionOpts {
-    pub(crate) requests_partial: bool,
-    pub(crate) supports_partial: bool,
+    /// The partial metadata we have and want.
+    pub metadata: Option<Vec<u8>>,
 }
 
 /// Stored `Metadata` for a peer,
@@ -472,20 +499,44 @@ impl AsRef<[u8]> for PeerMetadata {
     }
 }
 
-/// The partial message data the peer has.
-#[derive(Debug)]
-pub(crate) struct PartialData {
-    /// The current peer partial metadata.
-    pub(crate) metadata: Option<PeerMetadata>,
-    /// The remaining heartbeats for this message to be deleted.
-    pub(crate) ttl: usize,
+/// Partial options when subscribing a topic.
+#[derive(Default)]
+pub(crate) struct LocalSubscription {
+    /// Subscription options, None if we have not subscribe to the topic.
+    options: Option<SubscriptionOpts>,
+    /// Partial messages we have sent us on the topic subscription.
+    partial_messages: HashMap<Vec<u8>, LocalPartial>,
 }
 
-impl Default for PartialData {
+/// A topic subscribed by a remote peer.
+#[derive(Debug, Default)]
+pub(crate) struct RemoteSubscription {
+    /// Subscription options, None if peer has not subscribe to the topic.
+    options: Option<SubscriptionOpts>,
+    /// Partial messages that the peer has sent us on the topic subscription.
+    partial_messages: HashMap<Vec<u8>, RemotePartial>,
+}
+
+/// a local cached sent partial message.
+struct LocalPartial {
+    partial: Box<dyn Partial>,
+    ttl: usize,
+}
+
+/// A partial message data the peer has sent us.
+#[derive(Debug)]
+struct RemotePartial {
+    /// The current peer partial metadata.
+    metadata: Option<PeerMetadata>,
+    /// The remaining heartbeats for this message to be deleted.
+    ttl: usize,
+}
+
+impl Default for RemotePartial {
     fn default() -> Self {
         Self {
             metadata: Default::default(),
-            ttl: 5,
+            ttl: DEFAULT_PARTIAL_TTL,
         }
     }
 }
