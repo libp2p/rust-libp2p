@@ -8,16 +8,21 @@ async fn main() -> Result<()> {
 
     let report = interop_tests::run_test(
         &config.transport,
-        &config.ip,
+        &config.listener_ip,
         config.is_dialer,
-        config.test_timeout,
+        config.test_timeout_secs,
         &config.redis_addr,
-        config.sec_protocol,
+        config.secure_channel,
         config.muxer,
+        config.debug,
+        &config.test_key,
     )
     .await?;
 
-    println!("{}", serde_json::to_string(&report)?);
+    println!("latency:");
+    println!("  handshake_plus_one_rtt: {}", report.handshake_plus_one_rtt_ms);
+    println!("  ping_rtt: {}", report.ping_rtt_ms);
+    println!("  unit: ms");
 
     Ok(())
 }
