@@ -463,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                substreams_timeout,
+                move || futures_bounded::Delay::futures_timer(substreams_timeout),
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),

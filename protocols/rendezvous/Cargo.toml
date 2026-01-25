@@ -23,14 +23,14 @@ libp2p-identity = { workspace = true }
 libp2p-request-response = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rand = "0.8"
+rand = "0.9"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-rand = "0.8"
+rand = "0.9"
 tokio = { workspace = true, features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

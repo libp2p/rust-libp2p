@@ -116,7 +116,7 @@ impl Cookie {
     /// namespace.
     pub fn for_namespace(namespace: Namespace) -> Self {
         Self {
-            id: rand::thread_rng().next_u64(),
+            id: rand::rng().next_u64(),
             namespace: Some(namespace),
         }
     }

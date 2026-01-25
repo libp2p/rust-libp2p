@@ -15,7 +15,6 @@ use libp2p_swarm::{
     ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
 use rand::prelude::*;
-use rand_core::OsRng;
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
@@ -57,9 +56,9 @@ impl Default for Config {
     }
 }
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = ThreadRng>
 where
-    R: RngCore + 'static,
+    R: Rng + 'static,
 {
     rng: R,
     config: Config,
@@ -293,7 +292,7 @@ where
                 return;
             };
 
-            let nonce = self.rng.gen();
+            let nonce = self.rng.random();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
@@ -368,9 +367,9 @@ where
     }
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<ThreadRng> {
     fn default() -> Self {
-        Self::new(OsRng, Config::default())
+        Self::new(rand::rng(), Config::default())
     }
 }
 

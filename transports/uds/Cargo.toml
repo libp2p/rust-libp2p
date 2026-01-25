@@ -17,7 +17,7 @@ tokio = { workspace = true, default-features = false, features = ["net"], option
 tracing = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.10"
+tempfile = "3.24"
 tokio = { workspace = true, features = ["rt", "macros", "io-util"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

@@ -11,21 +11,21 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-either = "1.11.0"
+either = "1.15.0"
 fnv = "1.0"
 futures = { workspace = true }
 futures-timer = "3.0.3"
-getrandom = { workspace = true, features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
+getrandom = { workspace = true, optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 web-time = { workspace = true }
 hashlink = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-swarm-derive = { workspace = true, optional = true }
 multistream-select = { workspace = true }
-rand = "0.8"
-smallvec = "1.13.2"
+rand = "0.9"
+smallvec = "1.15.1"
 tracing = { workspace = true }
-wasm-bindgen-futures = { version = "0.4.42", optional = true }
+wasm-bindgen-futures = { version = "0.4.58", optional = true }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 tokio = { workspace = true, features = ["rt"], optional = true }
@@ -36,7 +36,7 @@ tokio = ["dep:tokio"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 
 [dev-dependencies]
-either = "1.11.0"
+either = "1.15.0"
 futures = { workspace = true }
 libp2p-identify = { path = "../protocols/identify" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-identity = { workspace = true, features = ["ed25519"] }
@@ -47,8 +47,8 @@ libp2p-swarm-derive = { path = "../swarm-derive" }                  # Using `pat
 libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] }# Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
-criterion = { version = "0.5", features = ["async_tokio"] }
-trybuild = "1.0.95"
+criterion = { version = "0.7", features = ["async_tokio"] }
+trybuild = "1.0.114"
 tokio = { workspace = true, features = ["time", "rt", "macros", "rt-multi-thread"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

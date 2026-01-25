@@ -13,7 +13,7 @@ anyhow = "1"
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "tokio", "quic"] }
 libp2p-stream = { path = "../../protocols/stream", version = "0.4.0-alpha" }
-rand = "0.8"
+rand = "0.9"
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

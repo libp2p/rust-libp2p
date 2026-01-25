@@ -11,19 +11,19 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen"]
 metrics = ["prometheus-client"]
 
 [dependencies]
-async-channel = "2.3.1"
+async-channel = "2.5.0"
 asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
-bytes = "1.6"
-either = "1.11"
+bytes = "1.11"
+either = "1.15"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-timer = "3.0.2"
+futures-timer = "3.0.3"
 getrandom = { workspace = true }
 hashlink = { workspace = true }
 hex_fmt = "0.3.0"
@@ -33,10 +33,10 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rand = "0.8"
-regex = "1.10.5"
+rand = "0.9"
+regex = "1.12.2"
 serde = { version = "1", optional = true, features = ["derive"] }
-sha2 = "0.10.8"
+sha2 = "0.10.9"
 tracing = { workspace = true }
 
 # Metrics dependencies

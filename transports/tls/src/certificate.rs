@@ -247,7 +247,7 @@ fn make_libp2p_extension(
     let signature = {
         let mut msg = vec![];
         msg.extend(P2P_SIGNING_PREFIX);
-        msg.extend(certificate_keypair.public_key_der());
+        msg.extend(certificate_keypair.serialize_der());
 
         identity_keypair
             .sign(&msg)
@@ -307,7 +307,7 @@ impl P2pCertificate<'_> {
         let current_signature_scheme = self.signature_scheme()?;
         if signature_scheme != current_signature_scheme {
             // This certificate was signed with a different signature scheme
-            return Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey);
+            return Err(unsupported_signature_algorithm_for_public_key());
         }
 
         let verification_algorithm: &dyn signature::VerificationAlgorithm = match signature_scheme {
@@ -318,7 +318,7 @@ impl P2pCertificate<'_> {
             ECDSA_NISTP384_SHA384 => &signature::ECDSA_P384_SHA384_ASN1,
             ECDSA_NISTP521_SHA512 => {
                 // See https://github.com/briansmith/ring/issues/824
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm());
             }
             RSA_PSS_SHA256 => &signature::RSA_PSS_2048_8192_SHA256,
             RSA_PSS_SHA384 => &signature::RSA_PSS_2048_8192_SHA384,
@@ -326,14 +326,14 @@ impl P2pCertificate<'_> {
             ED25519 => &signature::ED25519,
             ED448 => {
                 // See https://github.com/briansmith/ring/issues/463
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm());
             }
             // Similarly, hash functions with an output length less than 256 bits
             // MUST NOT be used, due to the possibility of collision attacks.
             // In particular, MD5 and SHA1 MUST NOT be used.
-            RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            _ => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            RSA_PKCS1_SHA1 => return Err(unsupported_signature_algorithm()),
+            ECDSA_SHA1_Legacy => return Err(unsupported_signature_algorithm()),
+            _ => return Err(unsupported_signature_algorithm()),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
         let key = signature::UnparsedPublicKey::new(
@@ -446,7 +446,7 @@ impl P2pCertificate<'_> {
 
                 // Default hash algo is SHA-1, however:
                 // In particular, MD5 and SHA1 MUST NOT be used.
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm());
             }
         }
 
@@ -472,7 +472,7 @@ impl P2pCertificate<'_> {
             {
                 return Ok(ECDSA_NISTP521_SHA512);
             }
-            return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+            return Err(unsupported_signature_algorithm());
         }
 
         if signature_algorithm.algorithm == OID_SIG_ED25519 {
@@ -482,8 +482,26 @@ impl P2pCertificate<'_> {
             return Ok(ED448);
         }
 
-        Err(webpki::Error::UnsupportedSignatureAlgorithm)
+        Err(unsupported_signature_algorithm())
     }
+}
+
+fn unsupported_signature_algorithm() -> webpki::Error {
+    webpki::Error::UnsupportedSignatureAlgorithmContext(
+        webpki::UnsupportedSignatureAlgorithmContext {
+            signature_algorithm_id: Vec::new(),
+            supported_algorithms: Vec::new(),
+        },
+    )
+}
+
+fn unsupported_signature_algorithm_for_public_key() -> webpki::Error {
+    webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(
+        webpki::UnsupportedSignatureAlgorithmForPublicKeyContext {
+            signature_algorithm_id: Vec::new(),
+            public_key_algorithm_id: Vec::new(),
+        },
+    )
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "1"
-either = "1.11"
+either = "1.15"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }
 futures = { workspace = true }
@@ -22,9 +22,9 @@ futures-bounded = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
-rand = "0.8"
-sha2 = "0.10.8"
-smallvec = "1.13.2"
+rand = "0.9"
+sha2 = "0.10.9"
+smallvec = "1.15.1"
 uint = "0.10"
 futures-timer = "3.0.3"
 web-time = { workspace = true }

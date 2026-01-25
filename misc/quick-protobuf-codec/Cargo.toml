@@ -18,7 +18,7 @@ unsigned-varint = { workspace = true, features = ["std"] }
 quick-protobuf = "0.8"
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = "0.7.0"
 futures = { workspace = true }
 quickcheck = { workspace = true }
 

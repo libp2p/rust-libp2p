@@ -81,7 +81,7 @@ tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
 tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 webrtc-websys = ['dep:libp2p-webrtc-websys']
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
@@ -91,9 +91,9 @@ upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
 bytes = "1"
-either = "1.9.0"
+either = "1.15.0"
 futures = { workspace = true }
-futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
+futures-timer = "3.0.3" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = { workspace = true } # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
@@ -118,7 +118,7 @@ libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
-pin-project = "1.0.0"
+pin-project = "1.1.10"
 thiserror = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

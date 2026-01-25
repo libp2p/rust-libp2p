@@ -391,11 +391,11 @@ impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             outbound_workers: futures_bounded::FuturesMap::new(
-                STREAM_TIMEOUT,
+                || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             endpoint,

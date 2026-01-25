@@ -120,29 +120,29 @@ libp2p-yamux = { version = "0.47.0", path = "muxers/yamux" }
 # External dependencies
 asynchronous-codec = { version = "0.7.0" }
 env_logger = "0.11"
-futures = "0.3.30"
-futures-bounded = { version = "0.2.4" }
+futures = "0.3.31"
+futures-bounded = { version = "0.3.0", features = ["futures-timer"] }
 futures-rustls = { version = "0.26.0", default-features = false }
-getrandom = "0.2"
+getrandom = "0.3"
 if-watch = "3.2.1"
 hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
-multiaddr = "0.18.1"
-multihash = "0.19.1"
+multiaddr = "0.18.2"
+multihash = "0.19.3"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
 quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
-rcgen = "0.13"
-ring = "0.17.12"
+rcgen = "0.14"
+ring = "0.17.14"
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
-tokio = { version = "1.38", default-features = false }
-tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tokio = { version = "1.49", default-features = false }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
 unsigned-varint = { version = "0.8.0" }
 web-time = "1.1.0"
-hashlink = "0.10.0"
+hashlink = "0.11.0"
 
 [patch.crates-io]
 

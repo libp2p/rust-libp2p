@@ -12,7 +12,8 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
     NetworkBehaviour, ToSwarm,
 };
-use rand_core::{OsRng, RngCore};
+use rand::prelude::*;
+use rand::SeedableRng;
 
 use crate::v2::server::handler::{
     dial_back,
@@ -20,9 +21,9 @@ use crate::v2::server::handler::{
     Handler,
 };
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = StdRng>
 where
-    R: Clone + Send + RngCore + 'static,
+    R: Clone + Send + Rng + 'static,
 {
     dialing_dial_back: HashMap<ConnectionId, DialBackCommand>,
     pending_events: VecDeque<
@@ -34,15 +35,15 @@ where
     rng: R,
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<StdRng> {
     fn default() -> Self {
-        Self::new(OsRng)
+        Self::new(StdRng::from_rng(&mut rand::rng()))
     }
 }
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: Rng + Send + Clone + 'static,
 {
     pub fn new(rng: R) -> Self {
         Self {

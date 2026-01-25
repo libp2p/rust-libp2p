@@ -212,7 +212,7 @@ impl PnetConfig {
         tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut local_nonce);
+        rand::rng().fill_bytes(&mut local_nonce);
         socket
             .write_all(&local_nonce)
             .await

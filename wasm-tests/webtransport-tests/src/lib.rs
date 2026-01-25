@@ -2,7 +2,7 @@
 use std::{future::poll_fn, pin::Pin};
 
 use futures::{channel::oneshot, AsyncReadExt, AsyncWriteExt};
-use getrandom::getrandom;
+use rand::RngCore;
 use libp2p_core::{
     transport::{DialOpts, PortUse},
     Endpoint, StreamMuxer, Transport as _,
@@ -139,7 +139,7 @@ pub async fn allow_read_after_closing_writer() {
 
     // Write random data
     let mut send_buf = [0u8; 1024];
-    getrandom(&mut send_buf).unwrap();
+    rand::rng().fill_bytes(&mut send_buf);
     stream.write_all(&send_buf).await.unwrap();
 
     // Close writer by calling AsyncWrite::poll_close
@@ -417,7 +417,7 @@ async fn send_recv(stream: &mut Stream) {
     let mut recv_buf = [0u8; 1024];
 
     for _ in 0..30 {
-        getrandom(&mut send_buf).unwrap();
+        rand::rng().fill_bytes(&mut send_buf);
 
         stream.write_all(&send_buf).await.unwrap();
         stream.read_exact(&mut recv_buf).await.unwrap();

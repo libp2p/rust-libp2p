@@ -147,7 +147,7 @@ async fn redis_blpop(
     request: Json<BlpopRequest>,
 ) -> Result<Json<Vec<String>>, StatusCode> {
     let client = state.0.redis_client;
-    let mut conn = client.get_async_connection().await.map_err(|e| {
+    let mut conn = client.get_multiplexed_async_connection().await.map_err(|e| {
         tracing::warn!("Failed to connect to redis: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
