@@ -437,6 +437,14 @@ impl Config {
         self
     }
 
+    /// Sets the number of closest peers to return in response to a request.
+    ///
+    /// The default is `K_VALUE`.
+    pub fn set_num_closest_peers(&mut self, num_closest_peers: NonZeroUsize) -> &mut Self {
+        self.query_config.num_closest_peers = num_closest_peers;
+        self
+    }
+
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted
     /// in the routing table. This prevent cascading bootstrap requests when multiple peers are
     /// inserted into the routing table "at the same time". This also allows to wait a little
@@ -729,12 +737,13 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
-        self.get_closest_peers_inner(key, K_VALUE)
+        self.get_closest_peers_inner(key, self.queries.config().num_closest_peers)
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
     /// The expected responding peers is specified by `num_results`
-    /// Note that the result is capped after exceeds K_VALUE
+    /// Note that the result is capped to the configured `num_closest_peers` (defaults to
+    /// `K_VALUE`).
     ///
     /// The result of the query is delivered in a
     /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetClosestPeers`].
@@ -742,11 +751,13 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
-        // The inner code never expect higher than K_VALUE results to be returned.
-        // And removing such cap will be tricky,
+        // The inner code never expect higher than the configured num_closest_peers results to be
+        // returned. And removing such cap will be tricky,
         // since it would involve forging a new key and additional requests.
-        // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
-        let capped_num_results = std::cmp::min(num_results, K_VALUE);
+        // Hence bound to num_closest_peers here to set clear expectation and prevent unexpected
+        // behaviour.
+        let capped_num_results =
+            std::cmp::min(num_results, self.queries.config().num_closest_peers);
         self.get_closest_peers_inner(key, capped_num_results)
     }
 
@@ -784,10 +795,11 @@ where
         key: &'a kbucket::Key<K>,
         source: &'a PeerId,
     ) -> impl Iterator<Item = KadPeer> + 'a {
+        let num_closest_peers = self.queries.config().num_closest_peers;
         self.kbuckets
             .closest(key)
             .filter(move |e| e.node.key.preimage() != source)
-            .take(K_VALUE.get())
+            .take(num_closest_peers.get())
             .map(KadPeer::from)
     }
 

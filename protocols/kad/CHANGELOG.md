@@ -1,3 +1,9 @@
+## Unreleased
+
+- Make the number of closest peers returned in response to FIND_NODE requests configurable via `Config::set_num_closest_peers()`.
+  The default remains `K_VALUE` (20) for backward compatibility.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/6255)
+
 ## 0.49.0
 
 - Remove no longer constructed GetRecordError::QuorumFailed.
