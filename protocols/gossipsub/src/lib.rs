@@ -105,7 +105,7 @@ mod mcache;
 mod metrics;
 mod peer_score;
 mod protocol;
-mod rpc;
+mod queue;
 mod rpc_proto;
 mod subscription_filter;
 mod time_cache;
@@ -133,9 +133,6 @@ pub use self::{
     transform::{DataTransform, IdentityTransform},
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
-
-#[deprecated(note = "Will be removed from the public API.")]
-pub type Rpc = self::types::Rpc;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

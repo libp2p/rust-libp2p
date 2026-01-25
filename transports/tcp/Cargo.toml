@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.44.0"
+version = "0.44.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ futures-timer = "3.0"
 if-watch = { workspace = true }
 libc = "0.2.155"
 libp2p-core = { workspace = true }
-socket2 = { version = "0.5.7", features = ["all"] }
+socket2 = { version = "0.6.0", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 

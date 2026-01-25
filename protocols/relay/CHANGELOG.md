@@ -1,3 +1,8 @@
+## 0.21.1
+
+- reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
+  See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
+
 ## 0.21.0
 
 <!-- Update to libp2p-swarm v0.47.0 -->

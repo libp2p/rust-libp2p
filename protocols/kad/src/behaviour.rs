@@ -724,7 +724,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetClosestPeers`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -737,7 +737,7 @@ where
     /// Note that the result is capped after exceeds K_VALUE
     ///
     /// The result of the query is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetClosestPeers`].
     pub fn get_n_closest_peers<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -794,7 +794,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetRecord`].
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -823,7 +823,7 @@ where
         } else {
             QueryInfo::GetRecord {
                 key,
-                step: step.clone(),
+                step,
                 found_a_record: false,
                 cache_candidates: BTreeMap::new(),
             }
@@ -853,7 +853,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`Event::OutboundQueryProgressed{QueryResult::PutRecord}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::PutRecord`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -967,8 +967,8 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
-    /// with one such event per bootstrapping query.
+    /// reported via [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::Bootstrap`]
+    /// events, with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
@@ -1020,7 +1020,8 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::StartProviding}`].
+    /// reported via [`Event::OutboundQueryProgressed`] with `result`
+    /// [`QueryResult::StartProviding`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -1056,7 +1057,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::GetProviders}`].
+    /// reported via [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetProviders`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -1079,7 +1080,7 @@ where
             key: key.clone(),
             providers_found: providers.len(),
             step: if providers.is_empty() {
-                step.clone()
+                step
             } else {
                 step.next()
             },
@@ -1230,7 +1231,7 @@ where
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.peers.addresses.insert(peer.node_id, addrs);
             }
-            query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
+            query.on_success(source, others_iter.map(|kp| kp.node_id))
         }
     }
 
@@ -2367,7 +2368,7 @@ where
                 let peers = closer_peers.iter().chain(provider_peers.iter());
                 self.discovered(&query_id, &source, peers);
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetProviders {
                         ref key,
                         ref mut providers_found,
@@ -2387,7 +2388,7 @@ where
                                         providers,
                                     },
                                 )),
-                                step: step.clone(),
+                                step: *step,
                                 stats,
                             },
                         ));
@@ -2461,7 +2462,7 @@ where
                 query_id,
             } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
-                    let stats = query.stats().clone();
+                    let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
                         ref mut step,
@@ -2482,7 +2483,7 @@ where
                                     result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
                                         record,
                                     ))),
-                                    step: step.clone(),
+                                    step: *step,
                                     stats,
                                 },
                             ));
@@ -2768,7 +2769,7 @@ pub enum Event {
         result: QueryResult,
         /// Execution statistics from the query.
         stats: QueryStats,
-        /// Indicates which event this is, if therer are multiple responses for a single query.
+        /// Indicates which event this is, if there are multiple responses for a single query.
         step: ProgressStep,
     },
 
@@ -2830,7 +2831,7 @@ pub enum Event {
 }
 
 /// Information about progress events.
-#[derive(Debug, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct ProgressStep {
     /// The index into the event
     pub count: NonZeroUsize,
@@ -2951,12 +2952,6 @@ pub enum GetRecordError {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
-    #[error("the quorum failed; needed {quorum} peers")]
-    QuorumFailed {
-        key: record::Key,
-        records: Vec<PeerRecord>,
-        quorum: NonZeroUsize,
-    },
     #[error("the request timed out")]
     Timeout { key: record::Key },
 }
@@ -2965,7 +2960,6 @@ impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
     pub fn key(&self) -> &record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
@@ -2975,7 +2969,6 @@ impl GetRecordError {
     /// consuming the error.
     pub fn into_key(self) -> record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
