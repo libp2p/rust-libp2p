@@ -48,7 +48,10 @@ use libp2p_swarm::{
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
 use quick_protobuf::{MessageWrite, Writer};
-use rand::{rng, seq::SliceRandom};
+use rand::{
+    rng,
+    seq::{IteratorRandom, SliceRandom},
+};
 use web_time::{Instant, SystemTime};
 
 #[cfg(feature = "metrics")]
@@ -685,7 +688,7 @@ where
         let candidates = self.publish_peers(&topic_hash);
 
         #[cfg(feature = "partial_messages")]
-        let candidates: HashSet<_> = candidates
+        let candidates = candidates
             .into_iter()
             .filter(|peer_id| {
                 !self
@@ -752,7 +755,7 @@ where
     }
 
     /// Get all peers on the topic that have a sufficiently high score to allow publishing.
-    fn publish_peers(&self, topic_hash: &TopicHash) -> HashSet<PeerId> {
+    fn publish_peers(&self, topic_hash: &TopicHash) -> Vec<PeerId> {
         self.connected_peers
             .iter()
             .filter(|(_, peer)| peer.topics.contains(topic_hash))
@@ -771,13 +774,13 @@ where
     fn filter_publish_candidates(
         &mut self,
         topic_hash: &TopicHash,
-        candidates: HashSet<PeerId>,
-    ) -> HashSet<PeerId> {
+        candidates: Vec<PeerId>,
+    ) -> Vec<PeerId> {
         if self.config.flood_publish() {
             return candidates;
         }
         let mesh_n = self.config.mesh_n_for_topic(topic_hash);
-        let mut recipients = HashSet::new();
+        let mut recipients = Vec::new();
         // Always include explicit peers and floodsub peers from candidates
         recipients.extend(
             candidates
@@ -792,6 +795,8 @@ where
                 })
                 .copied(),
         );
+        // Check if we are subscribed to the topic, if so,
+        // select the required mesh peers.
         match self.mesh.get(topic_hash) {
             Some(mesh_peers) => {
                 // Filter mesh peers to those in candidates
@@ -803,21 +808,20 @@ where
 
                 let needed_extra_peers = mesh_n.saturating_sub(mesh_peers.len());
                 if needed_extra_peers > 0 {
-                    let remaining = candidates
+                    let extras = candidates
                         .iter()
-                        .filter(|peer_id| !mesh_peers.contains(peer_id))
-                        .filter_map(|peer_id| {
-                            self.connected_peers
-                                .get(peer_id)
-                                .map(|peer| (peer_id, peer))
-                        });
+                        .filter(|peer_id| {
+                            !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
+                        })
+                        .choose_multiple(&mut rng(), needed_extra_peers);
 
-                    let extras =
-                        get_random_peers(remaining, topic_hash, needed_extra_peers, |_, _| true);
+                    tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
                 }
                 recipients.extend(mesh_peers);
             }
+            // In case we are not subscribed to the topic,
+            // select the required peers from fanout
             None => {
                 tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
 
@@ -836,20 +840,15 @@ where
                 // If we have fanout peers add them to the map.
                 recipients.extend(fanout_peers);
                 if needed_extra_peers > 0 {
-                    let remaining = candidates
-                        .iter()
-                        .filter(|peer_id| !recipients.contains(*peer_id))
-                        .filter_map(|peer_id| {
-                            self.connected_peers
-                                .get(peer_id)
-                                .map(|peer| (peer_id, peer))
-                        });
+                    let new_peers = candidates
+                        .into_iter()
+                        .filter(|peer_id| !recipients.contains(peer_id))
+                        .choose_multiple(&mut rng(), needed_extra_peers);
 
-                    let new_peers =
-                        get_random_peers(remaining, topic_hash, needed_extra_peers, |_, _| true);
-
+                    tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
-                    self.fanout.insert(topic_hash.clone(), new_peers.clone());
+                    self.fanout
+                        .insert(topic_hash.clone(), new_peers.clone().into_iter().collect());
                     recipients.extend(new_peers);
                 }
                 self.fanout_last_pub
@@ -895,7 +894,7 @@ where
             topic_hash.clone(),
             partial_message,
             recipients,
-        );
+        )?;
 
         for action in publish_actions {
             match action {
@@ -2724,7 +2723,28 @@ where
         }
 
         #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension.heartbeat();
+        {
+            let actions = self.partial_messages_extension.heartbeat(
+                &self.mesh,
+                &self.fanout,
+                self.config.gossip_lazy(),
+            );
+            for action in actions {
+                match action {
+                    PublishAction::SendMessage { peer_id, rpc } => {
+                        self.send_message(peer_id, rpc);
+                    }
+                    PublishAction::PenalizePeer {
+                        peer_id,
+                        topic_hash,
+                    } => {
+                        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                            peer_score.reject_invalid_partial(peer_id, &topic_hash);
+                        }
+                    }
+                }
+            }
+        }
 
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
@@ -3388,9 +3408,6 @@ where
             );
         }
 
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension.peer_connected(peer_id);
-
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
         Ok(Handler::new(self.config.protocol_config(), queue))
@@ -3433,9 +3450,6 @@ where
                 }),
             );
         }
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension.peer_connected(peer_id);
 
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
