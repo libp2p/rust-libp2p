@@ -183,7 +183,7 @@ enum PublishConfig {
 
 /// A strictly linearly increasing sequence number.
 ///
-/// We start from the current time as unix timestamp in milliseconds.
+/// We start from the current time as unix timestamp in nanoseconds.
 #[derive(Debug)]
 struct SequenceNumber(u64);
 
@@ -194,7 +194,10 @@ impl SequenceNumber {
             .expect("time to be linear")
             .as_nanos();
 
-        Self(unix_timestamp as u64)
+        Self(
+            u64::try_from(unix_timestamp)
+                .expect("timestamp in nanos since UNIX_EPOCH should fit in u64"),
+        )
     }
 
     fn next(&mut self) -> u64 {
@@ -511,8 +514,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked. Returns [`Ok(false)`](Ok) if we were
+    /// already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
@@ -1366,8 +1369,6 @@ where
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-        // Needs to be here to comply with the borrow checker.
-        let is_outbound = connected_peer.outbound;
 
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
@@ -1419,8 +1420,6 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
-                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
-                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
@@ -1455,10 +1454,9 @@ where
                     }
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
-                    // or if it is an outbound peer
                     let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
 
-                    if peers.len() >= mesh_n_high && !is_outbound {
+                    if peers.len() >= mesh_n_high {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -2140,11 +2138,14 @@ where
             let mesh_n_high = self.config.mesh_n_high_for_topic(topic_hash);
             let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic_hash);
 
-            // drop all peers with negative score, without PX
-            // if there is at some point a stable retain method for BTreeSet the following can be
-            // written more efficiently with retain.
-            let mut to_remove_peers = Vec::new();
-            for peer_id in peers.iter() {
+            #[cfg(feature = "metrics")]
+            let mut removed_peers_count = 0;
+
+            // Drop all peers with negative score, without PX
+            //
+            // TODO: Use `extract_if` once MSRV is raised to a version that includes its
+            // stabilization.
+            peers.retain(|peer_id| {
                 let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
                 // Record the score per mesh
@@ -2164,17 +2165,20 @@ where
                     let current_topic = to_prune.entry(*peer_id).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                     no_px.insert(*peer_id);
-                    to_remove_peers.push(*peer_id);
+
+                    #[cfg(feature = "metrics")]
+                    {
+                        removed_peers_count += 1;
+                    }
+
+                    return false;
                 }
-            }
+                true
+            });
 
             #[cfg(feature = "metrics")]
             if let Some(m) = self.metrics.as_mut() {
-                m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
-            }
-
-            for peer_id in to_remove_peers {
-                peers.remove(&peer_id);
+                m.peers_removed(topic_hash, Churn::BadScore, removed_peers_count)
             }
 
             // too little peers - add some
@@ -2208,7 +2212,7 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > mesh_n_high {
+            if peers.len() >= mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",
@@ -2228,7 +2232,9 @@ where
                     score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
                 // shuffle everything except the last retain_scores many peers (the best ones)
-                shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                if peers.len() > self.config.retain_scores() {
+                    shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
+                }
 
                 // count total number of outbound peers
                 let mut outbound = shuffled
@@ -3134,6 +3140,7 @@ where
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
             connected_peer.messages.clone(),
         ))
@@ -3163,6 +3170,7 @@ where
         // This clones a reference to the Queue so any new handlers reference the same underlying
         // queue. No data is actually cloned here.
         Ok(Handler::new(
+            peer_id,
             self.config.protocol_config(),
             connected_peer.messages.clone(),
         ))
@@ -3222,6 +3230,7 @@ where
                 rpc,
                 invalid_messages,
             } => {
+                tracing::debug!(peer=%propagation_source, message=?rpc, "Received gossipsub message");
                 // Handle the gossipsub RPC
 
                 // Handle subscriptions

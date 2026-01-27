@@ -3,6 +3,11 @@
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 
+## 0.56.1
+
+- Fix `metrics` delegation to gossipsub protocol.
+  See [PR 6180](https://github.com/libp2p/rust-libp2p/pull/6180)
+
 ## 0.56.0
 
 - Remove `async-std` support.
