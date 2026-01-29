@@ -103,6 +103,23 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "bluetooth",
+        feature = "noise",
+        feature = "yamux",
+    ))]
+    fn bluetooth() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_bluetooth(libp2p_noise::Config::new, libp2p_yamux::Config::default)
+            .unwrap()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
     #[cfg(all(feature = "tokio", feature = "quic"))]
     fn quic() {
         let _ = SwarmBuilder::with_new_identity()
