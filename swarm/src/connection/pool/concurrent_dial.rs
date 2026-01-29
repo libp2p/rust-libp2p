@@ -19,22 +19,28 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
+    collections::HashMap,
     num::NonZeroU8,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use futures::{
     future::{BoxFuture, Future},
     ready,
     stream::{FuturesUnordered, StreamExt},
+    FutureExt,
 };
+use futures_timer::Delay;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_identity::PeerId;
 
+use super::DialRanker;
 use crate::{transport::TransportError, Multiaddr};
 
-type Dial = BoxFuture<
+pub(crate) type Dial = BoxFuture<
     'static,
     (
         Multiaddr,
@@ -43,29 +49,56 @@ type Dial = BoxFuture<
 >;
 
 pub(crate) struct ConcurrentDial {
+    concurrency_factor: NonZeroU8,
     dials: FuturesUnordered<Dial>,
-    pending_dials: Box<dyn Iterator<Item = Dial> + Send>,
+    pending_dials: Box<dyn Iterator<Item = (Multiaddr, Option<Duration>, Dial)> + Send>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
 }
 
 impl Unpin for ConcurrentDial {}
 
 impl ConcurrentDial {
-    pub(crate) fn new(pending_dials: Vec<Dial>, concurrency_factor: NonZeroU8) -> Self {
-        let mut pending_dials = pending_dials.into_iter();
-
+    pub(crate) fn new(
+        pending_dials: Vec<(Multiaddr, Dial)>,
+        concurrency_factor: NonZeroU8,
+        dial_ranker: Option<Arc<DialRanker>>,
+    ) -> Self {
         let dials = FuturesUnordered::new();
-        for dial in pending_dials.by_ref() {
-            dials.push(dial);
-            if dials.len() == concurrency_factor.get() as usize {
-                break;
-            }
-        }
-
+        let pending_dials: Vec<_> = if let Some(dial_ranker) = dial_ranker {
+            let addresses = pending_dials.iter().map(|(k, _)| k.clone()).collect();
+            let mut dials: HashMap<Multiaddr, Dial> = HashMap::from_iter(pending_dials);
+            dial_ranker(addresses)
+                .into_iter()
+                .filter_map(|(addr, delay)| dials.remove(&addr).map(|dial| (addr, delay, dial)))
+                .collect()
+        } else {
+            pending_dials
+                .into_iter()
+                .map(|(addr, dial)| (addr, None, dial))
+                .collect()
+        };
         Self {
+            concurrency_factor,
             dials,
             errors: Default::default(),
-            pending_dials: Box::new(pending_dials),
+            pending_dials: Box::new(pending_dials.into_iter()),
+        }
+    }
+
+    fn dial_pending(&mut self) -> bool {
+        if let Some((_, delay, dial)) = self.pending_dials.next() {
+            self.dials.push(
+                async move {
+                    if let Some(delay) = delay {
+                        Delay::new(delay).await;
+                    }
+                    dial.await
+                }
+                .boxed(),
+            );
+            true
+        } else {
+            false
         }
     }
 }
@@ -92,12 +125,16 @@ impl Future for ConcurrentDial {
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, e));
-                    if let Some(dial) = self.pending_dials.next() {
-                        self.dials.push(dial)
-                    }
+                    self.dial_pending();
                 }
                 None => {
-                    return Poll::Ready(Err(std::mem::take(&mut self.errors)));
+                    while self.dials.len() < self.concurrency_factor.get() as usize
+                        && self.dial_pending()
+                    {}
+
+                    if self.dials.is_empty() {
+                        return Poll::Ready(Err(std::mem::take(&mut self.errors)));
+                    }
                 }
             }
         }
