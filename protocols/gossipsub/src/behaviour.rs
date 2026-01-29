@@ -2728,6 +2728,7 @@ where
                 &self.mesh,
                 &self.fanout,
                 self.config.gossip_lazy(),
+                self.config.gossip_factor(),
             );
             for action in actions {
                 match action {

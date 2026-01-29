@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
+    cmp::max,
     collections::{BTreeSet, HashMap},
     fmt::Debug,
 };
@@ -167,6 +168,7 @@ impl State {
         mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
         fanout: &HashMap<TopicHash, BTreeSet<PeerId>>,
         gossip_lazy: usize,
+        gossip_factor: f64,
     ) -> Vec<PublishAction> {
         for peer_state in self.peer_subscriptions.values_mut() {
             for topics in peer_state.values_mut() {
@@ -196,7 +198,7 @@ impl State {
                 continue;
             };
 
-            let to_msg_peers = subscription_peers
+            let eligible_peers = subscription_peers
                 .iter_mut()
                 .filter(|(peer_id, peer_subscription)| {
                     !non_gossip_peers.contains(peer_id)
@@ -205,7 +207,14 @@ impl State {
                             .map(|options| options.supports_partial)
                             .unwrap_or_default()
                 })
-                .choose_multiple(&mut rand::rng(), gossip_lazy);
+                .collect::<Vec<_>>();
+            let gossip_amp = max(
+                gossip_lazy,
+                (gossip_factor * eligible_peers.len() as f64) as usize,
+            );
+            let to_msg_peers = eligible_peers
+                .into_iter()
+                .choose_multiple(&mut rand::rng(), gossip_amp);
 
             for (peer_id, remote_subscription) in to_msg_peers {
                 for (group_id, partial_message) in subscription.partial_messages.iter() {
