@@ -238,7 +238,7 @@ impl From<Response> for proto::Message {
 
 impl DialDataRequest {
     pub(crate) fn from_rng<R: rand_core::RngCore>(addr_idx: usize, mut rng: R) -> Self {
-        let num_bytes = rng.gen_range(DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND);
+        let num_bytes = rng.random_range(DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND);
         Self {
             addr_idx,
             num_bytes,

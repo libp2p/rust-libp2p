@@ -11,13 +11,13 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-trait = "0.1.80"
+async-trait = "0.1.89"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.3"
+parking_lot = "0.12.5"
 hickory-resolver = { workspace = true, features = ["system-config"] }
-smallvec = "1.13.2"
+smallvec = "1.15.1"
 tracing = { workspace = true }
 
 [dev-dependencies]

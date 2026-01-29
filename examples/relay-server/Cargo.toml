@@ -9,8 +9,8 @@ license = "MIT"
 release = false
 
 [dependencies]
-clap = { version = "4.5.6", features = ["derive"] }
-tokio = { version = "1.37.0", features = ["full"] }
+clap = { version = "4.5.54", features = ["derive"] }
+tokio = { version = "1.49.0", features = ["full"] }
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

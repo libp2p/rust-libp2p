@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-either = "1.12.0"
+either = "1.15.0"
 futures = { workspace = true }
 futures-timer = "3"
 futures-bounded = { workspace = true }
@@ -23,7 +23,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rand = "0.8.4"
+rand = "0.9.2"
 static_assertions = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }

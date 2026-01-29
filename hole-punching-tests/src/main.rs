@@ -277,7 +277,7 @@ fn quic_addr(addr: IpAddr) -> Multiaddr {
 }
 
 struct RedisClient {
-    inner: redis::aio::Connection,
+    inner: redis::aio::MultiplexedConnection,
 }
 
 impl RedisClient {
@@ -285,7 +285,7 @@ impl RedisClient {
         let client = redis::Client::open(format!("redis://{host}:{port}/"))
             .context("Bad redis server URL")?;
         let connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .context("Failed to connect to redis server")?;
 

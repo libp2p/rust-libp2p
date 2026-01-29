@@ -14,15 +14,15 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = { workspace = true }
 cuckoofilter = "0.5.0"
 fnv = "1.0"
-bytes = "1.6"
+bytes = "1.11"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rand = "0.8"
-smallvec = "1.13.2"
+rand = "0.9"
+smallvec = "1.15.1"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

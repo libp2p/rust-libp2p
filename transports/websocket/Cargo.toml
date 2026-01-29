@@ -12,18 +12,18 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures-rustls = { workspace = true, features = ["ring"] }
-either = "1.12.0"
+either = "1.15.0"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.3"
-pin-project-lite = "0.2.14"
+parking_lot = "0.12.5"
+pin-project-lite = "0.2.16"
 rw-stream-sink = { workspace = true }
-soketto = "0.8.0"
+soketto = "0.8.1"
 tracing = { workspace = true }
 thiserror = { workspace = true }
 url = "2.5"
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["tokio"] }
