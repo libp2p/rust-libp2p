@@ -2805,7 +2805,7 @@ where
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
                     signature_bytes.extend_from_slice(&buf);
-                    Some(keypair.sign(&signature_bytes)?)
+                    Some(keypair.sign(&signature_bytes).unwrap())
                 };
 
                 Ok(RawMessage {

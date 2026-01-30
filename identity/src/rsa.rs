@@ -75,12 +75,12 @@ impl Keypair {
     }
 
     /// Sign a message with this keypair.
-    pub fn sign(&self, data: &[u8]) -> Result<Vec<u8>, SigningError> {
+    pub fn sign(&self, data: &[u8]) -> Vec<u8> {
         let mut signature = vec![0; self.0.public().modulus_len()];
         let rng = SystemRandom::new();
         match self.0.sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature) {
-            Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA").source(e)),
+            Ok(()) => signature,
+            Err(_) => unreachable!("length of pubkey remain unchanged with immutability"),
         }
     }
 }
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn rsa_sign_verify() {
         fn prop(SomeKeypair(kp): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
-            kp.sign(&msg).map(|s| kp.public().verify(&msg, &s))
+            Ok(kp.public().verify(&msg, &kp.sign(&msg)))
         }
         QuickCheck::new()
             .tests(10)
