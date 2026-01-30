@@ -879,13 +879,13 @@ fn get_record() {
 
 #[test]
 fn get_record_many() {
-    // TODO: Randomise
-    let num_nodes = 12;
-    let mut swarms = build_connected_nodes(num_nodes, 3)
-        .into_iter()
-        .map(|(_addr, swarm)| swarm)
-        .collect::<Vec<_>>();
-    let num_results = 10;
+    fn run(rng: &mut impl Rng) {
+        let num_nodes = rng.gen_range(3..20);
+        let mut swarms = build_connected_nodes(num_nodes, 3)
+            .into_iter()
+            .map(|(_addr, swarm)| swarm)
+            .collect::<Vec<_>>();
+        let num_results = rng.gen_range(1..num_nodes);
 
     let record = Record::new(random_multihash(), vec![4, 5, 6]);
 
@@ -931,6 +931,12 @@ fn get_record_many() {
         }
         Poll::Pending
     }))
+    }
+
+    let mut rng = thread_rng();
+    for _ in 0..10 {
+        run(&mut rng)
+    }
 }
 
 /// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
