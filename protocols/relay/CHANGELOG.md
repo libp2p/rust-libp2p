@@ -1,5 +1,9 @@
-## 0.21.1
+## 0.22.0
 
+- Automatically configure HOP protocol advertisement based on external addresses, with the ability to override this
+  functionality using `Behaviour::set_status` to explicitly set `Status::{Enable,Disable}` to enable or disable
+  protocol advertisement.
+  See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
   See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
 
