@@ -76,7 +76,7 @@ edition = "2021"
 [workspace.dependencies]
 libp2p = { version = "0.56.1", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.6.0", path = "misc/allow-block-list" }
-libp2p-autonat = { version = "0.15.0", path = "protocols/autonat" }
+libp2p-autonat = { version = "0.15.1", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.6.0", path = "misc/connection-limits" }
 libp2p-core = { version = "0.43.2", path = "core" }
 libp2p-dcutr = { version = "0.14.1", path = "protocols/dcutr" }

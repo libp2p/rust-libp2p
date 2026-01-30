@@ -12,7 +12,8 @@ use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
-    ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    ConnectionId, ExternalAddrExpired, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate,
+    NotifyHandler, ToSwarm,
 };
 use rand::prelude::*;
 use rand_core::OsRng;
@@ -108,8 +109,20 @@ where
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.address_candidates
                     .entry(addr.clone())
-                    .or_default()
-                    .score += 1;
+                    .and_modify(|info| info.score = info.score.saturating_add(1))
+                    .or_insert(AddressInfo {
+                        score: 1,
+                        status: TestStatus::Untested,
+                    });
+            }
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
+                self.address_candidates
+                        .entry(addr.clone())
+                        .and_modify(|info| {
+                            info.status = TestStatus::Untested;
+                            info.score = info.score.saturating_sub(1);
+                            tracing::debug!(%addr, "External address expired, resetting for re-testing");
+                        });
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -439,4 +452,184 @@ enum TestStatus {
     Pending(Nonce),
     Failed,
     Received(Nonce),
+}
+
+#[cfg(test)]
+mod tests {
+    use libp2p_swarm::{ExternalAddrExpired, FromSwarm};
+    use rand::{rngs::StdRng, SeedableRng};
+
+    use super::*;
+
+    fn test_multiaddr() -> Multiaddr {
+        "/ip4/1.2.3.4/tcp/1234".parse().unwrap()
+    }
+
+    fn test_multiaddr_2() -> Multiaddr {
+        "/ip4/5.6.7.8/tcp/5678".parse().unwrap()
+    }
+
+    #[test]
+    fn expired_address_resets_status_to_untested() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        // Simulate address being reported and confirmed
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
+
+        // Manually set to confirmed state
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Received(12345);
+
+        // Now expire it
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        // Verify status is reset but entry still exists
+        let info = behaviour.address_candidates.get(&addr).unwrap();
+        assert!(matches!(info.status, TestStatus::Untested));
+    }
+
+    #[test]
+    fn expired_address_decrements_score() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        // Report address multiple times to build up score
+        for _ in 0..5 {
+            behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                NewExternalAddrCandidate { addr: &addr },
+            ));
+        }
+
+        assert_eq!(behaviour.address_candidates.get(&addr).unwrap().score, 5);
+
+        // Expire the address
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        // Score should be decremented
+        assert_eq!(behaviour.address_candidates.get(&addr).unwrap().score, 4);
+    }
+
+    #[test]
+    fn expired_nonexistent_address_does_nothing() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        // Expire an address that was never reported
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        // Should not create an entry
+        assert!(!behaviour.address_candidates.contains_key(&addr));
+    }
+
+    #[test]
+    fn expired_address_can_be_retested() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        // Report and set to received
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Received(12345);
+
+        // Expire it
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        // Should now appear in untested candidates
+        let untested: Vec<_> = behaviour.untested_candidates().collect();
+        assert!(untested.contains(&addr));
+    }
+
+    #[test]
+    fn expired_address_preserves_high_score_for_priority() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr1 = test_multiaddr();
+        let addr2 = test_multiaddr_2();
+
+        // addr1 reported 10 times (high confidence)
+        for _ in 0..10 {
+            behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                NewExternalAddrCandidate { addr: &addr1 },
+            ));
+        }
+
+        // addr2 reported once (low confidence)
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr2 },
+        ));
+
+        // Mark both as received
+        behaviour.address_candidates.get_mut(&addr1).unwrap().status = TestStatus::Received(11111);
+        behaviour.address_candidates.get_mut(&addr2).unwrap().status = TestStatus::Received(22222);
+
+        // Expire both
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr1,
+        }));
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr2,
+        }));
+
+        // addr1 should still have higher score and be tested first
+        let untested: Vec<_> = behaviour.untested_candidates().collect();
+        assert_eq!(untested[0], addr1); // Higher score comes first
+
+        let score1 = behaviour.address_candidates.get(&addr1).unwrap().score;
+        let score2 = behaviour.address_candidates.get(&addr2).unwrap().score;
+        assert!(score1 > score2);
+    }
+
+    #[test]
+    fn expired_address_resets_from_pending_state() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
+
+        // Set to pending (currently being tested)
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Pending(54321);
+
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        assert!(matches!(
+            behaviour.address_candidates.get(&addr).unwrap().status,
+            TestStatus::Untested
+        ));
+    }
+
+    #[test]
+    fn expired_address_resets_from_failed_state() {
+        let mut behaviour = Behaviour::new(StdRng::seed_from_u64(0), Config::default());
+        let addr = test_multiaddr();
+
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
+
+        // Set to failed
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Failed;
+
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &addr,
+        }));
+
+        assert!(matches!(
+            behaviour.address_candidates.get(&addr).unwrap().status,
+            TestStatus::Untested
+        ));
+    }
 }

@@ -1,3 +1,8 @@
+## 0.15.1
+
+- Fix issue where AutoNATv2 client was not resetting address status on `FromSwarm::ExternalAddrExpired` event.
+  See [PR 6207](https://github.com/libp2p/rust-libp2p/pull/6207).
+
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.
