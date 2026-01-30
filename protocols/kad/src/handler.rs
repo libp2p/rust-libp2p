@@ -277,6 +277,11 @@ pub enum HandlerEvent {
         /// The user data passed to the `PutValue`.
         query_id: QueryId,
     },
+    /// Notification that a one-way request (e.g., AddProvider) has been sent.
+    AddProviderSent {
+        /// The user data passed to the request.
+        query_id: QueryId,
+    },
 }
 
 /// Error that can happen when requesting an RPC query.
@@ -716,68 +721,69 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
-        loop {
-            match &mut self.protocol_status {
-                Some(status) if !status.reported => {
-                    status.reported = true;
-                    let event = if status.supported {
-                        HandlerEvent::ProtocolConfirmed {
-                            endpoint: self.endpoint.clone(),
-                        }
-                    } else {
-                        HandlerEvent::ProtocolNotSupported {
-                            endpoint: self.endpoint.clone(),
-                        }
-                    };
+        match &mut self.protocol_status {
+            Some(status) if !status.reported => {
+                status.reported = true;
+                let event = if status.supported {
+                    HandlerEvent::ProtocolConfirmed {
+                        endpoint: self.endpoint.clone(),
+                    }
+                } else {
+                    HandlerEvent::ProtocolNotSupported {
+                        endpoint: self.endpoint.clone(),
+                    }
+                };
 
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
-                }
-                _ => {}
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
             }
-
-            match self.outbound_substreams.poll_unpin(cx) {
-                Poll::Ready((Ok(Ok(Some(response))), query_id)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        process_kad_response(response, query_id),
-                    ))
-                }
-                Poll::Ready((Ok(Ok(None)), _)) => {
-                    continue;
-                }
-                Poll::Ready((Ok(Err(e)), query_id)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        HandlerEvent::QueryError {
-                            error: HandlerQueryErr::Io(e),
-                            query_id,
-                        },
-                    ))
-                }
-                Poll::Ready((Err(_timeout), query_id)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        HandlerEvent::QueryError {
-                            error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
-                            query_id,
-                        },
-                    ))
-                }
-                Poll::Pending => {}
-            }
-
-            if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
-                return Poll::Ready(event);
-            }
-
-            if self.outbound_substreams.len() < MAX_NUM_STREAMS {
-                if let Some((msg, id)) = self.pending_messages.pop_front() {
-                    self.queue_new_stream(id, msg);
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
-                    });
-                }
-            }
-
-            return Poll::Pending;
+            _ => {}
         }
+
+        match self.outbound_substreams.poll_unpin(cx) {
+            Poll::Ready((Ok(Ok(Some(response))), query_id)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    process_kad_response(response, query_id),
+                ))
+            }
+            Poll::Ready((Ok(Ok(None)), query_id)) => {
+                // One-way request successfully sent (e.g., AddProvider).
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    HandlerEvent::AddProviderSent { query_id },
+                ));
+            }
+            Poll::Ready((Ok(Err(e)), query_id)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    HandlerEvent::QueryError {
+                        error: HandlerQueryErr::Io(e),
+                        query_id,
+                    },
+                ))
+            }
+            Poll::Ready((Err(_timeout), query_id)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    HandlerEvent::QueryError {
+                        error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
+                        query_id,
+                    },
+                ))
+            }
+            Poll::Pending => {}
+        }
+
+        if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
+            return Poll::Ready(event);
+        }
+
+        if self.outbound_substreams.len() < MAX_NUM_STREAMS {
+            if let Some((msg, id)) = self.pending_messages.pop_front() {
+                self.queue_new_stream(id, msg);
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
+                });
+            }
+        }
+
+        return Poll::Pending;
     }
 
     fn on_connection_event(
