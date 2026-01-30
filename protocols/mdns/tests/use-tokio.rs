@@ -115,18 +115,19 @@ async fn create_swarm(config: Config) -> Swarm<Behaviour> {
     });
 
     // Manually listen on all interfaces because mDNS only works for non-loopback addresses.
-    let expected_listener_id = swarm
+    let expected_listener_id_ip4 = swarm
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
+    let expected_listener_id_ip6 = swarm.listen_on("/ip6/::/tcp/0".parse().unwrap()).unwrap();
 
-    swarm
-        .wait(|e| match e {
-            SwarmEvent::NewListenAddr { listener_id, .. } => {
-                (listener_id == expected_listener_id).then_some(())
-            }
-            _ => None,
-        })
-        .await;
+    let mut listen_both = false;
+
+    while !listen_both {
+        if let SwarmEvent::NewListenAddr { listener_id, .. } = swarm.next_swarm_event().await {
+            listen_both |= listener_id == expected_listener_id_ip4;
+            listen_both |= listener_id == expected_listener_id_ip6;
+        }
+    }
 
     swarm
 }
