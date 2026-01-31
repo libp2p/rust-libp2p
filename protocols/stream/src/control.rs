@@ -8,7 +8,7 @@ use std::{
 
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt as _, StreamExt as _,
+    StreamExt as _,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{Stream, StreamProtocol};
@@ -48,14 +48,15 @@ impl Control {
     ) -> Result<Stream, OpenStreamError> {
         tracing::debug!(%peer, "Requesting new stream");
 
-        let mut new_stream_sender = Shared::lock(&self.shared).sender(peer);
-
         let (sender, receiver) = oneshot::channel();
 
-        new_stream_sender
-            .send(NewStream { protocol, sender })
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
+        Shared::send_new_stream(
+            &self.shared,
+            peer,
+            NewStream { protocol, sender },
+        )
+        .await
+        .map_err(OpenStreamError::Io)?;
 
         let stream = receiver
             .await
