@@ -1,3 +1,7 @@
+## 0.13.1
+- Improving the way opened lister sockets are re-used when dialing.
+  See [PR 6224](https://github.com/libp2p/rust-libp2p/pull/6224)
+
 ## 0.13.0
 
 - Remove `async-std` support.
