@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    fmt::{Debug, Display, Formatter},
+    fmt::Debug,
     task::{Context, Poll},
     time::Duration,
 };
@@ -239,7 +239,7 @@ where
             tested_addr,
             bytes_sent,
             server: peer_id,
-            result: result.map_err(|e| Error { inner: e }),
+            result,
         }));
     }
 
@@ -374,22 +374,6 @@ impl Default for Behaviour<OsRng> {
     }
 }
 
-pub struct Error {
-    pub(crate) inner: dial_request::DialBackError,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.inner, f)
-    }
-}
-
-impl Debug for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.inner, f)
-    }
-}
-
 #[derive(Debug)]
 pub struct Event {
     /// The address that was selected for testing.
@@ -402,7 +386,7 @@ pub struct Event {
     pub server: PeerId,
     /// The result of the test. If the test was successful, this is `Ok(())`.
     /// Otherwise it's an error.
-    pub result: Result<(), Error>,
+    pub result: Result<(), dial_request::DialBackError>,
 }
 
 struct ConnectionInfo {
