@@ -2432,7 +2432,7 @@ checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
 
 [[package]]
 name = "libp2p"
-version = "0.56.1"
+version = "0.57.0"
 dependencies = [
  "bytes",
  "either",
@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.47.1"
+version = "0.48.0"
 dependencies = [
  "criterion",
  "either",
@@ -3250,7 +3250,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bytes",
  "futures",

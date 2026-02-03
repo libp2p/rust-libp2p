@@ -11,7 +11,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
 metrics = ["prometheus-client"]
 
 [dependencies]
@@ -23,8 +22,7 @@ bytes = "1.6"
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-timer = "3.0.2"
-getrandom = { workspace = true }
+futures-timer = { workspace = true}
 hashlink = { workspace = true }
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
@@ -48,6 +46,10 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
+
+[target.'cfg(target_family="wasm")'.dependencies]
+futures-timer = { workspace = true, features = ["wasm-bindgen"] }
+getrandom = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

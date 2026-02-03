@@ -1,3 +1,8 @@
+## 0.48.0
+
+- Remove `wasm-bindgen` feature and make `wasm` support implicit.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.
