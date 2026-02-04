@@ -2729,6 +2729,7 @@ where
                 &self.fanout,
                 self.config.gossip_lazy(),
                 self.config.gossip_factor(),
+                self.config.max_metadata_length(),
             );
             for action in actions {
                 match action {

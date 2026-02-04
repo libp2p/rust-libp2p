@@ -169,6 +169,7 @@ impl State {
         fanout: &HashMap<TopicHash, BTreeSet<PeerId>>,
         gossip_lazy: usize,
         gossip_factor: f64,
+        max_metadata_length: usize,
     ) -> Vec<PublishAction> {
         for peer_state in self.peer_subscriptions.values_mut() {
             for topics in peer_state.values_mut() {
@@ -217,7 +218,11 @@ impl State {
                 .choose_multiple(&mut rand::rng(), gossip_amp);
 
             for (peer_id, remote_subscription) in to_msg_peers {
+                let mut num_messages = 0;
                 for (group_id, partial_message) in subscription.partial_messages.iter() {
+                    if num_messages == max_metadata_length {
+                        break;
+                    }
                     let remote_partial = remote_subscription
                         .partial_messages
                         .entry(group_id.clone())
@@ -260,6 +265,7 @@ impl State {
                             metadata: Some(partial_message.content.metadata().clone()),
                         }),
                     });
+                    num_messages += 1;
                 }
             }
         }
