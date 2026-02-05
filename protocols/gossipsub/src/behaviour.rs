@@ -3655,38 +3655,42 @@ where
                         tracing::debug!("Peer below threshold, ignoring partial message");
                     }
 
-                    let result = self
+                    let actions = self
                         .partial_messages_extension
                         .handle_received(propagation_source, partial_message);
-                    match result {
-                        ReceivedAction::Publish(PublishAction::SendMessage { peer_id, rpc }) => {
-                            self.send_message(peer_id, rpc);
-                        }
-                        partial_messages::ReceivedAction::EmitEvent {
-                            topic_hash,
-                            peer_id,
-                            group_id,
-                            message,
-                            metadata,
-                        } => {
-                            self.events
-                                .push_back(ToSwarm::GenerateEvent(Event::Partial {
-                                    topic_hash,
-                                    peer_id,
-                                    group_id,
-                                    message,
-                                    metadata,
-                                }));
-                        }
-                        ReceivedAction::Publish(PublishAction::PenalizePeer {
-                            peer_id,
-                            topic_hash,
-                        }) => {
-                            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                                peer_score.reject_invalid_partial(peer_id, &topic_hash);
+                    for action in actions {
+                        match action {
+                            ReceivedAction::Publish(PublishAction::SendMessage {
+                                peer_id,
+                                rpc,
+                            }) => {
+                                self.send_message(peer_id, rpc);
+                            }
+                            partial_messages::ReceivedAction::EmitEvent {
+                                topic_hash,
+                                peer_id,
+                                group_id,
+                                message,
+                                metadata,
+                            } => {
+                                self.events
+                                    .push_back(ToSwarm::GenerateEvent(Event::Partial {
+                                        topic_hash,
+                                        peer_id,
+                                        group_id,
+                                        message,
+                                        metadata,
+                                    }));
+                            }
+                            ReceivedAction::Publish(PublishAction::PenalizePeer {
+                                peer_id,
+                                topic_hash,
+                            }) => {
+                                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                                    peer_score.reject_invalid_partial(peer_id, &topic_hash);
+                                }
                             }
                         }
-                        partial_messages::ReceivedAction::None => {}
                     }
                 }
             }

@@ -223,6 +223,7 @@ impl State {
                     if num_messages == max_metadata_length {
                         break;
                     }
+
                     let remote_partial = remote_subscription
                         .partial_messages
                         .entry(group_id.clone())
@@ -277,7 +278,7 @@ impl State {
         &mut self,
         peer_id: PeerId,
         message: PartialMessage,
-    ) -> ReceivedAction {
+    ) -> Vec<ReceivedAction> {
         // If we don't have any peer yet subscribed to this topic, insert it.
         // We might have received a message from a peer not subscribed to a topic.
         let topic = self
@@ -319,35 +320,35 @@ impl State {
                             err=%err,
                             "Error updating Partial metadata"
                         );
-                        return ReceivedAction::Publish(PublishAction::PenalizePeer {
+                        return vec![ReceivedAction::Publish(PublishAction::PenalizePeer {
                             peer_id,
                             topic_hash: message.topic_hash.clone(),
-                        });
+                        })];
                     }
                 }
             }
             (Some(_), None) | (None, None) => false,
         };
 
+        // Check whether there is anything to send or receive.
         if !metadata_updated && message.body.is_none() {
-            return ReceivedAction::None;
+            return vec![];
         }
 
-        // We may have already received other partials from this and other peers,
-        // but haven't responded to them yet, in those situations just return
-        // the partial to the application layer.
+        // Check if we already have this partial,
+        // if not, just return it to the application layer.
         let Some(local_partial) = self
             .subscriptions
             .get_mut(&message.topic_hash)
             .and_then(|t| t.partial_messages.get(&message.group_id))
         else {
-            return ReceivedAction::EmitEvent {
+            return vec![ReceivedAction::EmitEvent {
                 topic_hash: message.topic_hash,
                 peer_id,
                 group_id: message.group_id,
                 message: message.body,
                 metadata: message.metadata,
-            };
+            }];
         };
 
         let action = match local_partial
@@ -360,21 +361,32 @@ impl State {
                     "Could not reconstruct message bytes for peer metadata from a received partial");
                 // Should we remove the partial from the peer?
                 peer_subscription.partial_messages.remove(&message.group_id);
-                return ReceivedAction::Publish(PublishAction::PenalizePeer {
+                return vec![ReceivedAction::Publish(PublishAction::PenalizePeer {
                     peer_id,
                     topic_hash: message.topic_hash.clone(),
-                });
+                })];
             }
         };
 
-        // check if we have new data for that peer.
+        let mut actions = vec![];
+        if action.need {
+            actions.push(ReceivedAction::EmitEvent {
+                topic_hash: message.topic_hash.clone(),
+                peer_id,
+                group_id: message.group_id.clone(),
+                message: message.body,
+                metadata: message.metadata,
+            });
+        }
+
         let Some((body, peer_updated_metadata)) = action.send else {
-            return ReceivedAction::None;
+            return actions;
         };
+
         peer_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
 
         let cached_metadata = local_partial.content.metadata().as_slice().to_vec();
-        ReceivedAction::Publish(PublishAction::SendMessage {
+        actions.push(ReceivedAction::Publish(PublishAction::SendMessage {
             peer_id,
             rpc: RpcOut::PartialMessage(PartialMessage {
                 body: Some(body),
@@ -382,7 +394,8 @@ impl State {
                 group_id: message.group_id.clone(),
                 topic_hash: message.topic_hash.clone(),
             }),
-        })
+        }));
+        actions
     }
 
     /// Check if the peer requests partial messages for the topic.
@@ -529,6 +542,7 @@ impl State {
 
 /// Action returned by `State::partial_action`.
 #[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
 pub(crate) enum PublishAction {
     /// Send a partial message RPC to a peer
     SendMessage { peer_id: PeerId, rpc: RpcOut },
@@ -540,9 +554,8 @@ pub(crate) enum PublishAction {
 }
 
 /// Action returned by `State::handle_received`.
+#[derive(Debug)]
 pub(crate) enum ReceivedAction {
-    /// Do not do anything.
-    None,
     /// Emit a Partial event to the application
     EmitEvent {
         topic_hash: TopicHash,
