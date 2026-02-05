@@ -60,7 +60,7 @@ pub trait Partial: Send + Sync {
     ///
     /// The returned bytes will be sent in partsMetadata field to advertise
     /// available and wanted parts to peers.
-    fn metadata(&self) -> Vec<u8>;
+    fn metadata(&self) -> Box<dyn Metadata>;
 
     /// Generates an action from the given metadata.
     ///
@@ -231,7 +231,7 @@ impl State {
 
                     let Ok(action) = partial_message.content.partial_action_from_metadata(
                         *peer_id,
-                        remote_partial.metadata.as_ref().map(|p| p.as_ref()),
+                        remote_partial.peer_metadata.as_ref().map(|p| p.as_ref()),
                     ) else {
                         tracing::error!(peer = %peer_id, group_id = ?group_id,
                     "Could not reconstruct message bytes for peer metadata");
@@ -246,9 +246,9 @@ impl State {
                     // Check if we have new data for the peer.
                     let body = if let Some((body, peer_updated_metadata)) = action.send {
                         // We have something to send, update the peer's metadata.
-                        remote_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+                        remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
                         Some(body)
-                    } else if remote_partial.metadata.is_none() || action.need {
+                    } else if remote_partial.peer_metadata.is_none() || action.need {
                         // We have no data to eagerly send, but we want to transmit our metadata anyway, to
                         // let the peer know of our metadata so that it sends us its data.
                         None
@@ -296,14 +296,14 @@ impl State {
             .or_default();
 
         // Check if the local partial data we have from the peer is oudated.
-        let metadata_updated = match (&mut peer_partial.metadata, &message.metadata) {
+        let metadata_updated = match (&mut peer_partial.peer_metadata, &message.metadata) {
             (None, Some(remote_metadata)) => {
-                peer_partial.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
+                peer_partial.peer_metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                 true
             }
             (Some(PeerMetadata::Remote(ref metadata)), Some(remote_metadata)) => {
                 if metadata != remote_metadata {
-                    peer_partial.metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
+                    peer_partial.peer_metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                     true
                 } else {
                     false
@@ -454,7 +454,7 @@ impl State {
 
         let mut actions = vec![];
         let group_id = partial_message.group_id();
-        let publish_metadata = partial_message.metadata();
+        let publish_metadata = partial_message.metadata().as_slice().to_vec();
         let Some(topic_peers) = self.peer_subscriptions.get_mut(&topic_hash) else {
             tracing::error!(topic = %topic_hash, "No peers subscribed to topic");
             return Err(PublishError::NoPeersSubscribedToTopic);
@@ -490,7 +490,7 @@ impl State {
 
             let Ok(action) = partial_message.partial_action_from_metadata(
                 peer_id,
-                remote_partial.metadata.as_ref().map(|p| p.as_ref()),
+                remote_partial.peer_metadata.as_ref().map(|p| p.as_ref()),
             ) else {
                 tracing::error!(peer = %peer_id, group_id = ?group_id,
                     "Could not reconstruct message bytes for peer metadata");
@@ -507,13 +507,15 @@ impl State {
                 // We have something to send, update the peer's metadata.
                 remote_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
                 Some(body)
-            } else if remote_partial.metadata.is_none() || action.need {
-                // We have no data to eagerly send, but we want to transmit our metadata anyway, to
-                // let the peer know of our metadata so that it sends us its data.
-                None
             } else {
-                continue;
+                None
             };
+
+            if let Some(view_on_our_metadata) = &mut remote_partial.view_on_our_metadata {
+                if !view_on_our_metadata.update(&publish_metadata).unwrap() {
+                    continue;
+                }
+            }
 
             actions.push(PublishAction::SendMessage {
                 peer_id,
@@ -626,8 +628,10 @@ struct LocalPartial {
 /// A partial message data the peer has sent us.
 #[derive(Debug)]
 struct RemotePartial {
-    /// The current peer partial metadata.
-    metadata: Option<PeerMetadata>,
+    /// Our view of the peers' partial metadata.
+    peer_metadata: Option<PeerMetadata>,
+    /// The peers view of our partial metadata.
+    view_on_our_metadata: Option<Box<dyn Metadata>>,
     /// The remaining heartbeats for this message to be deleted.
     ttl: usize,
 }
@@ -635,7 +639,8 @@ struct RemotePartial {
 impl Default for RemotePartial {
     fn default() -> Self {
         Self {
-            metadata: Default::default(),
+            peer_metadata: Default::default(),
+            view_on_our_metadata: Default::default(),
             ttl: DEFAULT_PARTIAL_TTL,
         }
     }
