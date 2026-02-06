@@ -1,5 +1,3 @@
-version: '3'
-
 services:
     autonatv2:
         build:
@@ -8,7 +6,7 @@ services:
         environment:
             - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
         ports:
-            - 4884:4884
+            - "4884:4884"
         depends_on:
             - jaeger
     jaeger:
@@ -16,5 +14,5 @@ services:
         environment:
             - COLLECTOR_OTLP_ENABLED=true
         ports:
-            - 4317:4317
-            - 16686:16686
+            - "4317:4317"
+            - "16686:16686"
