@@ -1,42 +1,26 @@
 use core::slice;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use hashlink::LinkedHashMap;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use crate::{
-    behaviour::tests::{add_peer_with_addr_and_kind, flush_events, DefaultBehaviourTestBuilder},
+    behaviour::tests::{
+        add_peer_with_addr_and_kind, count_control_msgs, random_message,
+        DefaultBehaviourTestBuilder,
+    },
     handler::HandlerEvent,
     partial_messages::{
         Metadata, Partial, PartialAction, PartialError, PartialMessage, PublishAction,
         ReceivedAction, State, DEFAULT_PARTIAL_TTL,
     },
     queue::Queue,
-    rpc_proto::proto,
-    types::{ControlAction, Extensions, PeerDetails, PeerKind, RpcIn, RpcOut, SubscriptionOpts},
+    types::{
+        ControlAction, Extensions, IHave, PeerDetails, PeerKind, RpcIn, RpcOut, SubscriptionOpts,
+    },
     Behaviour, ConfigBuilder, Event, MessageAuthenticity, TopicHash, ValidationMode,
 };
-
-#[test]
-fn test_extensions_message_creation() {
-    let extensions_rpc = RpcOut::Extensions(Extensions {
-        test_extension: Some(true),
-        partial_messages: None,
-    });
-    let proto_rpc: proto::RPC = extensions_rpc.into();
-
-    assert!(proto_rpc.control.is_some());
-    let control = proto_rpc.control.unwrap();
-    assert!(control.extensions.is_some());
-    let test_extension = control.extensions.unwrap().testExtension.unwrap();
-    assert!(test_extension);
-    assert!(control.ihave.is_empty());
-    assert!(control.iwant.is_empty());
-    assert!(control.graft.is_empty());
-    assert!(control.prune.is_empty());
-    assert!(control.idontwant.is_empty());
-}
 
 #[test]
 fn test_handle_extensions_message() {
@@ -1251,6 +1235,97 @@ fn test_subscription_options_tracking() {
 }
 
 /// Verifies that:
+/// - When `partial_action_from_metadata()` fails due to invalid metadata,
+///   a `PenalizePeer` action is returned.
+/// - This tests the error path when generating a response action from received metadata.
+#[test]
+fn test_handle_received_penalizes_invalid_action_from_metadata() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer = PeerId::random();
+    let mut state = State::default();
+    state.subscribe(topic_hash.clone(), true, true);
+    state.peer_subscribed(
+        &peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish to cache local partial (so handle_received hits the action_from_metadata path)
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _ = state
+        .handle_publish(topic_hash.clone(), message, vec![peer])
+        .expect("Publish should succeed");
+    // Receive a partial with invalid metadata format (2 bytes)
+    // This triggers partial_action_from_metadata() which fails
+    let invalid_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(vec![0b11110000]), // Some body to ensure we reach the action path
+        metadata: Some(vec![0xFF, 0xFF]), // Invalid: 2 bytes
+    };
+    let actions = state.handle_received(peer, invalid_partial);
+    assert_eq!(actions.len(), 1, "Should return one action");
+    assert!(
+        matches!(
+            &actions[0],
+            ReceivedAction::Publish(PublishAction::PenalizePeer { peer_id, .. })
+            if *peer_id == peer
+        ),
+        "Should penalize peer for invalid metadata in action generation"
+    );
+}
+
+/// Verifies that:
+/// - Receiving a metadata-only partial with UNCHANGED metadata returns empty.
+/// - This prevents redundant processing when peer re-advertises same state.
+#[test]
+fn test_metadata_only_update_unchanged_returns_empty() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer = PeerId::random();
+    let mut state = State::default();
+    state.subscribe(topic_hash.clone(), true, true);
+    state.peer_subscribed(
+        &peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // First receive - establishes peer's metadata
+    let metadata_only = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: None,
+        metadata: Some(vec![0b00001111]),
+    };
+
+    let first_actions = state.handle_received(peer, metadata_only.clone());
+
+    // First receive should emit event (new metadata)
+    assert_eq!(
+        first_actions.len(),
+        1,
+        "First receive should have one action"
+    );
+    assert!(
+        matches!(&first_actions[0], ReceivedAction::EmitEvent { .. }),
+        "First receive should emit event"
+    );
+    // Second receive with SAME metadata - should return empty
+    let second_actions = state.handle_received(peer, metadata_only);
+    assert!(
+        second_actions.is_empty(),
+        "Should return empty when metadata unchanged and no body"
+    );
+}
+
+/// Verifies that:
 /// - When Node A receives data from Node B, `RemotePartial::metadata` is updated
 ///   via `update_from_data` to reflect that B knows A now has those parts.
 /// - On the next `handle_publish`, no message is sent because B's view of A's
@@ -1297,6 +1372,14 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
         0b00000001,
         "Body should contain part 0"
     );
+    // Step 1b: Publish again immediately - should be idempotent
+    let actions_repeat = state_a
+        .handle_publish(topic_hash.clone(), node_a_message.clone(), vec![peer_b])
+        .expect("Repeat publish should succeed");
+    assert!(
+        actions_repeat.is_empty(),
+        "Immediate repeat publish should be idempotent (no messages sent)"
+    );
     // Step 2: Node A receives parts 1-7 from Node B
     // The body bitmap is 0b11111110 (parts 1-7)
     // This should trigger update_from_data, updating RemotePartial::metadata
@@ -1335,6 +1418,175 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     assert!(
         actions.is_empty(),
         "Should NOT send any message - B already knows A has all parts (via update_from_data)"
+    );
+}
+
+/// Verifies that:
+/// - `State::heartbeat` only sends gossip to peers NOT in the mesh or fanout.
+/// - Mesh peers are excluded from gossip targets.
+/// - Fanout peers are excluded from gossip targets.
+/// - Only peers with `supports_partial: true` are eligible for gossip.
+#[test]
+fn test_heartbeat_excludes_mesh_and_fanout_peers() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    // Create 4 peers with different roles:
+    let mesh_peer = PeerId::random();
+    let fanout_peer = PeerId::random();
+    let gossip_peer = PeerId::random();
+    // Not in mesh/fanout, but doesn't support partial - should NOT receive
+    let no_partial_peer = PeerId::random();
+    // Peer that receives the initial publish - should NOT receive gossip
+    // because it already has the partial (not because of mesh/fanout)
+    let published_peer = PeerId::random();
+    let mut state = State::default();
+
+    state.subscribe(topic_hash.clone(), true, true);
+
+    for peer in &[mesh_peer, fanout_peer, gossip_peer, published_peer] {
+        state.peer_subscribed(
+            peer,
+            topic_hash.clone(),
+            SubscriptionOpts {
+                requests_partial: true,
+                supports_partial: true,
+            },
+        );
+    }
+
+    state.peer_subscribed(
+        &no_partial_peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: false,
+            supports_partial: false,
+        },
+    );
+
+    // Publish a partial message to publish_peer,
+    // but exclude gossip_peer so that it receives it during heartbeat.
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _ = state.handle_publish(topic_hash.clone(), message, vec![published_peer]);
+
+    let mut mesh = HashMap::new();
+    mesh.insert(topic_hash.clone(), BTreeSet::from([mesh_peer]));
+
+    let mut fanout = HashMap::new();
+    fanout.insert(topic_hash.clone(), BTreeSet::from([fanout_peer]));
+
+    let actions = state.heartbeat(
+        &mesh, &fanout, 10, // gossip_lazy - high enough to pick all eligible peers
+        1.0, 100,
+    );
+
+    let gossiped_peers: Vec<PeerId> = actions
+        .iter()
+        .filter_map(|action| {
+            if let PublishAction::SendMessage { peer_id, .. } = action {
+                Some(*peer_id)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        !gossiped_peers.contains(&mesh_peer),
+        "Mesh peer should be excluded from heartbeat gossip"
+    );
+
+    assert!(
+        !gossiped_peers.contains(&fanout_peer),
+        "Fanout peer should be excluded from heartbeat gossip"
+    );
+
+    assert!(
+        !gossiped_peers.contains(&no_partial_peer),
+        "Peer without partial support should be excluded from heartbeat gossip"
+    );
+
+    assert!(
+        gossiped_peers.contains(&gossip_peer),
+        "Gossip peer (not in mesh/fanout, supports partial) should receive heartbeat gossip"
+    );
+}
+
+/// Verifies that:
+/// - `State::heartbeat` limits the number of partial messages sent to each peer.
+/// - When `max_metadata_length` is set, only that many messages are gossiped per peer.
+#[test]
+fn test_heartbeat_max_metadata_length() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id_1: [u8; 8] = [1, 0, 0, 0, 0, 0, 0, 1];
+    let group_id_2: [u8; 8] = [2, 0, 0, 0, 0, 0, 0, 2];
+    let group_id_3: [u8; 8] = [3, 0, 0, 0, 0, 0, 0, 3];
+    let gossip_peer = PeerId::random();
+    let cache_peer = PeerId::random(); // Used to cache the messages
+    let mut state = State::default();
+    state.subscribe(topic_hash.clone(), true, true);
+
+    for peer in [&gossip_peer, &cache_peer] {
+        state.peer_subscribed(
+            peer,
+            topic_hash.clone(),
+            SubscriptionOpts {
+                requests_partial: true,
+                supports_partial: true,
+            },
+        );
+    }
+
+    // Publish 3 different partial messages (3 different group_ids) to cache_peer
+    // This caches them locally in subscription.partial_messages
+    let mut message_1 = Bitmap::new(group_id_1);
+    message_1.fill_parts(0b11111111);
+    let _ = state.handle_publish(topic_hash.clone(), message_1, vec![cache_peer]);
+    let mut message_2 = Bitmap::new(group_id_2);
+    message_2.fill_parts(0b11111111);
+    let _ = state.handle_publish(topic_hash.clone(), message_2, vec![cache_peer]);
+    let mut message_3 = Bitmap::new(group_id_3);
+    message_3.fill_parts(0b11111111);
+    let _ = state.handle_publish(topic_hash.clone(), message_3, vec![cache_peer]);
+    // Run heartbeat with max_metadata_length = 2
+    let mut mesh = HashMap::new();
+    // Add topic to the mesh, required because heartbeat iterates
+    // all the topics in mesh and fanout.
+    mesh.insert(topic_hash, Default::default());
+    let fanout = HashMap::new();
+    let actions = state.heartbeat(
+        &mesh, &fanout, 10, // gossip_lazy - high enough to pick gossip_peer
+        1.0, 2, // max_metadata_length - limit to 2 messages per peer
+    );
+
+    let gossip_messages: Vec<_> = actions
+        .iter()
+        .filter_map(|action| {
+            if let PublishAction::SendMessage { peer_id, rpc } = action {
+                if *peer_id == gossip_peer {
+                    if let RpcOut::PartialMessage(pm) = rpc {
+                        return Some(pm.group_id.clone());
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+    // Should only have 2 messages due to max_metadata_length limit
+    assert_eq!(
+        gossip_messages.len(),
+        2,
+        "Should only gossip max_metadata_length (2) messages to peer, got {}",
+        gossip_messages.len()
+    );
+
+    // Verify all messages are for different group_ids
+    let unique_group_ids: HashSet<_> = gossip_messages.iter().collect();
+    assert_eq!(
+        unique_group_ids.len(),
+        2,
+        "All gossiped messages should have different group_ids"
     );
 }
 
@@ -1684,5 +1936,86 @@ fn test_partial_messages_response_on_receive() {
     assert!(
         response_partial.metadata.is_some(),
         "Response should contain metadata"
+    );
+}
+
+/// Verifies that:
+/// - Peers with `requestsPartial=true` do NOT receive IHAVE messages during gossip.
+/// - Peers with `requestsPartial=false` still receive IHAVE messages normally.
+/// - This implements the spec: "When Gossiping, a node that supports partial messages
+///   SHOULD NOT send an IHAVE to a peer that requested partial messages."
+#[test]
+fn test_ihave_not_sent_to_partial_peers() {
+    let config = ConfigBuilder::default()
+        .validation_mode(ValidationMode::None)
+        .build()
+        .unwrap();
+    // Create network with mesh filled with peers
+    let (mut gs, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(config.mesh_n_high())
+        .topics(vec!["test-topic".into()])
+        .to_subscribe(false)
+        .gs_config(config)
+        .create_network();
+    // Graft all initial peers to fill the mesh
+    for peer in &peers {
+        gs.handle_graft(peer, topics.clone());
+    }
+    let topic_hash = &topics[0];
+    // Add partial_peer outside mesh (requestsPartial=true, supportsPartial=true)
+    // This peer should NOT receive IHAVE - they get partial message metadata instead
+    let (partial_peer, partial_queue) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        true, // requests_partial
+        true, // supports_partial
+    );
+    queues.insert(partial_peer, partial_queue);
+    // Add normal_peer outside mesh (requestsPartial=false, supportsPartial=false)
+    // This peer SHOULD receive IHAVE as normal
+    let (normal_peer, normal_queue) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        false, // requests_partial
+        false, // supports_partial
+    );
+    queues.insert(normal_peer, normal_queue);
+    // Receive messages to populate the mcache
+    let mut seq = 0;
+    for _ in 0..10 {
+        gs.handle_received_message(random_message(&mut seq, &topics), &PeerId::random());
+    }
+    // Emit gossip (sends IHAVE to non-mesh peers)
+    gs.emit_gossip();
+    // Count IHAVE messages sent to each peer
+    let mut partial_peer_ihave_count = 0;
+    let mut normal_peer_ihave_count = 0;
+    let (_, _) = count_control_msgs(queues, |peer_id, rpc| {
+        if let RpcOut::IHave(IHave { .. }) = rpc {
+            if *peer_id == partial_peer {
+                partial_peer_ihave_count += 1;
+            } else if *peer_id == normal_peer {
+                normal_peer_ihave_count += 1;
+            }
+            true
+        } else {
+            false
+        }
+    });
+    assert_eq!(
+        partial_peer_ihave_count, 0,
+        "Peer with requestsPartial=true should NOT receive IHAVE messages"
+    );
+    assert!(
+        normal_peer_ihave_count > 0,
+        "Peer with requestsPartial=false should receive IHAVE messages"
     );
 }

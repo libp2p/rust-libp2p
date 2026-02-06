@@ -20,7 +20,7 @@
 
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
 };
 
@@ -84,7 +84,7 @@ pub trait Metadata: Debug + Send + Sync {
     fn update(&mut self, data: &[u8]) -> Result<bool, PartialError>;
     /// Attempts to update the local `Metadata` with the remote data received.
     /// This method is used to track the metadata that the remote peer believes the local system has.
-    /// By default, it returns `false` as it is an optimization, indicating that the update logic
+    /// The default returns `false` as it is an optimization, indicating that the update logic
     /// has not been triggered in this implementation.
     fn update_from_data(&mut self, _data: &[u8]) -> Result<(), PartialError> {
         Ok(())
@@ -196,7 +196,8 @@ impl State {
 
         // Emit gossip.
         let mut actions = vec![];
-        for (topic_hash, non_gossip_peers) in mesh.iter().chain(fanout.iter()) {
+        let all_topics: HashSet<_> = mesh.keys().chain(fanout.keys()).collect();
+        for topic_hash in all_topics {
             let Some(subscription) = self.subscriptions.get(topic_hash) else {
                 continue;
             };
@@ -206,14 +207,16 @@ impl State {
                 continue;
             };
 
+            let mesh_peers = mesh.get(topic_hash);
+            let fanout_peers = fanout.get(topic_hash);
             let eligible_peers = subscription_peers
                 .iter_mut()
                 .filter(|(peer_id, peer_subscription)| {
-                    !non_gossip_peers.contains(peer_id)
+                    !mesh_peers.is_some_and(|p| p.contains(peer_id))
+                        && !fanout_peers.is_some_and(|p| p.contains(peer_id))
                         && peer_subscription
                             .options
-                            .map(|options| options.supports_partial)
-                            .unwrap_or_default()
+                            .is_some_and(|options| options.supports_partial)
                 })
                 .collect::<Vec<_>>();
             let gossip_amp = max(

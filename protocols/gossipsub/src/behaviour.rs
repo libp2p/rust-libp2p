@@ -2791,12 +2791,20 @@ where
                 topic_hash,
                 n_map,
                 |peer_id, _| {
-                    !peers.contains(peer_id)
+                    let filter = !peers.contains(peer_id)
                         && !self.explicit_peers.contains(peer_id)
                         && !self
                             .peer_score
                             .below_threshold(peer_id, |ts| ts.gossip_threshold)
-                            .0
+                            .0;
+                    // Don't send IHAVE to peers that requested partial messages -
+                    // they receive metadata via partial message gossip instead.
+                    #[cfg(feature = "partial_messages")]
+                    let filter = filter
+                        && !self
+                            .partial_messages_extension
+                            .requests_partial(peer_id, topic_hash);
+                    filter
                 },
             );
 

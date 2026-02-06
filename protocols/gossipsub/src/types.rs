@@ -156,7 +156,7 @@ impl PeerKind {
     pub(crate) fn is_gossipsub(&self) -> bool {
         matches!(
             self,
-            Self::Gossipsubv1_2 | Self::Gossipsubv1_1 | Self::Gossipsub
+            Self::Gossipsubv1_3 | Self::Gossipsubv1_2 | Self::Gossipsubv1_1 | Self::Gossipsub
         )
     }
 }
