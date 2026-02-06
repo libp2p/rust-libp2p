@@ -33,7 +33,7 @@ use crate::{
 };
 
 /// Default TTL for partial messages kept.
-const DEFAULT_PARTIAL_TTL: usize = 5;
+pub(crate) const DEFAULT_PARTIAL_TTL: usize = 5;
 
 /// PartialMessage is a message that can be broken up into parts.
 /// This trait allows applications to define custom strategies for splitting large messages
@@ -524,9 +524,9 @@ impl State {
                 continue;
             };
 
-            // Check if we have new data for the peer.
+            // Check if we have new parts for the peer,
+            // and update the peer metadata if so.
             let body = if let Some((body, peer_updated_metadata)) = action.send {
-                // We have something to send, update the peer's metadata.
                 remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
                 Some(body)
             } else {
@@ -549,12 +549,6 @@ impl State {
                     }
                 }
                 None => remote_partial.metadata = Some(partial_message.metadata()),
-            }
-
-            if let Some(metadata) = &mut remote_partial.metadata {
-                if !metadata.update(&publish_metadata).unwrap() {
-                    continue;
-                }
             }
 
             actions.push(PublishAction::SendMessage {

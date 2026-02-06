@@ -1,18 +1,21 @@
+use core::slice;
 use std::collections::BTreeSet;
 
 use hashlink::LinkedHashMap;
-use libp2p_core::PeerId;
-use libp2p_swarm::{ConnectionId, NetworkBehaviour};
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use crate::{
+    behaviour::tests::{add_peer_with_addr_and_kind, flush_events, DefaultBehaviourTestBuilder},
     handler::HandlerEvent,
     partial_messages::{
-        Metadata, Partial, PartialAction, PartialError, PublishAction, ReceivedAction, State,
+        Metadata, Partial, PartialAction, PartialError, PartialMessage, PublishAction,
+        ReceivedAction, State, DEFAULT_PARTIAL_TTL,
     },
     queue::Queue,
     rpc_proto::proto,
     types::{ControlAction, Extensions, PeerDetails, PeerKind, RpcIn, RpcOut, SubscriptionOpts},
-    Behaviour, ConfigBuilder, MessageAuthenticity, TopicHash, ValidationMode,
+    Behaviour, ConfigBuilder, Event, MessageAuthenticity, TopicHash, ValidationMode,
 };
 
 #[test]
@@ -276,6 +279,11 @@ impl Metadata for MetadataBitmap {
         self.bitmap.as_slice()
     }
 
+    fn update_from_data(&mut self, data: &[u8]) -> Result<(), PartialError> {
+        self.bitmap[0] |= data[0];
+        Ok(())
+    }
+
     fn update(&mut self, data: &[u8]) -> Result<bool, PartialError> {
         if data.len() != 1 {
             return Err(PartialError::InvalidFormat);
@@ -417,7 +425,7 @@ fn test_full_data_provider_to_requester() {
 /// - Peer2 (with parts 0,2,4,6 = 0b01010101) receives only parts 1,3,5,7 (0b10101010).
 /// - Peer2 successfully reconstructs the full message via handle_received.
 #[test]
-fn test_partial_overlap_exchange() {
+fn test_overlap_exchange() {
     let topic_hash = TopicHash::from_raw("test-topic");
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer1 = PeerId::random();
@@ -542,7 +550,7 @@ fn test_partial_overlap_exchange() {
 /// - Peer2 has odd parts (1,3,5,7 = 0b10101010).
 /// - Both peers exchange via handle_received and can reconstruct full message.
 #[test]
-fn test_partial_symmetric_half_exchange() {
+fn test_symmetric_half_exchange() {
     let topic_hash = TopicHash::from_raw("test-topic");
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer1 = PeerId::random();
@@ -781,5 +789,900 @@ fn test_no_redundant_transfer() {
     assert!(
         received_actions2.is_empty(),
         "Should have no actions - peer1 has same data as peer2"
+    );
+}
+
+/// Verifies that:
+/// - After TTL expires, cached partials are cleaned up.
+/// - This is verified by observing that handle_received returns EmitEvent
+///   (as if seeing the group_id for the first time) instead of Publish.
+#[test]
+fn test_heartbeat_ttl_expiry() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer2 = PeerId::random();
+    let mut state1 = State::default();
+    state1.subscribe(topic_hash.clone(), true, true);
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    // Publish a partial message (caches it locally)
+    let _actions = state1
+        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .expect("Publish should succeed");
+    // Receive a partial from peer2 - since we have a cached local partial,
+    // this should return Publish (responding with our data)
+    let peer2_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b00000000]), // peer2 has nothing
+    };
+    let received_actions = state1.handle_received(peer2, peer2_partial.clone());
+    // Should have Publish action (we have cached data to send)
+    assert!(
+        received_actions
+            .iter()
+            .any(|a| matches!(a, ReceivedAction::Publish(_))),
+        "Before TTL expiry: should return Publish since we have cached local partial"
+    );
+    // Create empty mesh/fanout for heartbeat (no gossip, just TTL decrement)
+    let empty_mesh = std::collections::HashMap::new();
+    let empty_fanout = std::collections::HashMap::new();
+    // Run heartbeats until TTL expires (DEFAULT_PARTIAL_TTL = 5)
+    for _ in 0..DEFAULT_PARTIAL_TTL {
+        let _ = state1.heartbeat(&empty_mesh, &empty_fanout, 0, 0.0, 100);
+    }
+    // Now receive the same partial again - since local cache expired,
+    // this should return EmitEvent (as if first time seeing this group_id)
+    let received_actions_after = state1.handle_received(peer2, peer2_partial.clone());
+    // Should have EmitEvent (no cached local partial anymore)
+    assert_eq!(received_actions_after.len(), 1);
+    assert!(
+        received_actions_after
+            .iter()
+            .any(|a| matches!(a, ReceivedAction::EmitEvent { .. })),
+        "After TTL expiry: should return EmitEvent since local partial cache expired"
+    );
+}
+
+/// Verifies that:
+/// - When a peer disconnects, all its partial message state is cleaned up.
+/// - This follows the same behavior as full messages.
+/// - After disconnect and reconnect, we re-send all data (no knowledge of what peer has).
+#[test]
+fn test_peer_disconnect_cleanup() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer2 = PeerId::random();
+    let mut state1 = State::default();
+    state1.subscribe(topic_hash.clone(), true, true);
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish a partial to establish state with peer2
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _ = state1
+        .handle_publish(topic_hash.clone(), message.clone(), vec![peer2])
+        .expect("Publish should succeed");
+    // Receive a partial from peer2 to create remote partial state
+    let peer2_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b01010101]), // peer2 has even parts
+    };
+    let actions = state1.handle_received(peer2, peer2_partial.clone());
+    assert_eq!(actions.len(), 1);
+    let ReceivedAction::Publish(PublishAction::SendMessage {
+        peer_id,
+        rpc: RpcOut::PartialMessage(partial_msg),
+    }) = &actions[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    assert_eq!(*peer_id, peer2);
+    let body = partial_msg.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body[0], 0b10101010,
+        "Should send all parts after reconnect (peer metadata was cleaned up)"
+    );
+
+    // Now disconnect peer2
+    state1.peer_disconnected(peer2);
+    // Re-subscribe peer2 (simulating reconnection)
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish again - if peer2's metadata was preserved, we'd only send
+    // missing parts (0b10101010). Since it was cleaned up on disconnect,
+    // we send all parts (0b11111111).
+    let actions = state1
+        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .expect("Publish should succeed");
+    assert_eq!(actions.len(), 1);
+    let PublishAction::SendMessage {
+        peer_id,
+        rpc: RpcOut::PartialMessage(partial_msg),
+    } = &actions[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    assert_eq!(*peer_id, peer2);
+    // Should send all parts since peer2's metadata was wiped on disconnect
+    let body = partial_msg.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body[0], 0b11111111,
+        "Should send all parts after reconnect (peer metadata was cleaned up)"
+    );
+}
+
+/// Verifies that:
+/// - When we unsubscribe from a topic, our local partial message state is cleaned up.
+/// - After re-subscribing, publishing is treated as fresh (no cached local partial).
+#[test]
+fn test_unsubscribe_cleanup() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer2 = PeerId::random();
+    let mut state1 = State::default();
+    state1.subscribe(topic_hash.clone(), true, true);
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish a partial to cache it locally
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _actions = state1
+        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .expect("Publish should succeed");
+    // Receive from peer2 - should return Publish (we have cached local partial)
+    let peer2_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b00000000]), // peer2 has nothing
+    };
+    let received_actions = state1.handle_received(peer2, peer2_partial.clone());
+    assert!(
+        received_actions
+            .iter()
+            .any(|a| matches!(a, ReceivedAction::Publish(_))),
+        "Before unsubscribe: should return Publish since we have cached local partial"
+    );
+    // Unsubscribe from the topic
+    state1.unsubscribe(&topic_hash);
+    // Re-subscribe to the topic
+    state1.subscribe(topic_hash.clone(), true, true);
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Receive the same partial again from peer2
+    // Since our local cache was cleaned up, should return EmitEvent (no local partial)
+    let received_actions_after = state1.handle_received(peer2, peer2_partial.clone());
+    assert_eq!(received_actions_after.len(), 1);
+    assert!(
+        received_actions_after
+            .iter()
+            .any(|a| matches!(a, ReceivedAction::EmitEvent { .. })),
+        "After unsubscribe: should return EmitEvent since local partial cache was cleaned up"
+    );
+}
+
+/// Verifies that:
+/// - When a peer unsubscribes from a topic, their partial message state for that topic is cleaned up.
+/// - After the peer re-subscribes, we treat them as fresh (no knowledge of what they have).
+#[test]
+fn test_peer_unsubscribed_cleanup() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer2 = PeerId::random();
+    let mut state1 = State::default();
+    state1.subscribe(topic_hash.clone(), true, true);
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish a partial to establish state with peer2
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _actions = state1
+        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .expect("Publish should succeed");
+    // Receive a partial from peer2 to create remote partial state
+    let peer2_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b01010101]), // peer2 has even parts
+    };
+    let _ = state1.handle_received(peer2, peer2_partial.clone());
+    // Peer2 unsubscribes from the topic
+    state1.peer_unsubscribed(peer2, &topic_hash);
+    // Peer2 re-subscribes to the topic
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish again - if peer2's metadata was preserved, we'd only send
+    // missing parts (0b10101010). Since it was cleaned up on unsubscribe,
+    // we send all parts (0b11111111).
+    let mut new_message = Bitmap::new(group_id);
+    new_message.fill_parts(0b11111111);
+    let actions = state1
+        .handle_publish(topic_hash.clone(), new_message, vec![peer2])
+        .expect("Publish should succeed");
+    assert_eq!(actions.len(), 1);
+    let PublishAction::SendMessage {
+        peer_id,
+        rpc: RpcOut::PartialMessage(partial_msg),
+    } = &actions[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    assert_eq!(*peer_id, peer2);
+    // Should send all parts since peer2's metadata was wiped on unsubscribe
+    let body = partial_msg.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body[0], 0b11111111,
+        "Should send all parts after peer re-subscribes (peer metadata was cleaned up)"
+    );
+}
+
+/// Verifies that:
+/// - When a peer unsubscribes from one topic, their state for other topics is preserved.
+/// - We still know what parts they have for topics they remain subscribed to.
+#[test]
+fn test_peer_unsubscribed_preserves_other_topics() {
+    let topic1 = TopicHash::from_raw("topic-1");
+    let topic2 = TopicHash::from_raw("topic-2");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer2 = PeerId::random();
+    let mut state1 = State::default();
+    // Subscribe to both topics
+    state1.subscribe(topic1.clone(), true, true);
+    state1.subscribe(topic2.clone(), true, true);
+    // Peer2 subscribes to both topics
+    state1.peer_subscribed(
+        &peer2,
+        topic1.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    state1.peer_subscribed(
+        &peer2,
+        topic2.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Publish partials on both topics
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _actions1 = state1
+        .handle_publish(topic1.clone(), message.clone(), vec![peer2])
+        .expect("Publish should succeed");
+    // Receive partials from peer2 on both topics (peer2 has even parts on both)
+    let peer2_partial_topic1 = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic1.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b01010101]),
+    };
+    let _ = state1.handle_received(peer2, peer2_partial_topic1);
+    let peer2_partial_topic2 = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic2.clone(),
+        body: Some(vec![0]),
+        metadata: Some(vec![0b01010101]),
+    };
+    let _ = state1.handle_received(peer2, peer2_partial_topic2);
+    // Peer2 unsubscribes from topic1 only
+    state1.peer_unsubscribed(peer2, &topic1);
+    // Publish on topic1 - peer2's state was cleared, should send all parts
+    // Re-subscribe peer2 to topic1 first
+    state1.peer_subscribed(
+        &peer2,
+        topic1.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    let actions1 = state1
+        .handle_publish(topic1.clone(), message.clone(), vec![peer2])
+        .expect("Publish should succeed");
+    let PublishAction::SendMessage {
+        rpc: RpcOut::PartialMessage(partial_msg1),
+        ..
+    } = &actions1[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    // Topic1: Should send all parts (state was cleared)
+    let body1 = partial_msg1.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body1[0], 0b11111111,
+        "Topic1: Should send all parts (peer metadata was cleared on unsubscribe)"
+    );
+    // Publish on topic2 - peer2's state was preserved, should send only missing parts
+    let actions2 = state1
+        .handle_publish(topic2.clone(), message, vec![peer2])
+        .expect("Publish should succeed");
+    let PublishAction::SendMessage {
+        rpc: RpcOut::PartialMessage(partial_msg2),
+        ..
+    } = &actions2[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    // Topic2: Should send only odd parts (peer2's state preserved, they have even parts)
+    let body2 = partial_msg2.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body2[0], 0b10101010,
+        "Topic2: Should send only missing parts (peer metadata preserved)"
+    );
+}
+
+/// Verifies that:
+/// - `requests_partial()` and `supports_partial()` return correct values based on peer subscription options.
+/// - Options are correctly tracked per peer per topic.
+#[test]
+fn test_subscription_options_tracking() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let peer1 = PeerId::random();
+    let peer2 = PeerId::random();
+    let peer3 = PeerId::random();
+    let mut state1 = State::default();
+    state1.subscribe(topic_hash.clone(), true, true);
+    // Peer1: requests and supports partial
+    state1.peer_subscribed(
+        &peer1,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Peer2: only supports partial (doesn't request)
+    state1.peer_subscribed(
+        &peer2,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: false,
+            supports_partial: true,
+        },
+    );
+    // Peer3: only requests partial (doesn't support)
+    state1.peer_subscribed(
+        &peer3,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: false,
+        },
+    );
+    // Verify peer1
+    assert!(
+        state1.requests_partial(&peer1, &topic_hash),
+        "Peer1 should request partial"
+    );
+    assert!(
+        state1.supports_partial(&peer1, &topic_hash),
+        "Peer1 should support partial"
+    );
+    // Verify peer2
+    assert!(
+        !state1.requests_partial(&peer2, &topic_hash),
+        "Peer2 should not request partial"
+    );
+    assert!(
+        state1.supports_partial(&peer2, &topic_hash),
+        "Peer2 should support partial"
+    );
+    // Verify peer3
+    assert!(
+        state1.requests_partial(&peer3, &topic_hash),
+        "Peer3 should request partial"
+    );
+    assert!(
+        !state1.supports_partial(&peer3, &topic_hash),
+        "Peer3 should not support partial"
+    );
+    // Verify unknown peer returns false
+    let unknown_peer = PeerId::random();
+    assert!(
+        !state1.requests_partial(&unknown_peer, &topic_hash),
+        "Unknown peer should not request partial"
+    );
+    assert!(
+        !state1.supports_partial(&unknown_peer, &topic_hash),
+        "Unknown peer should not support partial"
+    );
+    // Verify unknown topic returns false
+    let unknown_topic = TopicHash::from_raw("unknown-topic");
+    assert!(
+        !state1.requests_partial(&peer1, &unknown_topic),
+        "Known peer on unknown topic should not request partial"
+    );
+    assert!(
+        !state1.supports_partial(&peer1, &unknown_topic),
+        "Known peer on unknown topic should not support partial"
+    );
+}
+
+/// Verifies that:
+/// - When Node A receives data from Node B, `RemotePartial::metadata` is updated
+///   via `update_from_data` to reflect that B knows A now has those parts.
+/// - On the next `handle_publish`, no message is sent because B's view of A's
+///   metadata (`RemotePartial::metadata`) already matches A's current state.
+#[test]
+fn test_handle_publish_skips_redundant_update_after_receiving_data() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer_a = PeerId::random();
+    let peer_b = PeerId::random();
+    let mut state_a = State::default();
+    state_a.subscribe(topic_hash.clone(), true, true);
+    state_a.peer_subscribed(
+        &peer_b,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    let mut node_a_message = Bitmap::new(group_id);
+    node_a_message.fill_parts(0b00000001);
+    // Step 1: Node A publishes to Node B
+    // This initializes RemotePartial::metadata to 0b00000001
+    let actions = state_a
+        .handle_publish(topic_hash.clone(), node_a_message.clone(), vec![peer_b])
+        .expect("Publish should succeed");
+    assert_eq!(actions.len(), 1, "Should send one message");
+    let PublishAction::SendMessage {
+        rpc: RpcOut::PartialMessage(partial_msg),
+        ..
+    } = &actions[0]
+    else {
+        panic!("Expected SendMessage with PartialMessage");
+    };
+    assert_eq!(
+        partial_msg.metadata,
+        Some(vec![0b00000001]),
+        "Should send metadata with part 0"
+    );
+    assert!(partial_msg.body.is_some(), "Should send body with part 0");
+    assert_eq!(
+        partial_msg.body.as_ref().unwrap()[0],
+        0b00000001,
+        "Body should contain part 0"
+    );
+    // Step 2: Node A receives parts 1-7 from Node B
+    // The body bitmap is 0b11111110 (parts 1-7)
+    // This should trigger update_from_data, updating RemotePartial::metadata
+    // to 0b00000001 | 0b11111110 = 0b11111111
+    let mut node_b_message = Bitmap::new(group_id);
+    node_b_message.fill_parts(0b11111110); // B sends parts 1-7
+    let action = node_b_message
+        .partial_action_from_metadata(peer_a, Some(&[0b00000001])) // B knows A has part 0
+        .expect("Should generate action");
+    let (body, _) = action.send.expect("Should have data to send");
+    let received_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(body),
+        metadata: Some(vec![0b11111111]), // B has all parts
+    };
+    let received_actions = state_a.handle_received(peer_b, received_partial);
+    // Should emit event with the received data and possibly send a response
+    // (though A has nothing new to send to B since B has everything)
+    assert!(
+        received_actions
+            .iter()
+            .any(|a| matches!(a, ReceivedAction::EmitEvent { .. })),
+        "Should emit event with received parts"
+    );
+    // Step 3: Node A updates its local message to have all parts
+    node_a_message.fill_parts(0b11111111);
+    // Step 4: Node A publishes again
+    // RemotePartial::metadata should now be 0b11111111 (updated via update_from_data)
+    // A's current metadata is also 0b11111111
+    // metadata.update(0b11111111) should return false (no change)
+    // Therefore, NO SendMessage action should be emitted
+    let actions = state_a
+        .handle_publish(topic_hash.clone(), node_a_message, vec![peer_b])
+        .expect("Publish should succeed");
+    assert!(
+        actions.is_empty(),
+        "Should NOT send any message - B already knows A has all parts (via update_from_data)"
+    );
+}
+
+/// Verifies that:
+/// - Two nodes exchange partial messages via the Behaviour API.
+/// - Node1 publishes even parts (0b01010101) and receives odd parts from Node2.
+/// - Event::Partial is emitted when receiving partial messages.
+#[test]
+fn test_partial_messages_two_node_exchange() {
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let (mut gs1, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .peer_kind(PeerKind::Gossipsubv1_3)
+        .requests_partial(true)
+        .supports_partial(true)
+        .create_network();
+    let peer2 = peers[0];
+    let topic_hash = topics[0].clone();
+    // Node1 has even parts
+    let mut node1_message = Bitmap::new(group_id);
+    node1_message.fill_parts(0b01010101);
+    // Node1 publishes its partial
+    gs1.publish_partial(topic_hash.clone(), node1_message.clone())
+        .expect("Publish should succeed");
+    // Check that node1 sent a partial message to peer2
+    // Note: Queue may also contain Subscribe messages from setup, so we search for PartialMessage
+    let mut receiver_queue = queues.remove(&peer2).unwrap();
+    let mut partial_msg1 = None;
+    while !receiver_queue.is_empty() {
+        if let Some(RpcOut::PartialMessage(pm)) = receiver_queue.try_pop() {
+            partial_msg1 = Some(pm);
+            break;
+        }
+    }
+    let partial_msg1 = partial_msg1.expect("Should have sent PartialMessage");
+    assert!(partial_msg1.body.is_some());
+    assert_eq!(partial_msg1.body.as_ref().unwrap()[0], 0b01010101);
+    gs1.events.clear();
+    // Node2 has odd parts
+    let mut node2_message = Bitmap::new(group_id);
+    node2_message.fill_parts(0b10101010);
+    // Get the encoded body that node2 would send to a peer with no parts
+    let action = node2_message
+        .partial_action_from_metadata(peer2, Some(&[0x00]))
+        .unwrap();
+    let (body, _) = action.send.expect("Should have data to send");
+    // Create the partial message that node2 would send
+    let node2_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(body),
+        metadata: Some(vec![0b10101010]),
+    };
+    gs1.on_connection_handler_event(
+        peer2,
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc: RpcIn {
+                messages: vec![],
+                subscriptions: vec![],
+                control_msgs: vec![],
+                test_extension: None,
+                partial_message: Some(node2_partial),
+            },
+            invalid_messages: vec![],
+        },
+    );
+    let partial_event = gs1
+        .events
+        .iter()
+        .find(|e| matches!(e, ToSwarm::GenerateEvent(Event::Partial { .. })));
+    assert!(partial_event.is_some(), "Should emit Event::Partial");
+    // Extract and verify the event
+    let ToSwarm::GenerateEvent(Event::Partial {
+        topic_hash: recv_topic,
+        peer_id: recv_peer,
+        group_id: recv_group,
+        message: recv_body,
+        metadata: recv_metadata,
+    }) = partial_event.unwrap()
+    else {
+        panic!("Expected Event::Partial");
+    };
+    assert_eq!(*recv_topic, topic_hash);
+    assert_eq!(*recv_peer, peer2);
+    assert_eq!(*recv_group, group_id.to_vec());
+    assert_eq!(*recv_metadata, Some(vec![0b10101010]));
+    assert!(recv_body.is_some());
+    assert_eq!(recv_body.as_ref().unwrap()[0], 0b10101010);
+}
+
+/// Verifies that:
+/// - Partial messages are only sent to peers with `supports_partial: true`.
+/// - Peers with `supports_partial: false` are filtered out from `publish_partial`.
+#[test]
+fn test_partial_subscription_options_respected() {
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    let (mut gs, _, _, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(0)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .requests_partial(true)
+        .supports_partial(true)
+        .create_network();
+
+    let topic_hash = topics[0].clone();
+
+    // 2. Add peer1 with supports_partial: true
+    let (_peer1, queue1) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        true, // requests_partial
+        true, // supports_partial
+    );
+
+    // 3. Add peer2 with supports_partial: false
+    let (_peer2, queue2) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false, // outbound
+        false, // explicit
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        false, // requests_partial
+        false, // supports_partial
+    );
+
+    // 4. Publish a partial message
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    gs.publish_partial(topic_hash, message)
+        .expect("Publish should succeed");
+
+    // 5. Verify peer1 received a PartialMessage
+    let mut receiver_queue1 = queue1;
+    let mut peer1_received_partial = false;
+    while !receiver_queue1.is_empty() {
+        if let Some(RpcOut::PartialMessage(_)) = receiver_queue1.try_pop() {
+            peer1_received_partial = true;
+            break;
+        }
+    }
+    assert!(
+        peer1_received_partial,
+        "Peer with supports_partial=true should receive PartialMessage"
+    );
+
+    // 6. Verify peer2 did NOT receive a PartialMessage
+    let mut receiver_queue2 = queue2;
+    let mut peer2_received_partial = false;
+    while !receiver_queue2.is_empty() {
+        if let Some(RpcOut::PartialMessage(_)) = receiver_queue2.try_pop() {
+            peer2_received_partial = true;
+            break;
+        }
+    }
+    assert!(
+        !peer2_received_partial,
+        "Peer with supports_partial=false should NOT receive PartialMessage"
+    );
+}
+
+/// Verifies that:
+/// - A peer with `supports_partial: true` but `requests_partial: false` receives a PartialMessage.
+/// - The PartialMessage contains metadata but NO body.
+/// - A peer with both `supports_partial: true` and `requests_partial: true` receives body AND metadata.
+#[test]
+fn test_partial_requests_partial_metadata_only() {
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let (mut gs, _, _, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(0)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .requests_partial(true)
+        .supports_partial(true)
+        .create_network();
+    let topic_hash = topics[0].clone();
+    // Add peer1 with requests_partial: true, supports_partial: true
+    let (_peer1, queue1) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        true, // requests_partial
+        true, // supports_partial
+    );
+    // Add peer2 with requests_partial: false, supports_partial: true
+    let (_peer2, queue2) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        false, // requests_partial
+        true,  // supports_partial
+    );
+    // Publish a partial message with full data
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    gs.publish_partial(topic_hash.clone(), message)
+        .expect("Publish should succeed");
+    // Verify peer1 received a PartialMessage WITH body
+    let mut receiver_queue1 = queue1;
+    let mut peer1_partial = None;
+    while !receiver_queue1.is_empty() {
+        if let Some(RpcOut::PartialMessage(pm)) = receiver_queue1.try_pop() {
+            peer1_partial = Some(pm);
+            break;
+        }
+    }
+    let peer1_partial = peer1_partial.expect("Peer1 should receive PartialMessage");
+    assert!(
+        peer1_partial.body.is_some(),
+        "Peer with requests_partial=true should receive body"
+    );
+    assert!(
+        peer1_partial.metadata.is_some(),
+        "Peer with requests_partial=true should receive metadata"
+    );
+    // Verify peer2 received a PartialMessage WITHOUT body (metadata only)
+    let mut receiver_queue2 = queue2;
+    let mut peer2_partial = None;
+    while !receiver_queue2.is_empty() {
+        if let Some(RpcOut::PartialMessage(pm)) = receiver_queue2.try_pop() {
+            peer2_partial = Some(pm);
+            break;
+        }
+    }
+    let peer2_partial = peer2_partial.expect("Peer2 should receive PartialMessage");
+    assert!(
+        peer2_partial.body.is_none(),
+        "Peer with requests_partial=false should NOT receive body"
+    );
+    assert!(
+        peer2_partial.metadata.is_some(),
+        "Peer with requests_partial=false should still receive metadata"
+    );
+}
+
+/// Verifies that:
+/// - When receiving a partial message with complementary data, we respond with our parts.
+/// - Both Event::Partial is emitted AND a response PartialMessage is sent.
+/// - The response contains only the parts the peer is missing.
+#[test]
+fn test_partial_messages_response_on_receive() {
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let (mut gs, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .peer_kind(PeerKind::Gossipsubv1_3)
+        .requests_partial(true)
+        .supports_partial(true)
+        .create_network();
+    let peer = peers[0];
+    let topic_hash = topics[0].clone();
+    // Local node publishes even parts (0b01010101) - caches them locally
+    let mut local_message = Bitmap::new(group_id);
+    local_message.fill_parts(0b01010101);
+    gs.publish_partial(topic_hash.clone(), local_message.clone())
+        .expect("Publish should succeed");
+    // Drain the queue to clear the initial publish message
+    let mut receiver_queue = queues.remove(&peer).unwrap();
+    while !receiver_queue.is_empty() {
+        let _ = receiver_queue.try_pop();
+    }
+    queues.insert(peer, receiver_queue);
+    gs.events.clear();
+    // Create the partial message from peer with odd parts (0b10101010)
+    let mut peer_message = Bitmap::new(group_id);
+    peer_message.fill_parts(0b10101010);
+    let action = peer_message
+        .partial_action_from_metadata(peer, Some(&[0b01010101])) // peer knows we have even parts
+        .unwrap();
+    let (body, _) = action.send.expect("Should have data to send");
+    let peer_partial = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: Some(body),
+        metadata: Some(vec![0b10101010]),
+    };
+    // Deliver via on_connection_handler_event
+    gs.on_connection_handler_event(
+        peer,
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc: RpcIn {
+                messages: vec![],
+                subscriptions: vec![],
+                control_msgs: vec![],
+                test_extension: None,
+                partial_message: Some(peer_partial),
+            },
+            invalid_messages: vec![],
+        },
+    );
+    // Verify Event::Partial was emitted with received odd parts
+    let partial_event = gs
+        .events
+        .iter()
+        .find(|e| matches!(e, ToSwarm::GenerateEvent(Event::Partial { .. })));
+    assert!(partial_event.is_some(), "Should emit Event::Partial");
+    let ToSwarm::GenerateEvent(Event::Partial {
+        message: recv_body,
+        metadata: recv_metadata,
+        ..
+    }) = partial_event.unwrap()
+    else {
+        panic!("Expected Event::Partial");
+    };
+    assert!(recv_body.is_some(), "Should have received body");
+    assert_eq!(
+        recv_body.as_ref().unwrap()[0],
+        0b10101010,
+        "Should receive odd parts from peer"
+    );
+    assert_eq!(*recv_metadata, Some(vec![0b10101010]));
+    // Verify a response PartialMessage was sent back with even parts
+    let mut receiver_queue = queues.remove(&peer).unwrap();
+    let mut response_partial = None;
+    while !receiver_queue.is_empty() {
+        if let Some(RpcOut::PartialMessage(pm)) = receiver_queue.try_pop() {
+            response_partial = Some(pm);
+            break;
+        }
+    }
+    let response_partial = response_partial.expect("Should send response PartialMessage");
+    assert!(
+        response_partial.body.is_some(),
+        "Response should contain body with our parts"
+    );
+    assert_eq!(
+        response_partial.body.as_ref().unwrap()[0],
+        0b01010101,
+        "Response should contain only even parts (what peer is missing)"
+    );
+    assert!(
+        response_partial.metadata.is_some(),
+        "Response should contain metadata"
     );
 }

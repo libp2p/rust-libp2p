@@ -52,7 +52,7 @@ use libp2p_core::ConnectedPoint;
 use rand::Rng;
 
 use super::*;
-use crate::{types::RpcIn, IdentTopic as Topic};
+use crate::{types::RpcIn, types::SubscriptionOpts, IdentTopic as Topic};
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =
@@ -85,6 +85,8 @@ pub(super) struct BehaviourTestBuilder<D, F> {
     data_transform: D,
     subscription_filter: F,
     peer_kind: Option<PeerKind>,
+    requests_partial: bool,
+    supports_partial: bool,
 }
 
 impl<D, F> BehaviourTestBuilder<D, F>
@@ -130,6 +132,13 @@ where
         // subscribe to the topics
         for t in self.topics {
             let topic = Topic::new(t);
+            #[cfg(feature = "partial_messages")]
+            if self.requests_partial {
+                gs.subscribe_partial(&topic, self.requests_partial).unwrap();
+            } else {
+                gs.subscribe(&topic).unwrap();
+            }
+            #[cfg(not(feature = "partial_messages"))]
             gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
@@ -151,6 +160,8 @@ where
                 i < self.explicit,
                 Multiaddr::empty(),
                 self.peer_kind.or(Some(PeerKind::Gossipsubv1_1)),
+                self.requests_partial,
+                self.supports_partial,
             );
             peers.push(peer);
             queues.insert(peer, queue);
@@ -218,6 +229,20 @@ where
         self.peer_kind = Some(peer_kind);
         self
     }
+
+    /// Sets whether peers request partial messages.
+    #[cfg(feature = "partial_messages")]
+    pub(super) fn requests_partial(mut self, requests_partial: bool) -> Self {
+        self.requests_partial = requests_partial;
+        self
+    }
+
+    /// Sets whether peers support partial messages.
+    #[cfg(feature = "partial_messages")]
+    pub(super) fn supports_partial(mut self, supports_partial: bool) -> Self {
+        self.supports_partial = supports_partial;
+        self
+    }
 }
 
 /// Adds a new peer to the gossipsub network with default settings.
@@ -270,6 +295,8 @@ where
         explicit,
         address,
         Some(PeerKind::Gossipsubv1_1),
+        false,
+        false,
     )
 }
 
@@ -287,6 +314,8 @@ where
 /// * `address` - The multiaddr for the peer connection
 /// * `kind` - The gossipsub protocol version. Use `None` for Floodsub peers, or
 ///   `Some(PeerKind::...)` for specific versions.
+/// * `requests_partial` - If `true`, the peer requests partial messages
+/// * `supports_partial` - If `true`, the peer supports partial messages
 ///
 /// # Returns
 ///
@@ -298,6 +327,8 @@ pub(super) fn add_peer_with_addr_and_kind<D, F>(
     explicit: bool,
     address: Multiaddr,
     kind: Option<PeerKind>,
+    requests_partial: bool,
+    supports_partial: bool,
 ) -> (PeerId, Queue)
 where
     D: DataTransform + Default + Clone + Send + 'static,
@@ -358,7 +389,10 @@ where
                 .map(|t| Subscription {
                     action: SubscriptionAction::Subscribe,
                     topic_hash: t,
-                    options: Default::default(),
+                    options: SubscriptionOpts {
+                        requests_partial,
+                        supports_partial,
+                    },
                 })
                 .collect::<Vec<_>>(),
             &peer,

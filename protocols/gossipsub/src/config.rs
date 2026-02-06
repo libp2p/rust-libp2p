@@ -429,6 +429,7 @@ impl Config {
 
     /// The maximum number of metadata messages to send per peer during heartbeat gossip.
     /// The default is XXXX.
+    #[cfg(feature = "partial_messages")]
     pub fn max_metadata_length(&self) -> usize {
         self.max_metadata_length
     }

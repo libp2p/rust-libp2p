@@ -3248,7 +3248,7 @@ where
                 // connection handler.
                 if !peer.connections.is_empty() {
                     for topic in &peer.topics {
-                        if let Some(mesh_peers) = self.mesh.get(&topic) {
+                        if let Some(mesh_peers) = self.mesh.get(topic) {
                             if mesh_peers.contains(&peer_id) {
                                 self.events.push_back(ToSwarm::NotifyHandler {
                                     peer_id,
