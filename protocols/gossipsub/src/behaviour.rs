@@ -3133,11 +3133,12 @@ where
 
         // Try sending the message to the connection handler,
         // High priority messages should not fail.
+        tracing::debug!(%peer_id, ?rpc, "Sending Rpc");
         match peer.messages.try_push(rpc) {
             Ok(()) => true,
             Err(rpc) => {
                 // Sending failed because the channel is full.
-                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {:?}.", rpc);
+                tracing::warn!(%peer_id, ?rpc, "Send Queue full. Could not send Rpc.");
 
                 // Update failed message counter.
                 let failed_messages = self.failed_messages.entry(peer_id).or_default();
@@ -3521,6 +3522,7 @@ where
                 invalid_messages,
             } => {
                 // Handle the gossipsub RPC
+                tracing::debug!(rpc = ?rpc, "Received RPC");
 
                 // Handle subscriptions
                 // Update connected peers topics
