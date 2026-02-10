@@ -24,24 +24,13 @@ struct Opt {
 async fn main() -> Result<(), Box<dyn Error>> {
     cfg_if! {
         if #[cfg(feature = "jaeger")] {
-            use opentelemetry::trace::TracerProvider as _;
-            use opentelemetry::KeyValue;
-            use opentelemetry_otlp::SpanExporter;
-            use opentelemetry_sdk::{runtime, trace::TracerProvider};
             use tracing_subscriber::layer::SubscriberExt;
-
-            let provider = TracerProvider::builder()
-                .with_batch_exporter(
-                    SpanExporter::builder().with_tonic().build()?,
-                    runtime::Tokio,
-                )
-                .with_resource(opentelemetry_sdk::Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "autonatv2",
-                )]))
-                .build();
-            let telemetry = tracing_opentelemetry::layer()
-                .with_tracer(provider.tracer("autonatv2"));
+            use opentelemetry_sdk::runtime::Tokio;
+            let tracer = opentelemetry_jaeger::new_agent_pipeline()
+                .with_endpoint("jaeger:6831")
+                .with_service_name("autonatv2")
+                .install_batch(Tokio)?;
+            let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
             let subscriber = tracing_subscriber::Registry::default()
                 .with(telemetry);
         } else {
