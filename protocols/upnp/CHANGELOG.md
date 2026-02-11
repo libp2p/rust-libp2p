@@ -1,3 +1,7 @@
+## 0.6.1
+
+- Add integration tests. See [PR 6264](https://github.com/libp2p/rust-libp2p/pull/6264)
+
 ## 0.6.0
 
 - Change `Event::NewExternalAddr` and `Event::ExpiredExternalAddr` from tuple variants to struct variants
@@ -31,7 +35,7 @@
 ## 0.4.0
 
 - update igd-next to 0.15.1.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5625](https://github.com/libp2p/rust-libp2p/pull/5625).
 
 <!-- Update to libp2p-core v0.43.0 -->
 

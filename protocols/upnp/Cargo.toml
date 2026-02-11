@@ -3,7 +3,7 @@ name = "libp2p-upnp"
 edition.workspace = true
 rust-version.workspace = true
 description = "UPnP support for libp2p transports"
-version = "0.6.0"
+version = "0.6.1"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -18,6 +18,11 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["rt"], optional = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+libp2p-swarm-test = { path = "../../swarm-test" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+mock-igd = "0.1"
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]

@@ -42,7 +42,13 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package "$CRATE" --all-features
+        run: |
+          if [ "$CRATE" = "libp2p-upnp" ]; then
+            # Run integration tests serially to avoid multiple IGD mock servers running in parallel.
+            cargo test --package "$CRATE" --all-features -- --test-threads 1
+          else
+            cargo test --package "$CRATE" --all-features
+          fi
 
       - name: Check if we compile without any features activated
         run: cargo build --package "$CRATE" --no-default-features

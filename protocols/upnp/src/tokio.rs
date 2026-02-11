@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, net::IpAddr};
+use std::{error::Error, net::IpAddr, time::Duration};
 
 use futures::{
     channel::{mpsc, oneshot},
@@ -90,14 +90,30 @@ pub(crate) struct Gateway {
     pub(crate) external_addr: IpAddr,
 }
 
-pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>> {
+/// Searches for a UPnP gateway on the network and returns a channel to receive the result.
+///
+/// # Arguments
+///
+/// * `timeout` - Optional timeout duration for the gateway search. If `None`, the default timeout
+///   from [`igd_next::SearchOptions`] is used.
+pub(crate) fn search_gateway(
+    timeout: Option<Duration>,
+) -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>> {
     let (search_result_sender, search_result_receiver) = oneshot::channel();
 
     let (events_sender, mut task_receiver) = mpsc::channel(10);
     let (mut task_sender, events_queue) = mpsc::channel(0);
 
     tokio::spawn(async move {
-        let gateway = match igd_next::aio::tokio::search_gateway(SearchOptions::default()).await {
+        let search_options = if timeout.is_some() {
+            SearchOptions {
+                timeout,
+                ..Default::default()
+            }
+        } else {
+            SearchOptions::default()
+        };
+        let gateway = match igd_next::aio::tokio::search_gateway(search_options).await {
             Ok(gateway) => gateway,
             Err(err) => {
                 let _ = search_result_sender.send(Err(err.into()));
