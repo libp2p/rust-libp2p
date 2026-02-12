@@ -273,6 +273,7 @@ impl NetworkBehaviour for Behaviour {
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
                     .condition(dial_opts::PeerCondition::Always)
+                    .extend_addresses_through_behaviour()
                     .build();
 
                 let maybe_direct_connection_id = opts.connection_id();
@@ -305,6 +306,7 @@ impl NetworkBehaviour for Behaviour {
                 let opts = DialOpts::peer_id(event_source)
                     .condition(dial_opts::PeerCondition::Always)
                     .addresses(remote_addrs)
+                    .extend_addresses_through_behaviour()
                     .override_role()
                     .build();
 
