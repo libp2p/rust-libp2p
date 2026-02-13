@@ -79,9 +79,16 @@ pub trait Partial: Send + Sync {
 pub trait Metadata: Debug + Send + Sync {
     /// Return the `Metadata` as a byte slice.
     fn as_slice(&self) -> &[u8];
-    /// try to Update the `Metadata` with the remote data,
-    /// return true if it was updated.
+    /// Attempts to update the `Metadata` with the remote metadata,
+    /// Returns `true` if the `Metadata` was updated.
     fn update(&mut self, data: &[u8]) -> Result<bool, PartialError>;
+    /// Attempts to update the local `Metadata` with the remote data received.
+    /// This method is used to track the metadata that the remote peer believes the local system has.
+    /// By default, it returns `false` as it is an optimization, indicating that the update logic
+    /// has not been triggered in this implementation.
+    fn update_from_data(&mut self, _data: &[u8]) -> Result<(), PartialError> {
+        Ok(())
+    }
 }
 
 /// Indicates the action to take for the given metadata.
@@ -353,7 +360,19 @@ impl State {
             }];
         };
 
-        let action = match local_partial
+        // Update the `Metadata` as seen by the remote peer, reflecting the current local state.
+        if let (Some(metadata), Some(body)) = (&mut peer_partial.metadata, &message.body) {
+            if let Err(err) = metadata.update_from_data(body) {
+                tracing::debug!(peer = %peer_id, group_id = ?message.group_id,err = %err,
+                    "Could update the metadata as seen by the remote peer");
+                return vec![ReceivedAction::Publish(PublishAction::PenalizePeer {
+                    peer_id,
+                    topic_hash: message.topic_hash.clone(),
+                })];
+            }
+        }
+
+        let received_action = match local_partial
             .content
             .partial_action_from_metadata(peer_id, message.metadata.as_deref())
         {
@@ -371,7 +390,7 @@ impl State {
         };
 
         let mut actions = vec![];
-        if action.need {
+        if received_action.need {
             actions.push(ReceivedAction::EmitEvent {
                 topic_hash: message.topic_hash.clone(),
                 peer_id,
@@ -381,7 +400,7 @@ impl State {
             });
         }
 
-        let Some((body, peer_updated_metadata)) = action.send else {
+        let Some((body, peer_updated_metadata)) = received_action.send else {
             return actions;
         };
 
@@ -397,6 +416,7 @@ impl State {
                 topic_hash: message.topic_hash.clone(),
             }),
         }));
+
         actions
     }
 
@@ -513,8 +533,26 @@ impl State {
                 None
             };
 
-            if let Some(view_on_our_metadata) = &mut remote_partial.metadata {
-                if !view_on_our_metadata.update(&publish_metadata).unwrap() {
+            // Determine whether the local `Metadata` needs to be sent, based on changes
+            // in the remote peer's view of our metadata.
+            match &mut remote_partial.metadata {
+                Some(metadata) => {
+                    let Ok(updated) = metadata.update(&publish_metadata) else {
+                        actions.push(PublishAction::PenalizePeer {
+                            peer_id,
+                            topic_hash: topic_hash.clone(),
+                        });
+                        continue;
+                    };
+                    if !updated {
+                        continue;
+                    }
+                }
+                None => remote_partial.metadata = Some(partial_message.metadata()),
+            }
+
+            if let Some(metadata) = &mut remote_partial.metadata {
+                if !metadata.update(&publish_metadata).unwrap() {
                     continue;
                 }
             }
