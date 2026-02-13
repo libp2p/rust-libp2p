@@ -200,8 +200,10 @@ impl Partial for Bitmap {
         self.group_id.to_vec()
     }
 
-    fn metadata(&self) -> Vec<u8> {
-        [self.metadata; 1].to_vec()
+    fn metadata(&self) -> Box<dyn Metadata> {
+        Box::new(MetadataBitmap {
+            bitmap: [self.metadata; 1],
+        })
     }
 
     fn partial_action_from_metadata(
@@ -253,7 +255,7 @@ impl Partial for Bitmap {
         // Set the correct bitmap in the first byte
         data[0] = response_bitmap;
         data.extend_from_slice(&self.group_id);
-        let bitmap = PeerBitmap {
+        let bitmap = MetadataBitmap {
             bitmap: [metadata[0] | response_bitmap],
         };
 
@@ -265,11 +267,11 @@ impl Partial for Bitmap {
 }
 
 #[derive(Debug)]
-struct PeerBitmap {
+struct MetadataBitmap {
     bitmap: [u8; 1],
 }
 
-impl Metadata for PeerBitmap {
+impl Metadata for MetadataBitmap {
     fn as_slice(&self) -> &[u8] {
         self.bitmap.as_slice()
     }

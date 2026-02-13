@@ -246,7 +246,8 @@ impl State {
                     // Check if we have new data for the peer.
                     let body = if let Some((body, peer_updated_metadata)) = action.send {
                         // We have something to send, update the peer's metadata.
-                        remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+                        remote_partial.peer_metadata =
+                            Some(PeerMetadata::Local(peer_updated_metadata));
                         Some(body)
                     } else if remote_partial.peer_metadata.is_none() || action.need {
                         // We have no data to eagerly send, but we want to transmit our metadata anyway, to
@@ -263,7 +264,7 @@ impl State {
                             group_id: group_id.clone(),
                             topic_hash: topic_hash.clone(),
                             body,
-                            metadata: Some(partial_message.content.metadata().clone()),
+                            metadata: Some(partial_message.content.metadata().as_slice().to_vec()),
                         }),
                     });
                     num_messages += 1;
@@ -303,7 +304,8 @@ impl State {
             }
             (Some(PeerMetadata::Remote(ref metadata)), Some(remote_metadata)) => {
                 if metadata != remote_metadata {
-                    peer_partial.peer_metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
+                    peer_partial.peer_metadata =
+                        Some(PeerMetadata::Remote(remote_metadata.clone()));
                     true
                 } else {
                     false
@@ -383,7 +385,7 @@ impl State {
             return actions;
         };
 
-        peer_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+        peer_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
 
         let cached_metadata = local_partial.content.metadata().as_slice().to_vec();
         actions.push(ReceivedAction::Publish(PublishAction::SendMessage {
@@ -505,13 +507,13 @@ impl State {
             // Check if we have new data for the peer.
             let body = if let Some((body, peer_updated_metadata)) = action.send {
                 // We have something to send, update the peer's metadata.
-                remote_partial.metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+                remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
                 Some(body)
             } else {
                 None
             };
 
-            if let Some(view_on_our_metadata) = &mut remote_partial.view_on_our_metadata {
+            if let Some(view_on_our_metadata) = &mut remote_partial.metadata {
                 if !view_on_our_metadata.update(&publish_metadata).unwrap() {
                     continue;
                 }
@@ -631,7 +633,7 @@ struct RemotePartial {
     /// Our view of the peers' partial metadata.
     peer_metadata: Option<PeerMetadata>,
     /// The peers view of our partial metadata.
-    view_on_our_metadata: Option<Box<dyn Metadata>>,
+    metadata: Option<Box<dyn Metadata>>,
     /// The remaining heartbeats for this message to be deleted.
     ttl: usize,
 }
@@ -640,7 +642,7 @@ impl Default for RemotePartial {
     fn default() -> Self {
         Self {
             peer_metadata: Default::default(),
-            view_on_our_metadata: Default::default(),
+            metadata: Default::default(),
             ttl: DEFAULT_PARTIAL_TTL,
         }
     }
