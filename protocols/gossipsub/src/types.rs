@@ -334,6 +334,34 @@ pub enum RpcOut {
     IDontWant(IDontWant),
 }
 
+impl std::fmt::Display for RpcOut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RpcOut::Publish { message_id, .. } => write!(f, "Rpc Out Publish id: {}", message_id),
+            RpcOut::Forward { message_id, .. } => write!(f, "Rpc Out Forward id: {}", message_id),
+            RpcOut::Subscribe(topic_hash) => {
+                write!(f, "Rpc Out Subscribe topic: {}", topic_hash)
+            }
+            RpcOut::Unsubscribe(topic_hash) => {
+                write!(f, "Rpc Out Unsubscribe topic: {}", topic_hash)
+            }
+            RpcOut::Graft(graft) => write!(f, "Rpc Out Graft topic: {}", graft.topic_hash),
+            RpcOut::Prune(prune) => write!(f, "Rpc Out Prune topic: {}", prune.topic_hash),
+            RpcOut::IHave(ihave) => write!(
+                f,
+                "Rpc Out IHAVE topic: {}, message ids: {:?}",
+                ihave.topic_hash, ihave.message_ids
+            ),
+            RpcOut::IWant(iwant) => write!(f, "Rpc Out IWANT message ids: {:?}", iwant.message_ids),
+            RpcOut::IDontWant(idontwant) => write!(
+                f,
+                "Rpc Out IDONTWANT message ids: {:?}",
+                idontwant.message_ids
+            ),
+        }
+    }
+}
+
 impl RpcOut {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
