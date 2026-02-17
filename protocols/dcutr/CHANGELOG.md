@@ -1,3 +1,8 @@
+## 0.14.1
+
+- Replace `lru::LruCache` with `hashlink::LruCache`.
+  See [PR #6138](https://github.com/libp2p/rust-libp2p/pull/6138)
+
 ## 0.14.0
 
 <!-- Update to libp2p-swarm v0.47.0 -->
