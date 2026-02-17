@@ -1,4 +1,8 @@
 ## 0.50.0
+
+- Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
+  See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
+
 - Log when sending and receiving messages.
   See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
 

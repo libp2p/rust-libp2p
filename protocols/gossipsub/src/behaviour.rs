@@ -2894,7 +2894,7 @@ where
             Ok(()) => true,
             Err(rpc) => {
                 // Sending failed because the channel is full.
-                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {}.", rpc);
+                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {:?}.", rpc);
 
                 // Update failed message counter.
                 let failed_messages = self.failed_messages.entry(peer_id).or_default();
