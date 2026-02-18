@@ -859,6 +859,13 @@ where
     }
 
     #[cfg(feature = "partial_messages")]
+    pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
+        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+            peer_score.reject_invalid_partial(peer_id, topic_hash);
+        }
+    }
+
+    #[cfg(feature = "partial_messages")]
     pub fn publish_partial<P: Partial + 'static>(
         &mut self,
         topic: impl Into<TopicHash>,
