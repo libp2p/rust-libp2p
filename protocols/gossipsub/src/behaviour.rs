@@ -515,7 +515,12 @@ where
         }
     }
 
-    /// Returns the detailed gossipsub score parameters for a given peer, if one exists.
+    /// Returns a breakdown of the individual score components for a peer.
+    ///
+    /// Returns `None` if peer scoring is disabled or the peer is unknown.
+    /// Each field in [`PeerScoreParameters`] reflects a weighted contribution
+    /// from the corresponding term in the gossipsub v1.1 scoring function.
+    /// The `final_score` field equals [`Self::peer_score`] for the same peer.
     pub fn peer_score_params(&self, peer_id: &PeerId) -> Option<PeerScoreParameters> {
         match &self.peer_score {
             PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).params),
