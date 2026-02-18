@@ -317,8 +317,8 @@ where
 /// * `address` - The multiaddr for the peer connection
 /// * `kind` - The gossipsub protocol version. Use `None` for Floodsub peers, or
 ///   `Some(PeerKind::...)` for specific versions.
-/// * `requests_partial` - If `true`, the peer requests partial messages
-/// * `supports_partial` - If `true`, the peer supports partial messages
+/// * `requests_partial` - If `true`, the peer requests partial messages.
+/// * `supports_partial` - If `true`, the peer supports partial messages.
 ///
 /// # Returns
 ///
@@ -643,15 +643,13 @@ pub(super) fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
 /// * `seq` - Mutable sequence counter (incremented each call)
 /// * `topics` - Pool of topics to randomly select from
 pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
-    let mut rng = rand::rng();
+    let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.random_range(10..10024))
-            .map(|_| rng.random())
-            .collect(),
+        data: (0..rng.gen_range(10..10024)).map(|_| rng.gen()).collect(),
         sequence_number: Some(*seq),
-        topic: topics[rng.random_range(0..topics.len())].clone(),
+        topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,
         key: None,
         validated: true,

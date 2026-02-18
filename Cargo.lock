@@ -2650,7 +2650,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
- "rand 0.9.0",
+ "rand 0.8.5",
  "regex",
  "serde",
  "sha2",
