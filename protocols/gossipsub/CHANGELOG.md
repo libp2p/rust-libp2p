@@ -1,5 +1,10 @@
 ## 0.50.0
 
+- Add `PeerScoreParameters` struct and `Behaviour::peer_score_params()` to expose
+  the individual weighted contributions (P1–P7, slow peer penalty) that make up a
+  peer's gossipsub score. Useful for debugging and external tooling.
+  See [PR 6189](https://github.com/libp2p/rust-libp2p/pull/6189).
+
 - Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
   See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
 

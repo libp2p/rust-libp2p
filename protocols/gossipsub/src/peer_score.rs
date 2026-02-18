@@ -81,20 +81,39 @@ pub(crate) struct PeerScoreReport {
     pub(crate) penalties: Vec<crate::metrics::Penalty>,
 }
 
-#[derive(Copy, Clone, Default)]
+/// A breakdown of the individual score components for a single peer.
+///
+/// Each field corresponds to a weighted score contribution as defined in the
+/// [gossipsub v1.1 peer scoring spec]. All values are pre-weighted (i.e. already
+/// multiplied by the relevant weight and, for topic parameters, the topic weight).
+/// `final_score` equals the sum of all components after the topic score cap is applied.
+///
+/// Obtain this via [`Behaviour::peer_score_params`].
+///
+/// [gossipsub v1.1 peer scoring spec]: https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function
+#[derive(Copy, Clone, Default, Debug)]
 pub struct PeerScoreParameters {
+    /// The final aggregate score. Equal to the sum of all other fields after
+    /// the topic score cap is applied.
     pub final_score: f64,
-    // weighted contributions per the spec.
-    // https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function
+    /// P1: time in mesh contribution (summed across topics).
     pub p1: f64,
+    /// P2: first message deliveries contribution (summed across topics).
     pub p2: f64,
+    /// P3: mesh message delivery deficit penalty (summed across topics, negative).
     pub p3: f64,
+    /// P3b: mesh failure penalty (summed across topics, negative).
     pub p3b: f64,
+    /// P4: invalid message delivery penalty (summed across topics, negative).
     pub p4: f64,
+    /// P5: application-specific score contribution.
     pub p5: f64,
+    /// P6: IP collocation factor penalty (negative).
     pub p6: f64,
+    /// P7: behavioural pattern penalty (negative).
     pub p7: f64,
-    // not part of the spec, but useful.
+    /// Slow peer penalty. Not part of the spec, but applied when a peer is
+    /// consistently slow to acknowledge messages.
     pub slow_peer_penalty: f64,
 }
 
