@@ -774,6 +774,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn port_of_extracts_tcp_port() {
+        let addr: Multiaddr = "/ip4/1.2.3.4/tcp/42042".parse().unwrap();
+        assert_eq!(port_of(&addr), Some(42042));
+    }
+
+    #[test]
+    fn port_of_extracts_udp_port() {
+        let addr: Multiaddr = "/ip4/1.2.3.4/udp/42042/quic-v1".parse().unwrap();
+        assert_eq!(port_of(&addr), Some(42042));
+    }
+
+    #[test]
+    fn port_of_returns_none_for_circuit_addr() {
+        let addr: Multiaddr = "/p2p-circuit".parse().unwrap();
+        assert_eq!(port_of(&addr), None);
+    }
+
+    #[test]
+    fn port_of_shared_port_matches_across_transports() {
+        let tcp: Multiaddr = "/ip4/0.0.0.0/tcp/42042".parse().unwrap();
+        let quic: Multiaddr = "/ip4/1.2.3.4/udp/42042/quic-v1".parse().unwrap();
+        assert_eq!(port_of(&tcp), port_of(&quic));
+    }
+
+    #[test]
+    fn port_of_separate_ports_do_not_match() {
+        let tcp: Multiaddr = "/ip4/0.0.0.0/tcp/4001".parse().unwrap();
+        let quic: Multiaddr = "/ip4/1.2.3.4/udp/4002/quic-v1".parse().unwrap();
+        assert_ne!(port_of(&tcp), port_of(&quic));
+    }
+
+    #[test]
     fn check_multiaddr_matches_peer_id() {
         let peer_id = PeerId::random();
         let other_peer_id = PeerId::random();

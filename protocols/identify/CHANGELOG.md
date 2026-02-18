@@ -1,3 +1,14 @@
+## 0.47.1
+
+- When address translation for an outbound ephemeral connection yields no
+  results due to a transport protocol mismatch (e.g. a QUIC listener observed
+  via a TCP connection), attempt cross-protocol translation using the observed
+  IP and the listen port, gated on the ports being equal. This correctly
+  handles the common deployment pattern of sharing a single port across TCP
+  and QUIC, and prevents AutoNAT from receiving ephemeral source ports as
+  external address candidates.
+  See [PR TODO](https://github.com/libp2p/rust-libp2p/pull/TODO).
+
 ## 0.47.0
 
 - Implement optional `signedPeerRecord` support for identify messages.
