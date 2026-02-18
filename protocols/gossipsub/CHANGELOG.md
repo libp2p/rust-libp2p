@@ -1,6 +1,13 @@
 ## 0.50.0
+
 - Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
   See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
+
+- Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
+  See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
+
+- Log when sending and receiving messages.
+  See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
 
 - Prevent mesh exceeding mesh_n_high.
   See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
@@ -28,6 +35,15 @@
 
 - Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
   with an internal priority queue. See [PR 6175](https://github.com/libp2p/rust-libp2p/pull/6175)
+
+- gossipsub: do early return in for an empty input
+  See [PR 6208](https://github.com/libp2p/rust-libp2p/pull/6208).
+
+- Refactor gossipsub with in-place negative-score peer removal.
+  See [PR 6209](https://github.com/libp2p/rust-libp2p/pull/6209).
+
+- Avoid direct casting from u128 to u64.
+  See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
 
 ## 0.49.2
 

@@ -689,6 +689,9 @@ where
                         ),
                     };
 
+                    // The `Result` is consumed immediately below so the large error variant is
+                    // never propagated across stack frames.
+                    #[allow(clippy::result_large_err)]
                     let check_peer_id = || {
                         if let Some(peer) = expected_peer_id {
                             if peer != obtained_peer_id {

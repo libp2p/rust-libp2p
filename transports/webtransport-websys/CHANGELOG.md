@@ -1,3 +1,8 @@
+## 0.5.2
+
+- Remove `poll_flush called after poll_close` assertion.
+  See [PR 6193](https://github.com/libp2p/rust-libp2p/pull/6193).
+
 ## 0.5.1
 
 - Remove `once_cell` dependency.

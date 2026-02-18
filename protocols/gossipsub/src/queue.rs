@@ -81,6 +81,10 @@ impl Queue {
     /// Remove pending low priority Publish and Forward messages.
     /// Returns the number of messages removed.
     pub(crate) fn remove_data_messages(&mut self, message_ids: &[MessageId]) -> usize {
+        if message_ids.is_empty() {
+            return 0;
+        }
+
         let mut count = 0;
         self.non_priority.retain(|message| match message {
             RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. } => {

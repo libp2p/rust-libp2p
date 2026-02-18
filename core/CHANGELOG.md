@@ -1,3 +1,16 @@
+## 0.43.2
+
+- Add `*_interop` methods to `PeerRecord` for cross-implementation compatibility with Go and JavaScript libp2p.
+  - `PeerRecord::new_interop()` - Create peer records using standard format
+  - `PeerRecord::from_signed_envelope_interop()` - Verify peer records using standard format
+  
+  The standard format uses libp2p-peer-record domain and multicodec identifier (0x0301) for interoperability.
+  Existing methods (`new()`, `from_signed_envelope()`) maintain backward compatibility with legacy Rust libp2p format.
+  
+  Use the `*_interop` variants when exchanging peer records with non-Rust libp2p implementations.
+  
+  See [PR 6230](https://github.com/libp2p/rust-libp2p/pull/6230).
+
 ## 0.43.1
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)

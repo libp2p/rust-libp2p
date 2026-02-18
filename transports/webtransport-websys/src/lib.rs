@@ -1,4 +1,4 @@
-//! Libp2p WebTransport built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html)
+//! Libp2p WebTransport built on [web-sys](https://wasm-bindgen.github.io/wasm-bindgen/contributing/web-sys/index.html)
 
 #![allow(unexpected_cfgs)]
 

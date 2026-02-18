@@ -153,10 +153,6 @@ impl StreamInner {
             // messages were flushed.
             self.poll_writer_ready(cx)
         } else {
-            debug_assert!(
-                false,
-                "libp2p_webtransport_websys::Stream: poll_flush called after poll_close"
-            );
             Poll::Ready(Ok(()))
         }
     }
