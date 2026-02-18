@@ -87,6 +87,17 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
+/// Extract the port number from a TCP or QUIC multiaddr, if present.
+///
+/// Returns `None` for address types that do not carry a port in the second
+/// protocol component (e.g. `/p2p-circuit`, WebSocket, etc.).
+fn port_of(addr: &Multiaddr) -> Option<u16> {
+    addr.iter().find_map(|p| match p {
+        Protocol::Tcp(port) | Protocol::Udp(port) => Some(port),
+        _ => None,
+    })
+}
+
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
 ///
@@ -364,10 +375,39 @@ impl Behaviour {
                 addrs
             };
 
-            // If address translation yielded nothing, broadcast the original candidate address.
             if translated_addresses.is_empty() {
-                self.events
-                    .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+                // Translation yielded nothing. This happens when all listen addresses are of a
+                // different transport type than the observed address (e.g. a QUIC listener
+                // observed via a TCP connection). In that case the observed address carries an
+                // ephemeral source port that is not a stable external address.
+                //
+                // As a best-effort, attempt cross-protocol translation: use the observed IP with
+                // the listen port, but only when the listen port and the observed port are the
+                // same — which is true when TCP and QUIC share a port. Sharing a port means the
+                // observed IP is valid for all transports listening on that port.
+                //
+                // If no listen addresses exist at all, fall back to emitting the raw observed
+                // address. This preserves existing behaviour for nodes that have no listeners
+                // (e.g. pure dial-out nodes), where the raw observed address is the only signal
+                // available.
+                let cross_protocol_candidates: Vec<_> = self
+                    .listen_addresses
+                    .iter()
+                    .filter(|listen| port_of(listen) == port_of(observed))
+                    .filter_map(|listen| _address_translation(listen, observed))
+                    .collect();
+
+                if !cross_protocol_candidates.is_empty() {
+                    for addr in cross_protocol_candidates {
+                        self.events
+                            .push_back(ToSwarm::NewExternalAddrCandidate(addr));
+                    }
+                } else {
+                    // No listen addresses at all, or ports differ across all transports.
+                    // Fall back to the raw observed address as the only available signal.
+                    self.events
+                        .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+                }
             } else {
                 for addr in translated_addresses {
                     self.events
