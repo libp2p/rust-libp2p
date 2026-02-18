@@ -1164,7 +1164,7 @@ where
                 &self.connected_peers,
                 topic_hash,
                 mesh_n - added_peers.len(),
-                |peer_id, _| {
+                |peer_id| {
                     !added_peers.contains(peer_id)
                         && !self.explicit_peers.contains(peer_id)
                         && !self.peer_score.below_threshold(peer_id, |_| 0.0).0
@@ -1250,9 +1250,7 @@ where
                 &self.connected_peers,
                 topic_hash,
                 self.config.prune_peers(),
-                |peer_id, _| {
-                    peer_id != peer && !self.peer_score.below_threshold(peer_id, |_| 0.0).0
-                },
+                |peer_id| peer_id != peer && !self.peer_score.below_threshold(peer_id, |_| 0.0).0,
             )
             .into_iter()
             .map(|p| PeerInfo { peer_id: Some(p) })
@@ -2361,7 +2359,7 @@ where
                     &self.connected_peers,
                     topic_hash,
                     desired_peers,
-                    |peer_id, _| {
+                    |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
                             && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
@@ -2464,11 +2462,8 @@ where
                 // if we have not enough outbound peers, graft to some new outbound peers
                 if outbound < mesh_outbound_min {
                     let needed = mesh_outbound_min - outbound;
-                    let peer_list = get_random_peers(
-                        &self.connected_peers,
-                        topic_hash,
-                        needed,
-                        |peer_id, _| {
+                    let peer_list =
+                        get_random_peers(&self.connected_peers, topic_hash, needed, |peer_id| {
                             !peers.contains(peer_id)
                                 && !explicit_peers.contains(peer_id)
                                 && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
@@ -2477,8 +2472,7 @@ where
                                     .connected_peers
                                     .get(peer_id)
                                     .is_some_and(|peer| peer.outbound)
-                        },
-                    );
+                        });
 
                     for peer in &peer_list {
                         let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
@@ -2544,7 +2538,7 @@ where
                             &self.connected_peers,
                             topic_hash,
                             self.config.opportunistic_graft_peers(),
-                            |peer_id, _| {
+                            |peer_id| {
                                 !peers.contains(peer_id)
                                     && !explicit_peers.contains(peer_id)
                                     && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
@@ -2651,19 +2645,15 @@ where
                 );
                 let needed_peers = mesh_n - peers.len();
                 let explicit_peers = &self.explicit_peers;
-                let new_peers = get_random_peers(
-                    &self.connected_peers,
-                    topic_hash,
-                    needed_peers,
-                    |peer_id, _| {
+                let new_peers =
+                    get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
                             && !self
                                 .peer_score
                                 .below_threshold(peer_id, |ts| ts.publish_threshold)
                                 .0
-                    },
-                );
+                    });
                 peers.extend(new_peers);
             }
         }
@@ -2792,7 +2782,7 @@ where
                 self.connected_peers.iter(),
                 topic_hash,
                 n_map,
-                |peer_id, _| {
+                |peer_id| {
                     let filter = !peers.contains(peer_id)
                         && !self.explicit_peers.contains(peer_id)
                         && !self
@@ -3832,12 +3822,12 @@ fn get_random_peers_dynamic<'a>(
     topic_hash: &TopicHash,
     // maps the number of total peers to the number of selected peers
     n_map: impl Fn(usize) -> usize,
-    f: impl Fn(&PeerId, &PeerDetails) -> bool,
+    f: impl Fn(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
     let mut gossip_peers = peers
         .into_iter()
         .filter(|(_, p)| p.topics.contains(topic_hash))
-        .filter(|(peer_id, peer_details)| f(peer_id, peer_details))
+        .filter(|(peer_id, _peer)| f(peer_id))
         .filter(|(_, p)| p.kind.is_gossipsub())
         .map(|(peer_id, _)| *peer_id)
         .collect::<Vec<PeerId>>();
@@ -3864,7 +3854,7 @@ fn get_random_peers<'a>(
     peers: impl IntoIterator<Item = (&'a PeerId, &'a PeerDetails)>,
     topic_hash: &TopicHash,
     n: usize,
-    f: impl Fn(&PeerId, &PeerDetails) -> bool,
+    f: impl Fn(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
     get_random_peers_dynamic(peers, topic_hash, |_| n, f)
 }
