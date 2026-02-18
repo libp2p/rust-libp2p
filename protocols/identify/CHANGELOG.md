@@ -7,7 +7,7 @@
   handles the common deployment pattern of sharing a single port across TCP
   and QUIC, and prevents AutoNAT from receiving ephemeral source ports as
   external address candidates.
-  See [PR TODO](https://github.com/libp2p/rust-libp2p/pull/TODO).
+  See [PR 6277](https://github.com/libp2p/rust-libp2p/pull/6277).
 
 ## 0.47.0
 
