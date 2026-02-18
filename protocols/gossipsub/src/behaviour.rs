@@ -3419,9 +3419,7 @@ where
             );
         }
 
-        // This clones a reference to the Queue so any new handlers reference the same underlying
-        // queue. No data is actually cloned here.
-        Ok(Handler::new(self.config.protocol_config(), queue))
+        Ok(Handler::new(peer_id, self.config.protocol_config(), queue))
     }
 
     fn handle_established_outbound_connection(
@@ -3462,9 +3460,7 @@ where
             );
         }
 
-        // This clones a reference to the Queue so any new handlers reference the same underlying
-        // queue. No data is actually cloned here.
-        Ok(Handler::new(self.config.protocol_config(), queue))
+        Ok(Handler::new(peer_id, self.config.protocol_config(), queue))
     }
 
     fn on_connection_handler_event(
@@ -3521,6 +3517,7 @@ where
                 rpc,
                 invalid_messages,
             } => {
+                tracing::debug!(peer=%propagation_source, message=?rpc, "Received gossipsub message");
                 // Handle the gossipsub RPC
                 tracing::debug!(rpc = ?rpc, "Received RPC");
 

@@ -1,4 +1,11 @@
 ## 0.50.0
+
+- Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
+  See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
+
+- Log when sending and receiving messages.
+  See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
+
 - Prevent mesh exceeding mesh_n_high.
   See [PR 6184](https://github.com/libp2p/rust-libp2p/pull/6184)
 
@@ -6,8 +13,8 @@
   See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
 
 
-- Implement gossipsub 1.3 extensions control message.
-  See [PR 6119](https://github.com/libp2p/rust-libp2p/pull/6119)
+- Implement gossipsub 1.3 partial messages extension
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
@@ -29,9 +36,6 @@
 
 - Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
   with an internal priority queue. See [PR 6175](https://github.com/libp2p/rust-libp2p/pull/6175)
-
-- Switch the internal `async-channel` used to dispatch messages from `NetworkBehaviour` to the `ConnectionHandler`
-  with an internal priority queue. See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 
 - gossipsub: do early return in for an empty input
   See [PR 6208](https://github.com/libp2p/rust-libp2p/pull/6208).
