@@ -1,5 +1,8 @@
 ## 0.50.0
 
+- Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
+  See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
+
 - Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
   See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
 
