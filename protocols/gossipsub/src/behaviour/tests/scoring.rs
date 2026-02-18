@@ -684,7 +684,6 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
-                test_extension: None,
                 #[cfg(feature = "partial_messages")]
                 partial_message: None,
             },
@@ -713,7 +712,6 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
-                test_extension: None,
                 #[cfg(feature = "partial_messages")]
                 partial_message: None,
             },
@@ -1310,7 +1308,6 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
-                test_extension: None,
                 #[cfg(feature = "partial_messages")]
                 partial_message: None,
             },

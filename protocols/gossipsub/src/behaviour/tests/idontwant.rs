@@ -225,7 +225,6 @@ fn parses_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        test_extension: None,
         #[cfg(feature = "partial_messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {

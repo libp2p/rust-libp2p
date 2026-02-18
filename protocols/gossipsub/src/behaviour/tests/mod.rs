@@ -546,7 +546,6 @@ pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
             })
             .collect(),
         control_msgs,
-        test_extension: None,
         #[cfg(feature = "partial_messages")]
         partial_message: None,
     }

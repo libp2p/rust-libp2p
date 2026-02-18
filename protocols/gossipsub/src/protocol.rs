@@ -39,7 +39,6 @@ use crate::{
     types::{
         ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
         Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, SubscriptionOpts,
-        TestExtension,
     },
     ValidationError,
 };
@@ -566,7 +565,6 @@ impl Decoder for GossipsubCodec {
                 .collect();
 
             let extensions_msg = rpc_control.extensions.map(|extensions| Extensions {
-                test_extension: extensions.testExtension,
                 partial_messages: extensions.partialMessages,
             });
 
@@ -619,7 +617,6 @@ impl Decoder for GossipsubCodec {
                     })
                     .collect(),
                 control_msgs,
-                test_extension: rpc.testExtension.map(|_test_extension| TestExtension {}),
                 #[cfg(feature = "partial_messages")]
                 partial_message,
             },

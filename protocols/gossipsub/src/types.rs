@@ -332,12 +332,8 @@ pub struct IDontWant {
 /// The node has sent us the supported Gossipsub Extensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Extensions {
-    pub(crate) test_extension: Option<bool>,
     pub(crate) partial_messages: Option<bool>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TestExtension {}
 
 /// A Gossipsub RPC message sent.
 #[derive(Debug)]
@@ -412,14 +408,12 @@ impl From<RpcOut> for proto::RPC {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
                 control: None,
-                testExtension: None,
                 partial: None,
             },
             RpcOut::Forward { message, .. } => proto::RPC {
                 publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
-                testExtension: None,
                 partial: None,
             },
             RpcOut::Subscribe {
@@ -435,7 +429,6 @@ impl From<RpcOut> for proto::RPC {
                     supportsPartial: Some(supports_partial),
                 }],
                 control: None,
-                testExtension: None,
                 partial: None,
             },
             RpcOut::Unsubscribe(topic) => proto::RPC {
@@ -447,7 +440,6 @@ impl From<RpcOut> for proto::RPC {
                     supportsPartial: None,
                 }],
                 control: None,
-                testExtension: None,
                 partial: None,
             },
             RpcOut::IHave(IHave {
@@ -467,7 +459,6 @@ impl From<RpcOut> for proto::RPC {
                     idontwant: vec![],
                     extensions: None,
                 }),
-                testExtension: None,
                 partial: None,
             },
             RpcOut::IWant(IWant { message_ids }) => proto::RPC {
@@ -483,7 +474,6 @@ impl From<RpcOut> for proto::RPC {
                     idontwant: vec![],
                     extensions: None,
                 }),
-                testExtension: None,
                 partial: None,
             },
             RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
@@ -499,7 +489,6 @@ impl From<RpcOut> for proto::RPC {
                     idontwant: vec![],
                     extensions: None,
                 }),
-                testExtension: None,
                 partial: None,
             },
             RpcOut::Prune(Prune {
@@ -529,7 +518,6 @@ impl From<RpcOut> for proto::RPC {
                         idontwant: vec![],
                         extensions: None,
                     }),
-                    testExtension: None,
                     partial: None,
                 }
             }
@@ -546,13 +534,9 @@ impl From<RpcOut> for proto::RPC {
                     }],
                     extensions: None,
                 }),
-                testExtension: None,
                 partial: None,
             },
-            RpcOut::Extensions(Extensions {
-                partial_messages,
-                test_extension,
-            }) => proto::RPC {
+            RpcOut::Extensions(Extensions { partial_messages }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -562,18 +546,15 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                     idontwant: vec![],
                     extensions: Some(proto::ControlExtensions {
-                        testExtension: test_extension,
                         partialMessages: partial_messages,
                     }),
                 }),
-                testExtension: None,
                 partial: None,
             },
             RpcOut::TestExtension => proto::RPC {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
-                testExtension: Some(proto::TestExtension {}),
                 partial: None,
             },
             #[cfg(feature = "partial_messages")]
@@ -586,7 +567,6 @@ impl From<RpcOut> for proto::RPC {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
-                testExtension: None,
                 partial: Some(proto::PartialMessagesExtension {
                     topicID: Some(topic_hash.as_str().as_bytes().to_vec()),
                     groupID: Some(group_id),
@@ -607,8 +587,6 @@ pub struct RpcIn {
     pub subscriptions: Vec<Subscription>,
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<ControlAction>,
-    /// Gossipsub test extension.
-    pub test_extension: Option<TestExtension>,
     /// Partial messages extension.
     #[cfg(feature = "partial_messages")]
     pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,

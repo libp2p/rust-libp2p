@@ -1674,12 +1674,6 @@ where
         }
 
         peer.extensions = Some(extensions);
-
-        if extensions.test_extension.unwrap_or(false)
-            && matches!(peer.kind, PeerKind::Gossipsubv1_3)
-        {
-            self.send_message(*peer_id, RpcOut::TestExtension);
-        }
     }
 
     /// Removes the specified peer from the mesh, returning true if it was present.
@@ -2176,7 +2170,7 @@ where
 
                     #[cfg(feature = "partial_messages")]
                     self.partial_messages_extension
-                        .peer_unsubscribed(*propagation_source, &topic_hash);
+                        .peer_unsubscribed(*propagation_source, topic_hash);
 
                     unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
@@ -3417,12 +3411,11 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    test_extension: Some(true),
-                    partial_messages: if cfg!(feature = "partial_messages") {
-                        Some(true)
-                    } else {
-                        None
-                    },
+                    #[cfg(feature = "partial_messages")]
+                    partial_messages: Some(true),
+
+                    #[cfg(not(feature = "partial_messages"))]
+                    partial_messages: None,
                 }),
             );
         }
@@ -3458,12 +3451,10 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    test_extension: Some(true),
-                    partial_messages: if cfg!(feature = "partial_messages") {
-                        Some(true)
-                    } else {
-                        None
-                    },
+                    #[cfg(feature = "partial_messages")]
+                    partial_messages: Some(true),
+                    #[cfg(not(feature = "partial_messages"))]
+                    partial_messages: None,
                 }),
             );
         }
@@ -3654,10 +3645,6 @@ where
                 }
                 if !prune_msgs.is_empty() {
                     self.handle_prune(&propagation_source, prune_msgs);
-                }
-
-                if let Some(_extension) = rpc.test_extension {
-                    tracing::debug!("Received Test Extension");
                 }
 
                 #[cfg(feature = "partial_messages")]
