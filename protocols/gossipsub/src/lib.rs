@@ -114,12 +114,11 @@ mod topic;
 mod transform;
 mod types;
 
-#[cfg(feature = "partial_messages")]
-pub use self::extensions::partial_messages;
-
 #[cfg(feature = "metrics")]
 pub use metrics::Config as MetricsConfig;
 
+#[cfg(feature = "partial_messages")]
+pub use self::extensions::partial_messages;
 pub use self::{
     behaviour::{Behaviour, Event, MessageAuthenticity},
     config::{Config, ConfigBuilder, ValidationMode, Version},

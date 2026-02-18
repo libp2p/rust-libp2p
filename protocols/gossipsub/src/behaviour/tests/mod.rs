@@ -52,7 +52,10 @@ use libp2p_core::ConnectedPoint;
 use rand::Rng;
 
 use super::*;
-use crate::{types::RpcIn, types::SubscriptionOpts, IdentTopic as Topic};
+use crate::{
+    types::{RpcIn, SubscriptionOpts},
+    IdentTopic as Topic,
+};
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =

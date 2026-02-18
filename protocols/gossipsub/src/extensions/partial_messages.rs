@@ -83,9 +83,9 @@ pub trait Metadata: Debug + Send + Sync {
     /// Returns `true` if the `Metadata` was updated.
     fn update(&mut self, data: &[u8]) -> Result<bool, PartialError>;
     /// Attempts to update the local `Metadata` with the remote data received.
-    /// This method is used to track the metadata that the remote peer believes the local system has.
-    /// The default returns `false` as it is an optimization, indicating that the update logic
-    /// has not been triggered in this implementation.
+    /// This method is used to track the metadata that the remote peer believes the local system
+    /// has. The default returns `false` as it is an optimization, indicating that the update
+    /// logic has not been triggered in this implementation.
     fn update_from_data(&mut self, _data: &[u8]) -> Result<(), PartialError> {
         Ok(())
     }
@@ -260,8 +260,9 @@ impl State {
                             Some(PeerMetadata::Local(peer_updated_metadata));
                         Some(body)
                     } else if remote_partial.peer_metadata.is_none() || action.need {
-                        // We have no data to eagerly send, but we want to transmit our metadata anyway, to
-                        // let the peer know of our metadata so that it sends us its data.
+                        // We have no data to eagerly send, but we want to transmit our metadata
+                        // anyway, to let the peer know of our metadata so
+                        // that it sends us its data.
                         None
                     } else {
                         continue;

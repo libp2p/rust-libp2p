@@ -778,8 +778,8 @@ fn test_no_redundant_transfer() {
 
 /// Verifies that:
 /// - After TTL expires, cached partials are cleaned up.
-/// - This is verified by observing that handle_received returns EmitEvent
-///   (as if seeing the group_id for the first time) instead of Publish.
+/// - This is verified by observing that handle_received
+///   returns EmitEvent (as if seeing the group_id for the first time) instead of Publish.
 #[test]
 fn test_heartbeat_ttl_expiry() {
     let topic_hash = TopicHash::from_raw("test-topic");
@@ -982,7 +982,8 @@ fn test_unsubscribe_cleanup() {
 }
 
 /// Verifies that:
-/// - When a peer unsubscribes from a topic, their partial message state for that topic is cleaned up.
+/// - When a peer unsubscribes from a topic,
+///   their partial message state for that topic is cleaned up.
 /// - After the peer re-subscribes, we treat them as fresh (no knowledge of what they have).
 #[test]
 fn test_peer_unsubscribed_cleanup() {
@@ -1148,7 +1149,8 @@ fn test_peer_unsubscribed_preserves_other_topics() {
 }
 
 /// Verifies that:
-/// - `requests_partial()` and `supports_partial()` return correct values based on peer subscription options.
+/// - `requests_partial()` and `supports_partial()`
+///   return correct values based on peer subscription options.
 /// - Options are correctly tracked per peer per topic.
 #[test]
 fn test_subscription_options_tracking() {
@@ -1326,10 +1328,10 @@ fn test_metadata_only_update_unchanged_returns_empty() {
 }
 
 /// Verifies that:
-/// - When Node A receives data from Node B, `RemotePartial::metadata` is updated
-///   via `update_from_data` to reflect that B knows A now has those parts.
-/// - On the next `handle_publish`, no message is sent because B's view of A's
-///   metadata (`RemotePartial::metadata`) already matches A's current state.
+/// - When Node A receives data from Node B, `RemotePartial::metadata` is updated via
+///   `update_from_data` to reflect that B knows A now has those parts.
+/// - On the next `handle_publish`, no message is sent because B's view of A's metadata
+///   (`RemotePartial::metadata`) already matches A's current state.
 #[test]
 fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     let topic_hash = TopicHash::from_raw("test-topic");
@@ -1759,7 +1761,8 @@ fn test_partial_subscription_options_respected() {
 /// Verifies that:
 /// - A peer with `supports_partial: true` but `requests_partial: false` receives a PartialMessage.
 /// - The PartialMessage contains metadata but NO body.
-/// - A peer with both `supports_partial: true` and `requests_partial: true` receives body AND metadata.
+/// - A peer with both `supports_partial: true` and `requests_partial: true` receives body AND
+///   metadata.
 #[test]
 fn test_partial_requests_partial_metadata_only() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -1942,8 +1945,8 @@ fn test_partial_messages_response_on_receive() {
 /// Verifies that:
 /// - Peers with `requestsPartial=true` do NOT receive IHAVE messages during gossip.
 /// - Peers with `requestsPartial=false` still receive IHAVE messages normally.
-/// - This implements the spec: "When Gossiping, a node that supports partial messages
-///   SHOULD NOT send an IHAVE to a peer that requested partial messages."
+/// - This implements the spec: "When Gossiping, a node that supports partial messages SHOULD NOT
+///   send an IHAVE to a peer that requested partial messages."
 #[test]
 fn test_ihave_not_sent_to_partial_peers() {
     let config = ConfigBuilder::default()
