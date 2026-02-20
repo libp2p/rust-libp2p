@@ -140,7 +140,8 @@ impl State {
         }
     }
 
-    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer unsubscribed from the topic.
+    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer unsubscribed from the
+    /// topic.
     pub(crate) fn peer_subscribed(
         &mut self,
         peer_id: &PeerId,
