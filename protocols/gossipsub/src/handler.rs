@@ -156,7 +156,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
@@ -287,7 +287,7 @@ impl EnabledHandler {
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
-                            message.into_protobuf(),
+                            Box::new(message.into_protobuf()),
                         ));
                         continue;
                     }
@@ -299,7 +299,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
                     match Sink::poll_ready(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
-                            match Sink::start_send(Pin::new(&mut substream), message) {
+                            match Sink::start_send(Pin::new(&mut substream), *message) {
                                 Ok(()) => {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
