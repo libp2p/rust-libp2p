@@ -152,15 +152,15 @@ pub enum Event {
     /// A new partial message has been received.
     #[cfg(feature = "partial_messages")]
     Partial {
-        /// The topic of the partial message.
+        /// Topic on which the partiall was published.
         topic_hash: TopicHash,
         /// The peer that forwarded us this message.
         peer_id: PeerId,
-        /// The group ID that identifies the complete logical message.
+        /// Identifier grouping the partials that belong to the same full message.
         group_id: Vec<u8>,
-        /// The partial message data.
+        /// /// Payload of the partial.
         message: Option<Vec<u8>>,
-        /// The partial message metadata, what peer has and wants.
+        /// Metadata associated with this partial (e.g., available or requested parts).
         metadata: Option<Vec<u8>>,
     },
     /// A remote subscribed to a topic.
@@ -859,6 +859,8 @@ where
     }
 
     #[cfg(feature = "partial_messages")]
+    /// Report an invalid partial message from a peer, originating at the application layer.
+    /// This triggers penalties for the peer that sent the invalid partial.
     pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
         if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
             peer_score.reject_invalid_partial(peer_id, topic_hash);
@@ -1164,11 +1166,11 @@ where
                 &self.connected_peers,
                 topic_hash,
                 mesh_n - added_peers.len(),
-                |peer_id| {
-                    !added_peers.contains(peer_id)
-                        && !self.explicit_peers.contains(peer_id)
-                        && !self.peer_score.below_threshold(peer_id, |_| 0.0).0
-                        && !self.backoffs.is_backoff_with_slack(topic_hash, peer_id)
+                |peer| {
+                    !added_peers.contains(peer)
+                        && !self.explicit_peers.contains(peer)
+                        && !self.peer_score.below_threshold(peer, |_| 0.0).0
+                        && !self.backoffs.is_backoff_with_slack(topic_hash, peer)
                 },
             );
 
@@ -1654,6 +1656,7 @@ where
         tracing::debug!(peer=%peer_id, "Completed GRAFT handling for peer");
     }
 
+    /// Handle received `Extensions` message.
     fn handle_extensions(&mut self, peer_id: &PeerId, extensions: Extensions) {
         let Some(peer) = self.connected_peers.get_mut(peer_id) else {
             tracing::error!(
@@ -2355,17 +2358,13 @@ where
                 );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = mesh_n - peers.len();
-                let peer_list = get_random_peers(
-                    &self.connected_peers,
-                    topic_hash,
-                    desired_peers,
-                    |peer_id| {
-                        !peers.contains(peer_id)
-                            && !explicit_peers.contains(peer_id)
-                            && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
-                            && scores.get(peer_id).map(|r| r.score).unwrap_or_default() >= 0.0
-                    },
-                );
+                let peer_list =
+                    get_random_peers(&self.connected_peers, topic_hash, desired_peers, |peer| {
+                        !peers.contains(peer)
+                            && !explicit_peers.contains(peer)
+                            && !backoffs.is_backoff_with_slack(topic_hash, peer)
+                            && scores.get(peer).map(|r| r.score).unwrap_or_default() >= 0.0
+                    });
                 for peer in &peer_list {
                     let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
@@ -2703,7 +2702,7 @@ where
         }
         self.failed_messages.shrink_to_fit();
 
-        // Flush stale IDONTWANTs and partial messages.
+        // Flush stale IDONTWANTs.
         for peer in self.connected_peers.values_mut() {
             while let Some((_front, instant)) = peer.dont_send.front() {
                 if (*instant + IDONTWANT_TIMEOUT) >= Instant::now() {
@@ -2778,16 +2777,13 @@ where
                 )
             };
             // get gossip_lazy random peers
-            let to_msg_peers = get_random_peers_dynamic(
-                self.connected_peers.iter(),
-                topic_hash,
-                n_map,
-                |peer_id| {
-                    let filter = !peers.contains(peer_id)
-                        && !self.explicit_peers.contains(peer_id)
+            let to_msg_peers =
+                get_random_peers_dynamic(&self.connected_peers, topic_hash, n_map, |peer| {
+                    let filter = !peers.contains(peer)
+                        && !self.explicit_peers.contains(peer)
                         && !self
                             .peer_score
-                            .below_threshold(peer_id, |ts| ts.gossip_threshold)
+                            .below_threshold(peer, |ts| ts.gossip_threshold)
                             .0;
                     // Don't send IHAVE to peers that requested partial messages -
                     // they receive metadata via partial message gossip instead.
@@ -2795,10 +2791,9 @@ where
                     let filter = filter
                         && !self
                             .partial_messages_extension
-                            .requests_partial(peer_id, topic_hash);
+                            .requests_partial(peer, topic_hash);
                     filter
-                },
-            );
+                });
 
             tracing::debug!("Gossiping IHAVE to {} peers", to_msg_peers.len());
 
@@ -3817,17 +3812,17 @@ fn peer_removed_from_mesh(
 /// Helper function to get a subset of random gossipsub peers for a `topic_hash`
 /// filtered by the function `f`. The number of peers to get equals the output of `n_map`
 /// that gets as input the number of filtered peers.
-fn get_random_peers_dynamic<'a>(
-    peers: impl IntoIterator<Item = (&'a PeerId, &'a PeerDetails)>,
+fn get_random_peers_dynamic(
+    connected_peers: &HashMap<PeerId, PeerDetails>,
     topic_hash: &TopicHash,
     // maps the number of total peers to the number of selected peers
     n_map: impl Fn(usize) -> usize,
-    f: impl Fn(&PeerId) -> bool,
+    mut f: impl FnMut(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
-    let mut gossip_peers = peers
-        .into_iter()
+    let mut gossip_peers = connected_peers
+        .iter()
         .filter(|(_, p)| p.topics.contains(topic_hash))
-        .filter(|(peer_id, _peer)| f(peer_id))
+        .filter(|(peer_id, _)| f(peer_id))
         .filter(|(_, p)| p.kind.is_gossipsub())
         .map(|(peer_id, _)| *peer_id)
         .collect::<Vec<PeerId>>();
@@ -3850,13 +3845,13 @@ fn get_random_peers_dynamic<'a>(
 
 /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
 /// filtered by the function `f`.
-fn get_random_peers<'a>(
-    peers: impl IntoIterator<Item = (&'a PeerId, &'a PeerDetails)>,
+fn get_random_peers(
+    connected_peers: &HashMap<PeerId, PeerDetails>,
     topic_hash: &TopicHash,
     n: usize,
-    f: impl Fn(&PeerId) -> bool,
+    f: impl FnMut(&PeerId) -> bool,
 ) -> BTreeSet<PeerId> {
-    get_random_peers_dynamic(peers, topic_hash, |_| n, f)
+    get_random_peers_dynamic(connected_peers, topic_hash, |_| n, f)
 }
 
 /// Validates the combination of signing, privacy and message validation to ensure the

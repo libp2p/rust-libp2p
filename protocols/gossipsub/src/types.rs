@@ -151,7 +151,7 @@ pub struct RawMessage {
     pub validated: bool,
 }
 
-impl std::fmt::Debug for RawMessage {
+impl fmt::Debug for RawMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RawMessage")
             .field("source", &self.source)
