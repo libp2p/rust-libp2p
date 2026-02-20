@@ -707,8 +707,8 @@ fn test_no_redundant_transfer() {
 
 /// Verifies that:
 /// - After TTL expires, cached partials are cleaned up.
-/// - This is verified by observing that handle_received
-///   returns EmitEvent (as if seeing the group_id for the first time) instead of Publish.
+/// - This is verified by observing that handle_received returns EmitEvent (as if seeing the
+///   group_id for the first time) instead of Publish.
 #[test]
 fn test_heartbeat_ttl_expiry() {
     let topic_hash = TopicHash::from_raw("test-topic");
@@ -911,8 +911,8 @@ fn test_unsubscribe_cleanup() {
 }
 
 /// Verifies that:
-/// - When a peer unsubscribes from a topic,
-///   their partial message state for that topic is cleaned up.
+/// - When a peer unsubscribes from a topic, their partial message state for that topic is cleaned
+///   up.
 /// - After the peer re-subscribes, we treat them as fresh (no knowledge of what they have).
 #[test]
 fn test_peer_unsubscribed_cleanup() {
@@ -1078,8 +1078,8 @@ fn test_peer_unsubscribed_preserves_other_topics() {
 }
 
 /// Verifies that:
-/// - `requests_partial()` and `supports_partial()`
-///   return correct values based on peer subscription options.
+/// - `requests_partial()` and `supports_partial()` return correct values based on peer subscription
+///   options.
 /// - Options are correctly tracked per peer per topic.
 #[test]
 fn test_subscription_options_tracking() {
@@ -1166,8 +1166,8 @@ fn test_subscription_options_tracking() {
 }
 
 /// Verifies that:
-/// - When `partial_action_from_metadata()` fails due to invalid metadata,
-///   a `PenalizePeer` action is returned.
+/// - When `partial_action_from_metadata()` fails due to invalid metadata, a `PenalizePeer` action
+///   is returned.
 /// - This tests the error path when generating a response action from received metadata.
 #[test]
 fn test_handle_received_penalizes_invalid_action_from_metadata() {
