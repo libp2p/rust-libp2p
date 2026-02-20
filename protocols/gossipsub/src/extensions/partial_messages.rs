@@ -84,7 +84,7 @@ pub trait Metadata: Debug + Send + Sync {
     fn update(&mut self, data: &[u8]) -> Result<bool, PartialError>;
     /// Attempts to update the local `Metadata` with the remote data received.
     /// This method is used to track the metadata that the remote peer believes the local system
-    /// has. The default returns `false` as it is an optimization, indicating that the update
+    /// has. The default returns [`Ok(())`](Ok) as it is an optimization, indicating that the update
     /// logic has not been triggered in this implementation.
     fn update_from_data(&mut self, _data: &[u8]) -> Result<(), PartialError> {
         Ok(())
@@ -542,12 +542,16 @@ impl State {
             // in the remote peer's view of our metadata.
             match &mut remote_partial.metadata {
                 Some(metadata) => {
-                    let Ok(updated) = metadata.update(&publish_metadata) else {
-                        actions.push(PublishAction::PenalizePeer {
-                            peer_id,
-                            topic_hash: topic_hash.clone(),
-                        });
-                        continue;
+                    let updated = match metadata.update(&publish_metadata) {
+                        Ok(updated) => updated,
+                        Err(error) => {
+                            actions.push(PublishAction::PenalizePeer {
+                                peer_id,
+                                topic_hash: topic_hash.clone(),
+                            });
+                            tracing::debug!(%error, "Error updating peers view of the metdata");
+                            continue;
+                        }
                     };
                     if !updated {
                         continue;
