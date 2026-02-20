@@ -542,16 +542,16 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked.
+    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         self.subscribe_inner(topic, false, false)
     }
 
     /// Subscribe to a topic with partial options.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked.
+    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     #[cfg(feature = "partial_messages")]
     pub fn subscribe_partial<H: Hasher>(
         &mut self,
@@ -563,8 +563,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`](Ok) if the subscription worked.
+    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     fn subscribe_inner<H: Hasher>(
         &mut self,
         topic: &Topic<H>,

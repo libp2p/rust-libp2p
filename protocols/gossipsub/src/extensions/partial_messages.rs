@@ -68,7 +68,7 @@ pub trait Partial: Send + Sync {
     /// generates the actual message data to send back. The `metadata` parameter
     /// describes what parts are being requested.
     ///
-    /// Returns a [`PublishAction`] for the given metadata, or an error.
+    /// Returns a [`PartialAction`] for the given metadata, or an error.
     fn partial_action_from_metadata(
         &self,
         peer_id: PeerId,
@@ -109,7 +109,7 @@ pub(crate) struct State {
 }
 
 impl State {
-    /// Called by the [`Behaviour`] when we subscribed to the topic.
+    /// Called by the [`Behaviour`](crate::Behaviour) when we subscribed to the topic.
     pub(crate) fn subscribe(
         &mut self,
         topic_hash: TopicHash,
@@ -128,19 +128,19 @@ impl State {
         );
     }
 
-    /// Called by the [`Behaviour`] when we unsubscribed from the topic.
+    /// Called by the [`Behaviour`](crate::Behaviour) when we unsubscribed from the topic.
     pub(crate) fn unsubscribe(&mut self, topic_hash: &TopicHash) {
         self.subscriptions.remove(&topic_hash.clone());
     }
 
-    /// Called by the [`Behaviour`] when a peer has disconnected.
+    /// Called by the [`Behaviour`](crate::Behaviour) when a peer has disconnected.
     pub(crate) fn peer_disconnected(&mut self, peer_id: PeerId) {
         for topic_peers in self.peer_subscriptions.values_mut() {
             topic_peers.remove(&peer_id);
         }
     }
 
-    /// Called by the [`Behaviour`] when a remote peer unsubscribed from the topic.
+    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer unsubscribed from the topic.
     pub(crate) fn peer_subscribed(
         &mut self,
         peer_id: &PeerId,
@@ -168,7 +168,7 @@ impl State {
         topic.remove(&peer_id);
     }
 
-    /// Called by the [`Behaviour`] during heartbeat.
+    /// Called by the [`Behaviour`](crate::Behaviour) during heartbeat.
     /// Returns the list of the peers and respective partial metadata to send.
     pub(crate) fn heartbeat(
         &mut self,
@@ -285,7 +285,7 @@ impl State {
         actions
     }
 
-    /// Called by the [`Behaviour`] when a partial message is received.
+    /// Called by the [`Behaviour`](crate::Behaviour) when a partial message is received.
     pub(crate) fn handle_received(
         &mut self,
         peer_id: PeerId,

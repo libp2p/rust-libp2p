@@ -323,6 +323,7 @@ where
 /// # Returns
 ///
 /// A tuple of the peer's ID and their message queue (for inspecting sent messages).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
     topic_hashes: &[TopicHash],
