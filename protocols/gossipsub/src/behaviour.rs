@@ -3113,7 +3113,7 @@ where
             return false;
         };
 
-        if !matches!(peer.kind, PeerKind::Gossipsubv1_2) && matches!(rpc, RpcOut::IDontWant(..)) {
+        if peer.kind < PeerKind::Gossipsubv1_2 && matches!(rpc, RpcOut::IDontWant(..)) {
             tracing::trace!(peer=%peer_id, "Won't send IDONTWANT message for message to peer as it doesn't support Gossipsub v1.2");
             return false;
         }

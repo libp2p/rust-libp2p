@@ -106,24 +106,24 @@ pub(crate) struct PeerDetails {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Hash, Eq)]
 #[cfg_attr(
     feature = "metrics",
     derive(prometheus_client::encoding::EncodeLabelValue)
 )]
 pub enum PeerKind {
-    /// A gossipsub 1.3 peer.
-    Gossipsubv1_3,
-    /// A gossipsub 1.2 peer.
-    Gossipsubv1_2,
-    /// A gossipsub 1.1 peer.
-    Gossipsubv1_1,
-    /// A gossipsub 1.0 peer.
-    Gossipsub,
-    /// A floodsub peer.
-    Floodsub,
     /// The peer doesn't support any of the protocols.
     NotSupported,
+    /// A floodsub peer.
+    Floodsub,
+    /// A gossipsub 1.0 peer.
+    Gossipsub,
+    /// A gossipsub 1.1 peer.
+    Gossipsubv1_1,
+    /// A gossipsub 1.2 peer.
+    Gossipsubv1_2,
+    /// A gossipsub 1.3 peer.
+    Gossipsubv1_3,
 }
 
 /// A message received by the gossipsub system and stored locally in caches..
@@ -633,5 +633,20 @@ impl AsRef<str> for PeerKind {
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PeerKind;
+    #[test]
+    fn peerkind_gossipsub_version_ord() {
+        assert!(
+            PeerKind::Gossipsubv1_3 > PeerKind::Gossipsubv1_2
+                && PeerKind::Gossipsubv1_2 > PeerKind::Gossipsubv1_1
+                && PeerKind::Gossipsubv1_1 > PeerKind::Gossipsub
+                && PeerKind::Gossipsub > PeerKind::Floodsub
+                && PeerKind::Gossipsub > PeerKind::NotSupported
+        );
     }
 }
