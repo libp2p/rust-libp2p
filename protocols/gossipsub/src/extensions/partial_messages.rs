@@ -42,11 +42,10 @@ pub(crate) const DEFAULT_PARTIAL_TTL: usize = 5;
 ///
 /// The partial message protocol works as follows:
 /// 1. Applications implement this trait to define how messages are split and reconstructed
-/// 2. Peers advertise available parts using `available_parts()` metadata in PartialIHAVE
-/// 3. Peers request missing parts using `missing_parts()` metadata in PartialIWANT
-/// 4. When requests are received, `partial_message_bytes_from_metadata()` generates the response
-/// 5. Received partial data is integrated using `extend_from_encoded_partial_message()`
-/// 6. The `group_id()` ties all parts of the same logical message together
+/// 2. Peers advertise available and missing parts using the `metadata()` in PartialMessage
+/// 3. When requests are received, `partial_action_from_metadata()` generates the response
+/// 4. If a new part is received it is reported to the application layer to freely integrate it as it deems.
+/// 5. The `group_id()` ties all parts of the same logical message together
 pub trait Partial: Send + Sync {
     /// Returns the unique identifier for this message group.
     ///
@@ -58,15 +57,16 @@ pub trait Partial: Send + Sync {
     /// Returns application defined metadata describing which parts of the message
     /// are available and which parts we want.
     ///
-    /// The returned bytes will be sent in partsMetadata field to advertise
-    /// available and wanted parts to peers.
+    /// The returned bytes will be sent in partsMetadata field of the protobuf
+    /// to advertise available and wanted parts to peers.
     fn metadata(&self) -> Box<dyn Metadata>;
 
     /// Generates an action from the given metadata.
     ///
-    /// When a peer requests specific parts (via PartialIWANT), this method
-    /// generates the actual message data to send back. The `metadata` parameter
-    /// describes what parts are being requested.
+    /// When a peer requests specific parts, this method
+    /// generates the actual message data to send back.
+    /// The `metadata` parameter describes both what parts are being requested by the peer,
+    /// and what parts the peer has that we may not have yet.
     ///
     /// Returns a [`PartialAction`] for the given metadata, or an error.
     fn partial_action_from_metadata(
@@ -76,6 +76,17 @@ pub trait Partial: Send + Sync {
     ) -> Result<PartialAction, PartialError>;
 }
 
+/// Application-defined state describing available and requested parts
+/// of a [`Partial`] message.
+///
+/// `Metadata` is exchanged between peers to advertise which parts of a
+/// logical message are present and which are still needed. It must provide
+/// a byte representation for wire transmission and support in-place updates
+/// when remote metadata is received.
+///
+/// `update` merges remote metadata into the local view and reports whether
+/// the state changed. `update_from_data` optionally tracks what the remote
+/// peer believes our state to be (default is a no-op).
 pub trait Metadata: Debug + Send + Sync {
     /// Return the `Metadata` as a byte slice.
     fn as_slice(&self) -> &[u8];
@@ -140,7 +151,7 @@ impl State {
         }
     }
 
-    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer unsubscribed from the
+    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer subscribed to the
     /// topic.
     pub(crate) fn peer_subscribed(
         &mut self,
@@ -161,6 +172,8 @@ impl State {
         );
     }
 
+    /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer unsubscribed from the
+    /// topic.
     pub(crate) fn peer_unsubscribed(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
         let Some(topic) = self.peer_subscriptions.get_mut(topic_hash) else {
             tracing::error!(topic = %topic_hash, "Peer not subscribed on topic");
@@ -170,7 +183,7 @@ impl State {
     }
 
     /// Called by the [`Behaviour`](crate::Behaviour) during heartbeat.
-    /// Returns the list of the peers and respective partial metadata to send.
+    /// Returns a list of the `PublishActions` to take.
     pub(crate) fn heartbeat(
         &mut self,
         mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
@@ -581,7 +594,9 @@ impl State {
     }
 }
 
-/// Action returned by `State::partial_action`.
+/// Action returned by `State::handle_publish`,
+/// and `State::heartBeat`.
+// Clippy lint instead of boxing to be able to destructure
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum PublishAction {
@@ -640,7 +655,8 @@ impl AsRef<[u8]> for PeerMetadata {
     }
 }
 
-/// Partial options when subscribing a topic.
+/// Local per-topic subscription state.
+/// Holds the subscription configuration and a cache of sent partial messages.
 #[derive(Default)]
 pub(crate) struct LocalSubscription {
     /// Subscription options, None if we have not subscribe to the topic.
@@ -649,7 +665,8 @@ pub(crate) struct LocalSubscription {
     partial_messages: HashMap<Vec<u8>, LocalPartial>,
 }
 
-/// A topic subscribed by a remote peer.
+/// A remote per-topic and per peer subscription state.
+/// Holds the subscription configuration and a cache of received partial messages.
 #[derive(Debug, Default)]
 pub(crate) struct RemoteSubscription {
     /// Subscription options, None if peer has not subscribe to the topic.
@@ -664,7 +681,7 @@ struct LocalPartial {
     ttl: usize,
 }
 
-/// A partial message data the peer has sent us.
+/// Tracks per-peer state for a received partial message.
 #[derive(Debug)]
 struct RemotePartial {
     /// Our view of the peers' partial metadata.
