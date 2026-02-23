@@ -9,19 +9,19 @@ message RPC {
 	message SubOpts {
 		optional bool subscribe = 1; // subscribe or unsubscribe
 		optional string topic_id = 2;
-        // Used with Partial Messages extension.
-        // If set to true, signals to the receiver that the sender prefers partial
-        // messages.
-        optional bool requestsPartial = 3;
-        // If set to true, signals to the receiver that the sender supports sending
-        // partial messages on this topic. If requestsPartial is true, this is
-        // assumed to be true.
-        optional bool supportsPartial = 4;
+		// Used with Partial Messages extension.
+		// If set to true, signals to the receiver that the sender prefers partialMessage
+		// messages.
+		optional bool requestsPartial = 3;
+		// If set to true, signals to the receiver that the sender supports sending
+		// partial messages on this topic. If requestsPartial is true, this is
+		// assumed to be true.
+		optional bool supportsPartial = 4;
 	}
 
 	optional ControlMessage control = 3;
-    // Canonical Extensions should register their messages here.
-    optional PartialMessagesExtension partial = 10;
+	// Canonical Extensions should register their messages here.
+	optional PartialMessagesExtension partial = 10;
 }
 
 message Message {
@@ -39,7 +39,7 @@ message ControlMessage {
 	repeated ControlGraft graft = 3;
 	repeated ControlPrune prune = 4;
 	repeated ControlIDontWant idontwant = 5;
-    optional ControlExtensions extensions = 6;
+	optional ControlExtensions extensions = 6;
 }
 
 message ControlIHave {
@@ -66,7 +66,7 @@ message ControlIDontWant {
 }
 
 message ControlExtensions {
-    optional bool partialMessages = 10;
+	optional bool partialMessages = 10;
 }
 
 message PeerInfo {
@@ -104,12 +104,12 @@ message TopicDescriptor {
 }
 
 message PartialMessagesExtension {
-  optional bytes topicID = 1;
-  optional bytes groupID = 2;
+	optional bytes topicID = 1;
+	optional bytes groupID = 2;
 
-  // An encoded partial message
-  optional bytes partialMessage = 3;
+	// An encoded partial message
+	optional bytes partialMessage = 3;
 
-  // An encoded representation of the parts a peer has and wants.
-  optional bytes partsMetadata = 4;
+	// An encoded representation of the parts a peer has and wants.
+	optional bytes partsMetadata = 4;
 }
