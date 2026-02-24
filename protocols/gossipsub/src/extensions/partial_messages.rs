@@ -243,56 +243,28 @@ impl State {
 
             for (peer_id, remote_subscription) in to_msg_peers {
                 let mut num_messages = 0;
-                for (group_id, partial_message) in subscription.partial_messages.iter() {
+                for (group_id, local_partial) in subscription.partial_messages.iter() {
                     if num_messages == max_metadata_length {
                         break;
                     }
 
-                    let remote_partial = remote_subscription
-                        .partial_messages
-                        .entry(group_id.clone())
-                        .or_default();
-
-                    let Ok(action) = partial_message.content.partial_action_from_metadata(
+                    match Self::publish_action(
                         *peer_id,
-                        remote_partial.peer_metadata.as_ref().map(|p| p.as_ref()),
-                    ) else {
-                        tracing::error!(peer = %peer_id, group_id = ?group_id,
-                    "Could not reconstruct message bytes for peer metadata");
-                        remote_subscription.partial_messages.remove(group_id);
-                        actions.push(PublishAction::PenalizePeer {
-                            peer_id: *peer_id,
-                            topic_hash: topic_hash.clone(),
-                        });
-                        continue;
-                    };
-
-                    // Check if we have new data for the peer.
-                    let body = if let Some((body, peer_updated_metadata)) = action.send {
-                        // We have something to send, update the peer's metadata.
-                        remote_partial.peer_metadata =
-                            Some(PeerMetadata::Local(peer_updated_metadata));
-                        Some(body)
-                    } else if remote_partial.peer_metadata.is_none() || action.need {
-                        // We have no data to eagerly send, but we want to transmit our metadata
-                        // anyway, to let the peer know of our metadata so
-                        // that it sends us its data.
-                        None
-                    } else {
-                        continue;
-                    };
-
-                    tracing::debug!(%peer_id, ?group_id, "Gossiping metadata to peer");
-                    actions.push(PublishAction::SendMessage {
-                        peer_id: *peer_id,
-                        rpc: RpcOut::PartialMessage(PartialMessage {
-                            group_id: group_id.clone(),
-                            topic_hash: topic_hash.clone(),
-                            body,
-                            metadata: Some(partial_message.content.metadata().as_slice().to_vec()),
-                        }),
-                    });
-                    num_messages += 1;
+                        topic_hash,
+                        group_id,
+                        &*local_partial.content,
+                        remote_subscription,
+                    ) {
+                        Some(message @ PublishAction::SendMessage { .. }) => {
+                            tracing::debug!(%peer_id, ?group_id, "Gossip partial message to peer");
+                            actions.push(message);
+                            num_messages += 1;
+                        }
+                        Some(penalization @ PublishAction::PenalizePeer { .. }) => {
+                            actions.push(penalization);
+                        }
+                        None => {}
+                    }
                 }
             }
         }
@@ -499,21 +471,16 @@ impl State {
         };
 
         for peer_id in recipients {
-            let Some(subscription) = topic_peers.get_mut(&peer_id) else {
+            let Some(remote_subscription) = topic_peers.get_mut(&peer_id) else {
                 tracing::error!(peer = %peer_id,
                     "Could not get partial subscripion from peer which subscribed for partial messages");
                 continue;
             };
 
-            let remote_partial = subscription
-                .partial_messages
-                .entry(group_id.clone())
-                .or_default();
-
             // Peer `supports_partial` but doesn't `requests_partial`.
             // We assume peer requests_partial is true as that has already been filtered
             // by the behavior.
-            if !subscription.options.requests_partial {
+            if !remote_subscription.options.requests_partial {
                 actions.push(PublishAction::SendMessage {
                     peer_id,
                     rpc: RpcOut::PartialMessage(PartialMessage {
@@ -526,60 +493,22 @@ impl State {
                 continue;
             }
 
-            let Ok(action) = partial_message.partial_action_from_metadata(
+            match Self::publish_action(
                 peer_id,
-                remote_partial.peer_metadata.as_ref().map(|p| p.as_ref()),
-            ) else {
-                tracing::error!(peer = %peer_id, group_id = ?group_id,
-                    "Could not reconstruct message bytes for peer metadata");
-                subscription.partial_messages.remove(&group_id);
-                actions.push(PublishAction::PenalizePeer {
-                    peer_id,
-                    topic_hash: topic_hash.clone(),
-                });
-                continue;
-            };
-
-            // Check if we have new parts for the peer,
-            // and update the peer metadata if so.
-            let body = if let Some((body, peer_updated_metadata)) = action.send {
-                remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
-                Some(body)
-            } else {
-                None
-            };
-
-            // Determine whether the local `Metadata` needs to be sent, based on changes
-            // in the remote peer's view of our metadata.
-            match &mut remote_partial.metadata {
-                Some(metadata) => {
-                    let updated = match metadata.update(&publish_metadata) {
-                        Ok(updated) => updated,
-                        Err(error) => {
-                            actions.push(PublishAction::PenalizePeer {
-                                peer_id,
-                                topic_hash: topic_hash.clone(),
-                            });
-                            tracing::debug!(%error, "Error updating peers view of the metdata");
-                            continue;
-                        }
-                    };
-                    if !updated {
-                        continue;
-                    }
+                &topic_hash,
+                &group_id,
+                &partial_message,
+                remote_subscription,
+            ) {
+                Some(message @ PublishAction::SendMessage { .. }) => {
+                    tracing::debug!(%peer_id, ?group_id, "New data for peer");
+                    actions.push(message);
                 }
-                None => remote_partial.metadata = Some(partial_message.metadata()),
+                Some(penalization @ PublishAction::PenalizePeer { .. }) => {
+                    actions.push(penalization);
+                }
+                None => {}
             }
-
-            actions.push(PublishAction::SendMessage {
-                peer_id,
-                rpc: RpcOut::PartialMessage(PartialMessage {
-                    group_id: group_id.clone(),
-                    topic_hash: topic_hash.clone(),
-                    body,
-                    metadata: Some(publish_metadata.clone()),
-                }),
-            });
         }
 
         // Cache the sent partial
@@ -593,6 +522,78 @@ impl State {
         );
 
         Ok(actions)
+    }
+
+    // Used by `State::heartbeat` and `State::handle_publish` to decide, per peer/group,
+    // whether to send parts/metadata based on local state vs the peer's tracked state,
+    // skip if already synced, or penalize if reconciliation fails.
+    fn publish_action(
+        peer_id: PeerId,
+        topic_hash: &TopicHash,
+        group_id: &[u8],
+        partial_message: &dyn Partial,
+        remote_subscription: &mut RemoteSubscription,
+    ) -> Option<PublishAction> {
+        let remote_partial = remote_subscription
+            .partial_messages
+            .entry(group_id.to_vec())
+            .or_default();
+
+        let Ok(action) = partial_message.partial_action_from_metadata(
+            peer_id,
+            remote_partial.peer_metadata.as_ref().map(|p| p.as_ref()),
+        ) else {
+            tracing::error!(peer = %peer_id, group_id = ?group_id,
+                    "Could not reconstruct message bytes for peer metadata");
+            remote_subscription.partial_messages.remove(group_id);
+            return Some(PublishAction::PenalizePeer {
+                peer_id,
+                topic_hash: topic_hash.clone(),
+            });
+        };
+
+        // Check if we have new parts for the peer,
+        // and update the peer metadata if so.
+        let body = if let Some((body, peer_updated_metadata)) = action.send {
+            remote_partial.peer_metadata = Some(PeerMetadata::Local(peer_updated_metadata));
+            Some(body)
+        } else {
+            None
+        };
+
+        let publish_metadata = partial_message.metadata().as_slice().to_vec();
+
+        // Determine whether the local `Metadata` needs to be sent, based on changes
+        // in the remote peer's view of our metadata.
+        match &mut remote_partial.metadata {
+            Some(metadata) => {
+                let updated = match metadata.update(&publish_metadata) {
+                    Ok(updated) => updated,
+                    Err(error) => {
+                        tracing::debug!(%error, "Could not update peer's view of the metdata");
+                        return Some(PublishAction::PenalizePeer {
+                            peer_id,
+                            topic_hash: topic_hash.clone(),
+                        });
+                    }
+                };
+                // Return if we don't have metadata nor new parts to send to this peer.
+                if !updated && body.is_none() {
+                    return None;
+                }
+            }
+            None => remote_partial.metadata = Some(partial_message.metadata()),
+        }
+
+        Some(PublishAction::SendMessage {
+            peer_id,
+            rpc: RpcOut::PartialMessage(PartialMessage {
+                group_id: group_id.to_vec(),
+                topic_hash: topic_hash.clone(),
+                body,
+                metadata: Some(publish_metadata),
+            }),
+        })
     }
 }
 
