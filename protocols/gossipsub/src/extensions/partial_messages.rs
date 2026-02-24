@@ -44,7 +44,8 @@ pub(crate) const DEFAULT_PARTIAL_TTL: usize = 5;
 /// 1. Applications implement this trait to define how messages are split and reconstructed
 /// 2. Peers advertise available and missing parts using the `metadata()` in PartialMessage
 /// 3. When requests are received, `partial_action_from_metadata()` generates the response
-/// 4. If a new part is received it is reported to the application layer to freely integrate it as it deems.
+/// 4. If a new part is received it is reported to the application layer to freely integrate it as
+///    it deems.
 /// 5. The `group_id()` ties all parts of the same logical message together
 pub trait Partial: Send + Sync {
     /// Returns the unique identifier for this message group.
@@ -104,7 +105,7 @@ pub trait Metadata: Debug + Send + Sync {
 
 /// Indicates the action to take for the given metadata.
 pub struct PartialAction {
-    /// Indicate if we want remote data from the peer.
+    /// Indicate if we need remote data from the peer.
     pub need: bool,
     /// Indicate if we have data to send for that peer
     pub send: Option<(Vec<u8>, Box<dyn Metadata>)>,
@@ -113,7 +114,8 @@ pub struct PartialAction {
 /// Partial message state for sent and received messages.
 #[derive(Default)]
 pub(crate) struct State {
-    /// Our subscription options per topic and respective cached partial messages we're publishing.
+    /// Our subscription options per topic and respective cached partial messages we are
+    /// publishing.
     pub(crate) subscriptions: HashMap<TopicHash, LocalSubscription>,
     /// Per-peer partial state
     pub(crate) peer_subscriptions: HashMap<TopicHash, HashMap<PeerId, RemoteSubscription>>,
