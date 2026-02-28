@@ -3640,6 +3640,7 @@ where
                         .0
                     {
                         tracing::debug!("Peer below threshold, ignoring partial message");
+                        return;
                     }
 
                     let actions = self

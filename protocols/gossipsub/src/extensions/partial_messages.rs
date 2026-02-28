@@ -473,7 +473,7 @@ impl State {
         for peer_id in recipients {
             let Some(remote_subscription) = topic_peers.get_mut(&peer_id) else {
                 tracing::error!(peer = %peer_id,
-                    "Could not get partial subscripion from peer which subscribed for partial messages");
+                    "Could not get partial subscription from peer which subscribed for partial messages");
                 continue;
             };
 
