@@ -251,7 +251,11 @@ fn test_full_data_provider_to_requester() {
     let mut empty_message = Bitmap::new(group_id);
     // Peer1 publishes its full message
     let actions1 = state1
-        .handle_publish(topic_hash.clone(), full_message.clone(), vec![peer2])
+        .handle_publish(
+            topic_hash.clone(),
+            full_message.clone(),
+            HashSet::from([peer2]),
+        )
         .expect("Publish should succeed");
 
     // Verify peer1 sent a partial message with data
@@ -278,7 +282,11 @@ fn test_full_data_provider_to_requester() {
 
     // Peer2 publishes its empty message (requesting data)
     let actions2 = state2
-        .handle_publish(topic_hash.clone(), empty_message.clone(), vec![peer1])
+        .handle_publish(
+            topic_hash.clone(),
+            empty_message.clone(),
+            HashSet::from([peer1]),
+        )
         .expect("Publish should succeed");
     // Peer2 should send a metadata-only message (requesting parts)
     assert_eq!(actions2.len(), 1, "Should have one action");
@@ -371,7 +379,11 @@ fn test_overlap_exchange() {
     peer2_message.fill_parts(0b01010101);
     // Peer1 publishes its full message
     let actions1 = state1
-        .handle_publish(topic_hash.clone(), full_message.clone(), vec![peer2])
+        .handle_publish(
+            topic_hash.clone(),
+            full_message.clone(),
+            HashSet::from([peer2]),
+        )
         .expect("Publish should succeed");
     assert_eq!(actions1.len(), 1);
     let PublishAction::SendMessage {
@@ -386,7 +398,11 @@ fn test_overlap_exchange() {
     assert_eq!(partial_msg1.body.as_ref().unwrap()[0], 0b11111111);
     // Peer2 publishes its partial message
     let actions2 = state2
-        .handle_publish(topic_hash.clone(), peer2_message.clone(), vec![peer1])
+        .handle_publish(
+            topic_hash.clone(),
+            peer2_message.clone(),
+            HashSet::from([peer1]),
+        )
         .expect("Publish should succeed");
     assert_eq!(actions2.len(), 1);
     let PublishAction::SendMessage {
@@ -496,10 +512,18 @@ fn test_symmetric_half_exchange() {
     peer2_message.fill_parts(0b10101010);
     // Both publish their partials
     let actions1 = state1
-        .handle_publish(topic_hash.clone(), peer1_message.clone(), vec![peer2])
+        .handle_publish(
+            topic_hash.clone(),
+            peer1_message.clone(),
+            HashSet::from([peer2]),
+        )
         .expect("Publish should succeed");
     let actions2 = state2
-        .handle_publish(topic_hash.clone(), peer2_message.clone(), vec![peer1])
+        .handle_publish(
+            topic_hash.clone(),
+            peer2_message.clone(),
+            HashSet::from([peer1]),
+        )
         .expect("Publish should succeed");
     assert_eq!(actions1.len(), 1);
     assert_eq!(actions2.len(), 1);
@@ -665,10 +689,18 @@ fn test_no_redundant_transfer() {
     peer2_message.fill_parts(0b01010101);
     // Both publish their partials
     let actions1 = state1
-        .handle_publish(topic_hash.clone(), peer1_message.clone(), vec![peer2])
+        .handle_publish(
+            topic_hash.clone(),
+            peer1_message.clone(),
+            HashSet::from([peer2]),
+        )
         .expect("Publish should succeed");
     let actions2 = state2
-        .handle_publish(topic_hash.clone(), peer2_message.clone(), vec![peer1])
+        .handle_publish(
+            topic_hash.clone(),
+            peer2_message.clone(),
+            HashSet::from([peer1]),
+        )
         .expect("Publish should succeed");
     assert_eq!(actions1.len(), 1);
     assert_eq!(actions2.len(), 1);
@@ -728,7 +760,7 @@ fn test_heartbeat_ttl_expiry() {
     message.fill_parts(0b11111111);
     // Publish a partial message (caches it locally)
     let _actions = state1
-        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     // Receive a partial from peer2 - since we have a cached local partial,
     // this should return Publish (responding with our data)
@@ -789,7 +821,7 @@ fn test_peer_disconnect_cleanup() {
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
     let _ = state1
-        .handle_publish(topic_hash.clone(), message.clone(), vec![peer2])
+        .handle_publish(topic_hash.clone(), message.clone(), HashSet::from([peer2]))
         .expect("Publish should succeed");
     // Receive a partial from peer2 to create remote partial state
     let peer2_partial = PartialMessage {
@@ -829,7 +861,7 @@ fn test_peer_disconnect_cleanup() {
     // missing parts (0b10101010). Since it was cleaned up on disconnect,
     // we send all parts (0b11111111).
     let actions = state1
-        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     assert_eq!(actions.len(), 1);
     let PublishAction::SendMessage {
@@ -870,7 +902,7 @@ fn test_unsubscribe_cleanup() {
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
     let _actions = state1
-        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     // Receive from peer2 - should return Publish (we have cached local partial)
     let peer2_partial = PartialMessage {
@@ -933,7 +965,7 @@ fn test_peer_unsubscribed_cleanup() {
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
     let _actions = state1
-        .handle_publish(topic_hash.clone(), message, vec![peer2])
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     // Receive a partial from peer2 to create remote partial state
     let peer2_partial = PartialMessage {
@@ -960,7 +992,7 @@ fn test_peer_unsubscribed_cleanup() {
     let mut new_message = Bitmap::new(group_id);
     new_message.fill_parts(0b11111111);
     let actions = state1
-        .handle_publish(topic_hash.clone(), new_message, vec![peer2])
+        .handle_publish(topic_hash.clone(), new_message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     assert_eq!(actions.len(), 1);
     let PublishAction::SendMessage {
@@ -1013,7 +1045,7 @@ fn test_peer_unsubscribed_preserves_other_topics() {
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
     let _actions1 = state1
-        .handle_publish(topic1.clone(), message.clone(), vec![peer2])
+        .handle_publish(topic1.clone(), message.clone(), HashSet::from([peer2]))
         .expect("Publish should succeed");
     // Receive partials from peer2 on both topics (peer2 has even parts on both)
     let peer2_partial_topic1 = PartialMessage {
@@ -1043,7 +1075,7 @@ fn test_peer_unsubscribed_preserves_other_topics() {
         },
     );
     let actions1 = state1
-        .handle_publish(topic1.clone(), message.clone(), vec![peer2])
+        .handle_publish(topic1.clone(), message.clone(), HashSet::from([peer2]))
         .expect("Publish should succeed");
     let PublishAction::SendMessage {
         rpc: RpcOut::PartialMessage(partial_msg1),
@@ -1060,7 +1092,7 @@ fn test_peer_unsubscribed_preserves_other_topics() {
     );
     // Publish on topic2 - peer2's state was preserved, should send only missing parts
     let actions2 = state1
-        .handle_publish(topic2.clone(), message, vec![peer2])
+        .handle_publish(topic2.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
     let PublishAction::SendMessage {
         rpc: RpcOut::PartialMessage(partial_msg2),
@@ -1188,7 +1220,7 @@ fn test_handle_received_penalizes_invalid_action_from_metadata() {
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
     let _ = state
-        .handle_publish(topic_hash.clone(), message, vec![peer])
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer]))
         .expect("Publish should succeed");
     // Receive a partial with invalid metadata format (2 bytes)
     // This triggers partial_action_from_metadata() which fails
@@ -1282,7 +1314,11 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     // Step 1: Node A publishes to Node B
     // This initializes RemotePartial::metadata to 0b00000001
     let actions = state_a
-        .handle_publish(topic_hash.clone(), node_a_message.clone(), vec![peer_b])
+        .handle_publish(
+            topic_hash.clone(),
+            node_a_message.clone(),
+            HashSet::from([peer_b]),
+        )
         .expect("Publish should succeed");
     assert_eq!(actions.len(), 1, "Should send one message");
     let PublishAction::SendMessage {
@@ -1305,7 +1341,11 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     );
     // Step 1b: Publish again immediately - should be idempotent
     let actions_repeat = state_a
-        .handle_publish(topic_hash.clone(), node_a_message.clone(), vec![peer_b])
+        .handle_publish(
+            topic_hash.clone(),
+            node_a_message.clone(),
+            HashSet::from([peer_b]),
+        )
         .expect("Repeat publish should succeed");
     assert!(
         actions_repeat.is_empty(),
@@ -1344,7 +1384,7 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     // metadata.update(0b11111111) should return false (no change)
     // Therefore, NO SendMessage action should be emitted
     let actions = state_a
-        .handle_publish(topic_hash.clone(), node_a_message, vec![peer_b])
+        .handle_publish(topic_hash.clone(), node_a_message, HashSet::from([peer_b]))
         .expect("Publish should succeed");
     assert!(
         actions.is_empty(),
@@ -1399,7 +1439,7 @@ fn test_heartbeat_excludes_mesh_and_fanout_peers() {
     // but exclude gossip_peer so that it receives it during heartbeat.
     let mut message = Bitmap::new(group_id);
     message.fill_parts(0b11111111);
-    let _ = state.handle_publish(topic_hash.clone(), message, vec![published_peer]);
+    let _ = state.handle_publish(topic_hash.clone(), message, HashSet::from([published_peer]));
 
     let mut mesh = HashMap::new();
     mesh.insert(topic_hash.clone(), BTreeSet::from([mesh_peer]));
@@ -1473,13 +1513,13 @@ fn test_heartbeat_max_metadata_length() {
     // This caches them locally in subscription.partial_messages
     let mut message_1 = Bitmap::new(group_id_1);
     message_1.fill_parts(0b11111111);
-    let _ = state.handle_publish(topic_hash.clone(), message_1, vec![cache_peer]);
+    let _ = state.handle_publish(topic_hash.clone(), message_1, HashSet::from([cache_peer]));
     let mut message_2 = Bitmap::new(group_id_2);
     message_2.fill_parts(0b11111111);
-    let _ = state.handle_publish(topic_hash.clone(), message_2, vec![cache_peer]);
+    let _ = state.handle_publish(topic_hash.clone(), message_2, HashSet::from([cache_peer]));
     let mut message_3 = Bitmap::new(group_id_3);
     message_3.fill_parts(0b11111111);
-    let _ = state.handle_publish(topic_hash.clone(), message_3, vec![cache_peer]);
+    let _ = state.handle_publish(topic_hash.clone(), message_3, HashSet::from([cache_peer]));
     // Run heartbeat with max_metadata_length = 2
     let mut mesh = HashMap::new();
     // Add topic to the mesh, required because heartbeat iterates

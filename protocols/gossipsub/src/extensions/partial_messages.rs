@@ -455,7 +455,7 @@ impl State {
         &mut self,
         topic_hash: TopicHash,
         partial_message: P,
-        recipients: Vec<PeerId>,
+        recipients: HashSet<PeerId>,
     ) -> Result<Vec<PublishAction>, PublishError> {
         if recipients.is_empty() {
             tracing::debug!(topic = %topic_hash, "Recipient list for publishing partial message is empty");

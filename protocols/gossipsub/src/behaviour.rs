@@ -689,13 +689,14 @@ where
 
         #[cfg(feature = "partial_messages")]
         let candidates = candidates
-            .into_iter()
             .filter(|peer_id| {
                 !self
                     .partial_messages_extension
                     .requests_partial(peer_id, &topic_hash)
             })
             .collect();
+        #[cfg(not(feature = "partial_messages"))]
+        let candidates = candidates.collect();
 
         let recipients = self.filter_publish_candidates(&topic_hash, candidates);
 
@@ -755,7 +756,7 @@ where
     }
 
     /// Get all peers on the topic that have a sufficiently high score to allow publishing.
-    fn publish_peers(&self, topic_hash: &TopicHash) -> Vec<PeerId> {
+    fn publish_peers<'a>(&'a self, topic_hash: &'a TopicHash) -> impl Iterator<Item = PeerId> + 'a {
         self.connected_peers
             .iter()
             .filter(|(_, peer)| peer.topics.contains(topic_hash))
@@ -767,20 +768,19 @@ where
                         .0
             })
             .map(|(peer_id, _)| *peer_id)
-            .collect()
     }
 
     /// Filter publish recipients from a list of candidates.
     fn filter_publish_candidates(
         &mut self,
         topic_hash: &TopicHash,
-        candidates: Vec<PeerId>,
-    ) -> Vec<PeerId> {
+        candidates: HashSet<PeerId>,
+    ) -> HashSet<PeerId> {
         if self.config.flood_publish() {
             return candidates;
         }
         let mesh_n = self.config.mesh_n_for_topic(topic_hash);
-        let mut recipients = Vec::new();
+        let mut recipients = HashSet::new();
         // Always include explicit peers and floodsub peers from candidates
         recipients.extend(
             candidates
@@ -876,7 +876,6 @@ where
         let topic_hash = topic.into();
         let candidates = self
             .publish_peers(&topic_hash)
-            .into_iter()
             .filter(|peer_id| {
                 self.partial_messages_extension
                     .supports_partial(peer_id, &topic_hash)
