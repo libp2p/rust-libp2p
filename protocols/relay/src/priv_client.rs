@@ -260,9 +260,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
-            FromSwarm::ListenerClosed(listener_closed) => {
-                self.on_listener_closed(listener_closed)
-            }
+            FromSwarm::ListenerClosed(listener_closed) => self.on_listener_closed(listener_closed),
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.reservation_addresses.remove(&connection_id);
                 self.pending_handler_commands.remove(&connection_id);
