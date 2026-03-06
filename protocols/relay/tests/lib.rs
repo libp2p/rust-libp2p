@@ -185,6 +185,80 @@ async fn new_reservation_to_same_relay_replaces_old() {
 }
 
 #[tokio::test]
+async fn closing_relay_listener_expires_external_address() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
+
+    let listener_id = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for connection to relay.
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+
+    // Wait for reservation to be accepted.
+    wait_for_reservation(
+        &mut client,
+        client_addr_with_peer_id.clone(),
+        relay_peer_id,
+        false, // No renewal.
+    )
+    .await;
+
+    // Now remove the relay listener.
+    assert!(client.remove_listener(listener_id));
+
+    // Expect the listener to close and the external address to expire.
+    let mut listener_closed = false;
+    let mut external_addr_expired = false;
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::ListenerClosed {
+                listener_id: closed_id,
+                addresses,
+                ..
+            } => {
+                assert_eq!(closed_id, listener_id);
+                assert_eq!(addresses, vec![client_addr_with_peer_id.clone()]);
+                listener_closed = true;
+                if external_addr_expired {
+                    break;
+                }
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                assert_eq!(address, client_addr_with_peer_id);
+                external_addr_expired = true;
+                if listener_closed {
+                    break;
+                }
+            }
+            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            SwarmEvent::ExpiredListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    }
+
+    assert!(listener_closed);
+    assert!(external_addr_expired);
+}
+
+#[tokio::test]
 async fn connect() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
