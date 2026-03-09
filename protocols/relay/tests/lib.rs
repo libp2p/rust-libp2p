@@ -442,6 +442,153 @@ async fn reuse_connection() {
     .await;
 }
 
+#[tokio::test]
+async fn relay_auto_enables_on_external_address() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay.add_external_address(relay_addr.clone());
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn relay_auto_disables_on_external_address_removal() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    // Wait for auto-enable.
+    loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged {
+                status: relay::Status::Enable,
+            })) => break,
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    }
+
+    relay.remove_external_address(&relay_addr);
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::Behaviour(RelayEvent::Ping(_)) => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Disable);
+}
+
+#[tokio::test]
+async fn relay_manual_status_overrides_auto() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    loop {
+        match relay.select_next_some().await {
+            SwarmEvent::NewListenAddr { .. } => break,
+            e => panic!("{e:?}"),
+        }
+    }
+
+    relay.add_external_address(relay_addr.clone());
+
+    relay.behaviour_mut().relay.set_status(None);
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status
+            }
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn disabled_relay_rejects_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener = client.listen_on(client_addr).unwrap();
+
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+
+    let error = client
+        .wait(|e| match e {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                reason: Err(e),
+                ..
+            } if listener_id == listener => Some(e),
+            _ => None,
+        })
+        .await;
+
+    assert!(error.source().is_some());
+}
+
 fn build_relay() -> Swarm<Relay> {
     build_relay_with_config(relay::Config {
         reservation_duration: Duration::from_secs(2),
