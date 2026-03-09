@@ -562,14 +562,14 @@ impl NetworkBehaviour for Behaviour {
                     && self
                         .connections
                         .get(&event_source)
-                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
+                        .map(|cs| cs.values().filter(|status| status.is_active()).count())
                         .unwrap_or(0)
                         > self.config.max_reservations_per_peer)
                     // Deny if it exceeds `max_reservations`.
                     || self
                         .connections
                         .values()
-                        .map(|cs| cs.get(&connection).iter().filter(|status| status.is_active()).count())
+                        .map(|cs|  cs.values().filter(|status| status.is_active()).count())
                         .sum::<usize>()
                         >= self.config.max_reservations
                     // Deny if it exceeds the allowed rate of reservations.
