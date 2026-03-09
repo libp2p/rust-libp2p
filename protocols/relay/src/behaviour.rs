@@ -437,13 +437,6 @@ impl Behaviour {
             }
         }
 
-        if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(peer_id) {
-            peer.get_mut().remove(&connection_id);
-            if peer.get().is_empty() {
-                peer.remove();
-            }
-        }
-
         for circuit in self
             .circuits
             .remove_by_connection(peer_id, connection_id)
