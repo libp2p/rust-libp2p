@@ -71,7 +71,9 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => {
+            }) =>
+            {
+                #[expect(clippy::collapsible_match)]
                 if self.inbound.try_push(perform_dial_back(protocol)).is_err() {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }

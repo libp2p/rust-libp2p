@@ -431,6 +431,7 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
+                #[expect(clippy::collapsible_match)]
                 if self
                     .inflight_inbound_circuit_requests
                     .try_push(inbound_stop::handle_open_circuit(stream))
