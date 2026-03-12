@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [features]
 wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
 metrics = ["prometheus-client"]
+partial_messages = []
 
 [dependencies]
 async-channel = "2.3.1"

@@ -33,21 +33,19 @@ use crate::{
     types::{ControlAction, IDontWant, MessageId, PeerKind, RawMessage, RpcIn, RpcOut},
 };
 
-/// Test that a node sends IDONTWANT messages to mesh peers
-/// that run Gossipsub v1.2.
-#[test]
-fn sends_idontwant() {
+/// Helper for IDONTWANT compatibility tests.
+/// Sends one large enough message to cross the IDONTWANT threshold in a fixed topology,
+/// and return the number of emitted `IDONTWANT` RPCs, so callers can assert behavior by `PeerKind`.
+fn send_idontwant_messages(peer_kind: PeerKind) -> usize {
     let (mut gs, peers, queues, topic_hashes) = DefaultBehaviourTestBuilder::default()
         .peer_no(5)
         .topics(vec![String::from("topic1")])
         .to_subscribe(true)
         .gs_config(Config::default())
         .explicit(1)
-        .peer_kind(PeerKind::Gossipsubv1_2)
+        .peer_kind(peer_kind)
         .create_network();
-
     let local_id = PeerId::random();
-
     let message = RawMessage {
         source: Some(peers[1]),
         data: vec![12u8; 1024],
@@ -57,22 +55,29 @@ fn sends_idontwant() {
         key: None,
         validated: true,
     };
-    gs.handle_received_message(message.clone(), &local_id);
-    assert_eq!(
-        queues
-            .into_iter()
-            .fold(0, |mut idontwants, (peer_id, mut queue)| {
-                while !queue.is_empty() {
-                    if let Some(RpcOut::IDontWant(_)) = queue.try_pop() {
-                        assert_ne!(peer_id, peers[1]);
-                        idontwants += 1;
-                    }
+    gs.handle_received_message(message, &local_id);
+    queues
+        .into_iter()
+        .fold(0, |mut count, (peer_id, mut queue)| {
+            while !queue.is_empty() {
+                if let Some(RpcOut::IDontWant(_)) = queue.try_pop() {
+                    assert_ne!(peer_id, peers[1]);
+                    count += 1;
                 }
-                idontwants
-            }),
-        3,
-        "IDONTWANT was not sent"
-    );
+            }
+            count
+        })
+}
+
+/// Test that a node sends IDONTWANT messages to mesh peers
+/// that run Gossipsub v1.2
+#[test]
+fn sends_idontwant_to_supported() {
+    let idontwants = send_idontwant_messages(PeerKind::Gossipsubv1_2);
+    assert_eq!(idontwants, 3, "Should have sent 3 IDONWANT messages");
+
+    let idontwants = send_idontwant_messages(PeerKind::Gossipsubv1_3);
+    assert_eq!(idontwants, 3, "Should have sent 3 IDONWANT messages");
 }
 
 #[test]
@@ -120,42 +125,11 @@ fn doesnt_sends_idontwant_for_lower_message_size() {
 /// that don't run Gossipsub v1.2.
 #[test]
 fn doesnt_send_idontwant() {
-    let (mut gs, peers, queues, topic_hashes) = DefaultBehaviourTestBuilder::default()
-        .peer_no(5)
-        .topics(vec![String::from("topic1")])
-        .to_subscribe(true)
-        .gs_config(Config::default())
-        .explicit(1)
-        .peer_kind(PeerKind::Gossipsubv1_1)
-        .create_network();
+    let idontwants = send_idontwant_messages(PeerKind::Gossipsubv1_1);
+    assert_eq!(idontwants, 0, "Should have sent 3 IDONWANT messages");
 
-    let local_id = PeerId::random();
-
-    let message = RawMessage {
-        source: Some(peers[1]),
-        data: vec![12],
-        sequence_number: Some(0),
-        topic: topic_hashes[0].clone(),
-        signature: None,
-        key: None,
-        validated: true,
-    };
-    gs.handle_received_message(message.clone(), &local_id);
-    assert_eq!(
-        queues
-            .into_iter()
-            .fold(0, |mut idontwants, (peer_id, mut queue)| {
-                while !queue.is_empty() {
-                    if matches!(queue.try_pop(), Some(RpcOut::IDontWant(_)) if peer_id != peers[1])
-                    {
-                        idontwants += 1;
-                    }
-                }
-                idontwants
-            }),
-        0,
-        "IDONTWANT were sent"
-    );
+    let idontwants = send_idontwant_messages(PeerKind::Gossipsub);
+    assert_eq!(idontwants, 0, "Should have sent 3 IDONWANT messages");
 }
 
 /// Test that a node doesn't forward a messages to the mesh peers
@@ -225,6 +199,8 @@ fn parses_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
+        #[cfg(feature = "partial_messages")]
+        partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![message_id.clone()],
         })],
