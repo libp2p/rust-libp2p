@@ -50,6 +50,7 @@ use crate::{
     IdentTopic as Topic,
 };
 
+
 #[test]
 fn test_prune_negative_scored_peers() {
     let config = Config::default();
@@ -2103,4 +2104,92 @@ fn test_subscribe_and_graft_with_negative_score() {
 
     // nobody got penalized
     assert!(gs1.as_peer_score_mut().score_report(&p2).score >= original_score);
+}
+
+// Tests for PeerScoreParameters / peer_score_params().
+
+/// `peer_score_params` returns `None` when scoring is disabled.
+#[test]
+fn test_peer_score_params_disabled() {
+    let (gs, peers, _, _) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec!["test".into()])
+        .to_subscribe(true)
+        .create_network();
+
+    // No scoring configured — must return None.
+    assert!(gs.peer_score_params(&peers[0]).is_none());
+}
+
+/// `peer_score_params` returns `Some` for a known peer when scoring is enabled,
+/// and the `final_score` field matches `peer_score`.
+#[test]
+fn test_peer_score_params_consistency_with_peer_score() {
+    let (gs, peers, _, _) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec!["test".into()])
+        .to_subscribe(true)
+        .scoring(Some((
+            PeerScoreParams::default(),
+            PeerScoreThresholds::default(),
+        )))
+        .create_network();
+
+    let peer = peers[0];
+
+    let params = gs
+        .peer_score_params(&peer)
+        .expect("scoring enabled; peer should have params");
+    let score = gs
+        .peer_score(&peer)
+        .expect("scoring enabled; peer should have a score");
+
+    assert_eq!(
+        params.final_score, score,
+        "final_score in PeerScoreParameters must equal peer_score()"
+    );
+}
+
+/// Applying a behavioural penalty is reflected in `p7` and `final_score`.
+#[test]
+fn test_peer_score_params_p7_reflects_penalty() {
+    let score_params = PeerScoreParams::default();
+    // behaviour_penalty_weight is negative; one penalty above threshold should
+    // produce a non-zero (negative) p7 contribution.
+    let (mut gs, peers, _, _) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec!["test".into()])
+        .to_subscribe(true)
+        .scoring(Some((score_params.clone(), PeerScoreThresholds::default())))
+        .create_network();
+
+    let peer = peers[0];
+
+    // Baseline: no penalty yet.
+    let before = gs
+        .peer_score_params(&peer)
+        .expect("scoring enabled");
+    assert_eq!(before.p7, 0.0, "p7 should be zero before any penalty");
+
+    // Apply enough penalties to exceed the threshold.
+    let penalties_needed =
+        (score_params.behaviour_penalty_threshold as usize).saturating_add(1).max(1);
+    for _ in 0..penalties_needed {
+        gs.as_peer_score_mut().add_penalty(&peer, 1);
+    }
+
+    let after = gs
+        .peer_score_params(&peer)
+        .expect("scoring enabled");
+
+    assert!(
+        after.p7 < 0.0,
+        "p7 should be negative after behavioural penalty (got {})",
+        after.p7
+    );
+    assert_eq!(
+        after.final_score,
+        gs.peer_score(&peer).unwrap(),
+        "final_score must stay consistent with peer_score() after penalty"
+    );
 }

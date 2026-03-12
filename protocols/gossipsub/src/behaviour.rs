@@ -59,7 +59,10 @@ use crate::{
     gossip_promises::GossipPromises,
     handler::{Handler, HandlerEvent, HandlerIn},
     mcache::MessageCache,
-    peer_score::{PeerScore, PeerScoreParams, PeerScoreState, PeerScoreThresholds, RejectReason},
+    peer_score::{
+        PeerScore, PeerScoreParameters, PeerScoreParams, PeerScoreState, PeerScoreThresholds,
+        RejectReason,
+    },
     protocol::SIGNING_PREFIX,
     queue::Queue,
     rpc_proto::proto,
@@ -508,6 +511,19 @@ where
     pub fn peer_score(&self, peer_id: &PeerId) -> Option<f64> {
         match &self.peer_score {
             PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).score),
+            PeerScoreState::Disabled => None,
+        }
+    }
+
+    /// Returns a breakdown of the individual score components for a peer.
+    ///
+    /// Returns `None` if peer scoring is disabled or the peer is unknown.
+    /// Each field in [`PeerScoreParameters`] reflects a weighted contribution
+    /// from the corresponding term in the gossipsub v1.1 scoring function.
+    /// The `final_score` field equals [`Self::peer_score`] for the same peer.
+    pub fn peer_score_params(&self, peer_id: &PeerId) -> Option<PeerScoreParameters> {
+        match &self.peer_score {
+            PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).params),
             PeerScoreState::Disabled => None,
         }
     }
