@@ -188,6 +188,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
+                #[allow(clippy::collapsible_match)]
                 if added.any(|p| p.as_ref() == DIAL_REQUEST_PROTOCOL) {
                     self.queued_events
                         .push_back(ConnectionHandlerEvent::NotifyBehaviour(
