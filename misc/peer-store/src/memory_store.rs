@@ -220,11 +220,11 @@ impl<T> Store for MemoryStore<T> {
                 };
 
                 match info.error {
-                    DialError::WrongPeerId { obtained, address } => {
+                    DialError::WrongPeerId { obtained, address }
+                        if self.remove_address_inner(&peer, address, false) =>
+                    {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
-                        if self.remove_address_inner(&peer, address, false) {
-                            self.add_address_inner(obtained, address, false);
-                        }
+                        self.add_address_inner(obtained, address, false);
                     }
                     DialError::Transport(errors) => {
                         for (addr, _) in errors {
