@@ -1,5 +1,9 @@
 ## 0.13.0
 
+- Add `Config::max_connection_send_data` to configure the connection-level
+  send window independently from `max_connection_data`.
+  This enables tuning for high BDP while preserving Quinn's default send window when unset.
+
 - Remove `async-std` support.
   See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
 
