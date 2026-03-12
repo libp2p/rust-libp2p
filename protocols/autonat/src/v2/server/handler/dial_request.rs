@@ -121,7 +121,7 @@ where
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => {
-                #[expect(clippy::collapsible_match)]
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inbound
                     .try_push(handle_request(
