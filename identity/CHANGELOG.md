@@ -1,3 +1,8 @@
+## 0.2.14 (unreleased)
+
+- Bump `rmp-serde` to `1.3.1`.
+
+
 ## 0.2.13
 
 - Turn the `quick-protobuf` dependency optional to only the features which require it.
