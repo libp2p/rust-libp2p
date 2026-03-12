@@ -1808,7 +1808,7 @@ where
         // Record the received message with the metrics
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
-            metrics.msg_recvd(&message.topic);
+            metrics.msg_recvd(&message.topic, raw_message.raw_protobuf_len());
         }
 
         // Tells score that message arrived (but is maybe not fully validated yet).
@@ -3544,14 +3544,12 @@ fn validate_config(
                 return Err("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
             }
         }
-        ValidationMode::Strict => {
-            if !authenticity.is_signing() {
-                return Err(
+        ValidationMode::Strict if !authenticity.is_signing() => {
+            return Err(
                     "Messages will be
                 published unsigned and incoming unsigned messages will be rejected. Consider adjusting
                 the validation or privacy settings in the config"
                 );
-            }
         }
         _ => {}
     }
