@@ -283,7 +283,7 @@ impl Metrics {
         );
 
         let topic_msg_last_sent_bytes = register_family!(
-            "topic_msg_sent_bytes",
+            "topic_msg_last_sent_bytes",
             "bytes from the last gossip message sent to each topic (after duplicates being filtered)"
         );
 
