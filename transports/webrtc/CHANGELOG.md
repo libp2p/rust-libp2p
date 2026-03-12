@@ -1,3 +1,8 @@
+## 0.10.0-alpha
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.9.0-alpha.2
 
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`

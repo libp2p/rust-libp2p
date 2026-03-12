@@ -1,3 +1,8 @@
+## 0.16.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.

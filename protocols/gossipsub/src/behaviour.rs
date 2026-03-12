@@ -2104,7 +2104,10 @@ where
         self.apply_iwant_penalties();
 
         // check connections to explicit peers
-        if self.heartbeat_ticks % self.config.check_explicit_peers_ticks() == 0 {
+        if self
+            .heartbeat_ticks
+            .is_multiple_of(self.config.check_explicit_peers_ticks())
+        {
             for p in self.explicit_peers.clone() {
                 self.check_explicit_peer_connection(&p);
             }
@@ -2321,7 +2324,9 @@ where
             }
 
             // should we try to improve the mesh with opportunistic grafting?
-            if self.heartbeat_ticks % self.config.opportunistic_graft_ticks() == 0
+            if self
+                .heartbeat_ticks
+                .is_multiple_of(self.config.opportunistic_graft_ticks())
                 && peers.len() > 1
             {
                 if let PeerScoreState::Active(peer_score) = &self.peer_score {

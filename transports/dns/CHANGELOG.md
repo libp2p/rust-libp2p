@@ -1,3 +1,8 @@
+## 0.45.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.44.0
 
 - Removed `async_std` module [PR 5959](https://github.com/libp2p/rust-libp2p/pull/5959)

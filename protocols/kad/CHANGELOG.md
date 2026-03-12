@@ -1,3 +1,8 @@
+## 0.50.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.49.0
 
 - Remove no longer constructed GetRecordError::QuorumFailed.
