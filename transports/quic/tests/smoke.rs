@@ -817,3 +817,213 @@ impl Spawn for libp2p_quic::tokio::Provider {
         tokio::spawn(future);
     }
 }
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+// Regression test for the original bug: listening on 0.0.0.0 and dialing to 127.0.0.1
+// should reuse the listener socket, not create a new one.
+//
+// This is the exact scenario from issue #4259.
+async fn test_port_reuse_wildcard_to_loopback() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    // A listens on 0.0.0.0 (wildcard) - this is the bug scenario
+    a_transport
+        .listen_on(
+            ListenerId::next(),
+            "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+        )
+        .unwrap();
+
+    // Wait for if-watch to discover 127.0.0.1
+    let a_listen_addr = 'outer: loop {
+        let ev = a_transport.next().await.unwrap();
+        let listen_addr = ev.into_new_address().unwrap();
+        for proto in listen_addr.iter() {
+            if let Protocol::Ip4(ip4) = proto {
+                if ip4.is_loopback() {
+                    break 'outer listen_addr;
+                }
+            }
+        }
+    };
+
+    // Drain all remaining NewAddress events to avoid them interfering
+    poll_fn(|cx| {
+        let mut pinned = Pin::new(&mut a_transport);
+        while pinned.as_mut().poll(cx).is_ready() {}
+        Poll::Ready(())
+    })
+    .await;
+
+    // B listens on 127.0.0.1
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+
+    // A dials B - the critical test
+    let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
+
+    // Source address should be A's loopback listener
+    // This proves we reused the listener socket instead of creating a new one
+    assert_eq!(
+        send_back_addr, a_listen_addr,
+        "Port reuse failed: expected source {} but got {}",
+        a_listen_addr, send_back_addr
+    );
+}
+
+// Test that listener cleanup properly unregisters addresses from PortReuse registry.
+//
+// This ensures closed listeners don't leak entries in the registry.
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn test_port_reuse_listener_cleanup() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    // A listens on wildcard
+    let listener_id = ListenerId::next();
+    a_transport
+        .listen_on(listener_id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        .unwrap();
+
+    // Wait for loopback address discovery
+    let a_loopback_addr = loop {
+        let ev = a_transport.next().await.unwrap();
+        if let Some(listen_addr) = ev.into_new_address() {
+            if listen_addr
+                .iter()
+                .any(|p| matches!(p, Protocol::Ip4(ip) if ip.is_loopback()))
+            {
+                break listen_addr;
+            }
+        }
+    };
+
+    // Drain events
+    poll_fn(|cx| {
+        let mut pinned = Pin::new(&mut a_transport);
+        while pinned.as_mut().poll(cx).is_ready() {}
+        Poll::Ready(())
+    })
+    .await;
+
+    // B listens
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+
+    // First dial should work and reuse listener
+    let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
+    assert_eq!(
+        send_back_addr, a_loopback_addr,
+        "First dial should reuse listener"
+    );
+
+    // Remove A's listener
+    assert!(a_transport.remove_listener(listener_id));
+
+    // Wait for listener close event
+    loop {
+        let ev = a_transport.next().await.unwrap();
+        if matches!(ev, TransportEvent::ListenerClosed { .. }) {
+            break;
+        }
+    }
+
+    // Poll once more to ensure listener stream is removed
+    poll_fn(|cx| {
+        let mut pinned = Pin::new(&mut a_transport);
+        while pinned.as_mut().poll(cx).is_ready() {}
+        Poll::Ready(())
+    })
+    .await;
+
+    // Second dial to a new B address should NOT reuse the old (closed) listener
+    // It should create a new dialer socket instead
+    let b2_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let (_, send_back_addr2, _) = connect(&mut b_transport, &mut a_transport, b2_addr).await.0;
+
+    // The source address should be different (new dialer socket, not the closed listener)
+    assert_ne!(
+        send_back_addr2, a_loopback_addr,
+        "After listener closes, dial should create new socket, not reuse closed listener"
+    );
+}
+
+// Test that PortUse::New creates a fresh socket instead of reusing listeners.
+//
+// This verifies the PortUse policy enum is respected correctly.
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn test_port_use_new_vs_reuse() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    // A listens on 127.0.0.1
+    let a_listen_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+
+    // B listens on 127.0.0.1
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+
+    // Test 1: Dial with PortUse::Reuse (should reuse listener)
+    let (_, send_back_addr_reuse, _) = connect(&mut b_transport, &mut a_transport, b_addr.clone())
+        .await
+        .0;
+
+    // With PortUse::Reuse, source address should be listener's address
+    assert_eq!(
+        send_back_addr_reuse, a_listen_addr,
+        "PortUse::Reuse should reuse listener socket"
+    );
+
+    // Test 2: Dial with PortUse::New (should create new socket)
+    let dial_fut = a_transport
+        .dial(
+            b_addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::New, // NEW socket
+            },
+        )
+        .unwrap();
+
+    let (_, send_back_addr_new, _) = tokio::join!(
+        async {
+            loop {
+                match b_transport.next().await.unwrap() {
+                    TransportEvent::Incoming {
+                        upgrade,
+                        send_back_addr,
+                        ..
+                    } => {
+                        let (peer_id, connection) = upgrade.await.unwrap();
+                        break (peer_id, send_back_addr, connection);
+                    }
+                    _ => continue,
+                }
+            }
+        },
+        async {
+            let (peer_id, connection) = dial_fut.await.unwrap();
+            (peer_id, Multiaddr::empty(), connection) // send_back_addr not available on dialer side
+        }
+    )
+    .0;
+
+    // With PortUse::New, source address should be different (new socket)
+    assert_ne!(
+        send_back_addr_new, a_listen_addr,
+        "PortUse::New should create fresh socket, not reuse listener"
+    );
+}
