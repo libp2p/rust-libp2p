@@ -1,3 +1,8 @@
+## 0.2.14
+
+- Enable rsa for wasm32-unknown-unknown targets.
+  See [PR 6137](https://github.com/libp2p/rust-libp2p/pull/6137)
+
 ## 0.2.13
 
 - Turn the `quick-protobuf` dependency optional to only the features which require it.
