@@ -1,3 +1,7 @@
+## 0.47.2
+
+- Add smart dialing support.
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.
