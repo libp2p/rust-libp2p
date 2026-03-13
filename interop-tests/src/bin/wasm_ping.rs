@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
 
     // read env variables
     let config = config::Config::from_env()?;
-    let test_timeout = Duration::from_secs(config.test_timeout);
+    let test_timeout = Duration::from_secs(config.test_timeout_secs);
 
     // create a redis client
     let redis_client =
@@ -95,7 +95,12 @@ async fn main() -> Result<()> {
     chrome.kill().await?;
 
     match test_result {
-        Ok(report) => println!("{}", serde_json::to_string(&report)?),
+        Ok(report) => {
+            println!("latency:");
+            println!("  handshake_plus_one_rtt: {}", report.handshake_plus_one_rtt_ms);
+            println!("  ping_rtt: {}", report.ping_rtt_ms);
+            println!("  unit: ms");
+        }
         Err(error) => bail!("Tests failed: {error}"),
     }
 
@@ -181,15 +186,17 @@ async fn post_results(
 async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, StatusCode> {
     let config::Config {
         transport,
-        ip,
+        listener_ip,
         is_dialer,
-        test_timeout,
-        sec_protocol,
+        test_timeout_secs,
+        secure_channel,
         muxer,
+        debug,
+        test_key,
         ..
     } = state.0.config;
 
-    let sec_protocol = sec_protocol
+    let secure_channel = secure_channel
         .map(|p| format!(r#""{p}""#))
         .unwrap_or("null".to_owned());
     let muxer = muxer
@@ -212,12 +219,14 @@ async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, 
                 // run our entrypoint with params from the env
                 await run_test_wasm(
                     "{transport}",
-                    "{ip}",
+                    "{listener_ip}",
                     {is_dialer},
-                    "{test_timeout}",
+                    "{test_timeout_secs}",
                     "{BIND_ADDR}",
-                    {sec_protocol},
-                    {muxer}
+                    {secure_channel},
+                    {muxer},
+                    {debug},
+                    "{test_key}"
                 )
             </script>
         </head>

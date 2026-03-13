@@ -26,9 +26,16 @@ pub(crate) mod native {
 
     pub(crate) type Instant = std::time::Instant;
 
-    pub(crate) fn init_logger() {
+    pub(crate) fn init_logger(debug: bool) {
+        // If DEBUG=true, enable debug logging for libp2p components
+        let filter = if debug {
+            EnvFilter::try_new("debug,libp2p=debug,libp2p_tls=debug,libp2p_noise=debug,libp2p_tcp=debug,libp2p_websocket=debug,libp2p_quic=debug,libp2p_swarm=debug,libp2p_core=debug,interop_tests=debug")
+                .unwrap_or_else(|_| EnvFilter::from_default_env())
+        } else {
+            EnvFilter::from_default_env()
+        };
         let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
+            .with_env_filter(filter)
             .try_init();
     }
 
@@ -39,11 +46,11 @@ pub(crate) mod native {
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
-        sec_protocol: Option<SecProtocol>,
+        secure_channel: Option<SecProtocol>,
         muxer: Option<Muxer>,
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
-        let (swarm, addr) = match (transport, sec_protocol, muxer) {
+        let (swarm, addr) = match (transport, secure_channel, muxer) {
             (Transport::QuicV1, None, None) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
@@ -195,9 +202,14 @@ pub(crate) mod wasm {
 
     pub(crate) type Instant = web_time::Instant;
 
-    pub(crate) fn init_logger() {
+    pub(crate) fn init_logger(debug: bool) {
         console_error_panic_hook::set_once();
-        wasm_logger::init(wasm_logger::Config::default());
+        let config = if debug {
+            wasm_logger::Config::new(log::Level::Debug)
+        } else {
+            wasm_logger::Config::default()
+        };
+        wasm_logger::init(config);
     }
 
     pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
@@ -207,11 +219,11 @@ pub(crate) mod wasm {
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
-        sec_protocol: Option<SecProtocol>,
+        secure_channel: Option<SecProtocol>,
         muxer: Option<Muxer>,
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
-        Ok(match (transport, sec_protocol, muxer) {
+        Ok(match (transport, secure_channel, muxer) {
             (Transport::Webtransport, None, None) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
