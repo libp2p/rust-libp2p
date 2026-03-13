@@ -1,7 +1,10 @@
-## 0.17.1
+## 0.18.0
 
 - Fix panic in swarm metrics when `ConnectionClosed` events are received for connections that were established before metrics collection started.
   See [PR 6158](https://github.com/libp2p/rust-libp2p/pull/6158).
+
+- Add `StatusChanged` as a relay metric.
+  See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
 
 ## 0.17.0
 
