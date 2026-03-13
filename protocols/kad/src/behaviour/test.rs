@@ -434,7 +434,7 @@ fn unresponsive_not_returned_indirect() {
 }
 
 // Test the result of get_closest_peers with different num_results
-// Note that the result is capped after exceeds K_VALUE
+// Note that the result is capped to the configured num_closest_peers (defaults to K_VALUE)
 #[test]
 fn get_closest_with_different_num_results() {
     let k_value = K_VALUE.get();
@@ -1665,6 +1665,62 @@ fn get_closest_peers_should_return_up_to_k_peers() {
                                 k_value,
                                 "Expected K_VALUE ({}) peers but got {}",
                                 k_value,
+                                ok.peers.len()
+                            );
+                            return Poll::Ready(());
+                        }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                        Poll::Pending => break,
+                    }
+                }
+            }
+            Poll::Pending
+        }))
+    }
+}
+
+// Test that nodes respond with the configured num_closest_peers amount.
+#[test]
+fn get_closest_peers_should_return_configured_num_closest_peers() {
+    let k_value = K_VALUE.get();
+    // Test with values less than, equal to, and greater than K_VALUE
+    for num_closest_peers in [5, k_value, k_value * 2] {
+        // Should be enough nodes for every node to have >= num_closest_peers nodes in their RT.
+        let num_of_nodes = 3 * num_closest_peers;
+
+        let mut cfg = Config::new(PROTOCOL_NAME);
+        cfg.set_num_closest_peers(NonZeroUsize::new(num_closest_peers).unwrap());
+
+        let swarms = build_connected_nodes_with_config(num_of_nodes, k_value, cfg);
+        let mut swarms = swarms
+            .into_iter()
+            .map(|(_addr, swarm)| swarm)
+            .collect::<Vec<_>>();
+
+        // Ask first node to search for a random peer.
+        let search_target = PeerId::random();
+        swarms[0].behaviour_mut().get_closest_peers(search_target);
+
+        let rt = Runtime::new().unwrap();
+        rt.block_on(poll_fn(move |ctx| {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(
+                            Event::OutboundQueryProgressed {
+                                result: QueryResult::GetClosestPeers(Ok(ok)),
+                                ..
+                            },
+                        ))) => {
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                            // Verify that we get the configured num_closest_peers amount.
+                            assert_eq!(
+                                ok.peers.len(),
+                                num_closest_peers,
+                                "Expected {} peers but got {}",
+                                num_closest_peers,
                                 ok.peers.len()
                             );
                             return Poll::Ready(());
