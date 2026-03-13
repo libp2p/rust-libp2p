@@ -62,8 +62,10 @@ impl From<io::Error> for Error {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DialBackError {
+    /// Tells that the client is actually behind NAT for this connection.
     #[error("server failed to establish a connection")]
     NoConnection,
+    /// Can't tell new information as dialing back couldn't be finished for a lower level reason.
     #[error("dial back stream failed")]
     StreamFailed,
 }
