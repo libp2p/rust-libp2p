@@ -53,7 +53,7 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: tomlq
 
@@ -110,7 +110,7 @@ jobs:
         with:
           target: wasm32-unknown-unknown
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: wasm-pack@0.12.0
 
@@ -281,7 +281,7 @@ jobs:
             cargo check --manifest-path "$toml";
           done
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: wasm-pack@0.12.0
 
