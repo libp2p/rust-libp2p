@@ -1,3 +1,7 @@
+## 0.48.1
+
+- Implements support for querying individual peer SRV and TXT queries via dns-sd style queries.
+
 ## 0.48.0
 
 - Remove `async_std` dependency [PR 5958](https://github.com/libp2p/rust-libp2p/pull/5958)
