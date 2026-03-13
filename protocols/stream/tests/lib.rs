@@ -78,3 +78,47 @@ async fn dial_errors_are_propagated() {
     assert_eq!(e.kind(), io::ErrorKind::NotConnected);
     assert_eq!("Dial error: no addresses for peer.", e.to_string());
 }
+
+#[tokio::test]
+async fn backpressure_on_many_concurrent_dials() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::DEBUG.into())
+                .from_env()
+                .unwrap(),
+        )
+        .with_test_writer()
+        .try_init();
+
+    let swarm1 = Swarm::new_ephemeral_tokio(|_| stream::Behaviour::new());
+    let control = swarm1.behaviour().new_control();
+
+    tokio::spawn(swarm1.loop_on_next());
+
+    // Spawn many concurrent dial attempts that will all fail
+    // Before the fix: some would silently drop and hang forever
+    // After the fix: all should fail with proper errors (backpressure propagated)
+    let mut handles = vec![];
+
+    for _ in 0..50 {
+        let mut control_clone = control.clone();
+        let handle = tokio::spawn(async move {
+            let result = control_clone.open_stream(PeerId::random(), PROTOCOL).await;
+            // All should fail, none should hang
+            assert!(result.is_err());
+        });
+        handles.push(handle);
+    }
+
+    // All tasks should complete (not hang indefinitely)
+    for handle in handles {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            handle,
+        )
+        .await
+        .expect("Task should not hang - backpressure should work")
+        .expect("Task should complete successfully");
+    }
+}
