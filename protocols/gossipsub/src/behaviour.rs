@@ -59,7 +59,10 @@ use crate::{
     gossip_promises::GossipPromises,
     handler::{Handler, HandlerEvent, HandlerIn},
     mcache::MessageCache,
-    peer_score::{PeerScore, PeerScoreParams, PeerScoreState, PeerScoreThresholds, RejectReason},
+    peer_score::{
+        PeerScore, PeerScoreParameters, PeerScoreParams, PeerScoreState, PeerScoreThresholds,
+        RejectReason,
+    },
     protocol::SIGNING_PREFIX,
     queue::Queue,
     rpc_proto::proto,
@@ -508,6 +511,14 @@ where
     pub fn peer_score(&self, peer_id: &PeerId) -> Option<f64> {
         match &self.peer_score {
             PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).score),
+            PeerScoreState::Disabled => None,
+        }
+    }
+
+    /// Returns the detailed gossipsub score parameters for a given peer, if one exists.
+    pub fn peer_score_params(&self, peer_id: &PeerId) -> Option<PeerScoreParameters> {
+        match &self.peer_score {
+            PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).params),
             PeerScoreState::Disabled => None,
         }
     }
