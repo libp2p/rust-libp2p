@@ -1191,7 +1191,7 @@ dependencies = [
  "pem-rfc7468",
  "pkcs8",
  "rand_core 0.6.4",
- "sec1",
+ "sec1 0.7.3",
  "subtle",
  "zeroize",
 ]
@@ -2700,7 +2700,7 @@ dependencies = [
  "rand 0.8.5",
  "ring",
  "rmp-serde",
- "sec1",
+ "sec1 0.8.0",
  "serde",
  "serde_json",
  "sha2",
@@ -4951,6 +4951,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sec1"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f46b9a5ab87780a3189a1d704766579517a04ad59de653b7aad7d38e8a15f7dc"
+
+[[package]]
 name = "security-framework"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6343,7 +6349,7 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls",
- "sec1",
+ "sec1 0.7.3",
  "serde",
  "sha1",
  "sha2",
