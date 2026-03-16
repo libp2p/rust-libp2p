@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = { workspace = true }
 cuckoofilter = "0.5.0"
 fnv = "1.0"
-bytes = "1.6"
+bytes = "1.11"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
