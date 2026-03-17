@@ -168,7 +168,7 @@ impl State {
         topic.insert(
             *peer_id,
             RemoteSubscription {
-                options,
+                options: Some(options),
                 partial_messages: Default::default(),
             },
         );
@@ -230,7 +230,10 @@ impl State {
                 .filter(|(peer_id, peer_subscription)| {
                     !mesh_peers.is_some_and(|p| p.contains(peer_id))
                         && !fanout_peers.is_some_and(|p| p.contains(peer_id))
-                        && peer_subscription.options.supports_partial
+                        && peer_subscription
+                            .options
+                            .map(|s| s.supports_partial)
+                            .unwrap_or_default()
                 })
                 .collect::<Vec<_>>();
             let gossip_amp = max(
@@ -415,7 +418,8 @@ impl State {
         self.peer_subscriptions
             .get(topic_hash)
             .and_then(|topic| topic.get(peer_id))
-            .map(|s| s.options.requests_partial)
+            .and_then(|subscription| subscription.options)
+            .map(|options| options.requests_partial)
             .unwrap_or(false)
     }
 
@@ -424,7 +428,8 @@ impl State {
         self.peer_subscriptions
             .get(topic_hash)
             .and_then(|topic| topic.get(peer_id))
-            .map(|s| s.options.supports_partial)
+            .and_then(|subscription| subscription.options)
+            .map(|options| options.supports_partial)
             .unwrap_or(false)
     }
 
@@ -477,10 +482,13 @@ impl State {
                 continue;
             };
 
-            // Peer `supports_partial` but doesn't `requests_partial`.
             // We assume peer requests_partial is true as that has already been filtered
-            // by the behavior.
-            if !remote_subscription.options.requests_partial {
+            // by the behavior, so no need to check it again.
+            if !remote_subscription
+                .options
+                .map(|s| s.requests_partial)
+                .unwrap_or_default()
+            {
                 actions.push(PublishAction::SendMessage {
                     peer_id,
                     rpc: RpcOut::PartialMessage(PartialMessage {
@@ -673,7 +681,7 @@ pub(crate) struct LocalSubscription {
 #[derive(Debug, Default)]
 pub(crate) struct RemoteSubscription {
     /// Subscription options, None if peer has not subscribe to the topic.
-    options: SubscriptionOpts,
+    options: Option<SubscriptionOpts>,
     /// Partial messages that the peer has sent us on the topic subscription.
     partial_messages: HashMap<Vec<u8>, RemotePartial>,
 }
