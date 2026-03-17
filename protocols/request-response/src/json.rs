@@ -58,7 +58,6 @@ pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 pub mod codec {
     use std::{io, marker::PhantomData};
 
-    use async_trait::async_trait;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
@@ -105,7 +104,6 @@ pub mod codec {
         }
     }
 
-    #[async_trait]
     impl<Req, Resp> crate::Codec for Codec<Req, Resp>
     where
         Req: Send + Serialize + DeserializeOwned,

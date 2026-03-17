@@ -2469,9 +2469,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
- "async-trait",
  "asynchronous-codec",
  "either",
  "futures",
@@ -2566,9 +2565,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
- "async-trait",
  "futures",
  "hickory-resolver",
  "libp2p-core",
@@ -2981,9 +2979,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
- "async-trait",
  "asynchronous-codec",
  "bimap",
  "futures",
@@ -3005,10 +3002,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "cbor4ii",
  "futures",
  "futures-bounded",
@@ -4652,10 +4648,11 @@ dependencies = [
 
 [[package]]
 name = "rmp-serde"
-version = "1.3.1"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
+checksum = "52e599a477cf9840e92f2cde9a7189e67b42c57532749bf90aea6ec10facd4db"
 dependencies = [
+ "byteorder",
  "rmp",
  "serde",
 ]
