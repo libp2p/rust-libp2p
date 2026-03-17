@@ -247,14 +247,13 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
     let mut iwant_exists = false;
     let mut receiver_queue = queues.remove(&peers[7]).unwrap();
     while !receiver_queue.is_empty() {
-        if let Some(RpcOut::IWant(IWant { message_ids })) = receiver_queue.try_pop() {
-            if message_ids
+        if let Some(RpcOut::IWant(IWant { message_ids })) = receiver_queue.try_pop()
+            && message_ids
                 .iter()
                 .any(|m| *m == MessageId::new(b"unknown id"))
-            {
-                iwant_exists = true;
-                break;
-            }
+        {
+            iwant_exists = true;
+            break;
         }
     }
 

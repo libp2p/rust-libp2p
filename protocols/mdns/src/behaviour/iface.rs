@@ -247,20 +247,20 @@ where
             }
 
             // 3rd priority: Keep local buffers small: Return discovered addresses.
-            if this.query_response_sender.poll_ready_unpin(cx).is_ready() {
-                if let Some(discovered) = this.discovered.pop_front() {
-                    match this.query_response_sender.try_send(discovered) {
-                        Ok(()) => {}
-                        Err(e) if e.is_disconnected() => {
-                            return Poll::Ready(());
-                        }
-                        Err(e) => {
-                            this.discovered.push_front(e.into_inner());
-                        }
+            if this.query_response_sender.poll_ready_unpin(cx).is_ready()
+                && let Some(discovered) = this.discovered.pop_front()
+            {
+                match this.query_response_sender.try_send(discovered) {
+                    Ok(()) => {}
+                    Err(e) if e.is_disconnected() => {
+                        return Poll::Ready(());
                     }
-
-                    continue;
+                    Err(e) => {
+                        this.discovered.push_front(e.into_inner());
+                    }
                 }
+
+                continue;
             }
 
             // 4th priority: Remote work: Answer incoming requests.

@@ -256,14 +256,14 @@ where
     pb.identity_sig.clone_from(&state.identity.signature);
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
-    if state.io.codec().is_responder() {
-        if let Some(ref certhashes) = state.responder_webtransport_certhashes {
-            let ext = pb
-                .extensions
-                .get_or_insert_with(proto::NoiseExtensions::default);
+    if state.io.codec().is_responder()
+        && let Some(ref certhashes) = state.responder_webtransport_certhashes
+    {
+        let ext = pb
+            .extensions
+            .get_or_insert_with(proto::NoiseExtensions::default);
 
-            ext.webtransport_certhashes = certhashes.iter().map(|hash| hash.to_bytes()).collect();
-        }
+        ext.webtransport_certhashes = certhashes.iter().map(|hash| hash.to_bytes()).collect();
     }
 
     state.io.send(&pb).await?;

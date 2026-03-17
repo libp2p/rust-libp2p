@@ -80,10 +80,9 @@ impl Graph {
                     .select_next_some()
                     .await
                     .try_into_behaviour_event()
+                    && f(&ev)
                 {
-                    if f(&ev) {
-                        break;
-                    }
+                    break;
                 }
             }
         };

@@ -220,24 +220,24 @@ impl MappingList {
                     retry_count,
                     next_retry,
                 } => {
-                    if let Some(delay) = next_retry {
-                        if Pin::new(delay).poll(cx).is_ready() {
-                            let duration = MAPPING_DURATION;
-                            if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
-                                mapping: mapping.clone(),
-                                duration,
-                            }) {
-                                tracing::debug!(
-                                    multiaddress=%mapping.multiaddr,
-                                    retry_count=%retry_count,
-                                    "could not retry port mapping for multiaddress on the gateway: {}",
-                                    err
-                                );
-                            } else {
-                                *state = MappingState::Pending {
-                                    retry_count: *retry_count,
-                                };
-                            }
+                    if let Some(delay) = next_retry
+                        && Pin::new(delay).poll(cx).is_ready()
+                    {
+                        let duration = MAPPING_DURATION;
+                        if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
+                            mapping: mapping.clone(),
+                            duration,
+                        }) {
+                            tracing::debug!(
+                                multiaddress=%mapping.multiaddr,
+                                retry_count=%retry_count,
+                                "could not retry port mapping for multiaddress on the gateway: {}",
+                                err
+                            );
+                        } else {
+                            *state = MappingState::Pending {
+                                retry_count: *retry_count,
+                            };
                         }
                     }
                 }
@@ -350,7 +350,7 @@ impl NetworkBehaviour for Behaviour {
                             MappingState::Inactive,
                         );
                     }
-                    GatewayState::Available(ref mut gateway) => {
+                    GatewayState::Available(gateway) => {
                         let mapping = Mapping {
                             listener_id,
                             protocol,
@@ -393,21 +393,21 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: _addr,
             }) => {
-                if let GatewayState::Available(ref mut gateway) = &mut self.state {
-                    if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
-                        if let Err(err) = gateway
-                            .sender
-                            .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
-                        {
-                            tracing::debug!(
-                                multiaddress=%mapping.multiaddr,
-                                "could not request port removal for multiaddress on the gateway: {}",
-                                err
-                            );
-                        }
-                        self.mappings
-                            .insert(mapping, MappingState::Pending { retry_count: 0 });
+                if let GatewayState::Available(gateway) = &mut self.state
+                    && let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id)
+                {
+                    if let Err(err) = gateway
+                        .sender
+                        .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
+                    {
+                        tracing::debug!(
+                            multiaddress=%mapping.multiaddr,
+                            "could not request port removal for multiaddress on the gateway: {}",
+                            err
+                        );
                     }
+                    self.mappings
+                        .insert(mapping, MappingState::Pending { retry_count: 0 });
                 }
             }
             _ => {}

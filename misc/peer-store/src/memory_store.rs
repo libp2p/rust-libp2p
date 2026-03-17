@@ -119,17 +119,17 @@ impl<T> MemoryStore<T> {
     /// Returns `true` when the address is removed, `false` if the address didn't exist
     /// or the address is permanent and `force` false.
     fn remove_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            if record.remove_address(address, force) {
-                if record.addresses.is_empty() && record.custom_data.is_none() {
-                    self.records.remove(peer);
-                }
-                self.push_event_and_wake(Event::PeerAddressRemoved {
-                    peer_id: *peer,
-                    address: address.clone(),
-                });
-                return true;
+        if let Some(record) = self.records.get_mut(peer)
+            && record.remove_address(address, force)
+        {
+            if record.addresses.is_empty() && record.custom_data.is_none() {
+                self.records.remove(peer);
             }
+            self.push_event_and_wake(Event::PeerAddressRemoved {
+                peer_id: *peer,
+                address: address.clone(),
+            });
+            return true;
         }
         false
     }

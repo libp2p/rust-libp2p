@@ -523,23 +523,22 @@ impl Reservation {
             to_listener,
             ..
         } = self
+            && !pending_msgs.is_empty()
         {
-            if !pending_msgs.is_empty() {
-                match to_listener.poll_ready(cx) {
-                    Poll::Ready(Ok(())) => {
-                        if let Err(e) = to_listener
-                            .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
-                        {
-                            tracing::debug!("Failed to sent pending message to listener: {:?}", e);
-                            *self = Reservation::None;
-                        }
-                    }
-                    Poll::Ready(Err(e)) => {
-                        tracing::debug!("Channel to listener failed: {:?}", e);
+            match to_listener.poll_ready(cx) {
+                Poll::Ready(Ok(())) => {
+                    if let Err(e) = to_listener
+                        .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
+                    {
+                        tracing::debug!("Failed to sent pending message to listener: {:?}", e);
                         *self = Reservation::None;
                     }
-                    Poll::Pending => {}
                 }
+                Poll::Ready(Err(e)) => {
+                    tracing::debug!("Channel to listener failed: {:?}", e);
+                    *self = Reservation::None;
+                }
+                Poll::Pending => {}
             }
         }
     }

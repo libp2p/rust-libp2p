@@ -96,13 +96,13 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            if let Some(i) = info.take(&key) {
-                h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                    info: i,
-                    error,
-                }));
-            }
+        if let Some(h) = self.handlers.get_mut(&key)
+            && let Some(i) = info.take(&key)
+        {
+            h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+                info: i,
+                error,
+            }));
         }
     }
 }

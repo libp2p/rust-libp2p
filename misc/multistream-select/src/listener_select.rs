@@ -196,14 +196,14 @@ where
                                     );
                                     return Poll::Ready(Err(NegotiationError::Failed));
                                 }
-                                if let ProtocolError::IoError(e) = &err {
-                                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                                        tracing::trace!(
-                                            "Listener: Negotiation failed with EOF \
+                                if let ProtocolError::IoError(e) = &err
+                                    && e.kind() == std::io::ErrorKind::UnexpectedEof
+                                {
+                                    tracing::trace!(
+                                        "Listener: Negotiation failed with EOF \
                                             after protocol rejection."
-                                        );
-                                        return Poll::Ready(Err(NegotiationError::Failed));
-                                    }
+                                    );
+                                    return Poll::Ready(Err(NegotiationError::Failed));
                                 }
                             }
 

@@ -767,13 +767,13 @@ impl ConnectionHandler for Handler {
                 return Poll::Ready(event);
             }
 
-            if self.outbound_substreams.len() < MAX_NUM_STREAMS {
-                if let Some((msg, id)) = self.pending_messages.pop_front() {
-                    self.queue_new_stream(id, msg);
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
-                    });
-                }
+            if self.outbound_substreams.len() < MAX_NUM_STREAMS
+                && let Some((msg, id)) = self.pending_messages.pop_front()
+            {
+                self.queue_new_stream(id, msg);
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
+                });
             }
 
             return Poll::Pending;

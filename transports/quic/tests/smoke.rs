@@ -444,10 +444,10 @@ async fn test_local_listener_reuse() {
         let ev = a_transport.next().await.unwrap();
         let listen_addr = ev.into_new_address().unwrap();
         for proto in listen_addr.iter() {
-            if let Protocol::Ip4(ip4) = proto {
-                if ip4.is_loopback() {
-                    break 'outer listen_addr;
-                }
+            if let Protocol::Ip4(ip4) = proto
+                && ip4.is_loopback()
+            {
+                break 'outer listen_addr;
             }
         }
     };
@@ -499,17 +499,17 @@ async fn build_streams<P: Provider + Spawn>() -> (SubstreamBox, SubstreamBox) {
             let _ = conn_a.poll_unpin(cx);
             let _ = b_transport.poll_next_unpin(cx);
             let _ = conn_b.poll_unpin(cx);
-            if stream_a_tx.is_some() {
-                if let Poll::Ready(stream) = conn_a.poll_outbound_unpin(cx) {
-                    let tx = stream_a_tx.take().unwrap();
-                    tx.send(stream.unwrap()).unwrap();
-                }
+            if stream_a_tx.is_some()
+                && let Poll::Ready(stream) = conn_a.poll_outbound_unpin(cx)
+            {
+                let tx = stream_a_tx.take().unwrap();
+                tx.send(stream.unwrap()).unwrap();
             }
-            if stream_b_tx.is_some() {
-                if let Poll::Ready(stream) = conn_b.poll_inbound_unpin(cx) {
-                    let tx = stream_b_tx.take().unwrap();
-                    tx.send(stream.unwrap()).unwrap();
-                }
+            if stream_b_tx.is_some()
+                && let Poll::Ready(stream) = conn_b.poll_inbound_unpin(cx)
+            {
+                let tx = stream_b_tx.take().unwrap();
+                tx.send(stream.unwrap()).unwrap();
             }
             Poll::Pending
         })

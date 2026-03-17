@@ -551,10 +551,10 @@ pub(super) fn count_control_msgs(
     let mut collected_messages = 0;
     for (peer_id, mut queue) in queues.into_iter() {
         while !queue.is_empty() {
-            if let Some(rpc) = queue.try_pop() {
-                if filter(&peer_id, &rpc) {
-                    collected_messages += 1;
-                }
+            if let Some(rpc) = queue.try_pop()
+                && filter(&peer_id, &rpc)
+            {
+                collected_messages += 1;
             }
         }
         new_queues.insert(peer_id, queue);
@@ -603,7 +603,7 @@ pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage 
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..10024)).map(|_| rng.gen()).collect(),
+        data: (0..rng.gen_range(10..10024)).map(|_| rng.r#gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,

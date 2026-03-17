@@ -1863,37 +1863,39 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            swarm2
+                                .disconnect_peer_id(swarm1_id)
+                                .expect("Error disconnecting");
+                            state = State::Disconnecting;
                         }
-                        swarm2
-                            .disconnect_peer_id(swarm1_id)
-                            .expect("Error disconnecting");
-                        state = State::Disconnecting;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            reconnected = true;
+                            for _ in 0..num_connections {
+                                swarm2.dial(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2) {
-                        if reconnected {
-                            return Poll::Ready(());
-                        }
-                        reconnected = true;
-                        for _ in 0..num_connections {
-                            swarm2.dial(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await
@@ -1927,41 +1929,41 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            swarm2.behaviour.inner().next_action.replace(
+                                ToSwarm::CloseConnection {
+                                    peer_id: swarm1_id,
+                                    connection: CloseConnection::All,
+                                },
+                            );
+                            state = State::Disconnecting;
+                            continue;
                         }
-                        swarm2
-                            .behaviour
-                            .inner()
-                            .next_action
-                            .replace(ToSwarm::CloseConnection {
-                                peer_id: swarm1_id,
-                                connection: CloseConnection::All,
-                            });
-                        state = State::Disconnecting;
-                        continue;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2) {
+                            reconnected = true;
+                            for _ in 0..num_connections {
+                                swarm2.dial(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                            continue;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2) {
-                        reconnected = true;
-                        for _ in 0..num_connections {
-                            swarm2.dial(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                        continue;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await
@@ -1995,49 +1997,56 @@ mod tests {
         let mut state = State::Connecting;
         let mut disconnected_conn_id = None;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        disconnected_conn_id = {
-                            let conn_id =
-                                swarm2.behaviour.on_connection_established[num_connections / 2].1;
-                            swarm2.behaviour.inner().next_action.replace(
-                                ToSwarm::CloseConnection {
-                                    peer_id: swarm1_id,
-                                    connection: CloseConnection::One(conn_id),
-                                },
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            disconnected_conn_id = {
+                                let conn_id = swarm2.behaviour.on_connection_established
+                                    [num_connections / 2]
+                                    .1;
+                                swarm2.behaviour.inner().next_action.replace(
+                                    ToSwarm::CloseConnection {
+                                        peer_id: swarm1_id,
+                                        connection: CloseConnection::One(conn_id),
+                                    },
+                                );
+                                Some(conn_id)
+                            };
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        for s in &[&swarm1, &swarm2] {
+                            assert!(
+                                s.behaviour
+                                    .on_connection_closed
+                                    .iter()
+                                    .all(|(.., remaining_conns)| *remaining_conns > 0)
                             );
-                            Some(conn_id)
-                        };
-                        state = State::Disconnecting;
-                    }
-                }
-                State::Disconnecting => {
-                    for s in &[&swarm1, &swarm2] {
-                        assert!(s
-                            .behaviour
-                            .on_connection_closed
+                            assert_eq!(
+                                s.behaviour.on_connection_established.len(),
+                                num_connections
+                            );
+                            s.behaviour.assert_connected(num_connections, 1);
+                        }
+                        if [&swarm1, &swarm2]
                             .iter()
-                            .all(|(.., remaining_conns)| *remaining_conns > 0));
-                        assert_eq!(s.behaviour.on_connection_established.len(), num_connections);
-                        s.behaviour.assert_connected(num_connections, 1);
-                    }
-                    if [&swarm1, &swarm2]
-                        .iter()
-                        .all(|s| s.behaviour.on_connection_closed.len() == 1)
-                    {
-                        let conn_id = swarm2.behaviour.on_connection_closed[0].1;
-                        assert_eq!(Some(conn_id), disconnected_conn_id);
-                        return Poll::Ready(());
+                            .all(|s| s.behaviour.on_connection_closed.len() == 1)
+                        {
+                            let conn_id = swarm2.behaviour.on_connection_closed[0].1;
+                            assert_eq!(Some(conn_id), disconnected_conn_id);
+                            return Poll::Ready(());
+                        }
                     }
                 }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await

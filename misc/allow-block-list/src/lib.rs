@@ -107,10 +107,8 @@ impl Behaviour<AllowedPeers> {
     /// was already present in the set.
     pub fn allow_peer(&mut self, peer: PeerId) -> bool {
         let inserted = self.state.peers.insert(peer);
-        if inserted {
-            if let Some(waker) = self.waker.take() {
-                waker.wake()
-            }
+        if inserted && let Some(waker) = self.waker.take() {
+            waker.wake()
         }
         inserted
     }
@@ -162,10 +160,8 @@ impl Behaviour<BlockedPeers> {
     /// was not present in the set.
     pub fn unblock_peer(&mut self, peer: PeerId) -> bool {
         let removed = self.state.peers.remove(&peer);
-        if removed {
-            if let Some(waker) = self.waker.take() {
-                waker.wake()
-            }
+        if removed && let Some(waker) = self.waker.take() {
+            waker.wake()
         }
         removed
     }

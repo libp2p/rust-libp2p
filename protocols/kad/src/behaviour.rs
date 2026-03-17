@@ -943,10 +943,10 @@ where
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
     pub fn remove_record(&mut self, key: &record::Key) {
-        if let Some(r) = self.store.get(key) {
-            if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                self.store.remove(key)
-            }
+        if let Some(r) = self.store.get(key)
+            && r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage())
+        {
+            self.store.remove(key)
         }
     }
 
@@ -1332,22 +1332,21 @@ where
                 if old_status != new_status {
                     entry.update(new_status)
                 }
-                if let Some(address) = address {
-                    if entry.value().insert(address) {
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            Event::RoutingUpdated {
-                                peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
-                    }
+                if let Some(address) = address
+                    && entry.value().insert(address)
+                {
+                    self.queued_events
+                        .push_back(ToSwarm::GenerateEvent(Event::RoutingUpdated {
+                            peer,
+                            is_new_peer: false,
+                            addresses: entry.value().clone(),
+                            old_peer: None,
+                            bucket_range: self
+                                .kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
+                        }))
                 }
             }
 
@@ -2465,8 +2464,8 @@ where
                     let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
-                        ref mut step,
-                        ref mut found_a_record,
+                        step,
+                        found_a_record,
                         cache_candidates,
                     } = &mut query.info
                     {
@@ -2587,10 +2586,10 @@ where
         }
 
         // Poll bootstrap periodically and automatically.
-        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
-            if let Err(e) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {e}");
-            }
+        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx)
+            && let Err(e) = self.bootstrap()
+        {
+            tracing::warn!("Failed to trigger bootstrap: {e}");
         }
 
         loop {

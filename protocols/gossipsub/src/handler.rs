@@ -232,13 +232,13 @@ impl EnabledHandler {
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     > {
-        if !self.peer_kind_sent {
-            if let Some(peer_kind) = self.peer_kind.as_ref() {
-                self.peer_kind_sent = true;
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    HandlerEvent::PeerKind(*peer_kind),
-                ));
-            }
+        if !self.peer_kind_sent
+            && let Some(peer_kind) = self.peer_kind.as_ref()
+        {
+            self.peer_kind_sent = true;
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                HandlerEvent::PeerKind(*peer_kind),
+            ));
         }
 
         // determine if we need to create the outbound stream

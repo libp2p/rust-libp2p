@@ -160,10 +160,11 @@ impl BackoffStorage {
                 };
                 if !keep {
                     // remove from backoffs
-                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {
-                        if m.get_mut().remove(peer).is_some() && m.get().is_empty() {
-                            m.remove();
-                        }
+                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone())
+                        && m.get_mut().remove(peer).is_some()
+                        && m.get().is_empty()
+                    {
+                        m.remove();
                     }
                 }
 

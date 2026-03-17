@@ -134,10 +134,9 @@ impl<TBvEv> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
             num_established,
             ..
         } = event
+            && *num_established == 0
         {
-            if *num_established == 0 {
-                self.peers.remove(*peer_id);
-            }
+            self.peers.remove(*peer_id);
         }
     }
 }

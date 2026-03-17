@@ -93,7 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn ping_pong() {
-        let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
+        let mem_addr = multiaddr![Memory(thread_rng().r#gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
         transport.listen_on(ListenerId::next(), mem_addr).unwrap();
 

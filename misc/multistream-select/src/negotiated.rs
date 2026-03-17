@@ -161,25 +161,25 @@ impl<TInner> Negotiated<TInner> {
                         }
                     };
 
-                    if let Message::Header(h) = &msg {
-                        if Some(h) == header.as_ref() {
-                            *this.state = State::Expecting {
-                                io,
-                                protocol,
-                                header: None,
-                            };
-                            continue;
-                        }
+                    if let Message::Header(h) = &msg
+                        && Some(h) == header.as_ref()
+                    {
+                        *this.state = State::Expecting {
+                            io,
+                            protocol,
+                            header: None,
+                        };
+                        continue;
                     }
 
-                    if let Message::Protocol(p) = &msg {
-                        if p.as_ref() == protocol.as_ref() {
-                            tracing::debug!(protocol=%p, "Negotiated: Received confirmation for protocol");
-                            *this.state = State::Completed {
-                                io: io.into_inner(),
-                            };
-                            return Poll::Ready(Ok(()));
-                        }
+                    if let Message::Protocol(p) = &msg
+                        && p.as_ref() == protocol.as_ref()
+                    {
+                        tracing::debug!(protocol=%p, "Negotiated: Received confirmation for protocol");
+                        *this.state = State::Completed {
+                            io: io.into_inner(),
+                        };
+                        return Poll::Ready(Ok(()));
                     }
 
                     return Poll::Ready(Err(NegotiationError::Failed));

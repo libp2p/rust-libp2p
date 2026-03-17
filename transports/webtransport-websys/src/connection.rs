@@ -118,10 +118,10 @@ impl ConnectionInner {
         let (peer_id, _io) = noise.upgrade_outbound(stream, info).await?;
 
         // TODO: This should be part libp2p-noise
-        if let Some(expected_peer_id) = remote_peer {
-            if peer_id != expected_peer_id {
-                return Err(Error::UnknownRemotePeerId);
-            }
+        if let Some(expected_peer_id) = remote_peer
+            && peer_id != expected_peer_id
+        {
+            return Err(Error::UnknownRemotePeerId);
         }
 
         Ok(peer_id)

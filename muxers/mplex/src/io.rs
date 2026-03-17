@@ -643,16 +643,16 @@ where
         }
 
         // Perform any pending flush before reading.
-        if let Some(id) = &stream_id {
-            if self.pending_flush_open.contains(id) {
-                tracing::trace!(
-                    connection=%self.id,
-                    substream=%id,
-                    "Executing pending flush for substream"
-                );
-                ready!(self.poll_flush(cx))?;
-                self.pending_flush_open = Default::default();
-            }
+        if let Some(id) = &stream_id
+            && self.pending_flush_open.contains(id)
+        {
+            tracing::trace!(
+                connection=%self.id,
+                substream=%id,
+                "Executing pending flush for substream"
+            );
+            ready!(self.poll_flush(cx))?;
+            self.pending_flush_open = Default::default();
         }
 
         // Check if there is a blocked stream.
