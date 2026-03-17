@@ -365,10 +365,13 @@ impl State {
             }
         }
 
-        let received_action = match local_partial
-            .content
-            .partial_action_from_metadata(peer_id, message.metadata.as_deref())
-        {
+        let received_action = match local_partial.content.partial_action_from_metadata(
+            peer_id,
+            peer_partial
+                .peer_metadata
+                .as_ref()
+                .map(|metadata| metadata.as_ref()),
+        ) {
             Ok(action) => action,
             Err(err) => {
                 tracing::debug!(peer = %peer_id, group_id = ?message.group_id,err = %err,
@@ -654,7 +657,7 @@ pub(crate) enum PeerMetadata {
     /// The metadata was updated with data from a remote peer.
     Remote(Vec<u8>),
     /// The metadata was updated by us when publishing a partial message.
-    Local(Box<dyn crate::extensions::partial_messages::Metadata>),
+    Local(Box<dyn Metadata>),
 }
 
 impl AsRef<[u8]> for PeerMetadata {
