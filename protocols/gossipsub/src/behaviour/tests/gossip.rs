@@ -26,7 +26,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, NetworkBehaviour};
 
 use super::{
-    add_peer, count_control_msgs, flush_events, random_message, DefaultBehaviourTestBuilder,
+    DefaultBehaviourTestBuilder, add_peer, count_control_msgs, flush_events, random_message,
 };
 use crate::{
     config::{Config, ConfigBuilder},

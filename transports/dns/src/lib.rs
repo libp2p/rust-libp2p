@@ -59,7 +59,7 @@
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{name_server::TokioConnectionProvider, system_conf, TokioResolver};
+    use hickory_resolver::{TokioResolver, name_server::TokioConnectionProvider, system_conf};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
@@ -106,8 +106,8 @@ use std::{
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
-    config::{ResolverConfig, ResolverOpts},
     ResolveError, ResolveErrorKind,
+    config::{ResolverConfig, ResolverOpts},
 };
 use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
@@ -426,7 +426,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
     resolver: &'a R,
 ) -> BoxFuture<'a, Result<Resolved<'a>, Error<E>>> {
     match proto {
-        Protocol::Dns(ref name) => resolver
+        Protocol::Dns(name) => resolver
             .lookup_ip(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -449,7 +449,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dns4(ref name) => resolver
+        Protocol::Dns4(name) => resolver
             .ipv4_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -473,7 +473,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dns6(ref name) => resolver
+        Protocol::Dns6(name) => resolver
             .ipv6_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -497,7 +497,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dnsaddr(ref name) => {
+        Protocol::Dnsaddr(name) => {
             let name = [DNSADDR_PREFIX, name].concat();
             resolver
                 .txt_lookup(name)
@@ -576,9 +576,9 @@ mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
+        Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
-        Endpoint, Transport,
     };
     use libp2p_identity::PeerId;
 

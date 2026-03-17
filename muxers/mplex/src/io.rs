@@ -33,15 +33,15 @@ use futures::{
     prelude::*,
     ready,
     stream::Fuse,
-    task::{waker_ref, ArcWake, AtomicWaker, WakerRef},
+    task::{ArcWake, AtomicWaker, WakerRef, waker_ref},
 };
 use nohash_hasher::{IntMap, IntSet};
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 
 use crate::{
-    codec::{Codec, Frame, LocalStreamId, RemoteStreamId},
     Config, MaxBufferBehaviour,
+    codec::{Codec, Frame, LocalStreamId, RemoteStreamId},
 };
 /// A connection identifier.
 ///
@@ -392,10 +392,10 @@ where
         // Check if the stream is open for writing.
         match self.substreams.get(&id) {
             None | Some(SubstreamState::Reset { .. }) => {
-                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
             }
             Some(SubstreamState::SendClosed { .. }) | Some(SubstreamState::Closed { .. }) => {
-                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
             }
             Some(SubstreamState::Open { .. }) | Some(SubstreamState::RecvClosed { .. }) => {
                 // Substream is writeable. Continue.
@@ -479,7 +479,7 @@ where
             // Read the next frame.
             match ready!(self.poll_read_frame(cx, Some(id)))? {
                 Frame::Data { data, stream_id } if stream_id.into_local() == id => {
-                    return Poll::Ready(Ok(Some(data)))
+                    return Poll::Ready(Ok(Some(data)));
                 }
                 Frame::Data { stream_id, data } => {
                     // The data frame is for a different stream than the one

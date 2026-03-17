@@ -31,21 +31,21 @@ use futures::{
     future::FutureExt,
 };
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, upgrade::ReadyUpgrade, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol, upgrade::ReadyUpgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound},
 };
 
 use crate::{
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
     client::Connection,
     priv_client,
     priv_client::{transport, transport::ToListenerMsg},
     proto,
     protocol::{self, inbound_stop, outbound_hop},
-    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
 };
 
 /// The maximum number of circuits being denied concurrently.

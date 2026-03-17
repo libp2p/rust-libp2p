@@ -8,11 +8,12 @@ use std::{
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
-    ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm,
+    NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    behaviour::ConnectionEstablished,
 };
 use rand::prelude::*;
 use rand_core::OsRng;
@@ -21,7 +22,7 @@ use super::handler::{
     dial_back::{self, IncomingNonce},
     dial_request,
 };
-use crate::v2::{protocol::DialRequest, Nonce};
+use crate::v2::{Nonce, protocol::DialRequest};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {

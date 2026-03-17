@@ -50,7 +50,7 @@ use libp2p_core::ConnectedPoint;
 use rand::Rng;
 
 use super::*;
-use crate::{types::RpcIn, IdentTopic as Topic};
+use crate::{IdentTopic as Topic, types::RpcIn};
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =
@@ -378,7 +378,7 @@ where
             role_override: Endpoint::Dialer,
             port_use: PortUse::Reuse,
         }; // this is not relevant
-           // peer_connections.connections should never be empty.
+        // peer_connections.connections should never be empty.
 
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {

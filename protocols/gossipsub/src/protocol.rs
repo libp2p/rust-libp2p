@@ -30,6 +30,7 @@ use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
+    ValidationError,
     config::ValidationMode,
     handler::HandlerEvent,
     rpc_proto::proto,
@@ -38,7 +39,6 @@ use crate::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, RpcIn, Subscription, SubscriptionAction,
     },
-    ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -337,7 +337,9 @@ impl Decoder for GossipsubCodec {
                         );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Message dropped. Message source was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
@@ -595,8 +597,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config, types::RpcOut, Behaviour, ConfigBuilder, IdentTopic as Topic,
-        MessageAuthenticity, Version,
+        Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
+        config::Config, types::RpcOut,
     };
 
     #[derive(Clone, Debug)]

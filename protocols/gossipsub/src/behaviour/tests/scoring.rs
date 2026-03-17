@@ -32,10 +32,11 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, FromSwarm, NetworkBehaviour, ToSwarm};
 
 use super::{
-    add_peer, add_peer_with_addr, count_control_msgs, proto_to_message, random_message,
-    DefaultBehaviourTestBuilder,
+    DefaultBehaviourTestBuilder, add_peer, add_peer_with_addr, count_control_msgs,
+    proto_to_message, random_message,
 };
 use crate::{
+    IdentTopic as Topic,
     behaviour::{ConnectionEstablished, PortUse},
     config::{Config, ConfigBuilder},
     error::ValidationError,
@@ -47,7 +48,6 @@ use crate::{
         ControlAction, IHave, IWant, MessageAcceptance, PeerInfo, Prune, RawMessage, RpcIn, RpcOut,
         Subscription, SubscriptionAction,
     },
-    IdentTopic as Topic,
 };
 
 #[test]
@@ -375,21 +375,25 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             });
 
     // the message got sent to p2
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id)
+    );
     // the message got not sent to p1
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id)));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id))
+    );
 }
 
 #[test]
@@ -821,12 +825,14 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 
     // mesh contains retain_scores best peers
-    assert!(gs.mesh[&topics[0]].is_superset(
-        &peers[(mesh_n_high - config.retain_scores())..]
-            .iter()
-            .cloned()
-            .collect()
-    ));
+    assert!(
+        gs.mesh[&topics[0]].is_superset(
+            &peers[(mesh_n_high - config.retain_scores())..]
+                .iter()
+                .cloned()
+                .collect()
+        )
+    );
 }
 
 #[test]

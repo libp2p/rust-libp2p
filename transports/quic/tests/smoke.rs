@@ -11,20 +11,21 @@ use std::{
 };
 
 use futures::{
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
     channel::{mpsc, oneshot},
     future,
-    future::{poll_fn, BoxFuture, Either},
+    future::{BoxFuture, Either, poll_fn},
     stream::StreamExt,
-    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
 };
 use futures_timer::Delay;
 use libp2p_core::{
+    Endpoint, Multiaddr, Transport,
     multiaddr::Protocol,
     muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
     transport::{
         Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
     },
-    upgrade, Endpoint, Multiaddr, Transport,
+    upgrade,
 };
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
@@ -201,7 +202,7 @@ async fn wrapped_with_delay() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 #[ignore] // Transport currently does not validate PeerId.
-          // Enable once we make use of PeerId validation in rustls.
+// Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 

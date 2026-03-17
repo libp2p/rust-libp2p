@@ -20,8 +20,8 @@
 
 use std::{
     cmp::{
-        max,
         Ordering::{self, Equal},
+        max,
     },
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt::{self, Debug},
@@ -34,16 +34,16 @@ use futures::FutureExt;
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
 use libp2p_core::{
+    Endpoint, Multiaddr,
     multiaddr::Protocol::{Ip4, Ip6},
     transport::PortUse,
-    Endpoint, Multiaddr,
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
-    dial_opts::DialOpts,
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
 };
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
@@ -54,6 +54,7 @@ use web_time::{Instant, SystemTime};
 #[cfg(feature = "metrics")]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
+    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
     gossip_promises::GossipPromises,
@@ -72,7 +73,6 @@ use crate::{
         PeerDetails, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
         SubscriptionAction,
     },
-    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
 
 #[cfg(test)]
@@ -3276,7 +3276,10 @@ where
                         .max_messages_per_rpc()
                         .is_some_and(|max_msg| count >= max_msg)
                     {
-                        tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
+                        tracing::warn!(
+                            "Received more messages than permitted. Ignoring further messages. Processed: {}",
+                            count
+                        );
                         break;
                     }
                     self.handle_received_message(raw_message, &propagation_source);
@@ -3295,7 +3298,10 @@ where
                         .max_messages_per_rpc()
                         .is_some_and(|max_msg| count >= max_msg)
                     {
-                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        tracing::warn!(
+                            "Received more control messages than permitted. Ignoring further messages. Processed: {}",
+                            count
+                        );
                         break;
                     }
 
@@ -3533,11 +3539,15 @@ fn validate_config(
     match validation_mode {
         ValidationMode::Anonymous => {
             if authenticity.is_signing() {
-                return Err("Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity");
+                return Err(
+                    "Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity",
+                );
             }
 
             if !authenticity.is_anonymous() {
-                return Err("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
+                return Err(
+                    "Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config",
+                );
             }
         }
         ValidationMode::Strict if !authenticity.is_signing() => {

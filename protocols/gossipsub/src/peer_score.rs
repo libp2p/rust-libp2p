@@ -21,7 +21,7 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map},
     net::IpAddr,
     time::Duration,
 };
@@ -30,12 +30,12 @@ use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::{time_cache::TimeCache, MessageId, TopicHash};
+use crate::{MessageId, TopicHash, time_cache::TimeCache};
 
 mod params;
 pub use params::{
-    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
-    TopicScoreParams,
+    PeerScoreParams, PeerScoreThresholds, TopicScoreParams, score_parameter_decay,
+    score_parameter_decay_with_base,
 };
 
 use crate::ValidationError;
@@ -851,18 +851,17 @@ impl PeerScore {
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
     fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
-        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            if let Some(topic_stats) =
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id)
+            && let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
-            {
-                tracing::debug!(
-                    peer=%peer_id,
-                    topic=%topic_hash,
-                    "[Penalty] Peer delivered an invalid message in topic and gets penalized \
-                    for it",
-                );
-                topic_stats.invalid_message_deliveries += 1f64;
-            }
+        {
+            tracing::debug!(
+                peer=%peer_id,
+                topic=%topic_hash,
+                "[Penalty] Peer delivered an invalid message in topic and gets penalized \
+                for it",
+            );
+            topic_stats.invalid_message_deliveries += 1f64;
         }
     }
 

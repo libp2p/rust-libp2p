@@ -24,11 +24,11 @@ use std::collections::{HashMap, HashSet};
 
 use libp2p_core::Multiaddr;
 
-use super::{add_peer_with_addr_and_kind, count_control_msgs, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, add_peer_with_addr_and_kind, count_control_msgs};
 use crate::{
+    IdentTopic as Topic,
     config::ConfigBuilder,
     types::{PeerKind, Prune, RpcOut},
-    IdentTopic as Topic,
 };
 
 #[test]

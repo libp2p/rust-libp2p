@@ -84,9 +84,9 @@ where
 mod tests {
     use futures::StreamExt;
     use libp2p_core::{
-        multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
         Endpoint,
+        multiaddr::multiaddr,
+        transport::{DialOpts, ListenerId, PortUse, Transport, memory::MemoryTransport},
     };
 
     use super::*;

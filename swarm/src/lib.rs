@@ -74,12 +74,14 @@ pub mod derive_prelude {
     pub use either::Either;
     pub use futures::prelude as futures;
     pub use libp2p_core::{
-        transport::{ListenerId, PortUse},
         ConnectedPoint, Endpoint, Multiaddr,
+        transport::{ListenerId, PortUse},
     };
     pub use libp2p_identity::PeerId;
 
     pub use crate::{
+        ConnectionDenied, ConnectionHandler, ConnectionHandlerSelect, DialError, NetworkBehaviour,
+        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
         behaviour::{
             AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
             ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm, ListenFailure, ListenerClosed,
@@ -87,15 +89,13 @@ pub mod derive_prelude {
             NewListener,
         },
         connection::ConnectionId,
-        ConnectionDenied, ConnectionHandler, ConnectionHandlerSelect, DialError, NetworkBehaviour,
-        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     };
 }
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     error, fmt, io,
-    num::{NonZeroU32, NonZeroU8, NonZeroUsize},
+    num::{NonZeroU8, NonZeroU32, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -107,10 +107,10 @@ pub use behaviour::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
     NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
 };
-pub use connection::{pool::ConnectionCounters, ConnectionError, ConnectionId, SupportedProtocols};
+pub use connection::{ConnectionError, ConnectionId, SupportedProtocols, pool::ConnectionCounters};
 use connection::{
-    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
     IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
+    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -120,10 +120,10 @@ pub use handler::{
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_core::{
+    Multiaddr, Transport,
     connection::ConnectedPoint,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 #[cfg(feature = "macros")]
@@ -638,11 +638,7 @@ where
         let was_connected = self.pool.is_connected(peer_id);
         self.pool.disconnect(peer_id);
 
-        if was_connected {
-            Ok(())
-        } else {
-            Err(())
-        }
+        if was_connected { Ok(()) } else { Err(()) }
     }
 
     /// Attempt to gracefully close a connection.
@@ -1316,9 +1312,9 @@ fn notify_any<THandler, TBehaviour>(
 where
     TBehaviour: NetworkBehaviour,
     THandler: ConnectionHandler<
-        FromBehaviour = THandlerInEvent<TBehaviour>,
-        ToBehaviour = THandlerOutEvent<TBehaviour>,
-    >,
+            FromBehaviour = THandlerInEvent<TBehaviour>,
+            ToBehaviour = THandlerOutEvent<TBehaviour>,
+        >,
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
@@ -1556,14 +1552,24 @@ impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId { address } => write!(
+            DialError::LocalPeerId { address } => {
+                write!(f, "Dial error: tried to dial local peer id at {address:?}.")
+            }
+            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(
                 f,
-                "Dial error: tried to dial local peer id at {address:?}."
+                "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."
             ),
-            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::DisconnectedAndNotDialing) => write!(f, "Dial error: dial condition was configured to only happen when both disconnected (`PeerCondition::Disconnected`) and there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but node is already connected or dial is in progress, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::Always) => unreachable!("Dial peer condition is by definition true."),
+            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(
+                f,
+                "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."
+            ),
+            DialError::DialPeerConditionFalse(PeerCondition::DisconnectedAndNotDialing) => write!(
+                f,
+                "Dial error: dial condition was configured to only happen when both disconnected (`PeerCondition::Disconnected`) and there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but node is already connected or dial is in progress, thus cancelling new dial."
+            ),
+            DialError::DialPeerConditionFalse(PeerCondition::Always) => {
+                unreachable!("Dial peer condition is by definition true.")
+            }
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
@@ -1762,7 +1768,7 @@ mod tests {
         multiaddr,
         multiaddr::multiaddr,
         transport,
-        transport::{memory::MemoryTransportError, TransportEvent},
+        transport::{TransportEvent, memory::MemoryTransportError},
         upgrade,
     };
     use libp2p_identity as identity;
@@ -2346,6 +2352,9 @@ mod tests {
 
         // Unfortunately, we have some "empty" errors
         // that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
+        assert_eq!(
+            "Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]",
+            string
+        )
     }
 }

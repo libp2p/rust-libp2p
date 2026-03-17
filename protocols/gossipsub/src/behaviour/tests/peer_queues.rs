@@ -27,13 +27,13 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, ToSwarm};
 
 use crate::{
+    Behaviour, Event, FailedMessages, IdentTopic as Topic, MessageAuthenticity, PublishError,
+    ValidationMode,
     config::ConfigBuilder,
     peer_score::{PeerScoreParams, PeerScoreThresholds},
     queue::Queue,
     transform::DataTransform,
     types::{Message, PeerDetails, PeerKind},
-    Behaviour, Event, FailedMessages, IdentTopic as Topic, MessageAuthenticity, PublishError,
-    ValidationMode,
 };
 
 #[test]

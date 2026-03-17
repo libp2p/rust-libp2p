@@ -30,7 +30,7 @@ mod test {
     use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
     use rand::Rng;
 
-    use crate::{rpc_proto::proto::compat, IdentTopic as Topic};
+    use crate::{IdentTopic as Topic, rpc_proto::proto::compat};
 
     #[test]
     fn test_multi_topic_message_compatibility() {

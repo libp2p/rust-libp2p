@@ -33,7 +33,7 @@ use quick_protobuf::MessageWrite;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
-use crate::{queue::Queue, rpc_proto::proto, TopicHash};
+use crate::{TopicHash, queue::Queue, rpc_proto::proto};
 
 /// Messages that have expired while attempting to be sent to a peer.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

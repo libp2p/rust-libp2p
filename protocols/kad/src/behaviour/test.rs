@@ -23,23 +23,24 @@
 use futures::{future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    multiaddr::{multiaddr, Protocol},
+    Transport,
+    multiaddr::{Protocol, multiaddr},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Transport,
+    upgrade,
 };
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
-use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, random, rngs::StdRng, thread_rng};
 use tokio::runtime::Runtime;
 
 use super::*;
 use crate::{
-    record::{store::MemoryStore, Key},
     K_VALUE, PROTOCOL_NAME, SHA_256_MH,
+    record::{Key, store::MemoryStore},
 };
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
@@ -1412,15 +1413,17 @@ fn network_behaviour_on_address_change() {
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the
     // local routing table and hence no addresses are known.
-    assert!(kademlia
-        .handle_pending_outbound_connection(
-            connection_id,
-            Some(remote_peer_id),
-            &[],
-            Endpoint::Dialer
-        )
-        .unwrap()
-        .is_empty());
+    assert!(
+        kademlia
+            .handle_pending_outbound_connection(
+                connection_id,
+                Some(remote_peer_id),
+                &[],
+                Endpoint::Dialer
+            )
+            .unwrap()
+            .is_empty()
+    );
 
     // Mimic the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.

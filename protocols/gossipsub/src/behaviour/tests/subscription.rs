@@ -25,13 +25,13 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
 
-use super::{flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, flush_events};
 use crate::{
+    IdentTopic as Topic,
     behaviour::tests::BehaviourTestBuilder,
     subscription_filter::WhitelistSubscriptionFilter,
     transform::IdentityTransform,
     types::{PeerDetails, PeerKind, RpcOut, Subscription, SubscriptionAction},
-    IdentTopic as Topic,
 };
 
 #[test]
@@ -141,9 +141,9 @@ fn test_unsubscribe() {
 /// Test JOIN(topic) functionality.
 #[test]
 fn test_join() {
-    use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+    use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
     use libp2p_identity::PeerId;
-    use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionId, NetworkBehaviour};
+    use libp2p_swarm::{ConnectionId, NetworkBehaviour, behaviour::ConnectionEstablished};
 
     use crate::{behaviour::FromSwarm, queue::Queue};
 

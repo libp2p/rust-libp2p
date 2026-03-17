@@ -28,6 +28,7 @@ use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use super::DefaultBehaviourTestBuilder;
 use crate::{
+    Event, IdentTopic as Topic, PublishError, ValidationMode,
     config::{Config, ConfigBuilder, TopicMeshConfig},
     error::ValidationError,
     handler::HandlerEvent,
@@ -35,7 +36,6 @@ use crate::{
     rpc_proto::proto,
     topic::TopicHash,
     types::{RawMessage, RpcIn, RpcOut},
-    Event, IdentTopic as Topic, PublishError, ValidationMode,
 };
 
 /// Test that specific topic configurations are correctly applied

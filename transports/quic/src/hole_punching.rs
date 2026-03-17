@@ -5,9 +5,9 @@ use std::{
 };
 
 use futures::future::Either;
-use rand::{distributions, Rng};
+use rand::{Rng, distributions};
 
-use crate::{provider::Provider, Error};
+use crate::{Error, provider::Provider};
 
 pub(crate) async fn hole_puncher<P: Provider>(
     socket: UdpSocket,

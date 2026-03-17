@@ -21,11 +21,11 @@
 use std::{
     collections::{HashMap, VecDeque},
     pin::Pin,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{Arc, Mutex, atomic::AtomicUsize},
     task::{Context, Poll, Waker},
 };
 
-use crate::{types::RpcOut, MessageId};
+use crate::{MessageId, types::RpcOut};
 
 const CONTROL_MSGS_LIMIT: usize = 20_000;
 
