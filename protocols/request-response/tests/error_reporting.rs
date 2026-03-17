@@ -1,7 +1,6 @@
 use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
-use async_trait::async_trait;
 use futures::{future::pending, prelude::*};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
@@ -416,7 +415,6 @@ impl TryFrom<u8> for Action {
     }
 }
 
-#[async_trait]
 impl Codec for TestCodec {
     type Protocol = StreamProtocol;
     type Request = Action;
