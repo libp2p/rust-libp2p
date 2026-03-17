@@ -1,3 +1,8 @@
+## 0.30.0
+
+- refactor: `Codec` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
 ## 0.29.0
 
 - fix: public cbor/json codec module

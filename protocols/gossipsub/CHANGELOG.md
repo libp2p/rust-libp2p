@@ -1,4 +1,11 @@
 ## 0.50.0
+
+- Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
+  See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
+
+- Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
+  See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
+
 - Log when sending and receiving messages.
   See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
 
@@ -38,6 +45,9 @@
 - Avoid direct casting from u128 to u64.
   See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
 
+- Remove `wasm-bindgen` feature and make `wasm` support implicit.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
@@ -53,9 +63,6 @@
 
 - Fix mesh not being constructed even when not adding any peer.
   See [PR 6100](https://github.com/libp2p/rust-libp2p/pull/6100)
-
-- Remove `wasm-bindgen` feature and make `wasm` support implicit.
-  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 
 ## 0.49.0
 

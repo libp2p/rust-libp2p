@@ -123,7 +123,7 @@ pub enum PeerKind {
 }
 
 /// A message received by the gossipsub system and stored locally in caches..
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct RawMessage {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
@@ -145,6 +145,20 @@ pub struct RawMessage {
 
     /// Flag indicating if this message has been validated by the application or not.
     pub validated: bool,
+}
+
+impl fmt::Debug for RawMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawMessage")
+            .field("source", &self.source)
+            .field("data length", &self.data.len())
+            .field("sequence_number", &self.sequence_number)
+            .field("topic", &self.topic)
+            .field("signature", &self.signature)
+            .field("key", &self.key)
+            .field("validated", &self.validated)
+            .finish()
+    }
 }
 
 impl PeerKind {

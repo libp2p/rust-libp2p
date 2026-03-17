@@ -22,7 +22,7 @@ libp2p-identity = { workspace = true }
 libp2p-swarm-derive = { workspace = true, optional = true }
 multistream-select = { workspace = true }
 rand = "0.8"
-smallvec = "1.13.2"
+smallvec = "1.15.1"
 tracing = { workspace = true }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
@@ -49,7 +49,7 @@ libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] }# Using `pat
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
-trybuild = "1.0.95"
+trybuild = "1.0.116"
 tokio = { workspace = true, features = ["time", "rt", "macros", "rt-multi-thread"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
