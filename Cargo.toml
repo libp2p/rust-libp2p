@@ -71,7 +71,7 @@ resolver = "2"
 
 [workspace.package]
 rust-version = "1.88.0"
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 libp2p = { version = "0.57.0", path = "libp2p" }
