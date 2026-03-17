@@ -87,13 +87,11 @@ impl Queue {
 
         let mut count = 0;
         self.non_priority.retain(|message| match message {
-            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. } => {
-                if message_ids.contains(message_id) {
-                    count += 1;
-                    false
-                } else {
-                    true
-                }
+            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. }
+                if message_ids.contains(message_id) =>
+            {
+                count += 1;
+                false
             }
             _ => true,
         });
