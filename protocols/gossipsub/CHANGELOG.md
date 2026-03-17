@@ -1,10 +1,7 @@
-## 0.51.0
+## 0.50.0
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
-
-## 0.50.0
-
 - Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
   See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
 
