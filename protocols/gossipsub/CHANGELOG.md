@@ -1,3 +1,7 @@
+## 0.49.3
+- Ignore invalid backoff values on peer prune.
+  See [CVE XXXX](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-gc42-3jg7-rxr2)
+
 ## 0.49.2
 
 - Relax `Behaviour::with_metrics` requirements, do not require DataTransform and TopicSubscriptionFilter to also impl Default
