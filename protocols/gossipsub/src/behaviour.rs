@@ -2572,13 +2572,13 @@ where
                     }
                     #[cfg(feature = "partial_messages")]
                     {
-                        let (full, partial): (Vec<PeerId>, Vec<PeerId>) =
+                        let (partial, full): (Vec<PeerId>, Vec<PeerId>) =
                             peers.iter().partition(|peer_id| {
                                 self.partial_messages_extension
                                     .supports_partial(peer_id, topic_hash)
                             });
-                        m.set_mesh_peers(topic_hash, full.len(), false);
-                        m.set_mesh_peers(topic_hash, partial.len(), true);
+                        m.set_mesh_peers(topic_hash, partial.len(), false);
+                        m.set_mesh_peers(topic_hash, full.len(), true);
                     }
                 }
             }

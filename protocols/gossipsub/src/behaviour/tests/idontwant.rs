@@ -126,10 +126,10 @@ fn doesnt_sends_idontwant_for_lower_message_size() {
 #[test]
 fn doesnt_send_idontwant() {
     let idontwants = send_idontwant_messages(PeerKind::Gossipsubv1_1);
-    assert_eq!(idontwants, 0, "Should have sent 3 IDONWANT messages");
+    assert_eq!(idontwants, 0, "Should have sent 0 IDONWANT messages");
 
     let idontwants = send_idontwant_messages(PeerKind::Gossipsub);
-    assert_eq!(idontwants, 0, "Should have sent 3 IDONWANT messages");
+    assert_eq!(idontwants, 0, "Should have sent 0 IDONWANT messages");
 }
 
 /// Test that a node doesn't forward a messages to the mesh peers
