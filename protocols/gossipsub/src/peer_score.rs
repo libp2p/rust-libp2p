@@ -95,7 +95,7 @@ pub(crate) struct PeerScoreReport {
 pub struct PeerScoreParameters {
     /// The final aggregate score. Equal to the sum of all other fields after
     /// the topic score cap is applied.
-    pub final_score: f64,
+    pub score: f64,
     /// P1: time in mesh contribution (summed across topics).
     pub p1: f64,
     /// P2: first message deliveries contribution (summed across topics).
