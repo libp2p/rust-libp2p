@@ -87,6 +87,7 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info: _,
             }) => {
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inbound
                     .try_push(crate::protocol::receive_send(protocol).boxed())

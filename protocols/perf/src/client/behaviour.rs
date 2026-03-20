@@ -114,12 +114,10 @@ impl NetworkBehaviour for Behaviour {
                 peer_id,
                 connection_id: _,
                 endpoint: _,
-                remaining_established,
+                remaining_established: 0,
                 ..
             }) => {
-                if remaining_established == 0 {
-                    assert!(self.connected.remove(&peer_id));
-                }
+                assert!(self.connected.remove(&peer_id));
             }
             _ => {}
         }

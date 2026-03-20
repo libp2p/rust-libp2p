@@ -1,3 +1,8 @@
+## 0.16.0
+
+- refactor: `Codec` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.
