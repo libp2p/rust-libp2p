@@ -475,8 +475,8 @@ fn test_overlap_exchange() {
 /// Verifies that:
 /// - Peer1 has even parts (0,2,4,6 = 0b01010101).
 /// - Peer2 has odd parts (1,3,5,7 = 0b10101010).
-/// - Each peer emits the data it needs and does not send a redundant response because
-///   publish-time peer metadata already records what the other side has received.
+/// - Each peer emits the data it needs and does not send a redundant response because publish-time
+///   peer metadata already records what the other side has received.
 /// - Both peers can reconstruct the full message.
 #[test]
 fn test_symmetric_half_exchange() {
@@ -861,8 +861,8 @@ fn test_peer_disconnect_cleanup() {
 
 /// Verifies that:
 /// - When we unsubscribe from a topic, our local partial message state is cleaned up.
-/// - Before unsubscribe, a peer metadata update triggers a `Publish` response when local
-///   partial cache exists.
+/// - Before unsubscribe, a peer metadata update triggers a `Publish` response when local partial
+///   cache exists.
 /// - After re-subscribing, receiving the same metadata-only update is treated as fresh
 ///   (`EmitEvent`) because local partial cache was removed.
 #[test]
