@@ -33,10 +33,11 @@ use libp2p_core::{
 };
 use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
+    _address_translation,
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
     NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm, _address_translation,
+    THandlerOutEvent, ToSwarm,
 };
 
 use crate::{

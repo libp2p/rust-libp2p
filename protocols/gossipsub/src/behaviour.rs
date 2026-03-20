@@ -3555,14 +3555,12 @@ fn validate_config(
                 return Err("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
             }
         }
-        ValidationMode::Strict => {
-            if !authenticity.is_signing() {
-                return Err(
+        ValidationMode::Strict if !authenticity.is_signing() => {
+            return Err(
                     "Messages will be
                 published unsigned and incoming unsigned messages will be rejected. Consider adjusting
                 the validation or privacy settings in the config"
                 );
-            }
         }
         _ => {}
     }

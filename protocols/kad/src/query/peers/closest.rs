@@ -394,8 +394,8 @@ impl ClosestPeersIter {
     /// Consumes the iterator, returning the closest peers.
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
         self.closest_peers
-            .into_iter()
-            .filter_map(|(_, peer)| {
+            .into_values()
+            .filter_map(|peer| {
                 if let PeerState::Succeeded = peer.state {
                     Some(peer.key.into_preimage())
                 } else {
