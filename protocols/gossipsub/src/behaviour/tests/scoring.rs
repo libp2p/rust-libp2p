@@ -864,12 +864,12 @@ fn test_scoring_p1() {
     // refresh scores
     gs.as_peer_score_mut().refresh_scores();
     assert!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score
             >= 2.0 * topic_params.time_in_mesh_weight * topic_params.topic_weight,
         "score should be at least 2 * time_in_mesh_weight * topic_weight"
     );
     assert!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score
             < 3.0 * topic_params.time_in_mesh_weight * topic_params.topic_weight,
         "score should be less than 3 * time_in_mesh_weight * topic_weight"
     );
@@ -879,7 +879,7 @@ fn test_scoring_p1() {
     // refresh scores
     gs.as_peer_score_mut().refresh_scores();
     assert!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score
             >= 2.0 * topic_params.time_in_mesh_weight * topic_params.topic_weight,
         "score should be at least 4 * time_in_mesh_weight * topic_weight"
     );
@@ -889,7 +889,7 @@ fn test_scoring_p1() {
     // refresh scores
     gs.as_peer_score_mut().refresh_scores();
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         topic_params.time_in_mesh_cap
             * topic_params.time_in_mesh_weight
             * topic_params.topic_weight,
@@ -939,13 +939,13 @@ fn test_scoring_p2() {
     deliver_message(&mut gs, 1, m1);
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         1.0 * topic_params.first_message_deliveries_weight * topic_params.topic_weight,
         "score should be exactly first_message_deliveries_weight * topic_weight"
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         0.0,
         "there should be no score for second message deliveries * topic_weight"
     );
@@ -954,7 +954,7 @@ fn test_scoring_p2() {
     deliver_message(&mut gs, 1, random_message(&mut seq, &topics));
     deliver_message(&mut gs, 1, random_message(&mut seq, &topics));
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         2.0 * topic_params.first_message_deliveries_weight * topic_params.topic_weight,
         "score should be exactly 2 * first_message_deliveries_weight * topic_weight"
     );
@@ -963,7 +963,7 @@ fn test_scoring_p2() {
     gs.as_peer_score_mut().refresh_scores();
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         1.0 * topic_params.first_message_deliveries_decay
             * topic_params.first_message_deliveries_weight
             * topic_params.topic_weight,
@@ -972,7 +972,7 @@ fn test_scoring_p2() {
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         2.0 * topic_params.first_message_deliveries_decay
             * topic_params.first_message_deliveries_weight
             * topic_params.topic_weight,
@@ -986,7 +986,7 @@ fn test_scoring_p2() {
     }
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         topic_params.first_message_deliveries_cap
             * topic_params.first_message_deliveries_weight
             * topic_params.topic_weight,
@@ -1065,7 +1065,7 @@ fn test_scoring_p3() {
     expected_message_deliveries *= 0.9; // decay
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         (5f64 - expected_message_deliveries).powi(2) * -2.0 * 0.7
     );
 
@@ -1076,7 +1076,7 @@ fn test_scoring_p3() {
 
     expected_message_deliveries = 10.0;
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // apply 10 decays
     for _ in 0..10 {
@@ -1085,7 +1085,7 @@ fn test_scoring_p3() {
     }
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         (5f64 - expected_message_deliveries).powi(2) * -2.0 * 0.7
     );
 }
@@ -1162,7 +1162,7 @@ fn test_scoring_p3b() {
     // the score should now consider p3b
     let mut expected_b3 = (5f64 - expected_message_deliveries).powi(2);
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         100.0 + expected_b3 * -3.0 * 0.7
     );
 
@@ -1178,7 +1178,7 @@ fn test_scoring_p3b() {
     expected_b3 *= 0.95;
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         100.0 + (expected_b3 * -3.0 + (5f64 - expected_message_deliveries).powi(2) * -2.0) * 0.7
     );
 }
@@ -1233,7 +1233,7 @@ fn test_scoring_p4_valid_message() {
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // message m1 gets validated
     gs.report_message_validation_result(
@@ -1242,7 +1242,7 @@ fn test_scoring_p4_valid_message() {
         MessageAcceptance::Accept,
     );
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 }
 
 #[test]
@@ -1302,7 +1302,7 @@ fn test_scoring_p4_invalid_signature() {
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         -2.0 * 0.7
     );
 }
@@ -1356,7 +1356,7 @@ fn test_scoring_p4_message_from_self() {
 
     deliver_message(&mut gs, 0, m);
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         -2.0 * 0.7
     );
 }
@@ -1408,7 +1408,7 @@ fn test_scoring_p4_ignored_message() {
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
@@ -1420,7 +1420,7 @@ fn test_scoring_p4_ignored_message() {
         MessageAcceptance::Ignore,
     );
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 }
 
 #[test]
@@ -1470,7 +1470,7 @@ fn test_scoring_p4_application_invalidated_message() {
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
@@ -1483,7 +1483,7 @@ fn test_scoring_p4_application_invalidated_message() {
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         -2.0 * 0.7
     );
 }
@@ -1541,8 +1541,8 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
     // peer 1 delivers same message
     deliver_message(&mut gs, 1, m1);
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[1]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score, 0.0);
 
     // message m1 gets rejected
     gs.report_message_validation_result(
@@ -1552,11 +1552,11 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         -2.0 * 0.7
     );
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         -2.0 * 0.7
     );
 }
@@ -1620,7 +1620,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
     // Transform the inbound message
     let message3 = &gs.data_transform.inbound_transform(m3).unwrap();
 
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // messages gets rejected
     gs.report_message_validation_result(
@@ -1643,7 +1643,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
 
     // number of invalid messages gets squared
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         9.0 * -2.0 * 0.7
     );
 }
@@ -1697,7 +1697,7 @@ fn test_scoring_p4_decay() {
 
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
-    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score, 0.0);
 
     // message m1 gets rejected
     gs.report_message_validation_result(
@@ -1707,7 +1707,7 @@ fn test_scoring_p4_decay() {
     );
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         -2.0 * 0.7
     );
 
@@ -1716,7 +1716,7 @@ fn test_scoring_p4_decay() {
 
     // the number of invalids gets decayed to 0.9 and then squared in the score
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         0.9 * 0.9 * -2.0 * 0.7
     );
 }
@@ -1742,7 +1742,7 @@ fn test_scoring_p5() {
     gs.set_application_score(&peers[0], 1.1);
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         1.1 * 2.0
     );
 }
@@ -1786,7 +1786,7 @@ fn test_scoring_p6() {
 
     // no penalties yet
     for peer in peers.iter().chain(others.iter()) {
-        assert_eq!(gs.as_peer_score_mut().score_report(peer).score, 0.0);
+        assert_eq!(gs.as_peer_score_mut().score_report(peer).unwrap().score, 0.0);
     }
 
     // add additional connection for 3 others with addr
@@ -1806,10 +1806,10 @@ fn test_scoring_p6() {
 
     // penalties apply squared
     for peer in peers.iter().chain(others.iter().take(3)) {
-        assert_eq!(gs.as_peer_score_mut().score_report(peer).score, 9.0 * -2.0);
+        assert_eq!(gs.as_peer_score_mut().score_report(peer).unwrap().score, 9.0 * -2.0);
     }
     // fourth other peer still no penalty
-    assert_eq!(gs.as_peer_score_mut().score_report(&others[3]).score, 0.0);
+    assert_eq!(gs.as_peer_score_mut().score_report(&others[3]).unwrap().score, 0.0);
 
     // add additional connection for 3 of the peers to addr2
     for peer in peers.iter().take(3) {
@@ -1829,17 +1829,17 @@ fn test_scoring_p6() {
     // double penalties for the first three of each
     for peer in peers.iter().take(3).chain(others.iter().take(3)) {
         assert_eq!(
-            gs.as_peer_score_mut().score_report(peer).score,
+            gs.as_peer_score_mut().score_report(peer).unwrap().score,
             (9.0 + 4.0) * -2.0
         );
     }
 
     // single penalties for the rest
     for peer in peers.iter().skip(3) {
-        assert_eq!(gs.as_peer_score_mut().score_report(peer).score, 9.0 * -2.0);
+        assert_eq!(gs.as_peer_score_mut().score_report(peer).unwrap().score, 9.0 * -2.0);
     }
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&others[3]).score,
+        gs.as_peer_score_mut().score_report(&others[3]).unwrap().score,
         4.0 * -2.0
     );
 
@@ -1860,17 +1860,17 @@ fn test_scoring_p6() {
     // double penalties for the first three of each
     for peer in peers.iter().take(3).chain(others.iter().take(3)) {
         assert_eq!(
-            gs.as_peer_score_mut().score_report(peer).score,
+            gs.as_peer_score_mut().score_report(peer).unwrap().score,
             (9.0 + 4.0) * -2.0
         );
     }
 
     // single penalties for the rest
     for peer in peers.iter().skip(3) {
-        assert_eq!(gs.as_peer_score_mut().score_report(peer).score, 9.0 * -2.0);
+        assert_eq!(gs.as_peer_score_mut().score_report(peer).unwrap().score, 9.0 * -2.0);
     }
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&others[3]).score,
+        gs.as_peer_score_mut().score_report(&others[3]).unwrap().score,
         4.0 * -2.0
     );
 }
@@ -1916,7 +1916,7 @@ fn test_scoring_p7_grafts_before_backoff() {
 
     // double behaviour penalty for first peer (squared)
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         4.0 * -2.0
     );
 
@@ -1928,7 +1928,7 @@ fn test_scoring_p7_grafts_before_backoff() {
 
     // single behaviour penalty for second peer
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         1.0 * -2.0
     );
 
@@ -1936,11 +1936,11 @@ fn test_scoring_p7_grafts_before_backoff() {
     gs.as_peer_score_mut().refresh_scores();
 
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[0]).score,
+        gs.as_peer_score_mut().score_report(&peers[0]).unwrap().score,
         4.0 * 0.9 * 0.9 * -2.0
     );
     assert_eq!(
-        gs.as_peer_score_mut().score_report(&peers[1]).score,
+        gs.as_peer_score_mut().score_report(&peers[1]).unwrap().score,
         1.0 * 0.9 * 0.9 * -2.0
     );
 }
@@ -2062,7 +2062,7 @@ fn test_subscribe_and_graft_with_negative_score() {
     // add penalty to peer p2
     gs1.as_peer_score_mut().add_penalty(&p2, 1);
 
-    let original_score = gs1.as_peer_score_mut().score_report(&p2).score;
+    let original_score = gs1.as_peer_score_mut().score_report(&p2).unwrap().score;
 
     // subscribe to topic in gs2
     gs2.subscribe(&topic).unwrap();
@@ -2103,7 +2103,7 @@ fn test_subscribe_and_graft_with_negative_score() {
     forward_messages_to_p1(&mut gs1, p1, p2, connection_id, queues);
 
     // nobody got penalized
-    assert!(gs1.as_peer_score_mut().score_report(&p2).score >= original_score);
+    assert!(gs1.as_peer_score_mut().score_report(&p2).unwrap().score >= original_score);
 }
 
 // Tests for PeerScoreParameters / peer_score_params().
@@ -2122,7 +2122,7 @@ fn test_peer_score_params_disabled() {
 }
 
 /// `peer_score_params` returns `Some` for a known peer when scoring is enabled,
-/// and the `final_score` field matches `peer_score`.
+/// and the `score` field matches `peer_score`.
 #[test]
 fn test_peer_score_params_consistency_with_peer_score() {
     let (gs, peers, _, _) = DefaultBehaviourTestBuilder::default()
@@ -2145,12 +2145,12 @@ fn test_peer_score_params_consistency_with_peer_score() {
         .expect("scoring enabled; peer should have a score");
 
     assert_eq!(
-        params.final_score, score,
-        "final_score in PeerScoreParameters must equal peer_score()"
+        params.score, score,
+        "score in PeerScoreParameters must equal peer_score()"
     );
 }
 
-/// Applying a behavioural penalty is reflected in `p7` and `final_score`.
+/// Applying a behavioural penalty is reflected in `p7` and `score`.
 #[test]
 fn test_peer_score_params_p7_reflects_penalty() {
     let score_params = PeerScoreParams::default();
@@ -2188,8 +2188,8 @@ fn test_peer_score_params_p7_reflects_penalty() {
         after.p7
     );
     assert_eq!(
-        after.final_score,
+        after.score,
         gs.peer_score(&peer).unwrap(),
-        "final_score must stay consistent with peer_score() after penalty"
+        "score must stay consistent with peer_score() after penalty"
     );
 }

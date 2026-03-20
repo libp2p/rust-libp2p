@@ -63,7 +63,9 @@ impl PeerScoreState {
     ) -> (bool, f64) {
         match self {
             PeerScoreState::Active(active) => {
-                let score = active.score_report(peer_id).score;
+                let score = active
+                    .score_report(peer_id)
+                    .map_or(0.0, |r| r.score);
                 (score < threshold(&active.thresholds), score)
             }
             PeerScoreState::Disabled => (false, 0.0),
@@ -86,7 +88,7 @@ pub(crate) struct PeerScoreReport {
 /// Each field corresponds to a weighted score contribution as defined in the
 /// [gossipsub v1.1 peer scoring spec]. All values are pre-weighted (i.e. already
 /// multiplied by the relevant weight and, for topic parameters, the topic weight).
-/// `final_score` equals the sum of all components after the topic score cap is applied.
+/// `score` equals the sum of all components after the topic score cap is applied.
 ///
 /// Obtain this via [`Behaviour::peer_score_params`].
 ///
@@ -304,11 +306,9 @@ impl PeerScore {
 
     /// Returns the score report for a peer, with applied penalties.
     /// This is called from the heartbeat
-    pub(crate) fn score_report(&self, peer_id: &PeerId) -> PeerScoreReport {
+    pub(crate) fn score_report(&self, peer_id: &PeerId) -> Option<PeerScoreReport> {
         let mut report = PeerScoreReport::default();
-        let Some(peer_stats) = self.peer_stats.get(peer_id) else {
-            return report;
-        };
+        let peer_stats = self.peer_stats.get(peer_id)?;
 
         // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
@@ -461,9 +461,9 @@ impl PeerScore {
             + report.params.p7
             + report.params.slow_peer_penalty;
 
-        report.params.final_score = report.score;
+        report.params.score = report.score;
 
-        report
+        Some(report)
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
@@ -621,7 +621,7 @@ impl PeerScore {
     /// non-positive.
     pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
-        if self.score_report(peer_id).score > 0f64 {
+        if self.score_report(peer_id).map_or(0.0, |r| r.score) > 0f64 {
             if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
                 Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
                 entry.remove();
