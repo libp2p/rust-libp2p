@@ -33,7 +33,7 @@
 //!   existing nodes in the kademlia network cannot obtain the listen addresses
 //!   of nodes querying them, and thus will not be able to add them to their routing table.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod addresses;
 mod behaviour;

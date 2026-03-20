@@ -58,7 +58,7 @@
 //! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
 //! Instead, you must pass all needed configuration into the constructor.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod config;
 mod connection;
