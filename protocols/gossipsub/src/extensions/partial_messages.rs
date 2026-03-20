@@ -251,6 +251,27 @@ impl State {
                         break;
                     }
 
+                    // We assume peer supports_partial is true as that has already been filtered
+                    // by the behavior, so no need to check it again.
+                    if !remote_subscription
+                        .options
+                        .map(|s| s.requests_partial)
+                        .unwrap_or_default()
+                    {
+                        actions.push(PublishAction::SendMessage {
+                            peer_id: *peer_id,
+                            rpc: RpcOut::PartialMessage(PartialMessage {
+                                body: None,
+                                metadata: Some(
+                                    local_partial.content.metadata().as_slice().to_vec(),
+                                ),
+                                group_id: group_id.clone(),
+                                topic_hash: topic_hash.clone(),
+                            }),
+                        });
+                        continue;
+                    }
+
                     match Self::publish_action(
                         *peer_id,
                         topic_hash,
@@ -472,7 +493,6 @@ impl State {
 
         let mut actions = vec![];
         let group_id = partial_message.group_id();
-        let publish_metadata = partial_message.metadata().as_slice().to_vec();
         let Some(topic_peers) = self.peer_subscriptions.get_mut(&topic_hash) else {
             tracing::error!(topic = %topic_hash, "No peers subscribed to topic");
             return Err(PublishError::NoPeersSubscribedToTopic);
@@ -484,25 +504,6 @@ impl State {
                     "Could not get partial subscription from peer which subscribed for partial messages");
                 continue;
             };
-
-            // We assume peer requests_partial is true as that has already been filtered
-            // by the behavior, so no need to check it again.
-            if !remote_subscription
-                .options
-                .map(|s| s.requests_partial)
-                .unwrap_or_default()
-            {
-                actions.push(PublishAction::SendMessage {
-                    peer_id,
-                    rpc: RpcOut::PartialMessage(PartialMessage {
-                        body: None,
-                        metadata: Some(publish_metadata.clone()),
-                        group_id: group_id.clone(),
-                        topic_hash: topic_hash.clone(),
-                    }),
-                });
-                continue;
-            }
 
             match Self::publish_action(
                 peer_id,
@@ -545,6 +546,22 @@ impl State {
         partial_message: &dyn Partial,
         remote_subscription: &mut RemoteSubscription,
     ) -> Option<PublishAction> {
+        if !remote_subscription
+            .options
+            .map(|s| s.requests_partial)
+            .unwrap_or_default()
+        {
+            return Some(PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(PartialMessage {
+                    body: None,
+                    metadata: Some(partial_message.metadata().as_slice().to_vec()),
+                    group_id: group_id.to_vec(),
+                    topic_hash: topic_hash.clone(),
+                }),
+            });
+        }
+
         let remote_partial = remote_subscription
             .partial_messages
             .entry(group_id.to_vec())

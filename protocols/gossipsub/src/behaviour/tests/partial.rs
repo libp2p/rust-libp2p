@@ -1477,6 +1477,94 @@ fn test_heartbeat_excludes_mesh_and_fanout_peers() {
     );
 }
 
+/// Verifies that during heartbeat gossip:
+/// - peers with `requests_partial: true` receive body + metadata.
+/// - peers with `requests_partial: false` receive metadata only (no body).
+#[test]
+fn test_heartbeat_requests_partial_false_gets_metadata_only() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [9, 8, 7, 6, 5, 4, 3, 2];
+    let requests_peer = PeerId::random();
+    let metadata_only_peer = PeerId::random();
+    let cache_peer = PeerId::random();
+    let mut state = State::default();
+    state.subscribe(topic_hash.clone(), true, true);
+    // Peer that requests partial data.
+    state.peer_subscribed(
+        &requests_peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Peer that supports partial but does not request body.
+    state.peer_subscribed(
+        &metadata_only_peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: false,
+            supports_partial: true,
+        },
+    );
+    // Peer used to seed local cache via publish.
+    state.peer_subscribed(
+        &cache_peer,
+        topic_hash.clone(),
+        SubscriptionOpts {
+            requests_partial: true,
+            supports_partial: true,
+        },
+    );
+    // Seed local partial cache.
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b11111111);
+    let _ = state
+        .handle_publish(topic_hash.clone(), message, HashSet::from([cache_peer]))
+        .expect("Publish should succeed");
+    // Put cache_peer in mesh so heartbeat gossips only to non-mesh peers.
+    let mut mesh = HashMap::new();
+    mesh.insert(topic_hash.clone(), BTreeSet::from([cache_peer]));
+    let fanout = HashMap::new();
+    let actions = state.heartbeat(&mesh, &fanout, 10, 1.0, 100);
+    let requests_peer_msg = actions
+        .iter()
+        .find_map(|action| match action {
+            PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(pm),
+            } if *peer_id == requests_peer => Some(pm),
+            _ => None,
+        })
+        .expect("Peer with requests_partial=true should receive heartbeat partial message");
+    assert!(
+        requests_peer_msg.body.is_some(),
+        "Peer with requests_partial=true should receive body during heartbeat gossip"
+    );
+    assert!(
+        requests_peer_msg.metadata.is_some(),
+        "Peer with requests_partial=true should receive metadata during heartbeat gossip"
+    );
+    let metadata_only_peer_msg = actions
+        .iter()
+        .find_map(|action| match action {
+            PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(pm),
+            } if *peer_id == metadata_only_peer => Some(pm),
+            _ => None,
+        })
+        .expect("Peer with requests_partial=false should receive heartbeat partial message");
+    assert!(
+        metadata_only_peer_msg.body.is_none(),
+        "Peer with requests_partial=false should NOT receive body during heartbeat gossip"
+    );
+    assert!(
+        metadata_only_peer_msg.metadata.is_some(),
+        "Peer with requests_partial=false should receive metadata during heartbeat gossip"
+    );
+}
+
 /// Verifies that:
 /// - `State::heartbeat` limits the number of partial messages sent to each peer.
 /// - When `max_metadata_length` is set, only that many messages are gossiped per peer.
