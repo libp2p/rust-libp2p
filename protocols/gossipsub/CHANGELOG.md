@@ -1,5 +1,8 @@
 ## 0.50.0
 
+- Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
+  See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)
+
 - Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
   See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
 
