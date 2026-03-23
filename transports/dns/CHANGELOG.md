@@ -1,3 +1,8 @@
+## 0.45.0
+
+- refactor: `Resolver` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
 ## 0.44.0
 
 - Removed `async_std` module [PR 5959](https://github.com/libp2p/rust-libp2p/pull/5959)
