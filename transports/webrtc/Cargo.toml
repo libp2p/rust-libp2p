@@ -23,7 +23,7 @@ libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
 rand = { workspace = true }
 rcgen = { workspace = true }
-stun = "0.7"
+stun = "0.17.0"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }

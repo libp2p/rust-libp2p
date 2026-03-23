@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
+cbor4ii = { version = "1.2", features = ["serde1", "use_std"], optional = true }
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
