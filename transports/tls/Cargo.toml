@@ -17,8 +17,8 @@ rcgen = { workspace = true }
 ring = { workspace = true }
 thiserror = { workspace = true }
 webpki = { version = "0.103", package = "rustls-webpki", features = ["std"] }
-x509-parser = "0.17.0"
-yasna = "0.5.2"
+x509-parser = "0.18"
+yasna = "0.6"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
@@ -28,7 +28,7 @@ features = ["ring", "std"] # Must enable this to allow for custom verification c
 
 
 [dev-dependencies]
-hex-literal = "0.4.1"
+hex-literal = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa", "rand"] }
 libp2p-swarm = { workspace = true, features = ["tokio"] }

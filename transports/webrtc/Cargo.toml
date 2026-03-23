@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1"
 futures = { workspace = true }
-futures-timer = "3"
+futures-timer = { workspace = true }
 hex = "0.4"
 if-watch = { workspace = true }
 libp2p-core = { workspace = true }
@@ -21,7 +21,7 @@ libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 rcgen = { workspace = true }
 stun = "0.7"
 thiserror = { workspace = true }

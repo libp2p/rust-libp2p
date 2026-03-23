@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 either = "1.11.0"
 fnv = "1.0"
 futures = { workspace = true }
-futures-timer = "3.0.3"
+futures-timer = { workspace = true }
 getrandom = { workspace = true, features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 web-time = { workspace = true }
 hashlink = { workspace = true }
@@ -22,7 +22,7 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-swarm-derive = { workspace = true, optional = true }
 multistream-select = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 smallvec = "1.15.1"
 tracing = { workspace = true }
 wasm-bindgen-futures = { version = "0.4.42", optional = true }
@@ -47,7 +47,7 @@ libp2p-swarm-derive = { path = "../swarm-derive" }                  # Using `pat
 libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] }# Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { workspace = true, features = ["async_tokio"] }
 trybuild = "1.0.116"
 tokio = { workspace = true, features = ["time", "rt", "macros", "rt-multi-thread"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

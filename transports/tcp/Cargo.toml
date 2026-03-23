@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = { workspace = true }
-futures-timer = "3.0"
+futures-timer = { workspace = true }
 if-watch = { workspace = true }
 libc = "0.2.183"
 libp2p-core = { workspace = true }
