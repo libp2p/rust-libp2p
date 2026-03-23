@@ -27,6 +27,7 @@ use std::{
 
 use bimap::BiMap;
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use hashlink::LruCache;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
@@ -44,6 +45,8 @@ use crate::{
 pub const MAX_REGISTRATION_PEER: usize = 32;
 /// Default maximum active registrations in total.
 pub const MAX_REGISTRATIONS_TOTAL: usize = 10_000;
+/// Default size of the cache that stores client cookies.
+pub const COOKIES_CACHE_SIZE: usize = 10_000;
 
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
@@ -56,6 +59,7 @@ pub struct Config {
     max_ttl: Ttl,
     max_registrations_per_peer: usize,
     max_registrations_total: usize,
+    max_cookies: usize,
 }
 
 impl Config {
@@ -78,6 +82,11 @@ impl Config {
         self.max_registrations_total = max;
         self
     }
+
+    pub fn with_max_stored_cookies(mut self, max: usize) -> Self {
+        self.max_cookies = max;
+        self
+    }
 }
 
 impl Default for Config {
@@ -87,6 +96,7 @@ impl Default for Config {
             max_ttl: MAX_TTL,
             max_registrations_per_peer: MAX_REGISTRATION_PEER,
             max_registrations_total: MAX_REGISTRATIONS_TOTAL,
+            max_cookies: COOKIES_CACHE_SIZE,
         }
     }
 }
@@ -372,7 +382,7 @@ struct Registrations {
     config: Config,
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
-    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
+    cookies: LruCache<Cookie, HashSet<RegistrationId>>,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
@@ -387,8 +397,8 @@ impl Registrations {
         Self {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
+            cookies: LruCache::new(config.max_cookies),
             config,
-            cookies: Default::default(),
             next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
         }
     }
