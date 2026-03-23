@@ -103,7 +103,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
     ResolveError, ResolveErrorKind,
@@ -540,16 +539,26 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
     io::Error::new(io::ErrorKind::InvalidData, e)
 }
 
-#[async_trait::async_trait]
 #[doc(hidden)]
 pub trait Resolver {
-    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError>;
-    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError>;
-    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError>;
-    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError>;
+    fn lookup_ip(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<LookupIp, ResolveError>> + Send;
+    fn ipv4_lookup(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<Ipv4Lookup, ResolveError>> + Send;
+    fn ipv6_lookup(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<Ipv6Lookup, ResolveError>> + Send;
+    fn txt_lookup(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<TxtLookup, ResolveError>> + Send;
 }
 
-#[async_trait]
 impl<C> Resolver for hickory_resolver::Resolver<C>
 where
     C: ConnectionProvider,

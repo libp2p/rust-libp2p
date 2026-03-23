@@ -75,7 +75,10 @@ impl BackoffStorage {
     /// Updates the backoff for a peer (if there is already a more restrictive backoff then this
     /// call doesn't change anything).
     pub(crate) fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
-        let instant = Instant::now() + time;
+        let Some(instant) = Instant::now().checked_add(time) else {
+            tracing::warn!("ignoring oversized prune backoff");
+            return;
+        };
         let insert_into_backoffs_by_heartbeat =
             |heartbeat_index: HeartbeatIndex,
              backoffs_by_heartbeat: &mut Vec<HashSet<_>>,

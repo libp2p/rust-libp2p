@@ -20,7 +20,6 @@
 
 use std::{fmt, io};
 
-use async_trait::async_trait;
 use asynchronous_codec::{BytesMut, Decoder, Encoder, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{PeerRecord, SignedEnvelope, peer_record, signed_envelope};
@@ -241,7 +240,6 @@ impl Decoder for Codec {
 #[derive(Clone, Default)]
 pub struct Codec {}
 
-#[async_trait]
 impl libp2p_request_response::Codec for Codec {
     type Protocol = StreamProtocol;
     type Request = Message;
