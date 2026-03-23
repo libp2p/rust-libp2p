@@ -279,9 +279,7 @@ fn handle_request(
 
                     Some((event, Some(response)))
                 }
-                Err(TtlOutOfRange::TooLong { .. }) | Err(TtlOutOfRange::TooShort { .. }) => {
-                    let error = ErrorCode::InvalidTtl;
-
+                Err(error) => {
                     let response = Message::RegisterResponse(Err(error));
 
                     let event = Event::PeerNotRegistered {
@@ -351,21 +349,13 @@ impl RegistrationId {
 #[derive(Debug, PartialEq)]
 struct ExpiredRegistration(Registration);
 
-pub struct Registrations {
+struct Registrations {
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
     min_ttl: Ttl,
     max_ttl: Ttl,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TtlOutOfRange {
-    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
-    TooLong { bound: Ttl, requested: Ttl },
-    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
-    TooShort { bound: Ttl, requested: Ttl },
 }
 
 impl Default for Registrations {
@@ -375,7 +365,7 @@ impl Default for Registrations {
 }
 
 impl Registrations {
-    pub fn with_config(config: Config) -> Self {
+    fn with_config(config: Config) -> Self {
         Self {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
@@ -386,22 +376,10 @@ impl Registrations {
         }
     }
 
-    pub fn add(
-        &mut self,
-        new_registration: NewRegistration,
-    ) -> Result<Registration, TtlOutOfRange> {
+    fn add(&mut self, new_registration: NewRegistration) -> Result<Registration, ErrorCode> {
         let ttl = new_registration.effective_ttl();
-        if ttl > self.max_ttl {
-            return Err(TtlOutOfRange::TooLong {
-                bound: self.max_ttl,
-                requested: ttl,
-            });
-        }
-        if ttl < self.min_ttl {
-            return Err(TtlOutOfRange::TooShort {
-                bound: self.min_ttl,
-                requested: ttl,
-            });
+        if ttl > self.max_ttl || ttl < self.min_ttl {
+            return Err(ErrorCode::InvalidTtl);
         }
 
         let namespace = new_registration.namespace;
@@ -436,7 +414,7 @@ impl Registrations {
         Ok(registration)
     }
 
-    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
+    fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
         let reggo_to_remove = self
             .registrations_for_peer
             .remove_by_left(&(peer_id, namespace));
@@ -446,7 +424,7 @@ impl Registrations {
         }
     }
 
-    pub fn get(
+    fn get(
         &mut self,
         discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
@@ -536,9 +514,8 @@ impl Registrations {
     }
 }
 
-#[derive(Debug, thiserror::Error, Eq, PartialEq)]
-#[error("The provided cookie is not valid for a DISCOVER request for the given namespace")]
-pub struct CookieNamespaceMismatch;
+#[derive(Debug, Eq, PartialEq)]
+struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
