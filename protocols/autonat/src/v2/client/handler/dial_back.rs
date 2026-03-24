@@ -22,7 +22,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: StreamSet::new(Duration::from_secs(5), 2),
+            inbound: StreamSet::new(|| futures_bounded::Delay::tokio(Duration::from_secs(5)), 2),
         }
     }
 }
@@ -71,7 +71,9 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => {
+            }) =>
+            {
+                #[allow(clippy::collapsible_match)]
                 if self.inbound.try_push(perform_dial_back(protocol)).is_err() {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }

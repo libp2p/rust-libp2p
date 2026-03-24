@@ -274,6 +274,7 @@ impl EnabledHandler {
                                 ref mut timeout,
                                 ..
                             } => {
+                                #[allow(clippy::collapsible_match)]
                                 if Pin::new(timeout).poll(cx).is_ready() {
                                     // Inform the behaviour and end the poll.
                                     self.outbound_substream =

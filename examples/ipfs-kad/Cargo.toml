@@ -12,7 +12,7 @@ release = false
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 clap = { version = "4.5.6", features = ["derive"] }
 futures = { workspace = true }
-anyhow = "1.0.86"
+anyhow = "1.0.102"
 libp2p = { path = "../../libp2p", features = [ "tokio", "dns", "kad", "noise", "tcp", "yamux", "rsa"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
