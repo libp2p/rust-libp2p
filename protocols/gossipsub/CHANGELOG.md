@@ -1,6 +1,5 @@
 ## 0.50.0
 
-
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
   See PR 6356 (https://github.com/libp2p/rust-libp2p/pull/6356)
 
