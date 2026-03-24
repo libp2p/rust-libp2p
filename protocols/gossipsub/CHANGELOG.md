@@ -1,7 +1,11 @@
 ## 0.50.0
 
+
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
   See PR 6356 (https://github.com/libp2p/rust-libp2p/pull/6356)
+
+- Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
+  See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)
 
 - Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
   See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
@@ -47,6 +51,10 @@
 
 - Avoid direct casting from u128 to u64.
   See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
+
+## 0.49.3
+- Ignore invalid backoff values on peer prune.
+  See [CVE GHSA-gc42-3jg7-rxr2](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-gc42-3jg7-rxr2)
 
 ## 0.49.2
 
