@@ -2577,8 +2577,8 @@ where
                                 self.partial_messages_extension
                                     .supports_partial(peer_id, topic_hash)
                             });
-                        m.set_mesh_peers(topic_hash, partial.len(), false);
-                        m.set_mesh_peers(topic_hash, full.len(), true);
+                        m.set_mesh_peers(topic_hash, partial.len(), true);
+                        m.set_mesh_peers(topic_hash, full.len(), false);
                     }
                 }
             }
