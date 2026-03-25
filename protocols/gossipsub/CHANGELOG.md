@@ -5,6 +5,9 @@
   peer's gossipsub score. Useful for debugging and external tooling.
   See [PR 6189](https://github.com/libp2p/rust-libp2p/pull/6189).
 
+- Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
+  See PR 6356 (https://github.com/libp2p/rust-libp2p/pull/6356)
+
 - Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
   See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)
 
