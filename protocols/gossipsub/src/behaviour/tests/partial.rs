@@ -5,17 +5,17 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use crate::{
+    ConfigBuilder, Event, TopicHash, ValidationMode,
     behaviour::tests::{
-        add_peer_with_addr_and_kind, count_control_msgs, random_message,
-        DefaultBehaviourTestBuilder,
+        DefaultBehaviourTestBuilder, add_peer_with_addr_and_kind, count_control_msgs,
+        random_message,
     },
     handler::HandlerEvent,
     partial_messages::{
-        Metadata, Partial, PartialAction, PartialError, PartialMessage, PublishAction,
-        ReceivedAction, State, DEFAULT_PARTIAL_TTL,
+        DEFAULT_PARTIAL_TTL, Metadata, Partial, PartialAction, PartialError, PartialMessage,
+        PublishAction, ReceivedAction, State,
     },
     types::{IHave, PeerKind, RpcIn, RpcOut, SubscriptionOpts},
-    ConfigBuilder, Event, TopicHash, ValidationMode,
 };
 
 /// A simple bitmap-based test implementation of the `Partial` trait.

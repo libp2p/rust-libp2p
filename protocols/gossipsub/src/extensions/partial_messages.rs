@@ -28,8 +28,8 @@ use libp2p_core::PeerId;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    types::{RpcOut, SubscriptionOpts},
     PublishError, TopicHash,
+    types::{RpcOut, SubscriptionOpts},
 };
 
 /// Default TTL for partial messages kept.
