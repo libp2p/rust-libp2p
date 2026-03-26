@@ -56,6 +56,7 @@ fn test_all_queues_full() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -93,6 +94,7 @@ fn test_slow_peer_returns_failed_publish() {
         slow_peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -106,6 +108,7 @@ fn test_slow_peer_returns_failed_publish() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -158,6 +161,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
         slow_peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -175,6 +179,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -263,6 +268,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
         slow_peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -280,6 +286,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -348,6 +355,7 @@ fn test_slow_peer_returns_failed_forward() {
         slow_peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -365,6 +373,7 @@ fn test_slow_peer_returns_failed_forward() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -438,6 +447,7 @@ fn test_slow_peer_is_downscored_on_publish() {
         slow_peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),
@@ -452,6 +462,7 @@ fn test_slow_peer_is_downscored_on_publish() {
         peer_id,
         PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
+            extensions: None,
             connections: vec![ConnectionId::new_unchecked(0)],
             outbound: false,
             topics: topics.clone(),

@@ -52,11 +52,21 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
+        false,
+        false,
     );
     queues.insert(p1, queue1);
 
-    let (p2, queue2) =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let (p2, queue2) = add_peer_with_addr_and_kind(
+        &mut gs,
+        &topics,
+        false,
+        false,
+        Multiaddr::empty(),
+        None,
+        false,
+        false,
+    );
     queues.insert(p2, queue2);
 
     // p1 and p2 are not in the mesh
@@ -110,11 +120,21 @@ fn test_do_not_use_floodsub_in_fanout() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
+        false,
+        false,
     );
 
     queues.insert(p1, queue1);
-    let (p2, queue2) =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let (p2, queue2) = add_peer_with_addr_and_kind(
+        &mut gs,
+        &topics,
+        false,
+        false,
+        Multiaddr::empty(),
+        None,
+        false,
+        false,
+    );
 
     queues.insert(p2, queue2);
     // publish a message
@@ -165,8 +185,19 @@ fn test_dont_add_floodsub_peers_to_mesh_on_join() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
+        false,
+        false,
     );
-    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(
+        &mut gs,
+        &topics,
+        false,
+        false,
+        Multiaddr::empty(),
+        None,
+        false,
+        false,
+    );
 
     gs.join(&topics[0]);
 
@@ -192,6 +223,8 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Gossipsub),
+        false,
+        false,
     );
 
     // prune the peer
@@ -226,8 +259,19 @@ fn test_dont_send_floodsub_peers_in_px() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
+        false,
+        false,
     );
-    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(
+        &mut gs,
+        &topics,
+        false,
+        false,
+        Multiaddr::empty(),
+        None,
+        false,
+        false,
+    );
 
     // prune only mesh node
     gs.send_graft_prune(
@@ -260,8 +304,19 @@ fn test_dont_add_floodsub_peers_to_mesh_in_heartbeat() {
         false,
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
+        false,
+        false,
     );
-    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, true, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(
+        &mut gs,
+        &topics,
+        true,
+        false,
+        Multiaddr::empty(),
+        None,
+        false,
+        false,
+    );
 
     gs.heartbeat();
 

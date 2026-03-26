@@ -3,6 +3,11 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+## 0.6.3
+
+- Enable rustls TLS key logging via `SSLKEYLOGFILE`.
+  See [XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.6.2
 
 - Upgrade `rustls-webpki` to `v0.103`

@@ -660,6 +660,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     let subscription = Subscription {
         action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
+        options: Default::default(),
     };
 
     let control_action = ControlAction::IHave(IHave {
@@ -679,6 +680,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -705,6 +708,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -1301,6 +1306,8 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: vec![(m, ValidationError::InvalidSignature)],
         },
