@@ -1761,7 +1761,9 @@ where
         let msg_id = self.config.message_id(&message);
 
         // Broadcast IDONTWANT messages
-        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+            && !self.duplicate_cache.contains(&msg_id)
+        {
             let recipient_peers = self
                 .mesh
                 .get(&message.topic)
@@ -1772,7 +1774,7 @@ where
                 .filter(|peer_id| {
                     peer_id != propagation_source && Some(peer_id) != message.source.as_ref()
                 })
-                .collect::<Vec<PeerId>>();
+                .collect::<HashSet<PeerId>>();
 
             for peer_id in recipient_peers {
                 self.send_message(
