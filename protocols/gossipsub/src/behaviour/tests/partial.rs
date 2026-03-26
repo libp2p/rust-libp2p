@@ -1615,12 +1615,11 @@ fn test_heartbeat_max_metadata_length() {
     let gossip_messages: Vec<_> = actions
         .iter()
         .filter_map(|action| {
-            if let PublishAction::SendMessage { peer_id, rpc } = action {
-                if *peer_id == gossip_peer {
-                    if let RpcOut::PartialMessage(pm) = rpc {
-                        return Some(pm.group_id.clone());
-                    }
-                }
+            if let PublishAction::SendMessage { peer_id, rpc } = action
+                && *peer_id == gossip_peer
+                && let RpcOut::PartialMessage(pm) = rpc
+            {
+                return Some(pm.group_id.clone());
             }
             None
         })
