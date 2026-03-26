@@ -323,7 +323,7 @@ impl State {
                 peer_partial.peer_metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                 true
             }
-            (Some(PeerMetadata::Remote(ref metadata)), Some(remote_metadata)) => {
+            (Some(PeerMetadata::Remote(metadata)), Some(remote_metadata)) => {
                 if metadata != remote_metadata {
                     peer_partial.peer_metadata =
                         Some(PeerMetadata::Remote(remote_metadata.clone()));
