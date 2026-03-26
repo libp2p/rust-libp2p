@@ -3129,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "futures",
  "futures-rustls",
