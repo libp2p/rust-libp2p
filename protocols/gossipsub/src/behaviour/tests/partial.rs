@@ -52,14 +52,12 @@ impl Bitmap {
                 continue;
             }
 
-            let mut counter = start + (i as u64) * (1024 / 8);
             let mut part = [0u8; 1024];
 
-            for j in 0..(1024 / 8) {
+            for (counter, j) in (start + (i as u64) * (1024 / 8)..).zip(0..(1024 / 8)) {
                 let bytes = counter.to_be_bytes();
                 let offset = j * 8;
                 part[offset..offset + 8].copy_from_slice(&bytes);
-                counter += 1;
             }
 
             *p = part;
