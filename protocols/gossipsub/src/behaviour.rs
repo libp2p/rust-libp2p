@@ -84,6 +84,9 @@ const IDONTWANT_CAP: usize = 10_000;
 /// IDONTWANT timeout before removal.
 const IDONTWANT_TIMEOUT: Duration = Duration::new(3, 0);
 
+/// Max allowed PRUNE backoff, 1 hour.
+const MAX_REMOTE_PRUNE_BACKOFF_SECONDS: u64 = 3600;
+
 /// Determines if published messages should be signed or not.
 ///
 /// Without signing, a number of privacy preserving modes can be selected.
@@ -1289,11 +1292,14 @@ where
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
 
-            self.gossip_promises.add_promise(
-                *peer_id,
-                &iwant_ids_vec,
-                Instant::now() + self.config.iwant_followup_time(),
-            );
+            let followup_time = Instant::now()
+                .checked_add(self.config.iwant_followup_time())
+                .unwrap_or_else(|| {
+                    tracing::error!("Invalid iwant_followup_time using Instant::now()");
+                    Instant::now()
+                });
+            self.gossip_promises
+                .add_promise(*peer_id, &iwant_ids_vec, followup_time);
             tracing::trace!(
                 peer=%peer_id,
                 "IHAVE: Asking for the following messages from peer: {:?}",
@@ -1429,14 +1435,25 @@ where
                                 }
                                 peer_score.add_penalty(peer_id, 1);
 
-                                // check the flood cutoff
-                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
-                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
-                                let flood_cutoff = (backoff_time
-                                    + self.config.graft_flood_threshold())
-                                    - self.config.prune_backoff();
-                                if flood_cutoff > now {
-                                    // extra penalty
+                                // Apply an extra graft-backoff penalty only when the peer is still far enough
+                                // from backoff expiry. This compares durations only,
+                                // avoiding Instant arithmetic and handling config edge cases safely:
+                                // if graft_flood_threshold >= prune_backoff,
+                                // any active backoff qualifies for the extra penalty.
+                                let apply_extra_penalty = match self
+                                    .config
+                                    .prune_backoff()
+                                    .checked_sub(self.config.graft_flood_threshold())
+                                {
+                                    Some(required_remaining) => {
+                                        let remaining_backoff =
+                                            backoff_time.saturating_duration_since(now);
+                                        remaining_backoff > required_remaining
+                                    }
+                                    // graft_flood_threshold >= prune_backoff
+                                    None => true,
+                                };
+                                if apply_extra_penalty {
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
@@ -1568,10 +1585,11 @@ where
             }
         }
         if always_update_backoff || peer_removed {
-            let time = if let Some(backoff) = backoff {
-                Duration::from_secs(backoff)
-            } else {
-                self.config.prune_backoff()
+            let time = match backoff {
+                Some(backoff) => {
+                    Duration::from_secs(std::cmp::min(backoff, MAX_REMOTE_PRUNE_BACKOFF_SECONDS))
+                }
+                None => self.config.prune_backoff(),
             };
             // is there a backoff specified by the peer? if so obey it.
             self.backoffs.update_backoff(topic_hash, peer_id, time);
@@ -2413,7 +2431,7 @@ where
             let fanout = &mut self.fanout; // help the borrow checker
             let fanout_ttl = self.config.fanout_ttl();
             self.fanout_last_pub.retain(|topic_hash, last_pub_time| {
-                if *last_pub_time + fanout_ttl < Instant::now() {
+                if fanout_ttl < Instant::now().saturating_duration_since(*last_pub_time) {
                     tracing::debug!(
                         topic=%topic_hash,
                         "HEARTBEAT: Fanout topic removed due to timeout"
@@ -2523,7 +2541,7 @@ where
         // Flush stale IDONTWANTs.
         for peer in self.connected_peers.values_mut() {
             while let Some((_front, instant)) = peer.dont_send.front() {
-                if (*instant + IDONTWANT_TIMEOUT) >= Instant::now() {
+                if IDONTWANT_TIMEOUT >= Instant::now().saturating_duration_since(*instant) {
                     break;
                 } else {
                     peer.dont_send.pop_front();
