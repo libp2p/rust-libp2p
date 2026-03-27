@@ -49,7 +49,7 @@ impl Handler {
     pub fn new() -> Self {
         Self {
             inbound: futures_bounded::FuturesSet::new(
-                crate::RUN_TIMEOUT,
+                move || futures_bounded::Delay::tokio(crate::RUN_TIMEOUT),
                 crate::MAX_PARALLEL_RUNS_PER_CONNECTION,
             ),
         }
@@ -87,6 +87,7 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info: _,
             }) => {
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inbound
                     .try_push(crate::protocol::receive_send(protocol).boxed())

@@ -91,7 +91,10 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesMap::new(Duration::from_secs(10), 10),
+            outbound: FuturesMap::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                10,
+            ),
             queued_streams: VecDeque::default(),
         }
     }
@@ -188,6 +191,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
+                #[allow(clippy::collapsible_match)]
                 if added.any(|p| p.as_ref() == DIAL_REQUEST_PROTOCOL) {
                     self.queued_events
                         .push_back(ConnectionHandlerEvent::NotifyBehaviour(

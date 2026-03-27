@@ -148,6 +148,7 @@ fn test_get_random_peers() {
             peer_id,
             PeerDetails {
                 kind: PeerKind::Gossipsubv1_1,
+                extensions: None,
                 connections: vec![ConnectionId::new_unchecked(0)],
                 outbound: false,
                 topics: topics.clone(),

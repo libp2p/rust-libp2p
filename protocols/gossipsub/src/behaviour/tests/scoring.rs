@@ -293,13 +293,9 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
         RpcOut::IHave(IHave {
             topic_hash,
             message_ids,
-        }) => {
-            if topic_hash == &topics[0] && message_ids.iter().any(|id| id == &msg_id) {
-                assert_eq!(peer, &p2);
-                true
-            } else {
-                false
-            }
+        }) if topic_hash == &topics[0] && message_ids.iter().any(|id| id == &msg_id) => {
+            assert_eq!(peer, &p2);
+            true
         }
         _ => false,
     });
@@ -455,13 +451,9 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
     // check that we sent exactly one IWANT request to p2
     let (control_msgs, _) = count_control_msgs(queues, |peer, c| match c {
-        RpcOut::IWant(IWant { message_ids }) => {
-            if message_ids.iter().any(|m| m == &msg_id) {
-                assert_eq!(peer, &p2);
-                true
-            } else {
-                false
-            }
+        RpcOut::IWant(IWant { message_ids }) if message_ids.iter().any(|m| m == &msg_id) => {
+            assert_eq!(peer, &p2);
+            true
         }
         _ => false,
     });
@@ -664,6 +656,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     let subscription = Subscription {
         action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
+        options: Default::default(),
     };
 
     let control_action = ControlAction::IHave(IHave {
@@ -683,6 +676,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -709,6 +704,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -1303,6 +1300,8 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: vec![(m, ValidationError::InvalidSignature)],
         },
