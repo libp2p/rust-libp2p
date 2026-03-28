@@ -21,9 +21,9 @@
 //! A benchmark for the `split_send_size` configuration option
 //! using different transports.
 
-use std::{pin::Pin, time::Duration};
+use std::{hint::black_box, pin::Pin, time::Duration};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use futures::{channel::oneshot, future::poll_fn, prelude::*};
 use libp2p_core::{
     multiaddr::multiaddr, muxing, muxing::StreamMuxerExt, transport, transport::ListenerId,

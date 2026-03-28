@@ -15,7 +15,7 @@ anyhow = "1"
 clap = { version = "4.5.6", features = ["derive"] }
 futures = { workspace = true }
 futures-bounded = { workspace = true }
-futures-timer = "3.0"
+futures-timer = { workspace = true }
 web-time = { workspace = true }
 libp2p = { workspace = true, features = ["tokio", "tcp", "quic", "tls", "yamux", "dns"] }
 libp2p-core = { workspace = true }
