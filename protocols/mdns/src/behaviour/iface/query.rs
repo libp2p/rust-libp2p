@@ -47,6 +47,9 @@ pub(crate) enum MdnsPacket {
     ServiceDiscovery(MdnsServiceDiscovery),
 }
 
+// Use a reasonable maximum - 1 day should be sufficient for most scenarios
+const MAX_TTL: Duration = Duration::from_secs(60 * 60 * 24);
+
 impl MdnsPacket {
     pub(crate) fn new_from_bytes(
         buf: &[u8],
@@ -181,12 +184,18 @@ impl MdnsResponse {
             .filter(move |peer| peer.id() != &local_peer_id)
             .flat_map(move |peer| {
                 let observed = self.observed_address();
-                let new_expiration = now + peer.ttl();
+                // Cap expiration time to avoid overflow
+                let new_expiration = match now.checked_add(peer.ttl()) {
+                    Some(expiration) => expiration,
+                    None => {
+                        now.checked_add(MAX_TTL).unwrap_or(now) // Fallback to now if even that
+                                                                // overflows (extremely unlikely).
+                    }
+                };
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = _address_translation(address, &observed)?;
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
-
                     Some((*peer.id(), new_addr, new_expiration))
                 })
             })
@@ -313,6 +322,8 @@ impl fmt::Debug for MdnsPeer {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+
     use super::{super::dns::build_query_response, *};
 
     #[test]
@@ -351,6 +362,103 @@ mod tests {
 
             let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
+        }
+    }
+
+    #[test]
+    fn test_extract_discovered_ttl_overflow() {
+        // Create a mock MdnsResponse with peers that have various TTLs
+        let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 5353);
+        let mut response = MdnsResponse {
+            peers: Vec::new(),
+            from: socket_addr,
+        };
+
+        // Create local peer ID (to be filtered out)
+        let local_peer_id = PeerId::random();
+
+        // Create remote peer IDs
+        let normal_peer_id = PeerId::random();
+        let huge_ttl_peer_id = PeerId::random();
+
+        // Setup addresses
+        let addr1 = "/ip4/192.168.1.2/tcp/1234".parse::<Multiaddr>().unwrap();
+        let addr2 = "/ip4/192.168.1.3/tcp/5678".parse::<Multiaddr>().unwrap();
+
+        // Add a peer with normal TTL
+        response.peers.push(MdnsPeer {
+            addrs: vec![addr1],
+            peer_id: normal_peer_id,
+            ttl: 120, // 2 minutes
+        });
+
+        // Add a peer with extremely large TTL
+        response.peers.push(MdnsPeer {
+            addrs: vec![addr2],
+            peer_id: huge_ttl_peer_id,
+            ttl: u32::MAX, // Maximum possible TTL
+        });
+
+        // Add the local peer (should be filtered out)
+        response.peers.push(MdnsPeer {
+            addrs: vec!["/ip4/127.0.0.1/tcp/9000".parse::<Multiaddr>().unwrap()],
+            peer_id: local_peer_id,
+            ttl: 120,
+        });
+
+        // Current time
+        let now = Instant::now();
+
+        // Call the method under test
+        let result: Vec<(PeerId, Multiaddr, Instant)> =
+            response.extract_discovered(now, local_peer_id).collect();
+
+        // Verify results
+        // Local peer should be filtered out
+        assert!(!result.iter().any(|(id, _, _)| id == &local_peer_id));
+
+        // The normal TTL peer should be included
+        assert!(result.iter().any(|(id, _, _)| id == &normal_peer_id));
+
+        // The huge TTL peer should now ALWAYS be included
+        assert!(result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
+
+        // For normal peer, verify expiration time calculation
+        let normal_peer_result = result.iter().find(|(id, _, _)| id == &normal_peer_id);
+        assert!(normal_peer_result.is_some());
+
+        let (_, _, expiration) = normal_peer_result.unwrap();
+        let expected_expiration = now + Duration::from_secs(120);
+        assert_eq!(*expiration, expected_expiration);
+
+        // For huge TTL peer, verify expiration time is properly capped
+        let huge_ttl_peer_result = result.iter().find(|(id, _, _)| id == &huge_ttl_peer_id);
+        assert!(huge_ttl_peer_result.is_some());
+        let (_, _, huge_expiration) = huge_ttl_peer_result.unwrap();
+
+        // Check if the TTL would cause overflow
+        let huge_ttl_duration = Duration::from_secs(u64::from(u32::MAX));
+        let overflow_check = now.checked_add(huge_ttl_duration);
+
+        if let Some(check) = overflow_check {
+            // If no overflow, should be exact expiration
+            assert_eq!(*huge_expiration, check);
+        } else {
+            // If overflow would occur, should be capped
+            let one_day = Duration::from_secs(24 * 60 * 60);
+            let capped_expiration = now.checked_add(one_day).unwrap_or(now);
+
+            // The expiration should be capped at max 1 day
+            assert!(
+                *huge_expiration <= capped_expiration,
+                "Huge TTL expiration should be capped to prevent overflow"
+            );
+
+            // And it should be greater than now (not reset to current time)
+            assert!(
+                *huge_expiration > now,
+                "Capped expiration should be greater than current time"
+            );
         }
     }
 }
