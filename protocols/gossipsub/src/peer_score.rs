@@ -63,7 +63,9 @@ impl PeerScoreState {
     ) -> (bool, f64) {
         match self {
             PeerScoreState::Active(active) => {
-                let score = active.score_report(peer_id).score;
+                let score = active
+                    .score_report(peer_id)
+                    .map_or(0.0, |r| r.score);
                 (score < threshold(&active.thresholds), score)
             }
             PeerScoreState::Disabled => (false, 0.0),
@@ -76,8 +78,45 @@ impl PeerScoreState {
 #[derive(Default)]
 pub(crate) struct PeerScoreReport {
     pub(crate) score: f64,
+    pub(crate) params: PeerScoreParameters,
     #[cfg(feature = "metrics")]
     pub(crate) penalties: Vec<crate::metrics::Penalty>,
+}
+
+/// A breakdown of the individual score components for a single peer.
+///
+/// Each field corresponds to a weighted score contribution as defined in the
+/// [gossipsub v1.1 peer scoring spec]. All values are pre-weighted (i.e. already
+/// multiplied by the relevant weight and, for topic parameters, the topic weight).
+/// `score` equals the sum of all components after the topic score cap is applied.
+///
+/// Obtain this via [`Behaviour::peer_score_params`].
+///
+/// [gossipsub v1.1 peer scoring spec]: https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function
+#[derive(Copy, Clone, Default, Debug)]
+pub struct PeerScoreParameters {
+    /// The final aggregate score. Equal to the sum of all other fields after
+    /// the topic score cap is applied.
+    pub score: f64,
+    /// P1: time in mesh contribution (summed across topics).
+    pub p1: f64,
+    /// P2: first message deliveries contribution (summed across topics).
+    pub p2: f64,
+    /// P3: mesh message delivery deficit penalty (summed across topics, negative).
+    pub p3: f64,
+    /// P3b: mesh failure penalty (summed across topics, negative).
+    pub p3b: f64,
+    /// P4: invalid message delivery penalty (summed across topics, negative).
+    pub p4: f64,
+    /// P5: application-specific score contribution.
+    pub p5: f64,
+    /// P6: IP collocation factor penalty (negative).
+    pub p6: f64,
+    /// P7: behavioural pattern penalty (negative).
+    pub p7: f64,
+    /// Slow peer penalty. Not part of the spec, but applied when a peer is
+    /// consistently slow to acknowledge messages.
+    pub slow_peer_penalty: f64,
 }
 
 pub(crate) struct PeerScore {
@@ -267,11 +306,9 @@ impl PeerScore {
 
     /// Returns the score report for a peer, with applied penalties.
     /// This is called from the heartbeat
-    pub(crate) fn score_report(&self, peer_id: &PeerId) -> PeerScoreReport {
+    pub(crate) fn score_report(&self, peer_id: &PeerId) -> Option<PeerScoreReport> {
         let mut report = PeerScoreReport::default();
-        let Some(peer_stats) = self.peer_stats.get(peer_id) else {
-            return report;
-        };
+        let peer_stats = self.peer_stats.get(peer_id)?;
 
         // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
@@ -279,8 +316,7 @@ impl PeerScore {
             if let Some(topic_params) = self.params.topics.get(topic) {
                 // we are tracking the topic
 
-                // the topic score
-                let mut topic_score = 0.0;
+                let topic_weight = topic_params.topic_weight;
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
@@ -293,19 +329,22 @@ impl PeerScore {
                             topic_params.time_in_mesh_cap
                         }
                     };
-                    topic_score += p1 * topic_params.time_in_mesh_weight;
+                    let p1_contrib = p1 * topic_params.time_in_mesh_weight * topic_weight;
+                    report.params.p1 += p1_contrib;
                 }
 
                 // P2: first message deliveries
-                let p2 = {
+                {
                     let v = topic_stats.first_message_deliveries;
-                    if v < topic_params.first_message_deliveries_cap {
+                    let p2 = if v < topic_params.first_message_deliveries_cap {
                         v
                     } else {
                         topic_params.first_message_deliveries_cap
-                    }
-                };
-                topic_score += p2 * topic_params.first_message_deliveries_weight;
+                    };
+                    let p2_contrib =
+                        p2 * topic_params.first_message_deliveries_weight * topic_weight;
+                    report.params.p2 += p2_contrib;
+                }
 
                 // P3: mesh message deliveries
                 if topic_stats.mesh_message_deliveries_active
@@ -318,7 +357,9 @@ impl PeerScore {
                     let p3 = deficit * deficit;
                     let penalty = p3 * topic_params.mesh_message_deliveries_weight;
 
-                    topic_score += penalty;
+                    // contribution includes the topic weight.
+                    report.params.p3 += penalty * topic_weight;
+
                     #[cfg(feature = "metrics")]
                     report
                         .penalties
@@ -335,29 +376,41 @@ impl PeerScore {
                 // P3b:
                 // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so
                 // this detracts.
-                let p3b = topic_stats.mesh_failure_penalty;
-                topic_score += p3b * topic_params.mesh_failure_penalty_weight;
+                {
+                    let p3b_val = topic_stats.mesh_failure_penalty;
+                    let p3b_contrib =
+                        p3b_val * topic_params.mesh_failure_penalty_weight * topic_weight;
+                    report.params.p3b += p3b_contrib;
+                }
 
                 // P4: invalid messages
                 // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so
                 // this detracts.
-                let p4 =
-                    topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
-                topic_score += p4 * topic_params.invalid_message_deliveries_weight;
-
-                // update score, mixing with topic weight
-                report.score += topic_score * topic_params.topic_weight;
+                {
+                    let p4_val = topic_stats.invalid_message_deliveries
+                        * topic_stats.invalid_message_deliveries;
+                    let p4_contrib =
+                        p4_val * topic_params.invalid_message_deliveries_weight * topic_weight;
+                    report.params.p4 += p4_contrib;
+                }
             }
         }
 
-        // apply the topic score cap, if any
-        if self.params.topic_score_cap > 0f64 && report.score > self.params.topic_score_cap {
-            report.score = self.params.topic_score_cap;
+        // aggregate topic contributions.
+        let mut topic_total = report.params.p1
+            + report.params.p2
+            + report.params.p3
+            + report.params.p3b
+            + report.params.p4;
+
+        // apply the topic score cap, if any.
+        if self.params.topic_score_cap > 0f64 && topic_total > self.params.topic_score_cap {
+            topic_total = self.params.topic_score_cap;
         }
 
         // P5: application-specific score
-        let p5 = peer_stats.application_score;
-        report.score += p5 * self.params.app_specific_weight;
+        let p5 = peer_stats.application_score * self.params.app_specific_weight;
+        report.params.p5 = p5;
 
         // P6: IP collocation factor
         for ip in peer_stats.known_ips.iter() {
@@ -383,7 +436,7 @@ impl PeerScore {
                         surplus=%surplus,
                         "[Penalty] The peer gets penalized because of too many peers with the same ip"
                     );
-                    report.score += p6 * self.params.ip_colocation_factor_weight;
+                    report.params.p6 += p6 * self.params.ip_colocation_factor_weight;
                 }
             }
         }
@@ -391,17 +444,26 @@ impl PeerScore {
         // P7: behavioural pattern penalty.
         if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
             let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
-            let p7 = excess * excess;
-            report.score += p7 * self.params.behaviour_penalty_weight;
+            let p7 = (excess * excess) * self.params.behaviour_penalty_weight;
+            report.params.p7 = p7;
         }
 
         // Slow peer weighting.
         if peer_stats.slow_peer_penalty > self.params.slow_peer_threshold {
             let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
-            report.score += excess * self.params.slow_peer_weight;
+            report.params.slow_peer_penalty = excess * self.params.slow_peer_weight;
         }
 
-        report
+        // Final total score with cap applied on topic contributions.
+        report.score = topic_total
+            + report.params.p5
+            + report.params.p6
+            + report.params.p7
+            + report.params.slow_peer_penalty;
+
+        report.params.score = report.score;
+
+        Some(report)
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
@@ -577,7 +639,7 @@ impl PeerScore {
     /// non-positive.
     pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
-        if self.score_report(peer_id).score > 0f64 {
+        if self.score_report(peer_id).map_or(0.0, |r| r.score) > 0f64 {
             if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
                 Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
                 entry.remove();

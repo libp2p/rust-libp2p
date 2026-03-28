@@ -758,7 +758,7 @@ fn test_iwant_penalties() {
     gs.heartbeat();
 
     for (peer, _queue) in &other_peers {
-        assert_eq!(gs.as_peer_score_mut().score_report(peer).score, 0.0);
+        assert_eq!(gs.as_peer_score_mut().score_report(peer).unwrap().score, 0.0);
     }
 
     // receive the first twenty of the other peers then send their response
@@ -788,7 +788,7 @@ fn test_iwant_penalties() {
     let mut double_penalized = 0;
 
     for (i, (peer, _queue)) in other_peers.iter().enumerate() {
-        let score = gs.as_peer_score_mut().score_report(peer).score;
+        let score = gs.as_peer_score_mut().score_report(peer).unwrap().score;
         if score == 0.0 {
             not_penalized += 1;
         } else if score == -1.0 {
