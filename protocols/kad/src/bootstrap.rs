@@ -4,7 +4,40 @@ use std::{
 };
 
 use futures::FutureExt;
+
+#[cfg(not(test))]
 use futures_timer::Delay;
+
+#[cfg(test)]
+use mock_delay::Delay;
+
+#[cfg(test)]
+mod mock_delay {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use std::time::Duration;
+
+    #[derive(Debug)]
+    pub(super) struct Delay(Pin<Box<tokio::time::Sleep>>);
+
+    impl Delay {
+        pub(super) fn new(dur: Duration) -> Self {
+            Self(Box::pin(tokio::time::sleep(dur)))
+        }
+
+        pub(super) fn reset(&mut self, dur: Duration) {
+            self.0.as_mut().reset(tokio::time::Instant::now() + dur);
+        }
+    }
+
+    impl Future for Delay {
+        type Output = ();
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            self.0.as_mut().poll(cx)
+        }
+    }
+}
 
 /// Default value chosen at `<https://github.com/libp2p/rust-libp2p/pull/4838#discussion_r1490184754>`.
 pub(crate) const DEFAULT_AUTOMATIC_THROTTLE: Duration = Duration::from_millis(500);
@@ -181,7 +214,7 @@ impl futures::Future for ThrottleTimer {
 
 #[cfg(test)]
 mod tests {
-    use web_time::Instant;
+    use tokio::time::Instant;
 
     use super::*;
 
@@ -198,7 +231,7 @@ mod tests {
         do_bootstrap(status);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn immediate_automatic_bootstrap_is_triggered_immediately() {
         let mut status = Status::new(Some(Duration::from_secs(1)), Some(Duration::ZERO));
 
@@ -223,7 +256,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn delayed_automatic_bootstrap_is_triggered_before_periodic_bootstrap() {
         let mut status = Status::new(Some(Duration::from_secs(1)), Some(MS_5));
 
@@ -263,7 +296,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval(
     ) {
         let mut status = Status::new(Some(MS_100), Some(MS_5));
@@ -280,10 +313,10 @@ mod tests {
         await_and_do_bootstrap(&mut status).await;
         let elapsed = Instant::now().duration_since(start);
 
-        assert!(elapsed > MS_100);
+        assert!(elapsed >= MS_100);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap(
     ) {
         let mut status = Status::new(None, Some(Duration::ZERO));
@@ -293,7 +326,7 @@ mod tests {
         status.next().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn given_periodic_bootstrap_and_no_automatic_bootstrap_triggers_periodically() {
         let mut status = Status::new(Some(MS_100), None);
 
@@ -308,7 +341,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers(
     ) {
         let mut status = Status::new(None, Some(MS_100));
@@ -334,7 +367,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic(
     ) {
         let mut status = Status::new(Some(MS_100), None);
