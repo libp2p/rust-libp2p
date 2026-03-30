@@ -124,7 +124,7 @@ futures = "0.3.30"
 futures-bounded = { version = "0.3", features = ["tokio"] }
 futures-rustls = { version = "0.26.0", default-features = false }
 getrandom = "0.2"
-if-watch = "3.2.1"
+if-watch = "3.2.2"
 hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
 multiaddr = "0.18.1"
@@ -138,7 +138,7 @@ ring = "0.17.12"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
 tokio = { version = "1.50", default-features = false }
-tracing = "0.1.41"
+tracing = "0.1.44"
 tracing-subscriber = "0.3.19"
 unsigned-varint = { version = "0.8.0" }
 web-time = "1.1.0"

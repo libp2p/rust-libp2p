@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "1"
 futures = { workspace = true }
 tracing = { workspace = true }
-pin-project = "1.1.5"
+pin-project = "1.1.11"
 smallvec = "1.15.1"
 unsigned-varint = { workspace = true }
 
