@@ -98,6 +98,7 @@ mod backoff;
 mod behaviour;
 mod config;
 mod error;
+pub mod extensions;
 mod gossip_promises;
 mod handler;
 mod mcache;
@@ -116,6 +117,8 @@ mod types;
 #[cfg(feature = "metrics")]
 pub use metrics::Config as MetricsConfig;
 
+#[cfg(feature = "partial_messages")]
+pub use self::extensions::partial_messages;
 pub use self::{
     behaviour::{Behaviour, Event, MessageAuthenticity},
     config::{Config, ConfigBuilder, ValidationMode, Version},
