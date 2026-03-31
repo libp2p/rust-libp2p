@@ -49,7 +49,7 @@ use std::collections::HashMap;
 use byteorder::{BigEndian, ByteOrder};
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
-use rand::Rng;
+use rand::RngExt;
 
 use super::*;
 use crate::{

@@ -816,7 +816,7 @@ where
                         .filter(|peer_id| {
                             !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
                         })
-                        .choose_multiple(&mut rng(), needed_extra_peers);
+                        .sample(&mut rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
@@ -846,7 +846,7 @@ where
                     let new_peers = candidates
                         .into_iter()
                         .filter(|peer_id| !recipients.contains(peer_id))
-                        .choose_multiple(&mut rng(), needed_extra_peers);
+                        .sample(&mut rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");

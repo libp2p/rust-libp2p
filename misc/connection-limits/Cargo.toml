@@ -21,7 +21,6 @@ libp2p-ping = { workspace = true }
 libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-rand = "0.8.5"
-
+rand = { workspace = true }
 [lints]
 workspace = true

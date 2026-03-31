@@ -97,13 +97,11 @@ enum Kind {
 
 #[cfg(all(test, feature = "pem"))]
 mod test {
-    use rand::thread_rng;
-
     use super::*;
 
     #[test]
     fn test_certificate_serialize_pem_and_from_pem() {
-        let cert = Certificate::generate(&mut thread_rng()).unwrap();
+        let cert = Certificate::generate(&mut rand::rng()).unwrap();
 
         let pem = cert.serialize_pem();
         let loaded_cert = Certificate::from_pem(&pem).unwrap();

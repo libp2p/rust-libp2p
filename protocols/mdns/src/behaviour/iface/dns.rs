@@ -24,7 +24,7 @@ use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use rand::{Rng, distributions::Alphanumeric, thread_rng};
+use rand::{RngExt, distr::Alphanumeric};
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 
@@ -267,7 +267,7 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 
 /// Generates and returns a random alphanumeric string of `length` size.
 fn random_string(length: usize) -> String {
-    thread_rng()
+    rand::rng()
         .sample_iter(&Alphanumeric)
         .take(length)
         .map(char::from)
@@ -278,7 +278,7 @@ fn random_string(length: usize) -> String {
 fn generate_peer_name() -> Vec<u8> {
     // Use a variable-length random string for mDNS peer name.
     // See https://github.com/libp2p/rust-libp2p/pull/2311/
-    let peer_name = random_string(32 + thread_rng().gen_range(0..32));
+    let peer_name = random_string(32 + rand::rng().random_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
     let mut peer_name_bytes = Vec::with_capacity(peer_name.len() + 32);
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_random_string() {
-        let varsize = thread_rng().gen_range(0..32);
+        let varsize = rand::rng().random_range(0..32);
         let size = 32 + varsize;
         let name = random_string(size);
         assert_eq!(name.len(), size);

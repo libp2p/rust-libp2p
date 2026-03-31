@@ -89,7 +89,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use libp2p_core::multiaddr::Protocol;
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
 
@@ -135,7 +135,7 @@ mod tests {
 
         while addresses.as_slice().len() < MAX_LOCAL_EXTERNAL_ADDRS {
             let random_address =
-                Multiaddr::empty().with(Protocol::Memory(rand::thread_rng().gen_range(0..1000)));
+                Multiaddr::empty().with(Protocol::Memory(rand::rng().random_range(0..1000)));
             addresses.on_swarm_event(&FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
                 addr: &random_address,
             }));

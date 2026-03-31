@@ -33,7 +33,7 @@ use libp2p_quic as quic;
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
-use rand::RngCore;
+use rand::Rng;
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
@@ -719,7 +719,7 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
                 }
 
                 let mut data = vec![0; BUFFER_SIZE];
-                rand::thread_rng().fill_bytes(&mut data);
+                rand::rng().fill_bytes(&mut data);
 
                 let mut received = Vec::new();
 

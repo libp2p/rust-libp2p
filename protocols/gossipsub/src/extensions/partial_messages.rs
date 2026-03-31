@@ -242,7 +242,7 @@ impl State {
             );
             let to_msg_peers = eligible_peers
                 .into_iter()
-                .choose_multiple(&mut rand::rng(), gossip_amp);
+                .sample(&mut rand::rng(), gossip_amp);
 
             for (peer_id, remote_subscription) in to_msg_peers {
                 let mut num_messages = 0;

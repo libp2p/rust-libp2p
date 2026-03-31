@@ -9,7 +9,7 @@ use libp2p_swarm::{
     DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
 };
 use libp2p_swarm_test::SwarmExt;
-use rand_core::OsRng;
+use rand::{SeedableRng, rngs::StdRng};
 use tokio::sync::oneshot;
 use tracing_subscriber::EnvFilter;
 
@@ -429,7 +429,7 @@ async fn new_server() -> Swarm<CombinedServer> {
 async fn new_client() -> Swarm<CombinedClient> {
     let mut node = Swarm::new_ephemeral_tokio(|identity| CombinedClient {
         autonat: libp2p_autonat::v2::client::Behaviour::new(
-            OsRng,
+            StdRng::from_rng(&mut rand::rng()),
             Config::default().with_probe_interval(Duration::from_millis(100)),
         ),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
