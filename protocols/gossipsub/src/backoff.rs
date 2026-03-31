@@ -21,8 +21,8 @@
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use std::{
     collections::{
-        hash_map::{Entry, HashMap},
         HashSet,
+        hash_map::{Entry, HashMap},
     },
     time::Duration,
 };
@@ -75,7 +75,10 @@ impl BackoffStorage {
     /// Updates the backoff for a peer (if there is already a more restrictive backoff then this
     /// call doesn't change anything).
     pub(crate) fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
-        let instant = Instant::now() + time;
+        let Some(instant) = Instant::now().checked_add(time) else {
+            tracing::warn!("ignoring oversized prune backoff");
+            return;
+        };
         let insert_into_backoffs_by_heartbeat =
             |heartbeat_index: HeartbeatIndex,
              backoffs_by_heartbeat: &mut Vec<HashSet<_>>,
@@ -160,10 +163,11 @@ impl BackoffStorage {
                 };
                 if !keep {
                     // remove from backoffs
-                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {
-                        if m.get_mut().remove(peer).is_some() && m.get().is_empty() {
-                            m.remove();
-                        }
+                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone())
+                        && m.get_mut().remove(peer).is_some()
+                        && m.get().is_empty()
+                    {
+                        m.remove();
                     }
                 }
 

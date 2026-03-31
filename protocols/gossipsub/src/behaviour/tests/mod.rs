@@ -36,6 +36,8 @@ mod gossip;
 mod graft_prune;
 mod idontwant;
 mod mesh;
+#[cfg(feature = "partial_messages")]
+mod partial;
 mod peer_queues;
 mod publish;
 mod scoring;
@@ -50,7 +52,10 @@ use libp2p_core::ConnectedPoint;
 use rand::Rng;
 
 use super::*;
-use crate::{types::RpcIn, IdentTopic as Topic};
+use crate::{
+    IdentTopic as Topic,
+    types::{RpcIn, SubscriptionOpts},
+};
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =
@@ -83,6 +88,8 @@ pub(super) struct BehaviourTestBuilder<D, F> {
     data_transform: D,
     subscription_filter: F,
     peer_kind: Option<PeerKind>,
+    requests_partial: bool,
+    supports_partial: bool,
 }
 
 impl<D, F> BehaviourTestBuilder<D, F>
@@ -128,6 +135,13 @@ where
         // subscribe to the topics
         for t in self.topics {
             let topic = Topic::new(t);
+            #[cfg(feature = "partial_messages")]
+            if self.requests_partial {
+                gs.subscribe_partial(&topic, self.requests_partial).unwrap();
+            } else {
+                gs.subscribe(&topic).unwrap();
+            }
+            #[cfg(not(feature = "partial_messages"))]
             gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
@@ -149,6 +163,8 @@ where
                 i < self.explicit,
                 Multiaddr::empty(),
                 self.peer_kind.or(Some(PeerKind::Gossipsubv1_1)),
+                self.requests_partial,
+                self.supports_partial,
             );
             peers.push(peer);
             queues.insert(peer, queue);
@@ -216,6 +232,20 @@ where
         self.peer_kind = Some(peer_kind);
         self
     }
+
+    /// Sets whether peers request partial messages.
+    #[cfg(feature = "partial_messages")]
+    pub(super) fn requests_partial(mut self, requests_partial: bool) -> Self {
+        self.requests_partial = requests_partial;
+        self
+    }
+
+    /// Sets whether peers support partial messages.
+    #[cfg(feature = "partial_messages")]
+    pub(super) fn supports_partial(mut self, supports_partial: bool) -> Self {
+        self.supports_partial = supports_partial;
+        self
+    }
 }
 
 /// Adds a new peer to the gossipsub network with default settings.
@@ -268,6 +298,8 @@ where
         explicit,
         address,
         Some(PeerKind::Gossipsubv1_1),
+        false,
+        false,
     )
 }
 
@@ -285,10 +317,13 @@ where
 /// * `address` - The multiaddr for the peer connection
 /// * `kind` - The gossipsub protocol version. Use `None` for Floodsub peers, or
 ///   `Some(PeerKind::...)` for specific versions.
+/// * `requests_partial` - If `true`, the peer requests partial messages.
+/// * `supports_partial` - If `true`, the peer supports partial messages.
 ///
 /// # Returns
 ///
 /// A tuple of the peer's ID and their message queue (for inspecting sent messages).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
     topic_hashes: &[TopicHash],
@@ -296,6 +331,8 @@ pub(super) fn add_peer_with_addr_and_kind<D, F>(
     explicit: bool,
     address: Multiaddr,
     kind: Option<PeerKind>,
+    requests_partial: bool,
+    supports_partial: bool,
 ) -> (PeerId, Queue)
 where
     D: DataTransform + Default + Clone + Send + 'static,
@@ -322,6 +359,7 @@ where
         peer,
         PeerDetails {
             kind: kind.unwrap_or(PeerKind::Floodsub),
+            extensions: None,
             outbound,
             connections: vec![connection_id],
             topics: Default::default(),
@@ -355,6 +393,10 @@ where
                 .map(|t| Subscription {
                     action: SubscriptionAction::Subscribe,
                     topic_hash: t,
+                    options: SubscriptionOpts {
+                        requests_partial,
+                        supports_partial,
+                    },
                 })
                 .collect::<Vec<_>>(),
             &peer,
@@ -378,7 +420,7 @@ where
             role_override: Endpoint::Dialer,
             port_use: PortUse::Reuse,
         }; // this is not relevant
-           // peer_connections.connections should never be empty.
+        // peer_connections.connections should never be empty.
 
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
@@ -501,9 +543,12 @@ pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
                     SubscriptionAction::Unsubscribe
                 },
                 topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
+                options: Default::default(),
             })
             .collect(),
         control_msgs,
+        #[cfg(feature = "partial_messages")]
+        partial_message: None,
     }
 }
 
@@ -551,10 +596,10 @@ pub(super) fn count_control_msgs(
     let mut collected_messages = 0;
     for (peer_id, mut queue) in queues.into_iter() {
         while !queue.is_empty() {
-            if let Some(rpc) = queue.try_pop() {
-                if filter(&peer_id, &rpc) {
-                    collected_messages += 1;
-                }
+            if let Some(rpc) = queue.try_pop()
+                && filter(&peer_id, &rpc)
+            {
+                collected_messages += 1;
             }
         }
         new_queues.insert(peer_id, queue);
@@ -603,7 +648,7 @@ pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage 
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..10024)).map(|_| rng.gen()).collect(),
+        data: (0..rng.gen_range(10..10024)).map(|_| rng.r#gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,

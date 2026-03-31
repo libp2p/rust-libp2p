@@ -22,11 +22,11 @@
 
 use std::{
     collections::{
+        VecDeque,
         hash_map::{
             self,
             Entry::{Occupied, Vacant},
         },
-        VecDeque,
     },
     time::Duration,
 };
@@ -127,10 +127,10 @@ where
                 self.list.push_front(element);
                 break;
             }
-            if let Occupied(entry) = self.map.entry(element.element.clone()) {
-                if entry.get().expires <= now {
-                    entry.remove();
-                }
+            if let Occupied(entry) = self.map.entry(element.element.clone())
+                && entry.get().expires <= now
+            {
+                entry.remove();
             }
         }
     }

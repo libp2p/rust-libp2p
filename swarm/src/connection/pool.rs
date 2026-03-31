@@ -34,7 +34,7 @@ use dial_ranker::DialRanker;
 use fnv::FnvHashMap;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{poll_fn, Either},
+    future::{Either, poll_fn},
     prelude::*,
     ready,
     stream::{FuturesUnordered, SelectAll},
@@ -47,12 +47,13 @@ use libp2p_core::{
 use tracing::Instrument;
 use web_time::{Duration, Instant};
 
-use super::{
-    Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
-    PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
-};
 use crate::{
-    transport::TransportError, ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
+    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
+    connection::{
+        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
+        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
+    },
+    transport::TransportError,
 };
 
 mod concurrent_dial;
@@ -692,22 +693,24 @@ where
                     // never propagated across stack frames.
                     #[allow(clippy::result_large_err)]
                     let check_peer_id = || {
-                        if let Some(peer) = expected_peer_id {
-                            if peer != obtained_peer_id {
-                                return match &endpoint {
-                                    ConnectedPoint::Dialer { address, .. } => {
-                                        Err(PoolEvent::PendingOutboundConnectionError {
-                                            id,
-                                            error: PendingOutboundConnectionError::WrongPeerId {
-                                                obtained: obtained_peer_id,
-                                                address: address.clone(),
-                                            },
-                                            peer: Some(peer),
-                                        })
-                                    }
-                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
-                                };
-                            }
+                        if let Some(peer) = expected_peer_id
+                            && peer != obtained_peer_id
+                        {
+                            return match &endpoint {
+                                ConnectedPoint::Dialer { address, .. } => {
+                                    Err(PoolEvent::PendingOutboundConnectionError {
+                                        id,
+                                        error: PendingOutboundConnectionError::WrongPeerId {
+                                            obtained: obtained_peer_id,
+                                            address: address.clone(),
+                                        },
+                                        peer: Some(peer),
+                                    })
+                                }
+                                ConnectedPoint::Listener { .. } => unreachable!(
+                                    "There shouldn't be an expected PeerId on inbound connections."
+                                ),
+                            };
                         }
 
                         if self.local_id == obtained_peer_id {

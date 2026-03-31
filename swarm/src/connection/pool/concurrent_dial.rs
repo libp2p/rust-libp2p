@@ -28,17 +28,17 @@ use std::{
 };
 
 use futures::{
+    FutureExt,
     future::{BoxFuture, Future},
     ready,
     stream::{FuturesUnordered, StreamExt},
-    FutureExt,
 };
 use futures_timer::Delay;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_identity::PeerId;
 
 use super::DialRanker;
-use crate::{transport::TransportError, Multiaddr};
+use crate::{Multiaddr, transport::TransportError};
 
 pub(crate) type Dial = BoxFuture<
     'static,
