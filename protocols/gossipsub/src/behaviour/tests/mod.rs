@@ -53,8 +53,8 @@ use rand::Rng;
 
 use super::*;
 use crate::{
-    types::{RpcIn, SubscriptionOpts},
     IdentTopic as Topic,
+    types::{RpcIn, SubscriptionOpts},
 };
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
@@ -420,7 +420,7 @@ where
             role_override: Endpoint::Dialer,
             port_use: PortUse::Reuse,
         }; // this is not relevant
-           // peer_connections.connections should never be empty.
+        // peer_connections.connections should never be empty.
 
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
@@ -596,10 +596,10 @@ pub(super) fn count_control_msgs(
     let mut collected_messages = 0;
     for (peer_id, mut queue) in queues.into_iter() {
         while !queue.is_empty() {
-            if let Some(rpc) = queue.try_pop() {
-                if filter(&peer_id, &rpc) {
-                    collected_messages += 1;
-                }
+            if let Some(rpc) = queue.try_pop()
+                && filter(&peer_id, &rpc)
+            {
+                collected_messages += 1;
             }
         }
         new_queues.insert(peer_id, queue);
@@ -648,7 +648,7 @@ pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage 
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..10024)).map(|_| rng.gen()).collect(),
+        data: (0..rng.gen_range(10..10024)).map(|_| rng.r#gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,

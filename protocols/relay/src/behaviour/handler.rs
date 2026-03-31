@@ -33,21 +33,21 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use futures_timer::Delay;
-use libp2p_core::{upgrade::ReadyUpgrade, ConnectedPoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Multiaddr, upgrade::ReadyUpgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 use web_time::Instant;
 
 use crate::{
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
     behaviour::CircuitId,
     copy_future::CopyFuture,
     proto,
     protocol::{inbound_hop, outbound_stop},
-    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
 };
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
@@ -627,7 +627,7 @@ impl ConnectionHandler for Handler {
                             dst_peer_id,
                             error: None,
                         },
-                    ))
+                    ));
                 }
                 Err(e) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -636,7 +636,7 @@ impl ConnectionHandler for Handler {
                             dst_peer_id,
                             error: Some(e),
                         },
-                    ))
+                    ));
                 }
             }
         }
@@ -859,7 +859,7 @@ impl ConnectionHandler for Handler {
                         Ok(()) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenied { status },
-                            ))
+                            ));
                         }
                         Err(error) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(

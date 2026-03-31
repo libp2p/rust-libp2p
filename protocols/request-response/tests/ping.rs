@@ -72,12 +72,16 @@ async fn is_response_outbound() {
 
     let request_id2 = swarm1.behaviour_mut().send_request(&offline_peer, ping);
 
-    assert!(!swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id1));
-    assert!(swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id2));
+    assert!(
+        !swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id1)
+    );
+    assert!(
+        swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id2)
+    );
 }
 
 /// Exercises a simple ping protocol.
@@ -427,7 +431,7 @@ async fn concurrent_ping_protocol() {
     use std::{collections::HashMap, num::NonZero};
 
     use libp2p_core::ConnectedPoint;
-    use libp2p_swarm::{dial_opts::PeerCondition, DialError};
+    use libp2p_swarm::{DialError, dial_opts::PeerCondition};
 
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();

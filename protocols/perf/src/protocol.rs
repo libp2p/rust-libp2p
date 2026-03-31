@@ -21,8 +21,8 @@
 use std::time::Duration;
 
 use futures::{
-    future::{select, Either},
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
+    future::{Either, select},
 };
 use futures_timer::Delay;
 use web_time::Instant;

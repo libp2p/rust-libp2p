@@ -274,9 +274,7 @@ mod tests {
         );
 
         assert!(
-            tokio::time::timeout(MS_5 * 2, status.next())
-                .await
-                .is_ok(),
+            tokio::time::timeout(MS_5 * 2, status.next()).await.is_ok(),
             "bootstrap to be triggered in less then the configured periodic delay because we connected to a new peer"
         );
     }
@@ -360,9 +358,7 @@ mod tests {
         Delay::new(MS_100 - MS_5).await;
 
         assert!(
-            tokio::time::timeout(MS_5*2, status.next())
-                .await
-                .is_ok(),
+            tokio::time::timeout(MS_5 * 2, status.next()).await.is_ok(),
             "bootstrap to be triggered in the configured throttle delay because we connected to a new peer"
         );
     }
