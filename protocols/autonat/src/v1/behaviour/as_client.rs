@@ -235,12 +235,12 @@ impl AsClient<'_> {
     }
 
     pub(crate) fn on_expired_address(&mut self, addr: &Multiaddr) {
-        if let NatStatus::Public(public_address) = self.nat_status {
-            if public_address == addr {
-                *self.confidence = 0;
-                *self.nat_status = NatStatus::Unknown;
-                self.schedule_next_probe(Duration::ZERO);
-            }
+        if let NatStatus::Public(public_address) = self.nat_status
+            && public_address == addr
+        {
+            *self.confidence = 0;
+            *self.nat_status = NatStatus::Unknown;
+            self.schedule_next_probe(Duration::ZERO);
         }
     }
 

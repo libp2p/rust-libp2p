@@ -3,12 +3,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse, upgrade::DeniedUpgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
+    NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, handler::ConnectionEvent,
 };
 use libp2p_swarm_test::SwarmExt;
 

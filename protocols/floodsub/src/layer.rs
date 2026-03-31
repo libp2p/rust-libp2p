@@ -20,8 +20,8 @@
 
 use std::{
     collections::{
-        hash_map::{DefaultHasher, HashMap},
         VecDeque,
+        hash_map::{DefaultHasher, HashMap},
     },
     iter,
     task::{Context, Poll},
@@ -30,23 +30,23 @@ use std::{
 use bytes::Bytes;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
-    dial_opts::DialOpts,
     CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
     OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
 };
 use smallvec::SmallVec;
 
 use crate::{
+    Config,
     protocol::{
         FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
         FloodsubSubscriptionAction,
     },
     topic::Topic,
-    Config,
 };
 
 #[deprecated = "Use `Behaviour` instead."]

@@ -5,17 +5,17 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use crate::{
+    ConfigBuilder, Event, TopicHash, ValidationMode,
     behaviour::tests::{
-        add_peer_with_addr_and_kind, count_control_msgs, random_message,
-        DefaultBehaviourTestBuilder,
+        DefaultBehaviourTestBuilder, add_peer_with_addr_and_kind, count_control_msgs,
+        random_message,
     },
     handler::HandlerEvent,
     partial_messages::{
-        Metadata, Partial, PartialAction, PartialError, PartialMessage, PublishAction,
-        ReceivedAction, State, DEFAULT_PARTIAL_TTL,
+        DEFAULT_PARTIAL_TTL, Metadata, Partial, PartialAction, PartialError, PartialMessage,
+        PublishAction, ReceivedAction, State,
     },
     types::{IHave, PeerKind, RpcIn, RpcOut, SubscriptionOpts},
-    ConfigBuilder, Event, TopicHash, ValidationMode,
 };
 
 /// A simple bitmap-based test implementation of the `Partial` trait.
@@ -52,14 +52,12 @@ impl Bitmap {
                 continue;
             }
 
-            let mut counter = start + (i as u64) * (1024 / 8);
             let mut part = [0u8; 1024];
 
-            for j in 0..(1024 / 8) {
+            for (counter, j) in (start + (i as u64) * (1024 / 8)..).zip(0..(1024 / 8)) {
                 let bytes = counter.to_be_bytes();
                 let offset = j * 8;
                 part[offset..offset + 8].copy_from_slice(&bytes);
-                counter += 1;
             }
 
             *p = part;
@@ -1615,12 +1613,11 @@ fn test_heartbeat_max_metadata_length() {
     let gossip_messages: Vec<_> = actions
         .iter()
         .filter_map(|action| {
-            if let PublishAction::SendMessage { peer_id, rpc } = action {
-                if *peer_id == gossip_peer {
-                    if let RpcOut::PartialMessage(pm) = rpc {
-                        return Some(pm.group_id.clone());
-                    }
-                }
+            if let PublishAction::SendMessage { peer_id, rpc } = action
+                && *peer_id == gossip_peer
+                && let RpcOut::PartialMessage(pm) = rpc
+            {
+                return Some(pm.group_id.clone());
             }
             None
         })
