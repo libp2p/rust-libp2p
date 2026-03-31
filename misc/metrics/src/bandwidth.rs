@@ -12,9 +12,9 @@ use futures::{
     ready,
 };
 use libp2p_core::{
+    Multiaddr,
     muxing::{StreamMuxer, StreamMuxerEvent},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-    Multiaddr,
 };
 use libp2p_identity::PeerId;
 use prometheus_client::{

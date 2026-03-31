@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 metrics = ["prometheus-client"]
+partial_messages = []
 
 [dependencies]
 async-channel = "2.5.0"

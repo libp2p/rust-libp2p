@@ -3,7 +3,7 @@ name = "multistream-select"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Multistream-select negotiation protocol for libp2p"
-version = "0.13.0"
+version = "0.14.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "1"
 futures = { workspace = true }
 tracing = { workspace = true }
-pin-project = "1.1.5"
+pin-project = "1.1.11"
 smallvec = "1.15.1"
 unsigned-varint = { workspace = true }
 
