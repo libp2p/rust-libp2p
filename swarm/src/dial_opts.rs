@@ -21,7 +21,7 @@
 
 use std::num::NonZeroU8;
 
-use libp2p_core::{connection::Endpoint, multiaddr::Protocol, transport::PortUse, Multiaddr};
+use libp2p_core::{Multiaddr, connection::Endpoint, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 
 use crate::ConnectionId;

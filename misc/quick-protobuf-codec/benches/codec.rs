@@ -1,7 +1,7 @@
 use asynchronous_codec::Encoder;
 use bytes::BytesMut;
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use quick_protobuf_codec::{proto, Codec};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use quick_protobuf_codec::{Codec, proto};
 
 pub fn benchmark(c: &mut Criterion) {
     for size in [1000, 10_000, 100_000, 1_000_000, 10_000_000] {

@@ -3,7 +3,7 @@ name = "rw-stream-sink"
 edition.workspace = true
 description = "Adaptator between Stream/Sink and AsyncRead/AsyncWrite"
 rust-version = { workspace = true }
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = { workspace = true }
-pin-project = "1.1.5"
+pin-project = "1.1.11"
 static_assertions = "1"
 
 [dev-dependencies]

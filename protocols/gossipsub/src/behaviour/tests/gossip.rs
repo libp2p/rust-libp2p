@@ -26,7 +26,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, NetworkBehaviour};
 
 use super::{
-    add_peer, count_control_msgs, flush_events, random_message, DefaultBehaviourTestBuilder,
+    DefaultBehaviourTestBuilder, add_peer, count_control_msgs, flush_events, random_message,
 };
 use crate::{
     config::{Config, ConfigBuilder},
@@ -207,6 +207,8 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
+        #[cfg(feature = "partial_messages")]
+        partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![msg_id.clone()],
         })],
@@ -247,14 +249,13 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
     let mut iwant_exists = false;
     let mut receiver_queue = queues.remove(&peers[7]).unwrap();
     while !receiver_queue.is_empty() {
-        if let Some(RpcOut::IWant(IWant { message_ids })) = receiver_queue.try_pop() {
-            if message_ids
+        if let Some(RpcOut::IWant(IWant { message_ids })) = receiver_queue.try_pop()
+            && message_ids
                 .iter()
                 .any(|m| *m == MessageId::new(b"unknown id"))
-            {
-                iwant_exists = true;
-                break;
-            }
+        {
+            iwant_exists = true;
+            break;
         }
     }
 

@@ -21,13 +21,13 @@
 use std::task::{Context, Poll};
 
 use either::Either;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 
 use crate::{
+    ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent,
     behaviour::{self, NetworkBehaviour, ToSwarm},
     connection::ConnectionId,
-    ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent,
 };
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
