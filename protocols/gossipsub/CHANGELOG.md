@@ -1,7 +1,10 @@
 ## 0.50.0
 
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
-  See PR 6356 (https://github.com/libp2p/rust-libp2p/pull/6356)
+  See [PR 6356](https://github.com/libp2p/rust-libp2p/pull/6356)
 
 - Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
   See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)

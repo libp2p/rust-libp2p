@@ -1,5 +1,7 @@
-## 0.56.1
+## 0.57.0
 
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - Fix `metrics` delegation to gossipsub protocol.
   See [PR 6180](https://github.com/libp2p/rust-libp2p/pull/6180)
 

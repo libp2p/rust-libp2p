@@ -28,8 +28,8 @@ use libp2p_core::PeerId;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    types::{RpcOut, SubscriptionOpts},
     PublishError, TopicHash,
+    types::{RpcOut, SubscriptionOpts},
 };
 
 /// Default TTL for partial messages kept.
@@ -323,7 +323,7 @@ impl State {
                 peer_partial.peer_metadata = Some(PeerMetadata::Remote(remote_metadata.clone()));
                 true
             }
-            (Some(PeerMetadata::Remote(ref metadata)), Some(remote_metadata)) => {
+            (Some(PeerMetadata::Remote(metadata)), Some(remote_metadata)) => {
                 if metadata != remote_metadata {
                     peer_partial.peer_metadata =
                         Some(PeerMetadata::Remote(remote_metadata.clone()));
@@ -375,15 +375,15 @@ impl State {
         };
 
         // Update the `Metadata` as seen by the remote peer, reflecting the current local state.
-        if let (Some(metadata), Some(body)) = (&mut peer_partial.metadata, &message.body) {
-            if let Err(err) = metadata.update_from_data(body) {
-                tracing::debug!(peer = %peer_id, group_id = ?message.group_id,err = %err,
-                    "Could update the metadata as seen by the remote peer");
-                return vec![ReceivedAction::Publish(PublishAction::PenalizePeer {
-                    peer_id,
-                    topic_hash: message.topic_hash.clone(),
-                })];
-            }
+        if let (Some(metadata), Some(body)) = (&mut peer_partial.metadata, &message.body)
+            && let Err(err) = metadata.update_from_data(body)
+        {
+            tracing::debug!(peer = %peer_id, group_id = ?message.group_id,err = %err,
+                "Could update the metadata as seen by the remote peer");
+            return vec![ReceivedAction::Publish(PublishAction::PenalizePeer {
+                peer_id,
+                topic_hash: message.topic_hash.clone(),
+            })];
         }
 
         let received_action = match local_partial.content.partial_action_from_metadata(

@@ -1,4 +1,7 @@
-## 0.17.1
+## 0.18.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
 - Fix panic in swarm metrics when `ConnectionClosed` events are received for connections that were established before metrics collection started.
   See [PR 6158](https://github.com/libp2p/rust-libp2p/pull/6158).
