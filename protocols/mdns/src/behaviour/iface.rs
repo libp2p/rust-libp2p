@@ -33,7 +33,7 @@ use std::{
 };
 
 use futures::{channel::mpsc, SinkExt, StreamExt};
-use libp2p_core::Multiaddr;
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
@@ -43,7 +43,11 @@ use self::{
     query::MdnsPacket,
 };
 use crate::{
-    behaviour::{socket::AsyncSocket, timer::Builder},
+    behaviour::{
+        iface::dns::{build_individual_query_srv_response, build_individual_query_txt_response},
+        socket::AsyncSocket,
+        timer::Builder,
+    },
     Config,
 };
 
@@ -313,6 +317,53 @@ where
 
                     this.send_buffer
                         .push_back(build_service_discovery_response(disc.query_id(), this.ttl));
+                    continue;
+                }
+                Poll::Ready(Ok(Ok(Some(MdnsPacket::IndividualPeerResponse(response))))) => {
+                    tracing::trace!(
+                        address=%this.addr,
+                        remote_address=%response.remote_addr(),
+                        "received service discovery from remote address on address"
+                    );
+
+                    let buffer_bytes = match response.query_type() {
+                        hickory_proto::rr::RecordType::SRV => {
+                            let port = this
+                                .listen_addresses
+                                .read()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .iter()
+                                .next()
+                                .and_then(|addr| {
+                                    addr.iter().find_map(|proto| match proto {
+                                        Protocol::Tcp(port) => Some(port),
+                                        Protocol::Udp(port) => Some(port),
+                                        _ => None,
+                                    })
+                                })
+                                .unwrap_or(0);
+
+                            build_individual_query_srv_response(
+                                response.query_id(),
+                                response.peer_name(),
+                                port,
+                                this.ttl,
+                            )
+                        }
+                        hickory_proto::rr::RecordType::TXT => build_individual_query_txt_response(
+                            response.query_id(),
+                            response.peer_name(),
+                            this.local_peer_id,
+                            this.listen_addresses
+                                .read()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .iter(),
+                            this.ttl,
+                        ),
+                        _ => continue,
+                    };
+
+                    this.send_buffer.push_back(buffer_bytes);
                     continue;
                 }
                 Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {

@@ -207,6 +207,99 @@ pub(crate) fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPa
     out
 }
 
+/// Builds the response to an individual peer SRV query.
+pub(crate) fn build_individual_query_srv_response(
+    id: u16,
+    peer_name: &str,
+    port: u16,
+    ttl: Duration,
+) -> MdnsPacket {
+    let ttl = duration_to_secs(ttl);
+    let mut out = Vec::with_capacity(200);
+
+    append_u16(&mut out, id);
+    // 0x84 flag for an answer.
+    append_u16(&mut out, 0x8400);
+    // Number of questions, answers, authorities, additionals.
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, 0x1);
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, 0x0);
+
+    // Answer to the query: peer_name._p2p._udp.local. SRV record
+    let full_name = format!("{}._p2p._udp.local", peer_name);
+    append_qname(&mut out, full_name.as_bytes());
+    // SRV type
+    append_u16(&mut out, 0x0021);
+    // Cache-flush bit (IN)
+    append_u16(&mut out, 0x8001);
+
+    // TTL for the answer
+    append_u32(&mut out, ttl);
+
+    // Calculate RDATA length
+    let mut rdata = Vec::new();
+    // Priority
+    append_u16(&mut rdata, 0);
+    // Weight
+    append_u16(&mut rdata, 0);
+    append_u16(&mut rdata, port);
+
+    // Use the peer name as hostname for mDNS
+    append_qname(&mut rdata, format!("{}.local", peer_name).as_bytes());
+
+    append_u16(&mut out, rdata.len() as u16);
+    out.extend_from_slice(&rdata);
+
+    out
+}
+
+/// Builds the response to an individual peer TXT query.
+pub(crate) fn build_individual_query_txt_response<'a>(
+    id: u16,
+    peer_name: &str,
+    peer_id: PeerId,
+    addresses: impl Iterator<Item = &'a Multiaddr>,
+    ttl: Duration,
+) -> MdnsPacket {
+    let ttl = duration_to_secs(ttl);
+    let mut out = Vec::with_capacity(500);
+
+    append_u16(&mut out, id);
+    // 0x84 flag for an answer.
+    append_u16(&mut out, 0x8400);
+    // Number of questions, answers, authorities, additionals.
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, 0x1);
+    append_u16(&mut out, 0x0);
+    append_u16(&mut out, 0x0);
+
+    // Answer: peer_name._p2p._udp.local. TXT record
+    let full_name = format!("{}._p2p._udp.local", peer_name);
+    append_qname(&mut out, full_name.as_bytes());
+
+    // TXT type
+    append_u16(&mut out, 0x0010);
+    // Cache-flush bit (IN)
+    append_u16(&mut out, 0x8001);
+    append_u32(&mut out, ttl);
+
+    // Build TXT record data with all addresses
+    let mut txt_data = Vec::new();
+    for addr in addresses {
+        let txt_value = format!("dnsaddr={}/p2p/{}", addr, peer_id.to_base58());
+        if txt_value.len() <= MAX_TXT_VALUE_LENGTH {
+            txt_data.push(txt_value.len() as u8);
+            txt_data.extend_from_slice(txt_value.as_bytes());
+        }
+    }
+
+    append_u16(&mut out, txt_data.len() as u16);
+    out.extend_from_slice(&txt_data);
+
+    out
+}
+
 /// Constructs an MDNS query response packet for an address lookup.
 fn query_response_packet(id: u16, peer_id: &[u8], records: &[Vec<u8>], ttl: u32) -> MdnsPacket {
     let mut out = Vec::with_capacity(records.len() * MAX_TXT_RECORD_SIZE);
@@ -425,6 +518,33 @@ mod tests {
     fn build_service_discovery_response_correct() {
         let query = build_service_discovery_response(0x1234, Duration::from_secs(120));
         assert!(Message::from_vec(&query).is_ok());
+    }
+
+    #[test]
+    fn build_individual_query_txt_response_correct() {
+        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().unwrap();
+
+        let packet = build_individual_query_txt_response(
+            0x5678,
+            "testpeer",
+            peer_id,
+            std::iter::once(&addr),
+            Duration::from_secs(60),
+        );
+        assert!(Message::from_vec(&packet).is_ok());
+    }
+
+    #[test]
+    fn build_individual_query_srv_response_correct() {
+        let packet = build_individual_query_srv_response(
+            0x1234,
+            "my-peer-abc123",
+            30333,
+            Duration::from_secs(120),
+        );
+
+        assert!(Message::from_vec(&packet).is_ok());
     }
 
     #[test]
