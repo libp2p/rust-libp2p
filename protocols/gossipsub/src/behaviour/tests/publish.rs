@@ -22,11 +22,11 @@
 
 use super::DefaultBehaviourTestBuilder;
 use crate::{
+    IdentTopic as Topic,
     config::{Config, ConfigBuilder},
     topic::TopicHash,
     transform::DataTransform,
     types::RpcOut,
-    IdentTopic as Topic,
 };
 
 /// Test local node publish to subscribed topic

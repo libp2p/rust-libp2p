@@ -21,8 +21,8 @@
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use std::{
     collections::{
-        hash_map::{Entry, HashMap},
         HashSet,
+        hash_map::{Entry, HashMap},
     },
     time::Duration,
 };
@@ -166,10 +166,11 @@ impl BackoffStorage {
                 };
                 if !keep {
                     // remove from backoffs
-                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {
-                        if m.get_mut().remove(peer).is_some() && m.get().is_empty() {
-                            m.remove();
-                        }
+                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone())
+                        && m.get_mut().remove(peer).is_some()
+                        && m.get().is_empty()
+                    {
+                        m.remove();
                     }
                 }
 

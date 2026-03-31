@@ -24,10 +24,10 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
 use crate::{
-    error::ConfigBuilderError,
-    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
-    types::{Message, MessageId, PeerKind},
     TopicHash,
+    error::ConfigBuilderError,
+    protocol::{FLOODSUB_PROTOCOL, ProtocolConfig, ProtocolId},
+    types::{Message, MessageId, PeerKind},
 };
 
 /// The types of message validation that can be employed by gossipsub.
@@ -1199,7 +1199,7 @@ mod test {
     use libp2p_core::UpgradeInfo;
 
     use super::*;
-    use crate::{topic::IdentityHash, Topic};
+    use crate::{Topic, topic::IdentityHash};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
