@@ -16,9 +16,9 @@ bytes = "1"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-quick-protobuf = "0.8"
+prost = { workspace = true }
 tracing = { workspace = true }
-quick-protobuf-codec = { workspace = true }
+prost-codec = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }

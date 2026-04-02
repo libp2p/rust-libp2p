@@ -95,7 +95,7 @@ where
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
-                        flag: Some(Flag::STOP_SENDING),
+                        flag: Some(Flag::StopSending as i32),
                         message: None,
                     })?;
                     self.state.close_read_message_sent();
@@ -160,7 +160,7 @@ where
                     }
                 }
                 None => {
-                    state.handle_inbound_flag(Flag::FIN, read_buffer);
+                    state.handle_inbound_flag(Flag::Fin, read_buffer);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -226,7 +226,7 @@ where
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
-                        flag: Some(Flag::FIN),
+                        flag: Some(Flag::Fin as i32),
                         message: None,
                     })?;
                     self.state.close_write_message_sent();
@@ -262,7 +262,10 @@ where
         .transpose()
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
     {
-        Some(Message { flag, message }) => Poll::Ready(Ok(Some((flag, message)))),
+        Some(Message { flag, message }) => {
+            let flag = flag.and_then(|f| Flag::try_from(f).ok());
+            Poll::Ready(Ok(Some((flag, message))))
+        }
         None => Poll::Ready(Ok(None)),
     }
 }
@@ -281,7 +284,7 @@ mod tests {
         let message = [0; MAX_DATA_LEN];
 
         let protobuf = Message {
-            flag: Some(Flag::FIN),
+            flag: Some(Flag::Fin as i32),
             message: Some(message.to_vec()),
         };
 

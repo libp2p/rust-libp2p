@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod message_v2;
+#[path = "message_v2.pb.rs"]
+pub mod message_v2_pb;

@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod holepunch;
+#[path = "holepunch.pb.rs"]
+pub mod holepunch_pb;

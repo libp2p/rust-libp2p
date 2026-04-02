@@ -1,16 +1,14 @@
-// change to quick-protobuf-codec
-
 use std::{io, io::ErrorKind};
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
-use quick_protobuf_codec::Codec;
+use prost_codec::Codec;
 use rand::Rng;
 
 use crate::v2::{Nonce, generated::structs as proto};
 
-const REQUEST_MAX_SIZE: usize = 4104;
+const REQUEST_MAX_SIZE: usize = 4102;
 pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
 pub(super) const DATA_LEN_UPPER_BOUND: usize = 100_000u32 as usize;
 pub(super) const DATA_FIELD_LEN_UPPER_BOUND: usize = 4096;
@@ -87,7 +85,10 @@ impl From<DialRequest> for proto::Message {
         let nonce = val.nonce;
 
         proto::Message {
-            msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }),
+            msg: Some(proto::message::Msg::DialRequest(proto::DialRequest {
+                addrs,
+                nonce,
+            })),
         }
     }
 }
@@ -99,12 +100,14 @@ impl From<DialDataResponse> for proto::Message {
             "data_count too large"
         );
         proto::Message {
-            msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                // One could use Cow::Borrowed here, but it will
-                // require a modification of the generated code
-                // and that will fail the CI
-                data: vec![0; val.data_count],
-            }),
+            msg: Some(proto::message::Msg::DialDataResponse(
+                proto::DialDataResponse {
+                    // One could use Cow::Borrowed here, but it will
+                    // require a modification of the generated code
+                    // and that will fail the CI
+                    data: vec![0; val.data_count],
+                },
+            )),
         }
     }
 }
@@ -139,7 +142,7 @@ impl TryFrom<proto::Message> for Request {
 
     fn try_from(msg: proto::Message) -> Result<Self, Self::Error> {
         match msg.msg {
-            proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }) => {
+            Some(proto::message::Msg::DialRequest(proto::DialRequest { addrs, nonce })) => {
                 let addrs = addrs
                     .into_iter()
                     .map(|e| e.to_vec())
@@ -151,7 +154,7 @@ impl TryFrom<proto::Message> for Request {
                     .collect::<Result<Vec<_>, io::Error>>()?;
                 Ok(Self::Dial(DialRequest { addrs, nonce }))
             }
-            proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse { data }) => {
+            Some(proto::message::Msg::DialDataResponse(proto::DialDataResponse { data })) => {
                 let data_count = data.len();
                 Ok(Self::Data(DialDataResponse { data_count }))
             }
@@ -176,7 +179,7 @@ pub(crate) struct DialDataRequest {
 
 #[derive(Debug, Clone)]
 pub(crate) struct DialResponse {
-    pub(crate) status: proto::mod_DialResponse::ResponseStatus,
+    pub(crate) status: proto::dial_response::ResponseStatus,
     pub(crate) addr_idx: usize,
     pub(crate) dial_status: proto::DialStatus,
 }
@@ -186,21 +189,25 @@ impl TryFrom<proto::Message> for Response {
 
     fn try_from(msg: proto::Message) -> Result<Self, Self::Error> {
         match msg.msg {
-            proto::mod_Message::OneOfmsg::dialResponse(proto::DialResponse {
+            Some(proto::message::Msg::DialResponse(proto::DialResponse {
                 status,
-                addrIdx,
-                dialStatus,
-            }) => Ok(Response::Dial(DialResponse {
-                status,
-                addr_idx: addrIdx as usize,
-                dial_status: dialStatus,
+                addr_idx,
+                dial_status,
+            })) => Ok(Response::Dial(DialResponse {
+                status: proto::dial_response::ResponseStatus::try_from(status).map_err(|_| {
+                    new_io_invalid_data_err(format!("unknown response status: {status}"))
+                })?,
+                addr_idx: addr_idx as usize,
+                dial_status: proto::DialStatus::try_from(dial_status).map_err(|_| {
+                    new_io_invalid_data_err(format!("unknown dial status: {dial_status}"))
+                })?,
             })),
-            proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
-                addrIdx,
-                numBytes,
-            }) => Ok(Self::Data(DialDataRequest {
-                addr_idx: addrIdx as usize,
-                num_bytes: numBytes as usize,
+            Some(proto::message::Msg::DialDataRequest(proto::DialDataRequest {
+                addr_idx,
+                num_bytes,
+            })) => Ok(Self::Data(DialDataRequest {
+                addr_idx: addr_idx as usize,
+                num_bytes: num_bytes as usize,
             })),
             _ => Err(new_io_invalid_data_err(
                 "invalid message type, expected dialResponse or dialDataRequest",
@@ -217,20 +224,22 @@ impl From<Response> for proto::Message {
                 addr_idx,
                 dial_status,
             }) => proto::Message {
-                msg: proto::mod_Message::OneOfmsg::dialResponse(proto::DialResponse {
-                    status,
-                    addrIdx: addr_idx as u32,
-                    dialStatus: dial_status,
-                }),
+                msg: Some(proto::message::Msg::DialResponse(proto::DialResponse {
+                    status: status as i32,
+                    addr_idx: addr_idx as u32,
+                    dial_status: dial_status as i32,
+                })),
             },
             Response::Data(DialDataRequest {
                 addr_idx,
                 num_bytes,
             }) => proto::Message {
-                msg: proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
-                    addrIdx: addr_idx as u32,
-                    numBytes: num_bytes as u64,
-                }),
+                msg: Some(proto::message::Msg::DialDataRequest(
+                    proto::DialDataRequest {
+                        addr_idx: addr_idx as u32,
+                        num_bytes: num_bytes as u64,
+                    },
+                )),
             },
         }
     }
@@ -268,7 +277,7 @@ pub(crate) async fn recv_dial_back(stream: impl AsyncRead + Unpin) -> io::Result
 
 pub(crate) async fn dial_back_response(stream: impl AsyncWrite + Unpin) -> io::Result<()> {
     let msg = proto::DialBackResponse {
-        status: proto::mod_DialBackResponse::DialBackStatus::OK,
+        status: proto::dial_back_response::DialBackStatus::Ok as i32,
     };
     let mut framed = FramedWrite::new(
         stream,
@@ -291,7 +300,7 @@ pub(crate) async fn recv_dial_back_response(
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    if proto::mod_DialBackResponse::DialBackStatus::OK == status {
+    if status == proto::dial_back_response::DialBackStatus::Ok as i32 {
         Ok(())
     } else {
         Err(io::Error::new(
@@ -304,28 +313,29 @@ pub(crate) async fn recv_dial_back_response(
 #[cfg(test)]
 mod tests {
     use crate::v2::generated::structs::{
-        DialDataResponse as GenDialDataResponse, Message, mod_Message::OneOfmsg,
+        DialDataResponse as GenDialDataResponse, Message, message::Msg,
     };
+    use prost::Message as ProstMessage;
 
     #[test]
     fn message_correct_max_size() {
-        let message_bytes = quick_protobuf::serialize_into_vec(&Message {
-            msg: OneOfmsg::dialDataResponse(GenDialDataResponse {
+        let msg = Message {
+            msg: Some(Msg::DialDataResponse(GenDialDataResponse {
                 data: vec![0; 4096],
-            }),
-        })
-        .unwrap();
+            })),
+        };
+        let message_bytes = msg.encode_to_vec();
         assert_eq!(message_bytes.len(), super::REQUEST_MAX_SIZE);
     }
 
     #[test]
     fn dial_back_correct_size() {
         let dial_back = super::proto::DialBack { nonce: 0 };
-        let buf = quick_protobuf::serialize_into_vec(&dial_back).unwrap();
+        let buf = dial_back.encode_to_vec();
         assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
 
         let dial_back_max_nonce = super::proto::DialBack { nonce: u64::MAX };
-        let buf = quick_protobuf::serialize_into_vec(&dial_back_max_nonce).unwrap();
+        let buf = dial_back_max_nonce.encode_to_vec();
         assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
     }
 }

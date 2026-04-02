@@ -442,7 +442,7 @@ where
 /// This is useful for simulating incoming RPC messages from peers in tests.
 /// It parses all message types: publish messages, subscriptions, and control
 /// messages (IHAVE, IWANT, GRAFT, PRUNE).
-pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
+pub(super) fn proto_to_message(rpc: &proto::Rpc) -> RpcIn {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();

@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod payload;
+#[path = "payload.proto.rs"]
+pub mod payload_proto;

@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod rendezvous;
+#[path = "rendezvous.pb.rs"]
+pub mod rendezvous_pb;

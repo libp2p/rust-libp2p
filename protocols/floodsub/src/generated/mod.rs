@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod floodsub;
+#[path = "floodsub.pb.rs"]
+pub mod floodsub_pb;

@@ -1,2 +1,3 @@
 // Automatically generated mod.rs
-pub mod webrtc;
+#[path = "webrtc.pb.rs"]
+pub mod webrtc_pb;

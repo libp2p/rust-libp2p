@@ -1,0 +1,10 @@
+[package]
+name = "gen-proto"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+prost-build = "0.14"

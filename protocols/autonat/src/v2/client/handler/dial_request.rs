@@ -24,7 +24,7 @@ use libp2p_swarm::{
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,
-    generated::structs::{DialStatus, mod_DialResponse::ResponseStatus},
+    generated::structs::{DialStatus, dial_response::ResponseStatus},
     protocol::{
         Coder, DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
         DialDataRequest, DialDataResponse, DialRequest, Response,
@@ -268,18 +268,18 @@ async fn start_stream_handle(
     }
 
     match res.status {
-        ResponseStatus::E_REQUEST_REJECTED => {
+        ResponseStatus::ERequestRejected => {
             return Err(Error::Io(io::Error::other("server rejected request")));
         }
-        ResponseStatus::E_DIAL_REFUSED => {
+        ResponseStatus::EDialRefused => {
             return Err(Error::Io(io::Error::other("server refused dial")));
         }
-        ResponseStatus::E_INTERNAL_ERROR => {
+        ResponseStatus::EInternalError => {
             return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
             )));
         }
-        ResponseStatus::OK => {}
+        ResponseStatus::Ok => {}
     }
 
     let tested_address = req
@@ -289,27 +289,27 @@ async fn start_stream_handle(
         .clone();
 
     match res.dial_status {
-        DialStatus::UNUSED => {
+        DialStatus::Unused => {
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "unexpected message",
             )));
         }
-        DialStatus::E_DIAL_ERROR => {
+        DialStatus::EDialError => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::NoConnection,
             });
         }
-        DialStatus::E_DIAL_BACK_ERROR => {
+        DialStatus::EDialBackError => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::StreamFailed,
             });
         }
-        DialStatus::OK => {}
+        DialStatus::Ok => {}
     }
 
     Ok((tested_address, bytes_sent))

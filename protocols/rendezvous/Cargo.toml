@@ -20,8 +20,8 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-request-response = { workspace = true }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+prost = { workspace = true }
+prost-codec = { workspace = true }
 rand = "0.8"
 thiserror = { workspace = true }
 tracing = { workspace = true }

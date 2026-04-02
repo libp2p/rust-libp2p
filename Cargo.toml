@@ -27,7 +27,7 @@ members = [
     "misc/metrics",
     "misc/multistream-select",
     "misc/peer-store",
-    "misc/quick-protobuf-codec",
+    "misc/prost-codec",
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
     "misc/server",
@@ -131,7 +131,8 @@ multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
-quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
+prost-codec = { version = "0.4.0", path = "misc/prost-codec" }
+prost = "0.14"
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rcgen = "0.13"
 ring = "0.17.12"
