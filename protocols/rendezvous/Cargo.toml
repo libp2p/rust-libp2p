@@ -15,6 +15,7 @@ asynchronous-codec = { workspace = true }
 bimap = "0.6.3"
 futures = { workspace = true, features = ["std"] }
 futures-timer = "3.0.3"
+hashlink = { workspace = true }
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
