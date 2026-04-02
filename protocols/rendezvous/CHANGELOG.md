@@ -1,3 +1,8 @@
+## 0.17.1
+
+- Add limits for the per-peer and total number of store registrations, and the stored client cookies.
+  See [CVE XXXX](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-cqfx-gf56-8x59)
+
 ## 0.17.0
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` for newly discovered peers.

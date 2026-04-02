@@ -27,6 +27,7 @@ use std::{
 
 use bimap::BiMap;
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use hashlink::LruCache;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
@@ -40,6 +41,13 @@ use crate::{
     MAX_TTL, MIN_TTL,
 };
 
+/// Default maximum active registrations per peer.
+pub const MAX_REGISTRATION_PEER: usize = 32;
+/// Default maximum active registrations in total.
+pub const MAX_REGISTRATIONS_TOTAL: usize = 10_000;
+/// Default size of the cache that stores client cookies.
+pub const COOKIES_CACHE_SIZE: usize = 10_000;
+
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
@@ -49,6 +57,9 @@ pub struct Behaviour {
 pub struct Config {
     min_ttl: Ttl,
     max_ttl: Ttl,
+    max_registrations_per_peer: usize,
+    max_registrations_total: usize,
+    max_cookies: usize,
 }
 
 impl Config {
@@ -61,6 +72,21 @@ impl Config {
         self.max_ttl = max_ttl;
         self
     }
+
+    pub fn with_max_registration_per_peer(mut self, max: usize) -> Self {
+        self.max_registrations_per_peer = max;
+        self
+    }
+
+    pub fn with_max_registration_total(mut self, max: usize) -> Self {
+        self.max_registrations_total = max;
+        self
+    }
+
+    pub fn with_max_stored_cookies(mut self, max: usize) -> Self {
+        self.max_cookies = max;
+        self
+    }
 }
 
 impl Default for Config {
@@ -68,6 +94,9 @@ impl Default for Config {
         Self {
             min_ttl: MIN_TTL,
             max_ttl: MAX_TTL,
+            max_registrations_per_peer: MAX_REGISTRATION_PEER,
+            max_registrations_total: MAX_REGISTRATIONS_TOTAL,
+            max_cookies: COOKIES_CACHE_SIZE,
         }
     }
 }
@@ -268,7 +297,17 @@ fn handle_request(
 
             let namespace = registration.namespace.clone();
 
-            match registrations.add(registration) {
+            // Check registration limits.
+            let checked_limit = registrations
+                .is_allowed(peer_id)
+                .then_some(())
+                .ok_or(ErrorCode::Unavailable);
+
+            match checked_limit.and_then(|_| {
+                registrations
+                    .add(registration)
+                    .map_err(|_| ErrorCode::InvalidTtl)
+            }) {
                 Ok(registration) => {
                     let response = Message::RegisterResponse(Ok(registration.ttl));
 
@@ -279,9 +318,7 @@ fn handle_request(
 
                     Some((event, Some(response)))
                 }
-                Err(TtlOutOfRange::TooLong { .. }) | Err(TtlOutOfRange::TooShort { .. }) => {
-                    let error = ErrorCode::InvalidTtl;
-
+                Err(error) => {
                     let response = Message::RegisterResponse(Err(error));
 
                     let event = Event::PeerNotRegistered {
@@ -352,11 +389,10 @@ impl RegistrationId {
 struct ExpiredRegistration(Registration);
 
 pub struct Registrations {
+    config: Config,
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
-    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
-    min_ttl: Ttl,
-    max_ttl: Ttl,
+    cookies: LruCache<Cookie, HashSet<RegistrationId>>,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
@@ -379,9 +415,8 @@ impl Registrations {
         Self {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
-            min_ttl: config.min_ttl,
-            max_ttl: config.max_ttl,
-            cookies: Default::default(),
+            cookies: LruCache::new(config.max_cookies),
+            config,
             next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
         }
     }
@@ -391,15 +426,15 @@ impl Registrations {
         new_registration: NewRegistration,
     ) -> Result<Registration, TtlOutOfRange> {
         let ttl = new_registration.effective_ttl();
-        if ttl > self.max_ttl {
+        if ttl > self.config.max_ttl {
             return Err(TtlOutOfRange::TooLong {
-                bound: self.max_ttl,
+                bound: self.config.max_ttl,
                 requested: ttl,
             });
         }
-        if ttl < self.min_ttl {
+        if ttl < self.config.min_ttl {
             return Err(TtlOutOfRange::TooShort {
-                bound: self.min_ttl,
+                bound: self.config.min_ttl,
                 requested: ttl,
             });
         }
@@ -506,6 +541,20 @@ impl Registrations {
             .map(move |id| regs.get(&id).expect("bad internal data structure"));
 
         Ok((registrations, new_cookie))
+    }
+
+    // Check per-peer and total registration limits.
+    fn is_allowed(&self, peer_id: PeerId) -> bool {
+        if self
+            .registrations_for_peer
+            .left_values()
+            .filter(|(p, _)| p == &peer_id)
+            .count()
+            >= self.config.max_registrations_per_peer
+        {
+            return false;
+        }
+        self.registrations_for_peer.len() < self.config.max_registrations_total
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
@@ -649,6 +698,7 @@ mod tests {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 0,
             max_ttl: 4,
+            ..Default::default()
         });
 
         let start_time = SystemTime::now();
@@ -685,6 +735,7 @@ mod tests {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 1,
             max_ttl: 10,
+            ..Default::default()
         });
         let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
         let namespace = dummy_registration.namespace.clone();
@@ -707,6 +758,7 @@ mod tests {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 0,
             max_ttl: 10,
+            ..Default::default()
         });
         let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
 
@@ -724,6 +776,7 @@ mod tests {
         let mut registrations = Registrations::with_config(Config {
             min_ttl: 1,
             max_ttl: 10,
+            ..Default::default()
         });
 
         registrations
