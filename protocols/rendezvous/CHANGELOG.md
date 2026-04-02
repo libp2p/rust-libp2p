@@ -3,11 +3,16 @@
 - Port [8fde2dc](https://github.com/libp2p/rust-libp2p/commit/8fde2dc0fae8b433f97c6cdf9ee24f59d51a359c) and make unrequired pub functions private
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 
+- refactor: `Codec` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.17.1
 
 - Add limits for the per-peer and total number of store registrations, and the stored client cookies.
   See [GHSA-cqfx-gf56-8x59](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-cqfx-gf56-8x59) and [GHSA-v5hw-cv9c-rpg7](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-v5hw-cv9c-rpg7)
-
 
 ## 0.17.0
 
@@ -16,7 +21,6 @@
 - Log error instead of panicking when sending response to channel fails
   See [PR 6002](https://github.com/libp2p/rust-libp2p/pull/6002).
 
-<!-- Update to libp2p-swarm v0.47.0 -->
 
 ## 0.16.0
 

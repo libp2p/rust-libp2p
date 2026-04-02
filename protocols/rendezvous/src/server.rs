@@ -21,7 +21,7 @@
 use std::{
     collections::{HashMap, HashSet},
     iter,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 
@@ -32,13 +32,13 @@ use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm, behaviour::FromSwarm,
 };
 
 use crate::{
-    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
     MAX_TTL, MIN_TTL,
+    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
 };
 
 /// Default maximum active registrations per peer.
@@ -217,13 +217,13 @@ impl NetworkBehaviour for Behaviour {
                         if let Some((event, response)) =
                             handle_request(peer_id, request, &mut self.registrations)
                         {
-                            if let Some(resp) = response {
-                                if let Err(resp) = self.inner.send_response(channel, resp) {
-                                    tracing::debug!(
-                                        %peer_id,
-                                        "Failed to send response, peer disconnected {resp:?}"
-                                    );
-                                }
+                            if let Some(resp) = response
+                                && let Err(resp) = self.inner.send_response(channel, resp)
+                            {
+                                tracing::debug!(
+                                    %peer_id,
+                                    "Failed to send response, peer disconnected {resp:?}"
+                                );
                             }
 
                             return Poll::Ready(ToSwarm::GenerateEvent(event));
@@ -470,7 +470,7 @@ impl Registrations {
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
             // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
-                return Err(CookieNamespaceMismatch)
+                return Err(CookieNamespaceMismatch);
             }
             // every other combination is fine
             _ => {}

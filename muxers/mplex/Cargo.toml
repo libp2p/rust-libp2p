@@ -3,7 +3,7 @@ name = "libp2p-mplex"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.43.1"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,7 +19,7 @@ libp2p-identity = { workspace = true }
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.13.2"
+smallvec = "1.15.1"
 tracing = { workspace = true }
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 

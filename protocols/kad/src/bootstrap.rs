@@ -241,9 +241,7 @@ mod tests {
         );
 
         assert!(
-            tokio::time::timeout(MS_5 * 2, status.next())
-                .await
-                .is_ok(),
+            tokio::time::timeout(MS_5 * 2, status.next()).await.is_ok(),
             "bootstrap to be triggered in less then the configured periodic delay because we connected to a new peer"
         );
     }
@@ -264,8 +262,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval(
-    ) {
+    async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval()
+     {
         let mut status = Status::new(Some(MS_100), Some(MS_5));
 
         status.trigger();
@@ -284,8 +282,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap(
-    ) {
+    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap()
+     {
         let mut status = Status::new(None, Some(Duration::ZERO));
 
         status.trigger();
@@ -309,8 +307,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers(
-    ) {
+    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers()
+     {
         let mut status = Status::new(None, Some(MS_100));
 
         status.trigger();
@@ -327,16 +325,14 @@ mod tests {
         Delay::new(MS_100 - MS_5).await;
 
         assert!(
-            tokio::time::timeout(MS_5*2, status.next())
-                .await
-                .is_ok(),
+            tokio::time::timeout(MS_5 * 2, status.next()).await.is_ok(),
             "bootstrap to be triggered in the configured throttle delay because we connected to a new peer"
         );
     }
 
     #[tokio::test]
-    async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic(
-    ) {
+    async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic()
+     {
         let mut status = Status::new(Some(MS_100), None);
 
         // first manually triggering

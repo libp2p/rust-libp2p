@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     fmt,
     fmt::Debug,
 };
@@ -76,6 +76,9 @@ impl MessageCache {
     ///
     /// Returns true if the message didn't already exist in the cache.
     pub(crate) fn put(&mut self, message_id: &MessageId, msg: RawMessage) -> bool {
+        if self.history.is_empty() {
+            return true;
+        }
         match self.msgs.entry(message_id.clone()) {
             Entry::Occupied(_) => {
                 // Don't add duplicate entries to the cache.
@@ -187,17 +190,21 @@ impl MessageCache {
     /// Shift the history array down one and delete messages associated with the
     /// last entry.
     pub(crate) fn shift(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+
         for entry in self.history.pop().expect("history is always > 1") {
-            if let Some((msg, _)) = self.msgs.remove(&entry.mid) {
-                if !msg.validated {
-                    // If GossipsubConfig::validate_messages is true, the implementing
-                    // application has to ensure that Gossipsub::validate_message gets called for
-                    // each received message within the cache timeout time."
-                    tracing::debug!(
-                        message=%&entry.mid,
-                        "The message got removed from the cache without being validated."
-                    );
-                }
+            if let Some((msg, _)) = self.msgs.remove(&entry.mid)
+                && !msg.validated
+            {
+                // If GossipsubConfig::validate_messages is true, the implementing
+                // application has to ensure that Gossipsub::validate_message gets called for
+                // each received message within the cache timeout time."
+                tracing::debug!(
+                    message=%&entry.mid,
+                    "The message got removed from the cache without being validated."
+                );
             }
             tracing::trace!(message=%&entry.mid, "Remove message from the cache");
 

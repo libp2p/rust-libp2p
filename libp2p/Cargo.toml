@@ -3,7 +3,7 @@ name = "libp2p"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.56.0"
+version = "0.57.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -28,7 +28,6 @@ full = [
     "memory-connection-limits",
     "metrics",
     "noise",
-    "peer-store",
     "ping",
     "plaintext",
     "pnet",
@@ -66,9 +65,8 @@ kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
-metrics = ["dep:libp2p-metrics"]
+metrics = ["dep:libp2p-metrics", "libp2p-gossipsub?/metrics"]
 noise = ["dep:libp2p-noise"]
-peer-store = ["dep:libp2p-peer-store"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -111,7 +109,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
-libp2p-peer-store = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
 libp2p-pnet = { workspace = true, optional = true }

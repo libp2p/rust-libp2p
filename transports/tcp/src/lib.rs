@@ -59,6 +59,9 @@ pub struct Config {
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets.
     nodelay: bool,
+    /// `SO_LINGER` to set for opened sockets,
+    /// by default is `None`.
+    linger: Option<Duration>,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
 }
@@ -137,6 +140,7 @@ impl Config {
         Self {
             ttl: None,
             nodelay: true, // Disable Nagle's algorithm by default.
+            linger: None,
             backlog: 1024,
         }
     }
@@ -159,14 +163,20 @@ impl Config {
         self
     }
 
+    /// Configures the `SO_LINGER` option for new sockets.
+    pub fn linger(mut self, duration: Option<Duration>) -> Self {
+        self.linger = duration;
+        self
+    }
+
     /// Configures port reuse for local sockets, which implies
     /// reuse of listening ports for outgoing connections to
     /// enhance NAT traversal capabilities.
     ///
     /// # Deprecation Notice
     ///
-    /// The new implementation works on a per-connaction basis, defined by the behaviour. This
-    /// removes the necessaity to configure the transport for port reuse, instead the behaviour
+    /// The new implementation works on a per-connection basis, defined by the behaviour. This
+    /// removes the necessity to configure the transport for port reuse, instead the behaviour
     /// requiring this behaviour can decide whether to use port reuse or not.
     ///
     /// The API to configure port reuse is part of [`Transport`] and the option can be found in
@@ -175,7 +185,7 @@ impl Config {
     /// If [`PortUse::Reuse`] is enabled, the transport will try to reuse the local port of the
     /// listener. If that's not possible, i.e. there is no listener or the transport doesn't allow
     /// a direct control over ports, a new port (or the default behaviour) is used. If port reuse
-    /// is enabled for a connection, this option will be treated on a best-effor basis.
+    /// is enabled for a connection, this option will be treated on a best-effort basis.
     #[deprecated(
         since = "0.42.0",
         note = "This option does nothing now, since the port reuse policy is now decided on a per-connection basis by the behaviour. The function will be removed in a future release."
@@ -194,9 +204,14 @@ impl Config {
             socket.set_only_v6(true)?;
         }
         if let Some(ttl) = self.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
-        socket.set_nodelay(self.nodelay)?;
+
+        if self.linger.is_some() {
+            socket.set_linger(self.linger)?;
+        }
+
+        socket.set_tcp_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {

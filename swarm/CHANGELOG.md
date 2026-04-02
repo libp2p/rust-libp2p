@@ -1,3 +1,13 @@
+## 0.48.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+## 0.47.1
+
+- Replace `lru::LruCache` with `hashlink::LruCache`.
+  See [PR #6138](https://github.com/libp2p/rust-libp2p/pull/6138)
+
 ## 0.47.0
 
 - Remove `async-std` support.
