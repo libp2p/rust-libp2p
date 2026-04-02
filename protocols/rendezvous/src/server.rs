@@ -26,9 +26,9 @@ use std::{
 };
 
 use bimap::BiMap;
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
 use hashlink::LruCache;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{
