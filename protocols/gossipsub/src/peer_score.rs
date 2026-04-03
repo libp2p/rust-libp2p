@@ -606,9 +606,13 @@ impl PeerScore {
                 topic_stats.mesh_message_deliveries_active = false;
             }
 
-            peer_stats.status = ConnectionStatus::Disconnected {
-                expire: Instant::now() + self.params.retain_score,
-            };
+            let expire = Instant::now()
+                .checked_add(self.params.retain_score)
+                .unwrap_or_else(|| {
+                    tracing::error!("invalid retain_score value, using Instant::now()");
+                    Instant::now()
+                });
+            peer_stats.status = ConnectionStatus::Disconnected { expire };
         }
     }
 

@@ -57,6 +57,10 @@
 - Avoid direct casting from u128 to u64.
   See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
 
+## 0.49.4
+- Harden time arithmetic and bound remote PRUNE backoff.
+  See [CVE](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-xqmp-fxgv-xvq5)
+
 ## 0.49.3
 - Ignore invalid backoff values on peer prune.
   See [CVE GHSA-gc42-3jg7-rxr2](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-gc42-3jg7-rxr2)
