@@ -409,7 +409,7 @@ impl NetworkBehaviour for Behaviour {
                         .get(&event_source)
                         .map(|cs| cs.len())
                         .unwrap_or(0)
-                        > self.config.max_reservations_per_peer)
+                        >= self.config.max_reservations_per_peer)
                     // Deny if it exceeds `max_reservations`.
                     || self
                         .reservations
