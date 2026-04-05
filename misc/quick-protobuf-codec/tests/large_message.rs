@@ -1,6 +1,6 @@
 use asynchronous_codec::Encoder;
 use bytes::BytesMut;
-use quick_protobuf_codec::{proto, Codec};
+use quick_protobuf_codec::{Codec, proto};
 
 #[test]
 fn encode_large_message() {

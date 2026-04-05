@@ -27,21 +27,21 @@ use std::{
 };
 
 use futures::{
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
     channel::mpsc,
     future,
     future::{BoxFuture, Either},
     ready,
     stream::StreamExt,
-    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
 };
 use libp2p_core::{
+    Endpoint, Multiaddr, Transport,
     muxing::{StreamMuxerBox, StreamMuxerExt},
     transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent},
-    Endpoint, Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
-use rand::{thread_rng, RngCore};
+use rand::{RngCore, thread_rng};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]

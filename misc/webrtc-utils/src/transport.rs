@@ -1,6 +1,6 @@
 use std::net::{IpAddr, SocketAddr};
 
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 
 use crate::fingerprint::Fingerprint;
 

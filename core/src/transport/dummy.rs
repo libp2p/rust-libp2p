@@ -26,8 +26,8 @@ use futures::{
 };
 
 use crate::{
-    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
     Multiaddr,
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
 };
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
