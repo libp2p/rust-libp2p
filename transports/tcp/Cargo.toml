@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = { workspace = true }
 futures-timer = "3.0"
 if-watch = { workspace = true }
-libc = "0.2.183"
+libc = "0.2.184"
 libp2p-core = { workspace = true }
 socket2 = { version = "0.6.0", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
