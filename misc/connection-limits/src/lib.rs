@@ -413,9 +413,9 @@ mod tests {
     use super::*;
 
     fn fill_outgoing() -> (Swarm<Behaviour>, Multiaddr, u32) {
-        use rand::Rng;
+        use rand::RngExt;
 
-        let outgoing_limit = rand::thread_rng().gen_range(1..10);
+        let outgoing_limit = rand::rng().random_range(1..10);
 
         let mut network = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new(

@@ -23,7 +23,6 @@
 use std::sync::LazyLock;
 
 use libp2p_identity as identity;
-use rand::{Rng as _, SeedableRng};
 use snow::params::NoiseParams;
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
 use zeroize::Zeroize;
@@ -115,8 +114,7 @@ impl Keypair {
 
     /// Create a new X25519 keypair.
     pub(crate) fn new() -> Keypair {
-        let mut sk_bytes = [0u8; 32];
-        rand::thread_rng().fill(&mut sk_bytes);
+        let mut sk_bytes: [u8; 32] = rand::random();
         let sk = SecretKey(sk_bytes); // Copy
         sk_bytes.zeroize();
         Self::from(sk)
@@ -169,7 +167,7 @@ struct Resolver;
 
 impl snow::resolvers::CryptoResolver for Resolver {
     fn resolve_rng(&self) -> Option<Box<dyn snow::types::Random>> {
-        Some(Box::new(Rng(rand::rngs::StdRng::from_entropy())))
+        Some(Box::new(Rng(rand_core::OsRng)))
     }
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
@@ -209,10 +207,10 @@ impl snow::resolvers::CryptoResolver for Resolver {
     }
 }
 
-/// Wrapper around a CSPRNG to implement `snow::Random` trait for.
-struct Rng(rand::rngs::StdRng);
+/// Wrapper around an OS CSPRNG to implement `snow::Random` trait for.
+struct Rng(rand_core::OsRng);
 
-impl rand::RngCore for Rng {
+impl rand_core::RngCore for Rng {
     fn next_u32(&mut self) -> u32 {
         self.0.next_u32()
     }
@@ -225,12 +223,12 @@ impl rand::RngCore for Rng {
         self.0.fill_bytes(dest)
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         self.0.try_fill_bytes(dest)
     }
 }
 
-impl rand::CryptoRng for Rng {}
+impl rand_core::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
 

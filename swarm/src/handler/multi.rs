@@ -33,7 +33,7 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
+use rand::RngExt;
 
 use crate::{
     Stream,
@@ -247,7 +247,7 @@ where
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
+        // Calling `random_range(0, 0)` (see below) would panic, so we have return early to avoid
         // that situation.
         if self.handlers.is_empty() {
             return Poll::Pending;
@@ -255,7 +255,7 @@ where
 
         // Not always polling handlers in the same order
         // should give anyone the chance to make progress.
-        let pos = rand::thread_rng().gen_range(0..self.handlers.len());
+        let pos = rand::rng().random_range(0..self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {
             if let Poll::Ready(e) = h.poll(cx) {

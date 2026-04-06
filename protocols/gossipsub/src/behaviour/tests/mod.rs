@@ -49,7 +49,7 @@ use std::collections::HashMap;
 use byteorder::{BigEndian, ByteOrder};
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
-use rand::Rng;
+use rand::RngExt;
 
 use super::*;
 use crate::{
@@ -644,13 +644,15 @@ pub(super) fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
 /// * `seq` - Mutable sequence counter (incremented each call)
 /// * `topics` - Pool of topics to randomly select from
 pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..10024)).map(|_| rng.r#gen()).collect(),
+        data: (0..rng.random_range(10..10024))
+            .map(|_| rng.random())
+            .collect(),
         sequence_number: Some(*seq),
-        topic: topics[rng.gen_range(0..topics.len())].clone(),
+        topic: topics[rng.random_range(0..topics.len())].clone(),
         signature: None,
         key: None,
         validated: true,

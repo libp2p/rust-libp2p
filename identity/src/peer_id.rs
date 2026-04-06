@@ -20,8 +20,6 @@
 
 use std::{fmt, str::FromStr};
 
-#[cfg(feature = "rand")]
-use rand::Rng;
 use sha2::Digest as _;
 use thiserror::Error;
 
@@ -106,7 +104,7 @@ impl PeerId {
     /// This is useful for randomly walking on a DHT, or for testing purposes.
     #[cfg(feature = "rand")]
     pub fn random() -> PeerId {
-        let peer_id = rand::thread_rng().gen::<[u8; 32]>();
+        let peer_id: [u8; 32] = rand::random();
         PeerId {
             multihash: Multihash::wrap(0x0, &peer_id).expect("The digest size is never too large"),
         }

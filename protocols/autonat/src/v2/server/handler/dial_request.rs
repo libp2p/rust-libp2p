@@ -1,6 +1,7 @@
 use std::{
     convert::Infallible,
     io,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
 };
@@ -20,7 +21,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
-use rand_core::RngCore;
+use rand::Rng;
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,
@@ -50,14 +51,18 @@ pub struct Handler<R> {
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     dial_back_cmd_receiver: mpsc::Receiver<DialBackCommand>,
     inbound: FuturesSet<Event>,
-    rng: R,
+    rng: Arc<Mutex<R>>,
 }
 
 impl<R> Handler<R>
 where
-    R: RngCore,
+    R: Rng + Send + 'static,
 {
-    pub(crate) fn new(client_id: PeerId, observed_multiaddr: Multiaddr, rng: R) -> Self {
+    pub(crate) fn new(
+        client_id: PeerId,
+        observed_multiaddr: Multiaddr,
+        rng: Arc<Mutex<R>>,
+    ) -> Self {
         let (dial_back_cmd_sender, dial_back_cmd_receiver) = mpsc::channel(10);
         Self {
             client_id,
@@ -75,7 +80,7 @@ where
 
 impl<R> ConnectionHandler for Handler<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: Rng + Send + 'static,
 {
     type FromBehaviour = Infallible;
     type ToBehaviour = Either<DialBackCommand, Event>;
@@ -132,7 +137,10 @@ where
                         self.observed_multiaddr.clone(),
                         self.client_id,
                         self.dial_back_cmd_sender.clone(),
-                        self.rng.clone(),
+                        {
+                            let mut rng = self.rng.lock().expect("lock to not be poisoned");
+                            DialDataRequest::from_rng(0, &mut *rng).num_bytes
+                        },
                     ))
                     .is_err()
                 {
@@ -195,7 +203,7 @@ async fn handle_request(
     observed_multiaddr: Multiaddr,
     client: PeerId,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    rng: impl RngCore,
+    dial_data_num_bytes: usize,
 ) -> Event {
     let mut coder = Coder::new(stream);
     let mut all_addrs = Vec::new();
@@ -205,7 +213,7 @@ async fn handle_request(
         &mut coder,
         observed_multiaddr.clone(),
         dial_back_cmd_sender,
-        rng,
+        dial_data_num_bytes,
         &mut all_addrs,
         &mut tested_addr_opt,
         &mut data_amount,
@@ -254,7 +262,7 @@ async fn handle_request_internal<I>(
     coder: &mut Coder<I>,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    mut rng: impl RngCore,
+    dial_data_num_bytes: usize,
     all_addrs: &mut Vec<Multiaddr>,
     tested_addrs: &mut Option<Multiaddr>,
     data_amount: &mut usize,
@@ -278,7 +286,10 @@ where
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {
-        let dial_data_request = DialDataRequest::from_rng(idx, &mut rng);
+        let dial_data_request = DialDataRequest {
+            addr_idx: idx,
+            num_bytes: dial_data_num_bytes,
+        };
         let mut rem_data = dial_data_request.num_bytes;
         coder
             .send(Response::Data(dial_data_request))

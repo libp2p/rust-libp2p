@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow = "1"
 futures = { workspace = true }
-rand = "0.8.5"
+rand = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

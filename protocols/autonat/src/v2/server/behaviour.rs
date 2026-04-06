@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     io,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -13,16 +14,16 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     dummy,
 };
-use rand_core::{OsRng, RngCore};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 use crate::v2::server::handler::{
     Handler, dial_back,
     dial_request::{self, DialBackCommand, DialBackStatus},
 };
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = StdRng>
 where
-    R: Clone + Send + RngCore + 'static,
+    R: Send + Rng + 'static,
 {
     dialing_dial_back: HashMap<ConnectionId, DialBackCommand>,
     pending_events: VecDeque<
@@ -31,31 +32,31 @@ where
             <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
         >,
     >,
-    rng: R,
+    rng: Arc<Mutex<R>>,
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<StdRng> {
     fn default() -> Self {
-        Self::new(OsRng)
+        Self::new(StdRng::from_rng(&mut rand::rng()))
     }
 }
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: Rng + Send + 'static,
 {
     pub fn new(rng: R) -> Self {
         Self {
             dialing_dial_back: HashMap::new(),
             pending_events: VecDeque::new(),
-            rng,
+            rng: Arc::new(Mutex::new(rng)),
         }
     }
 }
 
 impl<R> NetworkBehaviour for Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: Rng + Send + 'static,
 {
     type ConnectionHandler = Handler<R>;
 

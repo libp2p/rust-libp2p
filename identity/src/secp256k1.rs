@@ -25,6 +25,7 @@ use core::{cmp, fmt, hash};
 use asn1_der::typed::{DerDecodable, Sequence};
 use k256::{
     ecdsa::Signature,
+    elliptic_curve::rand_core::OsRng,
     sha2::{Digest as ShaDigestTrait, Sha256},
     ProjectivePoint,
 };
@@ -94,7 +95,7 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::thread_rng()))
+        SecretKey(k256::ecdsa::SigningKey::random(&mut OsRng))
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.

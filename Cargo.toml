@@ -131,6 +131,7 @@ multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
+rand = "0.10"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rcgen = "0.13"
