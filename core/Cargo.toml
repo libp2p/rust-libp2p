@@ -20,7 +20,7 @@ libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 multistream-select = { workspace = true }
-parking_lot = "0.12.3"
+parking_lot = "0.12.5"
 pin-project = "1.1.11"
 quick-protobuf = "0.8"
 rand = "0.8"
