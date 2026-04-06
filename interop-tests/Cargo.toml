@@ -46,7 +46,7 @@ wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }
 wasm-logger = { version = "0.2.0" }
 web-time = { workspace = true }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
 futures-timer = "3.0.3"
 
