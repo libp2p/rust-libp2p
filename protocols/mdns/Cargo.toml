@@ -18,7 +18,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8.3"
 smallvec = "1.15.1"
-socket2 = { version = "0.6.0", features = ["all"] }
+socket2 = { version = "0.6.3", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true }
 tracing = { workspace = true }
 hickory-proto = { workspace = true, features = ["mdns"] }
