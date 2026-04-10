@@ -19,22 +19,35 @@ mod mock_delay {
     use std::time::Duration;
 
     #[derive(Debug)]
-    pub(super) struct Delay(Pin<Box<tokio::time::Sleep>>);
+    pub(super) enum Delay {
+        Tokio(Pin<Box<tokio::time::Sleep>>),
+        Futures(futures_timer::Delay),
+    }
 
     impl Delay {
         pub(super) fn new(dur: Duration) -> Self {
-            Self(Box::pin(tokio::time::sleep(dur)))
+            if tokio::runtime::Handle::try_current().is_ok() {
+                Self::Tokio(Box::pin(tokio::time::sleep(dur)))
+            } else {
+                Self::Futures(futures_timer::Delay::new(dur))
+            }
         }
 
         pub(super) fn reset(&mut self, dur: Duration) {
-            self.0.as_mut().reset(tokio::time::Instant::now() + dur);
+            match self {
+                Self::Tokio(sleep) => sleep.as_mut().reset(tokio::time::Instant::now() + dur),
+                Self::Futures(delay) => delay.reset(dur),
+            }
         }
     }
 
     impl Future for Delay {
         type Output = ();
         fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            self.0.as_mut().poll(cx)
+            match &mut *self {
+                Self::Tokio(sleep) => sleep.as_mut().poll(cx),
+                Self::Futures(delay) => Pin::new(delay).poll(cx),
+            }
         }
     }
 }
@@ -295,8 +308,8 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval(
-    ) {
+    async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval()
+     {
         let mut status = Status::new(Some(MS_100), Some(MS_5));
 
         status.trigger();
@@ -315,8 +328,8 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap(
-    ) {
+    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap()
+     {
         let mut status = Status::new(None, Some(Duration::ZERO));
 
         status.trigger();
@@ -340,8 +353,8 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers(
-    ) {
+    async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers()
+     {
         let mut status = Status::new(None, Some(MS_100));
 
         status.trigger();
@@ -364,8 +377,8 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic(
-    ) {
+    async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic()
+     {
         let mut status = Status::new(Some(MS_100), None);
 
         // first manually triggering
