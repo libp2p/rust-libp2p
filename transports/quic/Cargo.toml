@@ -21,7 +21,7 @@ rustls = { version = "0.23.28", default-features = false }
 thiserror = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
-socket2 = "0.6.0"
+socket2 = "0.6.3"
 ring = { workspace = true }
 
 [features]
