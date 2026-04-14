@@ -25,11 +25,11 @@ use std::collections::BTreeSet;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ToSwarm;
 
-use super::{count_control_msgs, disconnect_peer, flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, count_control_msgs, disconnect_peer, flush_events};
 use crate::{
+    IdentTopic as Topic,
     config::{Config, ConfigBuilder},
     types::{Prune, RawMessage, RpcOut, Subscription, SubscriptionAction},
-    IdentTopic as Topic,
 };
 
 /// tests that a peer added as explicit peer gets connected to
@@ -264,6 +264,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
+                options: Default::default(),
             }],
             peer,
         );
@@ -312,6 +313,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
+                options: Default::default(),
             }],
             peer,
         );

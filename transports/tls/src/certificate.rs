@@ -511,8 +511,8 @@ mod tests {
 
                 let cert = parse_unverified(cert).unwrap();
                 assert!(cert.verify().is_err()); // Because p2p extension
-                                                 // was not signed with the private key
-                                                 // of the certificate.
+                // was not signed with the private key
+                // of the certificate.
                 assert_eq!(cert.signature_scheme(), Ok($scheme));
             }
         };

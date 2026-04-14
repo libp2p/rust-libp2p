@@ -53,8 +53,8 @@
 use std::{future::Future, pin::Pin};
 
 use futures::{
-    task::{Context, Poll},
     AsyncRead, AsyncWrite,
+    task::{Context, Poll},
 };
 use multiaddr::Multiaddr;
 
