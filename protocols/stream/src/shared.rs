@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     io,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -9,7 +9,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, Stream, StreamProtocol};
 use rand::seq::IteratorRandom as _;
 
-use crate::{handler::NewStream, AlreadyRegistered, IncomingStreams};
+use crate::{AlreadyRegistered, IncomingStreams, handler::NewStream};
 
 pub(crate) struct Shared {
     /// Tracks the supported inbound protocols created via

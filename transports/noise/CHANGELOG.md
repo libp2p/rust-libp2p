@@ -1,3 +1,8 @@
+## 0.47.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.46.1
 - Remove `once_cell` dependency.
   See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)

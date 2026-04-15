@@ -6,17 +6,16 @@ use std::{
 };
 
 use futures::{
-    channel::{mpsc, oneshot},
     StreamExt as _,
+    channel::{mpsc, oneshot},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    self as swarm,
+    self as swarm, ConnectionHandler, Stream, StreamProtocol,
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
-    ConnectionHandler, Stream, StreamProtocol,
 };
 
-use crate::{shared::Shared, upgrade::Upgrade, OpenStreamError};
+use crate::{OpenStreamError, shared::Shared, upgrade::Upgrade};
 
 pub struct Handler {
     remote: PeerId,
