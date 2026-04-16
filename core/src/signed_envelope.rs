@@ -4,7 +4,7 @@ use libp2p_identity::{Keypair, PublicKey, SigningError};
 use quick_protobuf::{BytesReader, Writer};
 use unsigned_varint::encode::usize_buffer;
 
-use crate::{proto, DecodeError};
+use crate::{DecodeError, proto};
 
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the
 /// public key that can be used to verify the signature.

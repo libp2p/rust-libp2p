@@ -6,8 +6,8 @@ use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
 
 use crate::{
-    bindings::{WebTransportHash, WebTransportOptions},
     Error,
+    bindings::{WebTransportHash, WebTransportOptions},
 };
 
 pub(crate) struct Endpoint {

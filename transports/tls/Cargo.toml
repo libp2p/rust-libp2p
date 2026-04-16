@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.6.3"
+version = "0.7.0"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
@@ -22,7 +22,7 @@ yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.23.9"
+version = "0.23.28"
 default-features = false
 features = ["ring", "std"] # Must enable this to allow for custom verification code.
 

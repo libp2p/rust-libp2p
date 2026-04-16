@@ -2,7 +2,7 @@
 name = "libp2p-mdns"
 edition.workspace = true
 rust-version = { workspace = true }
-version = "0.48.0"
+version = "0.49.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -18,7 +18,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8.3"
 smallvec = "1.15.1"
-socket2 = { version = "0.6.0", features = ["all"] }
+socket2 = { version = "0.6.3", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true }
 tracing = { workspace = true }
 hickory-proto = { workspace = true, features = ["mdns"] }

@@ -3,7 +3,7 @@ name = "libp2p-websocket"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "WebSocket transport for libp2p"
-version = "0.45.2"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ either = "1.12.0"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.3"
+parking_lot = "0.12.5"
 pin-project-lite = "0.2.17"
 rw-stream-sink = { workspace = true }
 soketto = "0.8.0"
