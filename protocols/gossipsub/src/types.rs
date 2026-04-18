@@ -358,6 +358,8 @@ pub enum RpcOut {
         requests_partial: bool,
         supports_partial: bool,
     },
+    /// Subscribe to multiple topics in a single RPC (hello packet on new connection).
+    SubscribeMany(Vec<(TopicHash, bool, bool)>),
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
     /// Send a GRAFT control message.
@@ -392,6 +394,7 @@ impl RpcOut {
         matches!(
             self,
             RpcOut::Subscribe { .. }
+                | RpcOut::SubscribeMany(_)
                 | RpcOut::Unsubscribe(_)
                 | RpcOut::Graft(_)
                 | RpcOut::Prune(_)
@@ -428,6 +431,20 @@ impl From<RpcOut> for proto::RPC {
                     requestsPartial: Some(requests_partial),
                     supportsPartial: Some(supports_partial),
                 }],
+                control: None,
+                partial: None,
+            },
+            RpcOut::SubscribeMany(topics) => proto::RPC {
+                publish: Vec::new(),
+                subscriptions: topics
+                    .into_iter()
+                    .map(|(topic, requests_partial, supports_partial)| proto::SubOpts {
+                        subscribe: Some(true),
+                        topic_id: Some(topic.into_string()),
+                        requestsPartial: Some(requests_partial),
+                        supportsPartial: Some(supports_partial),
+                    })
+                    .collect(),
                 control: None,
                 partial: None,
             },
