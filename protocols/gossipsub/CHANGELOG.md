@@ -54,6 +54,9 @@
 - Refactor gossipsub with in-place negative-score peer removal.
   See [PR 6209](https://github.com/libp2p/rust-libp2p/pull/6209).
 
+- Remove `wasm-bindgen` feature and make `wasm` support implicit.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
 - Avoid direct casting from u128 to u64.
   See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
 
