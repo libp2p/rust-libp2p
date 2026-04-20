@@ -32,10 +32,11 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionId, FromSwarm, NetworkBehaviour, ToSwarm};
 
 use super::{
-    add_peer, add_peer_with_addr, count_control_msgs, proto_to_message, random_message,
-    DefaultBehaviourTestBuilder,
+    DefaultBehaviourTestBuilder, add_peer, add_peer_with_addr, count_control_msgs,
+    proto_to_message, random_message,
 };
 use crate::{
+    IdentTopic as Topic,
     behaviour::{ConnectionEstablished, PortUse},
     config::{Config, ConfigBuilder},
     error::ValidationError,
@@ -47,7 +48,6 @@ use crate::{
         ControlAction, IHave, IWant, MessageAcceptance, PeerInfo, Prune, RawMessage, RpcIn, RpcOut,
         Subscription, SubscriptionAction,
     },
-    IdentTopic as Topic,
 };
 
 #[test]
@@ -293,13 +293,9 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
         RpcOut::IHave(IHave {
             topic_hash,
             message_ids,
-        }) => {
-            if topic_hash == &topics[0] && message_ids.iter().any(|id| id == &msg_id) {
-                assert_eq!(peer, &p2);
-                true
-            } else {
-                false
-            }
+        }) if topic_hash == &topics[0] && message_ids.iter().any(|id| id == &msg_id) => {
+            assert_eq!(peer, &p2);
+            true
         }
         _ => false,
     });
@@ -379,21 +375,25 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             });
 
     // the message got sent to p2
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id)
+    );
     // the message got not sent to p1
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id)));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id))
+    );
 }
 
 #[test]
@@ -455,13 +455,9 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
     // check that we sent exactly one IWANT request to p2
     let (control_msgs, _) = count_control_msgs(queues, |peer, c| match c {
-        RpcOut::IWant(IWant { message_ids }) => {
-            if message_ids.iter().any(|m| m == &msg_id) {
-                assert_eq!(peer, &p2);
-                true
-            } else {
-                false
-            }
+        RpcOut::IWant(IWant { message_ids }) if message_ids.iter().any(|m| m == &msg_id) => {
+            assert_eq!(peer, &p2);
+            true
         }
         _ => false,
     });
@@ -664,6 +660,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     let subscription = Subscription {
         action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
+        options: Default::default(),
     };
 
     let control_action = ControlAction::IHave(IHave {
@@ -683,6 +680,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -709,6 +708,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: Vec::new(),
         },
@@ -829,12 +830,14 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 
     // mesh contains retain_scores best peers
-    assert!(gs.mesh[&topics[0]].is_superset(
-        &peers[(mesh_n_high - config.retain_scores())..]
-            .iter()
-            .cloned()
-            .collect()
-    ));
+    assert!(
+        gs.mesh[&topics[0]].is_superset(
+            &peers[(mesh_n_high - config.retain_scores())..]
+                .iter()
+                .cloned()
+                .collect()
+        )
+    );
 }
 
 #[test]
@@ -1303,6 +1306,8 @@ fn test_scoring_p4_invalid_signature() {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: vec![(m, ValidationError::InvalidSignature)],
         },

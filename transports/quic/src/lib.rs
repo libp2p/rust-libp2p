@@ -32,7 +32,7 @@
 //! # #[tokio::main]
 //! # async fn main() -> std::io::Result<()> {
 //! #
-//! use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
+//! use libp2p_core::{Multiaddr, Transport, transport::ListenerId};
 //! use libp2p_quic as quic;
 //!
 //! let keypair = libp2p_identity::Keypair::generate_ed25519();
@@ -70,9 +70,9 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
+pub use provider::Provider;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
-pub use provider::Provider;
 pub use transport::GenTransport;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].

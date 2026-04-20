@@ -34,17 +34,17 @@ use multiaddr::Multiaddr;
 
 pub use crate::upgrade::Version;
 use crate::{
+    Negotiated,
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, DialOpts, ListenerId,
-        Transport, TransportError, TransportEvent,
+        DialOpts, ListenerId, Transport, TransportError, TransportEvent, and_then::AndThen,
+        boxed::boxed, timeout::TransportTimeout,
     },
     upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
+        self, InboundConnectionUpgrade, InboundUpgradeApply, OutboundConnectionUpgrade,
+        OutboundUpgradeApply, UpgradeError, apply_inbound, apply_outbound,
     },
-    Negotiated,
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
@@ -506,9 +506,10 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
-                        .map_err(TransportUpgradeError::Transport))
-                    {
+                    let (i, c) = match ready!(
+                        TryFuture::try_poll(this.future.as_mut(), cx)
+                            .map_err(TransportUpgradeError::Transport)
+                    ) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
@@ -565,9 +566,10 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
-                        .map_err(TransportUpgradeError::Transport))
-                    {
+                    let (i, c) = match ready!(
+                        TryFuture::try_poll(this.future.as_mut(), cx)
+                            .map_err(TransportUpgradeError::Transport)
+                    ) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
@@ -577,9 +579,10 @@ where
                     future::Either::Right((i, apply_inbound(c, u)))
                 }
                 future::Either::Right((i, ref mut up)) => {
-                    let d = match ready!(TryFuture::try_poll(Pin::new(up), cx)
-                        .map_err(TransportUpgradeError::Upgrade))
-                    {
+                    let d = match ready!(
+                        TryFuture::try_poll(Pin::new(up), cx)
+                            .map_err(TransportUpgradeError::Upgrade)
+                    ) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };

@@ -39,19 +39,13 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 use web_time::Instant;
 
-use crate::{
-    behaviour::{self, CircuitId},
-    copy_future::CopyFuture,
-    proto,
-    protocol::{inbound_hop, outbound_stop},
-    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
-};
+use crate::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME, behaviour::{self, CircuitId}, copy_future::CopyFuture, proto, protocol::{inbound_hop, outbound_stop}};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -403,11 +397,11 @@ impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint, status: behaviour::Status) -> Handler {
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             outbound_workers: futures_bounded::FuturesMap::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             endpoint,
@@ -646,7 +640,7 @@ impl ConnectionHandler for Handler {
                             dst_peer_id,
                             error: None,
                         },
-                    ))
+                    ));
                 }
                 Err(e) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -655,7 +649,7 @@ impl ConnectionHandler for Handler {
                             dst_peer_id,
                             error: Some(e),
                         },
-                    ))
+                    ));
                 }
             }
         }
@@ -878,7 +872,7 @@ impl ConnectionHandler for Handler {
                         Ok(()) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenied { status },
-                            ))
+                            ));
                         }
                         Err(error) => {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
