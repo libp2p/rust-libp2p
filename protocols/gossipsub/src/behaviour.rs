@@ -2992,7 +2992,10 @@ where
                 }
 
                 #[cfg(feature = "partial_messages")]
-                if self.partial_messages_extension.requests_partial(peer_id, topic) {
+                if self
+                    .partial_messages_extension
+                    .requests_partial(peer_id, topic)
+                {
                     continue;
                 }
 
