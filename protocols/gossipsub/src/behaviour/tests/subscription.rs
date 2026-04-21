@@ -118,7 +118,7 @@ fn test_unsubscribe() {
         "should be able to unsubscribe successfully from each topic",
     );
 
-    // collect all the subscriptions (hello RPC on connection is now a single SubscribeMany)
+    // collect all the subscriptions
     let subscriptions = queues
         .into_values()
         .fold(0, |mut collected_subscriptions, mut queue| {
