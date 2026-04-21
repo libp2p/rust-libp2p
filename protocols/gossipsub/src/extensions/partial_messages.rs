@@ -672,10 +672,7 @@ impl Debug for PartialMessage {
         f.debug_struct("PartialMessage")
             .field("group_id", &self.group_id)
             .field("topic_hash", &self.topic_hash)
-            .field(
-                "body length",
-                &self.body.as_ref().map(|body| body.len()).unwrap_or(0),
-            )
+            .field("body length", &self.body.as_ref().map(|body| body.len()))
             .field("metadata", &self.metadata)
             .finish()
     }
