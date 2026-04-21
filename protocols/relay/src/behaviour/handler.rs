@@ -34,8 +34,8 @@ use futures::{
 };
 use futures_timer::Delay;
 use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
     ConnectedPoint, Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -45,7 +45,13 @@ use libp2p_swarm::{
 };
 use web_time::Instant;
 
-use crate::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME, behaviour::{self, CircuitId}, copy_future::CopyFuture, proto, protocol::{inbound_hop, outbound_stop}};
+use crate::{
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
+    behaviour::{self, CircuitId},
+    copy_future::CopyFuture,
+    proto,
+    protocol::{inbound_hop, outbound_stop},
+};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);

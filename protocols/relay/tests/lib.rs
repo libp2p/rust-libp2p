@@ -522,24 +522,18 @@ async fn relay_manual_status_overrides_auto() {
         .relay
         .set_status(Some(relay::Status::Disable));
 
-    loop {
-        match relay.select_next_some().await {
-            SwarmEvent::NewListenAddr { .. } => break,
-            e => panic!("{e:?}"),
-        }
+    match relay.select_next_some().await {
+        SwarmEvent::NewListenAddr { .. } => {}
+        e => panic!("{e:?}"),
     }
 
     relay.add_external_address(relay_addr.clone());
 
     relay.behaviour_mut().relay.set_status(None);
 
-    let status = loop {
-        match relay.select_next_some().await {
-            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
-                break status;
-            }
-            e => panic!("{e:?}"),
-        }
+    let status = match relay.select_next_some().await {
+        SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => status,
+        e => panic!("{e:?}"),
     };
 
     assert_eq!(status, relay::Status::Enable);

@@ -23,7 +23,7 @@
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
 use std::{
-    collections::{HashMap, HashSet, VecDeque, hash_map},
+    collections::{HashMap, VecDeque, hash_map},
     num::NonZeroU32,
     ops::Add,
     task::{Context, Poll, Waker},
@@ -33,7 +33,11 @@ use std::{
 use either::Either;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{derive_prelude::ConnectionEstablished, dummy, ConnectionClosed, ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm};
+use libp2p_swarm::{
+    ConnectionClosed, ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm,
+    NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    derive_prelude::ConnectionEstablished, dummy,
+};
 use web_time::Instant;
 
 use crate::{
@@ -364,7 +368,9 @@ impl Behaviour {
 
         self.status = match (self.external_addresses.as_slice(), self.status) {
             ([], Status::Enable) => {
-                tracing::debug!("disabling protocol advertisement because we no longer have any confirmed external addresses");
+                tracing::debug!(
+                    "disabling protocol advertisement because we no longer have any confirmed external addresses"
+                );
                 Status::Disable
             }
             ([], Status::Disable) => {
