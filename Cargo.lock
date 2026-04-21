@@ -3007,11 +3007,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-<<<<<<< HEAD
-version = "0.21.2"
-=======
 version = "0.22.0"
->>>>>>> master
 dependencies = [
  "asynchronous-codec",
  "bytes",
