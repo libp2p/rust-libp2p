@@ -1,5 +1,6 @@
 ## 0.50.0
-
+- Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
+  See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
