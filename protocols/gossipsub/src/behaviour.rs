@@ -2991,6 +2991,11 @@ where
                     continue;
                 }
 
+                #[cfg(feature = "partial_messages")]
+                if self.partial_messages_extension.requests_partial(peer_id, topic) {
+                    continue;
+                }
+
                 tracing::debug!(%peer_id, message_id=%msg_id, "Sending message to peer");
 
                 self.send_message(
