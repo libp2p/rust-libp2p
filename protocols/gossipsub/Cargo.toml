@@ -11,11 +11,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
 metrics = ["prometheus-client"]
+partial_messages = []
 
 [dependencies]
-async-channel = "2.3.1"
+async-channel = "2.5.0"
 asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
@@ -23,8 +23,7 @@ bytes = "1.11"
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-timer = "3.0.2"
-getrandom = { workspace = true }
+futures-timer = { workspace = true}
 hashlink = { workspace = true }
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
@@ -34,7 +33,7 @@ libp2p-swarm = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-regex = "1.10.5"
+regex = "1.12.3"
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.8"
 tracing = { workspace = true }
@@ -48,6 +47,10 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
+
+[target.'cfg(target_family="wasm")'.dependencies]
+futures-timer = { workspace = true, features = ["wasm-bindgen"] }
+getrandom = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

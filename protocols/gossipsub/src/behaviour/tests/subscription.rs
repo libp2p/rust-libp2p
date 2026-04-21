@@ -25,13 +25,13 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
 
-use super::{flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, flush_events};
 use crate::{
+    IdentTopic as Topic,
     behaviour::tests::BehaviourTestBuilder,
     subscription_filter::WhitelistSubscriptionFilter,
     transform::IdentityTransform,
     types::{PeerDetails, PeerKind, RpcOut, Subscription, SubscriptionAction},
-    IdentTopic as Topic,
 };
 
 #[test]
@@ -59,7 +59,7 @@ fn test_subscribe() {
         .into_values()
         .fold(0, |mut collected_subscriptions, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(_)) = queue.try_pop() {
+                if let Some(RpcOut::Subscribe { .. }) = queue.try_pop() {
                     collected_subscriptions += 1
                 }
             }
@@ -119,7 +119,7 @@ fn test_unsubscribe() {
         .into_values()
         .fold(0, |mut collected_subscriptions, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(_)) = queue.try_pop() {
+                if let Some(RpcOut::Subscribe { .. }) = queue.try_pop() {
                     collected_subscriptions += 1
                 }
             }
@@ -141,9 +141,9 @@ fn test_unsubscribe() {
 /// Test JOIN(topic) functionality.
 #[test]
 fn test_join() {
-    use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+    use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
     use libp2p_identity::PeerId;
-    use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionId, NetworkBehaviour};
+    use libp2p_swarm::{ConnectionId, NetworkBehaviour, behaviour::ConnectionEstablished};
 
     use crate::{behaviour::FromSwarm, queue::Queue};
 
@@ -240,6 +240,7 @@ fn test_join() {
             random_peer,
             PeerDetails {
                 kind: PeerKind::Floodsub,
+                extensions: None,
                 outbound: false,
                 connections: vec![connection_id],
                 topics: Default::default(),
@@ -308,7 +309,7 @@ fn test_peer_added_on_connection() {
         HashMap::<libp2p_identity::PeerId, Vec<String>>::new(),
         |mut collected_subscriptions, (peer, mut queue)| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(topic)) = queue.try_pop() {
+                if let Some(RpcOut::Subscribe { topic, .. }) = queue.try_pop() {
                     let mut peer_subs = collected_subscriptions.remove(&peer).unwrap_or_default();
                     peer_subs.push(topic.into_string());
                     collected_subscriptions.insert(peer, peer_subs);
@@ -367,12 +368,14 @@ fn test_handle_received_subscriptions() {
         .map(|topic_hash| Subscription {
             action: SubscriptionAction::Subscribe,
             topic_hash: topic_hash.clone(),
+            options: Default::default(),
         })
         .collect::<Vec<Subscription>>();
 
     subscriptions.push(Subscription {
         action: SubscriptionAction::Unsubscribe,
         topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
+        options: Default::default(),
     });
 
     let unknown_peer = PeerId::random();
@@ -430,6 +433,7 @@ fn test_handle_received_subscriptions() {
         &[Subscription {
             action: SubscriptionAction::Unsubscribe,
             topic_hash: topic_hashes[0].clone(),
+            options: Default::default(),
         }],
         &peers[0],
     );

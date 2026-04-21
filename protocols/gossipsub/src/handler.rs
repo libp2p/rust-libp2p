@@ -24,23 +24,23 @@ use std::{
 };
 
 use asynchronous_codec::Framed;
-use futures::{future::Either, prelude::*, StreamExt};
-use libp2p_core::{upgrade::DeniedUpgrade, PeerId};
+use futures::{StreamExt, future::Either, prelude::*};
+use libp2p_core::{PeerId, upgrade::DeniedUpgrade};
 use libp2p_swarm::{
+    Stream,
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
     },
-    Stream,
 };
 use web_time::Instant;
 
 use crate::{
+    ValidationError,
     protocol::{GossipsubCodec, ProtocolConfig},
     queue::Queue,
     rpc_proto::proto,
     types::{PeerKind, RawMessage, RpcIn, RpcOut},
-    ValidationError,
 };
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
@@ -156,7 +156,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
@@ -232,13 +232,13 @@ impl EnabledHandler {
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     > {
-        if !self.peer_kind_sent {
-            if let Some(peer_kind) = self.peer_kind.as_ref() {
-                self.peer_kind_sent = true;
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    HandlerEvent::PeerKind(*peer_kind),
-                ));
-            }
+        if !self.peer_kind_sent
+            && let Some(peer_kind) = self.peer_kind.as_ref()
+        {
+            self.peer_kind_sent = true;
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                HandlerEvent::PeerKind(*peer_kind),
+            ));
         }
 
         // determine if we need to create the outbound stream
@@ -288,7 +288,7 @@ impl EnabledHandler {
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
-                            message.into_protobuf(),
+                            Box::new(message.into_protobuf()),
                         ));
                         continue;
                     }
@@ -300,7 +300,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
                     match Sink::poll_ready(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
-                            match Sink::start_send(Pin::new(&mut substream), message) {
+                            match Sink::start_send(Pin::new(&mut substream), *message) {
                                 Ok(()) => {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))

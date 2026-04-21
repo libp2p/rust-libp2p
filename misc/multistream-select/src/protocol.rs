@@ -37,8 +37,8 @@ use futures::{io::IoSlice, prelude::*, ready};
 use unsigned_varint as uvi;
 
 use crate::{
-    length_delimited::{LengthDelimited, LengthDelimitedReader},
     Version,
+    length_delimited::{LengthDelimited, LengthDelimitedReader},
 };
 
 /// The maximum number of supported protocols that can be processed.

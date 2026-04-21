@@ -22,9 +22,9 @@ use std::{io, pin::Pin};
 
 use futures::prelude::*;
 use libp2p_core::{
+    Endpoint,
     transport::{DialOpts, ListenerId, MemoryTransport, PortUse, Transport},
     upgrade::{self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
-    Endpoint,
 };
 use libp2p_identity as identity;
 use libp2p_mplex::Config;

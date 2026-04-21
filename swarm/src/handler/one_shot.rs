@@ -28,12 +28,12 @@ use std::{
 use smallvec::SmallVec;
 
 use crate::{
+    StreamUpgradeError,
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
     },
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
-    StreamUpgradeError,
 };
 
 /// A [`ConnectionHandler`] that opens a new substream for each request.
@@ -228,9 +228,11 @@ mod tests {
             Default::default(),
         );
 
-        block_on(poll_fn(|cx| loop {
-            if handler.poll(cx).is_pending() {
-                return Poll::Ready(());
+        block_on(poll_fn(|cx| {
+            loop {
+                if handler.poll(cx).is_pending() {
+                    return Poll::Ready(());
+                }
             }
         }));
 

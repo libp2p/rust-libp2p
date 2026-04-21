@@ -27,7 +27,7 @@ use futures::{
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
-    transport::{choice::OrTransport, Boxed, MemoryTransport, Transport},
+    transport::{Boxed, MemoryTransport, Transport, choice::OrTransport},
     upgrade,
 };
 use libp2p_identity as identity;
@@ -35,7 +35,7 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{dial_opts::DialOpts, Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
@@ -318,7 +318,7 @@ async fn connection_established_to(
             } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
-                break
+                break;
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::OutboundCircuitEstablished { .. },
@@ -516,6 +516,147 @@ async fn reuse_connection() {
     .await;
 }
 
+#[tokio::test]
+async fn relay_auto_enables_on_external_address() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay.add_external_address(relay_addr.clone());
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn relay_auto_disables_on_external_address_removal() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    // Wait for auto-enable.
+    loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged {
+                status: relay::Status::Enable,
+            })) => break,
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    }
+
+    relay.remove_external_address(&relay_addr);
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::Behaviour(RelayEvent::Ping(_)) => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Disable);
+}
+
+#[tokio::test]
+async fn relay_manual_status_overrides_auto() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    match relay.select_next_some().await {
+        SwarmEvent::NewListenAddr { .. } => {}
+        e => panic!("{e:?}"),
+    }
+
+    relay.add_external_address(relay_addr.clone());
+
+    relay.behaviour_mut().relay.set_status(None);
+
+    let status = match relay.select_next_some().await {
+        SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => status,
+        e => panic!("{e:?}"),
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn disabled_relay_rejects_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener = client.listen_on(client_addr).unwrap();
+
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+
+    let error = client
+        .wait(|e| match e {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                reason: Err(e),
+                ..
+            } if listener_id == listener => Some(e),
+            _ => None,
+        })
+        .await;
+
+    assert!(error.source().is_some());
+}
+
 fn build_relay() -> Swarm<Relay> {
     build_relay_with_config(relay::Config {
         reservation_duration: Duration::from_secs(2),
@@ -640,7 +781,7 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
             } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
-                return false
+                return false;
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{e:?}"),
