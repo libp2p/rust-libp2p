@@ -3005,6 +3005,14 @@ where
                     continue;
                 }
 
+                #[cfg(feature = "partial_messages")]
+                if self
+                    .partial_messages_extension
+                    .requests_partial(peer_id, topic)
+                {
+                    continue;
+                }
+
                 tracing::debug!(%peer_id, message_id=%msg_id, "Sending message to peer");
 
                 self.send_message(
@@ -3217,28 +3225,34 @@ where
         }
 
         tracing::debug!(peer=%peer_id, "New peer connected");
-        // We need to send our subscriptions to the newly-connected node.
-        for topic_hash in self.mesh.clone().into_keys() {
-            #[cfg(not(feature = "partial_messages"))]
-            let (requests_partial, supports_partial) = (false, false);
-            #[cfg(feature = "partial_messages")]
-            let Some(SubscriptionOpts {
-                requests_partial,
-                supports_partial,
-            }) = self.partial_messages_extension.opts(&topic_hash)
-            else {
-                tracing::error!("Partial subscription options should exist for subscribed topic");
-                return;
-            };
+        // Send all our topic subscriptions to the newly-connected peer in a single hello RPC.
+        let topics: Vec<_> = self
+            .mesh
+            .keys()
+            .cloned()
+            .filter_map(|topic_hash| {
+                #[cfg(not(feature = "partial_messages"))]
+                let (requests_partial, supports_partial) = (false, false);
+                #[cfg(feature = "partial_messages")]
+                let (requests_partial, supports_partial) = {
+                    let Some(SubscriptionOpts {
+                        requests_partial,
+                        supports_partial,
+                    }) = self.partial_messages_extension.opts(&topic_hash)
+                    else {
+                        tracing::error!(
+                            "Partial subscription options should exist for subscribed topic"
+                        );
+                        return None;
+                    };
+                    (requests_partial, supports_partial)
+                };
+                Some((topic_hash, requests_partial, supports_partial))
+            })
+            .collect();
 
-            self.send_message(
-                peer_id,
-                RpcOut::Subscribe {
-                    topic: topic_hash.clone(),
-                    requests_partial,
-                    supports_partial,
-                },
-            );
+        if !topics.is_empty() {
+            self.send_message(peer_id, RpcOut::SubscribeMany(topics));
         }
     }
 
