@@ -61,9 +61,7 @@ fn test_subscribe() {
             while !queue.is_empty() {
                 match queue.try_pop() {
                     Some(RpcOut::Subscribe { .. }) => collected_subscriptions += 1,
-                    Some(RpcOut::SubscribeMany(topics)) => {
-                        collected_subscriptions += topics.len()
-                    }
+                    Some(RpcOut::SubscribeMany(topics)) => collected_subscriptions += topics.len(),
                     _ => {}
                 }
             }
@@ -125,9 +123,7 @@ fn test_unsubscribe() {
             while !queue.is_empty() {
                 match queue.try_pop() {
                     Some(RpcOut::Subscribe { .. }) => collected_subscriptions += 1,
-                    Some(RpcOut::SubscribeMany(topics)) => {
-                        collected_subscriptions += topics.len()
-                    }
+                    Some(RpcOut::SubscribeMany(topics)) => collected_subscriptions += topics.len(),
                     _ => {}
                 }
             }
@@ -317,8 +313,10 @@ fn test_peer_added_on_connection() {
         |mut collected_subscriptions, (peer, mut queue)| {
             while !queue.is_empty() {
                 if let Some(RpcOut::SubscribeMany(topics)) = queue.try_pop() {
-                    let peer_subs: Vec<String> =
-                        topics.into_iter().map(|(t, _, _)| t.into_string()).collect();
+                    let peer_subs: Vec<String> = topics
+                        .into_iter()
+                        .map(|(t, _, _)| t.into_string())
+                        .collect();
                     collected_subscriptions.insert(peer, peer_subs);
                 }
             }

@@ -438,12 +438,14 @@ impl From<RpcOut> for proto::RPC {
                 publish: Vec::new(),
                 subscriptions: topics
                     .into_iter()
-                    .map(|(topic, requests_partial, supports_partial)| proto::SubOpts {
-                        subscribe: Some(true),
-                        topic_id: Some(topic.into_string()),
-                        requestsPartial: Some(requests_partial),
-                        supportsPartial: Some(supports_partial),
-                    })
+                    .map(
+                        |(topic, requests_partial, supports_partial)| proto::SubOpts {
+                            subscribe: Some(true),
+                            topic_id: Some(topic.into_string()),
+                            requestsPartial: Some(requests_partial),
+                            supportsPartial: Some(supports_partial),
+                        },
+                    )
                     .collect(),
                 control: None,
                 partial: None,
