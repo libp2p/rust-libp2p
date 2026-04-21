@@ -2,12 +2,12 @@
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
-
-## 0.21.1
 - Automatically configure HOP protocol advertisement based on external addresses, with the ability to override this
   functionality using `Behaviour::set_status` to explicitly set `Status::{Enable,Disable}` to enable or disable
   protocol advertisement.
   See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
+
+## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
   See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
 
