@@ -1376,6 +1376,20 @@ where
                 continue;
             }
 
+            // We should not handle IHAVEs from peers that support partials on topics where we
+            // request partial messages.
+            #[cfg(feature = "partial_messages")]
+            if self
+                .partial_messages_extension
+                .opts(&topic)
+                .is_some_and(|opts| opts.requests_partial)
+                && self
+                    .partial_messages_extension
+                    .supports_partial(peer_id, &topic)
+            {
+                continue;
+            }
+
             for id in ids.into_iter().filter(|id| {
                 if self.duplicate_cache.contains(id) {
                     return false;
