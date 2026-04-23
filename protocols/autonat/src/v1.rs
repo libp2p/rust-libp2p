@@ -24,7 +24,7 @@
 //! This version of the protocol will eventually be deprecated in favor of [v2](crate::v2).
 //! We recommend using v2 for new projects.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub(crate) mod behaviour;
 pub(crate) mod protocol;
