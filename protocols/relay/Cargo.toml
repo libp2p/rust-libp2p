@@ -21,8 +21,8 @@ web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+prost = { workspace = true }
+prost-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
 thiserror = { workspace = true }

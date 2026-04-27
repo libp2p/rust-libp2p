@@ -19,8 +19,8 @@ futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 futures-bounded = { workspace = true }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+prost = { workspace = true }
+prost-codec = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 rand = "0.8"
 sha2 = "0.10.8"

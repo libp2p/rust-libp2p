@@ -1,5 +1,5 @@
 use libp2p_identity::{Keypair, PeerId, SigningError};
-use quick_protobuf::{BytesReader, Writer};
+use prost::Message;
 use web_time::SystemTime;
 
 use crate::{DecodeError, Multiaddr, proto, signed_envelope, signed_envelope::SignedEnvelope};
@@ -75,12 +75,9 @@ impl PeerRecord {
         domain: &str,
         payload_type: &[u8],
     ) -> Result<Self, FromEnvelopeError> {
-        use quick_protobuf::MessageRead;
-
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(domain), payload_type)?;
-        let mut reader = BytesReader::from_bytes(payload);
-        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
+        let record = proto::PeerRecord::decode(payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -92,7 +89,7 @@ impl PeerRecord {
         let addresses = record
             .addresses
             .into_iter()
-            .map(|a| a.multiaddr.to_vec().try_into())
+            .map(|a| a.multiaddr.try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
@@ -140,8 +137,6 @@ impl PeerRecord {
         domain: &str,
         payload_type: &[u8],
     ) -> Result<Self, SigningError> {
-        use quick_protobuf::MessageWrite;
-
         let seq = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("now() is never before UNIX_EPOCH")
@@ -160,13 +155,7 @@ impl PeerRecord {
                     .collect(),
             };
 
-            let mut buf = Vec::with_capacity(record.get_size());
-            let mut writer = Writer::new(&mut buf);
-            record
-                .write_message(&mut writer)
-                .expect("Encoding to succeed");
-
-            buf
+            record.encode_to_vec()
         };
 
         let envelope =
@@ -252,8 +241,6 @@ mod tests {
 
     #[test]
     fn mismatched_signature_legacy() {
-        use quick_protobuf::MessageWrite;
-
         let addr: Multiaddr = HOME.parse().unwrap();
 
         let envelope = {
@@ -269,13 +256,7 @@ mod tests {
                     }],
                 };
 
-                let mut buf = Vec::with_capacity(record.get_size());
-                let mut writer = Writer::new(&mut buf);
-                record
-                    .write_message(&mut writer)
-                    .expect("Encoding to succeed");
-
-                buf
+                record.encode_to_vec()
             };
 
             SignedEnvelope::new(
@@ -295,8 +276,6 @@ mod tests {
 
     #[test]
     fn mismatched_signature_interop() {
-        use quick_protobuf::MessageWrite;
-
         let addr: Multiaddr = HOME.parse().unwrap();
 
         let envelope = {
@@ -312,13 +291,7 @@ mod tests {
                     }],
                 };
 
-                let mut buf = Vec::with_capacity(record.get_size());
-                let mut writer = Writer::new(&mut buf);
-                record
-                    .write_message(&mut writer)
-                    .expect("Encoding to succeed");
-
-                buf
+                record.encode_to_vec()
             };
 
             SignedEnvelope::new(

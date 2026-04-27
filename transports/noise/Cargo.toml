@@ -16,7 +16,7 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
-quick-protobuf = "0.8"
+prost = { workspace = true }
 rand = "0.8.3"
 static_assertions = "1"
 thiserror = { workspace = true }

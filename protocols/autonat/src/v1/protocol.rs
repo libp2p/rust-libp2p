@@ -106,8 +106,8 @@ impl request_response::Codec for AutoNatCodec {
     }
 }
 
-fn codec() -> quick_protobuf_codec::Codec<proto::Message> {
-    quick_protobuf_codec::Codec::<proto::Message>::new(1024)
+fn codec() -> prost_codec::Codec<proto::Message> {
+    prost_codec::Codec::<proto::Message>::new(1024)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -118,7 +118,7 @@ pub struct DialRequest {
 
 impl DialRequest {
     pub fn from_proto(msg: proto::Message) -> Result<Self, io::Error> {
-        if msg.type_pb != Some(proto::MessageType::DIAL) {
+        if msg.r#type != Some(proto::MessageType::Dial as i32) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
 
@@ -160,14 +160,14 @@ impl DialRequest {
             .collect();
 
         proto::Message {
-            type_pb: Some(proto::MessageType::DIAL),
+            r#type: Some(proto::MessageType::Dial as i32),
             dial: Some(proto::Dial {
                 peer: Some(proto::PeerInfo {
                     id: Some(peer_id.to_vec()),
                     addrs,
                 }),
             }),
-            dialResponse: None,
+            dial_response: None,
         }
     }
 }
@@ -183,10 +183,10 @@ pub enum ResponseError {
 impl From<ResponseError> for proto::ResponseStatus {
     fn from(t: ResponseError) -> Self {
         match t {
-            ResponseError::DialError => proto::ResponseStatus::E_DIAL_ERROR,
-            ResponseError::DialRefused => proto::ResponseStatus::E_DIAL_REFUSED,
-            ResponseError::BadRequest => proto::ResponseStatus::E_BAD_REQUEST,
-            ResponseError::InternalError => proto::ResponseStatus::E_INTERNAL_ERROR,
+            ResponseError::DialError => proto::ResponseStatus::EDialError,
+            ResponseError::DialRefused => proto::ResponseStatus::EDialRefused,
+            ResponseError::BadRequest => proto::ResponseStatus::EBadRequest,
+            ResponseError::InternalError => proto::ResponseStatus::EInternalError,
         }
     }
 }
@@ -196,11 +196,11 @@ impl TryFrom<proto::ResponseStatus> for ResponseError {
 
     fn try_from(value: proto::ResponseStatus) -> Result<Self, Self::Error> {
         match value {
-            proto::ResponseStatus::E_DIAL_ERROR => Ok(ResponseError::DialError),
-            proto::ResponseStatus::E_DIAL_REFUSED => Ok(ResponseError::DialRefused),
-            proto::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
-            proto::ResponseStatus::E_INTERNAL_ERROR => Ok(ResponseError::InternalError),
-            proto::ResponseStatus::OK => {
+            proto::ResponseStatus::EDialError => Ok(ResponseError::DialError),
+            proto::ResponseStatus::EDialRefused => Ok(ResponseError::DialRefused),
+            proto::ResponseStatus::EBadRequest => Ok(ResponseError::BadRequest),
+            proto::ResponseStatus::EInternalError => Ok(ResponseError::InternalError),
+            proto::ResponseStatus::Ok => {
                 tracing::debug!("Received response with status code OK but expected error");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -219,31 +219,39 @@ pub struct DialResponse {
 
 impl DialResponse {
     pub fn from_proto(msg: proto::Message) -> Result<Self, io::Error> {
-        if msg.type_pb != Some(proto::MessageType::DIAL_RESPONSE) {
+        if msg.r#type != Some(proto::MessageType::DialResponse as i32) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
 
-        Ok(match msg.dialResponse {
+        Ok(match msg.dial_response {
             Some(proto::DialResponse {
-                status: Some(proto::ResponseStatus::OK),
-                statusText,
-                addr: Some(addr),
+                status,
+                status_text,
+                addr,
             }) => {
-                let addr = Multiaddr::try_from(addr.to_vec())
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-                Self {
-                    status_text: statusText,
-                    result: Ok(addr),
+                let status = status.and_then(|s| proto::ResponseStatus::try_from(s).ok());
+                match (status, addr) {
+                    (Some(proto::ResponseStatus::Ok), Some(addr)) => {
+                        let addr = Multiaddr::try_from(addr.to_vec())
+                            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+                        Self {
+                            status_text,
+                            result: Ok(addr),
+                        }
+                    }
+                    (Some(status), _) => Self {
+                        status_text,
+                        result: Err(ResponseError::try_from(status)?),
+                    },
+                    _ => {
+                        tracing::debug!("Received malformed response message");
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "invalid dial response message",
+                        ));
+                    }
                 }
             }
-            Some(proto::DialResponse {
-                status: Some(status),
-                statusText,
-                addr: None,
-            }) => Self {
-                status_text: statusText,
-                result: Err(ResponseError::try_from(status)?),
-            },
             _ => {
                 tracing::debug!("Received malformed response message");
                 return Err(io::Error::new(
@@ -257,21 +265,21 @@ impl DialResponse {
     pub fn into_proto(self) -> proto::Message {
         let dial_response = match self.result {
             Ok(addr) => proto::DialResponse {
-                status: Some(proto::ResponseStatus::OK),
-                statusText: self.status_text,
+                status: Some(proto::ResponseStatus::Ok as i32),
+                status_text: self.status_text,
                 addr: Some(addr.to_vec()),
             },
             Err(error) => proto::DialResponse {
-                status: Some(error.into()),
-                statusText: self.status_text,
+                status: Some(proto::ResponseStatus::from(error) as i32),
+                status_text: self.status_text,
                 addr: None,
             },
         };
 
         proto::Message {
-            type_pb: Some(proto::MessageType::DIAL_RESPONSE),
+            r#type: Some(proto::MessageType::DialResponse as i32),
             dial: None,
-            dialResponse: Some(dial_response),
+            dial_response: Some(dial_response),
         }
     }
 }
@@ -328,14 +336,14 @@ mod tests {
         };
 
         let msg = proto::Message {
-            type_pb: Some(proto::MessageType::DIAL),
+            r#type: Some(proto::MessageType::Dial as i32),
             dial: Some(proto::Dial {
                 peer: Some(proto::PeerInfo {
                     id: Some(PeerId::random().to_bytes()),
                     addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
                 }),
             }),
-            dialResponse: None,
+            dial_response: None,
         };
 
         let request = DialRequest::from_proto(msg).expect("not to fail");

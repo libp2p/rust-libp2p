@@ -2,6 +2,8 @@
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+- Revert migration from `prost` to `quick-protobuf`; this reintroduces the `protoc` build-time dependency (revert of [PR 3312]).
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
   See [PR 6136](https://github.com/libp2p/rust-libp2p/pull/6136)
 

@@ -21,16 +21,16 @@
 pub(crate) mod proto {
     #![allow(unreachable_pub, dead_code)]
     include!("generated/mod.rs");
-    pub use self::gossipsub::pb::{mod_RPC::SubOpts, *};
+    pub use self::gossipsub_pb::{rpc::SubOpts, *};
 }
 
 #[cfg(test)]
 mod test {
     use libp2p_identity::PeerId;
-    use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+    use prost::Message;
     use rand::Rng;
 
-    use crate::{IdentTopic as Topic, rpc_proto::proto::compat};
+    use crate::{IdentTopic as Topic, rpc_proto::proto::compat_pb};
 
     #[test]
     fn test_multi_topic_message_compatibility() {
@@ -45,7 +45,7 @@ mod test {
             signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
             key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
-        let old_message1 = compat::pb::Message {
+        let old_message1 = compat_pb::Message {
             from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
@@ -53,7 +53,7 @@ mod test {
             signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
             key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
-        let old_message2 = compat::pb::Message {
+        let old_message2 = compat_pb::Message {
             from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
@@ -62,31 +62,17 @@ mod test {
             key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
 
-        let mut new_message1b = Vec::with_capacity(new_message1.get_size());
-        let mut writer = Writer::new(&mut new_message1b);
-        new_message1.write_message(&mut writer).unwrap();
+        let new_message1b = new_message1.encode_to_vec();
+        let old_message1b = old_message1.encode_to_vec();
+        let old_message2b = old_message2.encode_to_vec();
 
-        let mut old_message1b = Vec::with_capacity(old_message1.get_size());
-        let mut writer = Writer::new(&mut old_message1b);
-        old_message1.write_message(&mut writer).unwrap();
-
-        let mut old_message2b = Vec::with_capacity(old_message2.get_size());
-        let mut writer = Writer::new(&mut old_message2b);
-        old_message2.write_message(&mut writer).unwrap();
-
-        let mut reader = BytesReader::from_bytes(&old_message1b[..]);
-        let new_message =
-            super::proto::Message::from_reader(&mut reader, &old_message1b[..]).unwrap();
+        let new_message = super::proto::Message::decode(&old_message1b[..]).unwrap();
         assert_eq!(new_message.topic, topic1.clone().into_string());
 
-        let mut reader = BytesReader::from_bytes(&old_message2b[..]);
-        let new_message =
-            super::proto::Message::from_reader(&mut reader, &old_message2b[..]).unwrap();
+        let new_message = super::proto::Message::decode(&old_message2b[..]).unwrap();
         assert_eq!(new_message.topic, topic2.into_string());
 
-        let mut reader = BytesReader::from_bytes(&new_message1b[..]);
-        let old_message =
-            compat::pb::Message::from_reader(&mut reader, &new_message1b[..]).unwrap();
+        let old_message = compat_pb::Message::decode(&new_message1b[..]).unwrap();
         assert_eq!(old_message.topic_ids, vec![topic1.into_string()]);
     }
 }

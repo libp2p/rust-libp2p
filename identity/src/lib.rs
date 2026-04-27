@@ -71,7 +71,7 @@ mod peer_id;
 ))]
 impl zeroize::Zeroize for proto::PrivateKey {
     fn zeroize(&mut self) {
-        self.Data.zeroize();
+        self.data.zeroize();
     }
 }
 
@@ -86,23 +86,23 @@ impl From<&PublicKey> for proto::PublicKey {
         match &key.publickey {
             #[cfg(feature = "ed25519")]
             keypair::PublicKeyInner::Ed25519(key) => proto::PublicKey {
-                Type: proto::KeyType::Ed25519,
-                Data: key.to_bytes().to_vec(),
+                r#type: proto::KeyType::Ed25519 as i32,
+                data: key.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             keypair::PublicKeyInner::Rsa(key) => proto::PublicKey {
-                Type: proto::KeyType::RSA,
-                Data: key.encode_x509(),
+                r#type: proto::KeyType::Rsa as i32,
+                data: key.encode_x509(),
             },
             #[cfg(feature = "secp256k1")]
             keypair::PublicKeyInner::Secp256k1(key) => proto::PublicKey {
-                Type: proto::KeyType::Secp256k1,
-                Data: key.to_bytes().to_vec(),
+                r#type: proto::KeyType::Secp256k1 as i32,
+                data: key.to_bytes().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
             keypair::PublicKeyInner::Ecdsa(key) => proto::PublicKey {
-                Type: proto::KeyType::ECDSA,
-                Data: key.encode_der(),
+                r#type: proto::KeyType::Ecdsa as i32,
+                data: key.encode_der(),
             },
         }
     }

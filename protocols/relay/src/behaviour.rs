@@ -586,7 +586,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                            status: proto::Status::ResourceLimitExceeded,
                         }),
                     }
                 } else {
@@ -708,7 +708,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                            status: proto::Status::ResourceLimitExceeded,
                         }),
                     }
                 } else if let Some((dst_conn, status)) = self
@@ -745,7 +745,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: proto::Status::NO_RESERVATION,
+                            status: proto::Status::NoReservation,
                         }),
                     }
                 };
@@ -995,14 +995,14 @@ pub enum StatusCode {
 impl From<proto::Status> for StatusCode {
     fn from(other: proto::Status) -> Self {
         match other {
-            proto::Status::OK => Self::OK,
-            proto::Status::RESERVATION_REFUSED => Self::ReservationRefused,
-            proto::Status::RESOURCE_LIMIT_EXCEEDED => Self::ResourceLimitExceeded,
-            proto::Status::PERMISSION_DENIED => Self::PermissionDenied,
-            proto::Status::CONNECTION_FAILED => Self::ConnectionFailed,
-            proto::Status::NO_RESERVATION => Self::NoReservation,
-            proto::Status::MALFORMED_MESSAGE => Self::MalformedMessage,
-            proto::Status::UNEXPECTED_MESSAGE => Self::UnexpectedMessage,
+            proto::Status::Ok => Self::OK,
+            proto::Status::ReservationRefused => Self::ReservationRefused,
+            proto::Status::ResourceLimitExceeded => Self::ResourceLimitExceeded,
+            proto::Status::PermissionDenied => Self::PermissionDenied,
+            proto::Status::ConnectionFailed => Self::ConnectionFailed,
+            proto::Status::NoReservation => Self::NoReservation,
+            proto::Status::MalformedMessage => Self::MalformedMessage,
+            proto::Status::UnexpectedMessage => Self::UnexpectedMessage,
         }
     }
 }

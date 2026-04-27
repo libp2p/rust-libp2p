@@ -166,7 +166,7 @@ impl Handler {
 
         if self
             .inflight_outbound_circuit_deny_requests
-            .try_push(circuit.deny(proto::Status::NO_RESERVATION))
+            .try_push(circuit.deny(proto::Status::NoReservation))
             .is_err()
         {
             tracing::warn!(
