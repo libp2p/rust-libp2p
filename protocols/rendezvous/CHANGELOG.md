@@ -9,6 +9,9 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+- Revert migration from `prost` to `quick-protobuf`; this reintroduces the `protoc` build-time dependency (revert of [PR 3312]).
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.17.1
 
 - Add limits for the per-peer and total number of store registrations, and the stored client cookies.
