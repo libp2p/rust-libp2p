@@ -130,7 +130,7 @@ hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
 if-watch = "3.2.2"
 multiaddr = "0.18.1"
-multihash = "0.19.1"
+multihash = "0.19.4"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
@@ -139,7 +139,7 @@ rcgen = "0.13"
 ring = "0.17.12"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
-tokio = { version = "1.50", default-features = false }
+tokio = { version = "1.52", default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 unsigned-varint = { version = "0.8.0" }
