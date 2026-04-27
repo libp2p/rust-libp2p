@@ -139,7 +139,7 @@ rcgen = "0.13"
 ring = "0.17.12"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
-tokio = { version = "1.50", default-features = false }
+tokio = { version = "1.52", default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 unsigned-varint = { version = "0.8.0" }
