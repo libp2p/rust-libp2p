@@ -18,7 +18,7 @@ ed25519-dalek = { version = "2.2", optional = true }
 hkdf = { version = "0.12.4", optional = true }
 k256 = { version = "0.13.4", optional = true, features = ["ecdsa", "arithmetic"] }
 tracing = { workspace = true }
-multihash = { version = "0.19.1", optional = true }
+multihash = { version = "0.19.4", optional = true }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 prost = { workspace = true, optional = true }
 rand = { version = "0.8", optional = true }
