@@ -27,7 +27,7 @@ tinytemplate = "1.2"
 tracing = { workspace = true }
 
 [dev-dependencies]
-hex-literal = "0.4"
+hex-literal = "1.1"
 
 [lints]
 workspace = true
