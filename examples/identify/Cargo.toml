@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-tokio = { version = "1.50.0", features = ["full"] }
+tokio = { version = "1.52.1", features = ["full"] }
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["identify", "noise", "tcp", "tokio", "yamux"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
