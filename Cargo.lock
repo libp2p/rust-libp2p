@@ -8,7 +8,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
 dependencies = [
- "crypto-common",
+ "crypto-common 0.1.6",
  "generic-array",
 ]
 
@@ -19,7 +19,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
- "cipher",
+ "cipher 0.4.4",
  "cpufeatures",
 ]
 
@@ -31,7 +31,7 @@ checksum = "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
 dependencies = [
  "aead",
  "aes",
- "cipher",
+ "cipher 0.4.4",
  "ctr",
  "ghash",
  "subtle",
@@ -497,6 +497,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "block-buffer"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdd35008169921d80bc60d3d0ab416eecb028c4cd653352907921d95084790be"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
 name = "block-padding"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -583,7 +592,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b52a9543ae338f279b96b0b9fed9c8093744685043739079ce85cd58f289a6"
 dependencies = [
- "cipher",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -611,7 +620,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ae3c82e4355234767756212c570e29833699ab63e6ffd161887314cc5b43847"
 dependencies = [
  "aead",
- "cipher",
+ "cipher 0.4.4",
  "ctr",
  "subtle",
 ]
@@ -635,7 +644,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
 dependencies = [
  "cfg-if",
- "cipher",
+ "cipher 0.4.4",
  "cpufeatures",
 ]
 
@@ -647,7 +656,7 @@ checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
 dependencies = [
  "aead",
  "chacha20",
- "cipher",
+ "cipher 0.4.4",
  "poly1305",
  "zeroize",
 ]
@@ -695,9 +704,20 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
- "crypto-common",
- "inout",
+ "crypto-common 0.1.6",
+ "inout 0.1.4",
  "zeroize",
+]
+
+[[package]]
+name = "cipher"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e34d8227fe1ba289043aeb13792056ff80fd6de1a9f49137a5f499de8e8c78ea"
+dependencies = [
+ "block-buffer 0.12.0",
+ "crypto-common 0.2.1",
+ "inout 0.2.2",
 ]
 
 [[package]]
@@ -939,12 +959,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-common"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77727bb15fa921304124b128af125e7e3b968275d1b108b379190264f4423710"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
 name = "ctr"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
 dependencies = [
- "cipher",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -1078,9 +1107,9 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer",
+ "block-buffer 0.10.4",
  "const-oid",
- "crypto-common",
+ "crypto-common 0.1.6",
  "subtle",
 ]
 
@@ -1885,6 +1914,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
+name = "hybrid-array"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3944cf8cf766b40e2a1a333ee5e9b563f854d5fa49d6a8ca2764e97c6eddb214"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
 name = "hyper"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2219,6 +2257,15 @@ checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "block-padding",
  "generic-array",
+]
+
+[[package]]
+name = "inout"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
+dependencies = [
+ "hybrid-array",
 ]
 
 [[package]]
@@ -4929,11 +4976,12 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "salsa20"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
+checksum = "2f874456e72520ff1375a06c588eaf074b0f01f9e9e1aada45bd9b7954a6e42c"
 dependencies = [
- "cipher",
+ "cfg-if",
+ "cipher 0.5.1",
 ]
 
 [[package]]
@@ -6052,7 +6100,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
- "crypto-common",
+ "crypto-common 0.1.6",
  "subtle",
 ]
 
