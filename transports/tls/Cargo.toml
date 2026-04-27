@@ -18,7 +18,7 @@ ring = { workspace = true }
 thiserror = { workspace = true }
 webpki = { version = "0.103", package = "rustls-webpki", features = ["std"] }
 x509-parser = "0.17.0"
-yasna = "0.5.2"
+yasna = "0.6.0"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
