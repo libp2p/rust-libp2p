@@ -5,7 +5,7 @@
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
 - Revert migration from `prost` to `quick-protobuf`; this reintroduces the `protoc` build-time dependency (revert of [PR 3312]).
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
   See [PR 6356](https://github.com/libp2p/rust-libp2p/pull/6356)
