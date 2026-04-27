@@ -126,8 +126,8 @@ futures-rustls = { version = "0.26.0", default-features = false }
 futures-timer = { version = "3" }
 getrandom = { version = "0.2", features = ["js"] }
 hashlink = "0.11.0"
-hickory-proto = { version = "0.25.2", default-features = false }
-hickory-resolver = { version = "0.25.2", default-features = false }
+hickory-proto = { version = "0.26.0", default-features = false }
+hickory-resolver = { version = "0.26.0", default-features = false }
 if-watch = "3.2.2"
 multiaddr = "0.18.1"
 multihash = "0.19.1"
