@@ -265,15 +265,21 @@ pub(crate) struct QueryConfig {
     ///
     /// See [`crate::behaviour::Config::disjoint_query_paths`] for details.
     pub(crate) disjoint_query_paths: bool,
+    /// The number of closest peers to return in response to a request.
+    ///
+    /// See [`crate::behaviour::Config::set_num_closest_peers`] for details.
+    pub(crate) num_closest_peers: NonZeroUsize,
 }
 
 impl Default for QueryConfig {
     fn default() -> Self {
+        let k_value = NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0");
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
+            replication_factor: k_value,
             parallelism: ALPHA_VALUE,
             disjoint_query_paths: false,
+            num_closest_peers: k_value,
         }
     }
 }
