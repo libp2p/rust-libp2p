@@ -123,10 +123,12 @@ env_logger = "0.11"
 futures = "0.3.30"
 futures-bounded = { version = "0.3", features = ["tokio"] }
 futures-rustls = { version = "0.26.0", default-features = false }
-getrandom = "0.2"
-if-watch = "3.2.2"
+futures-timer = { version = "3" }
+getrandom = { version = "0.2", features = ["js"] }
+hashlink = "0.11.0"
 hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
+if-watch = "3.2.2"
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
@@ -140,10 +142,10 @@ rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
 tokio = { version = "1.50", default-features = false }
 tracing = "0.1.44"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.23"
 unsigned-varint = { version = "0.8.0" }
+wasm-bindgen-futures = "0.4"
 web-time = "1.1.0"
-hashlink = "0.11.0"
 
 [patch.crates-io]
 

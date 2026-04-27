@@ -21,7 +21,7 @@
 use std::{
     cmp::max,
     collections::{BTreeSet, HashMap, HashSet},
-    fmt::Debug,
+    fmt::{self, Debug},
 };
 
 use libp2p_core::PeerId;
@@ -655,7 +655,7 @@ pub(crate) enum ReceivedAction {
 }
 
 /// A Partial message sent and received from remote peers.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PartialMessage {
     /// The group ID that identifies the complete logical message.
     pub group_id: Vec<u8>,
@@ -665,6 +665,17 @@ pub struct PartialMessage {
     pub body: Option<Vec<u8>>,
     /// The partial metadata we have and want.
     pub metadata: Option<Vec<u8>>,
+}
+
+impl Debug for PartialMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PartialMessage")
+            .field("group_id", &self.group_id)
+            .field("topic_hash", &self.topic_hash)
+            .field("body length", &self.body.as_ref().map(|body| body.len()))
+            .field("metadata", &self.metadata)
+            .finish()
+    }
 }
 
 /// Stored `Metadata` for a peer,

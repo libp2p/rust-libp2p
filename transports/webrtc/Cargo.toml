@@ -37,7 +37,7 @@ pem = ["webrtc?/pem"]
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["full"] }
-quickcheck = "1.0.3"
+quickcheck = "1.1.0"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 
