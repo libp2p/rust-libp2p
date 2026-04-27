@@ -451,9 +451,9 @@ impl TryFrom<proto::Message> for Message {
                     .transpose()?
                     .ok_or(ConversionError::MissingNamespace)?,
                 ttl,
-                record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
-                    &signed_peer_record,
-                )?)?,
+                record: PeerRecord::from_signed_envelope_legacy_or_interop(
+                    SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
+                )?,
             }),
             proto::Message {
                 type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
@@ -494,7 +494,7 @@ impl TryFrom<proto::Message> for Message {
                                 .map(Namespace::new)
                                 .transpose()?
                                 .ok_or(ConversionError::MissingNamespace)?,
-                            record: PeerRecord::from_signed_envelope(
+                            record: PeerRecord::from_signed_envelope_legacy_or_interop(
                                 SignedEnvelope::from_protobuf_encoding(
                                     &reggo
                                         .signedPeerRecord
@@ -642,6 +642,9 @@ mod proto {
 
 #[cfg(test)]
 mod tests {
+    use libp2p_core::PeerRecord;
+    use libp2p_identity::Keypair;
+
     use super::*;
 
     #[test]
@@ -661,5 +664,60 @@ mod tests {
         let bytes = cookie.into_wire_encoding();
 
         assert_eq!(bytes.len(), 8 + 3)
+    }
+
+    #[test]
+    fn parses_interop_register_records() {
+        let namespace = Namespace::from_static("foo");
+        let record = interop_peer_record();
+        let expected_record = record.clone();
+
+        let message = Message::try_from(proto::Message::from(Message::Register(
+            NewRegistration::new(namespace.clone(), record, Some(42)),
+        )))
+        .expect("interop register record to parse");
+
+        assert_eq!(
+            message,
+            Message::Register(NewRegistration::new(namespace, expected_record, Some(42)))
+        );
+    }
+
+    #[test]
+    fn parses_interop_discover_response_records() {
+        let namespace = Namespace::from_static("foo");
+        let record = interop_peer_record();
+        let expected_record = record.clone();
+        let cookie = Cookie::for_namespace(namespace.clone());
+
+        let message = Message::try_from(proto::Message::from(Message::DiscoverResponse(Ok((
+            vec![Registration {
+                namespace: namespace.clone(),
+                record,
+                ttl: 42,
+            }],
+            cookie.clone(),
+        )))))
+        .expect("interop discover response record to parse");
+
+        assert_eq!(
+            message,
+            Message::DiscoverResponse(Ok((
+                vec![Registration {
+                    namespace,
+                    record: expected_record,
+                    ttl: 42,
+                }],
+                cookie,
+            )))
+        );
+    }
+
+    fn interop_peer_record() -> PeerRecord {
+        PeerRecord::new_interop(
+            &Keypair::generate_ed25519(),
+            vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()],
+        )
+        .unwrap()
     }
 }
