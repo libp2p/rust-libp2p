@@ -25,7 +25,7 @@ unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
-criterion = "0.5"
+criterion = "0.8"
 futures = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
