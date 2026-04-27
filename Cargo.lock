@@ -20,7 +20,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -355,7 +355,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
- "rand 0.8.5",
+ "rand 0.10.0",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -517,7 +517,7 @@ dependencies = [
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
  "mime_guess",
- "rand 0.8.5",
+ "rand 0.10.0",
  "rust-embed",
  "tokio",
  "tokio-util",
@@ -636,7 +636,18 @@ checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
+]
+
+[[package]]
+name = "chacha20"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -646,7 +657,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
 dependencies = [
  "aead",
- "chacha20",
+ "chacha20 0.9.1",
  "cipher",
  "poly1305",
  "zeroize",
@@ -826,6 +837,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "crc"
 version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -974,7 +994,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
  "digest",
  "fiat-crypto",
@@ -2266,7 +2286,7 @@ dependencies = [
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
  "mime_guess",
- "rand 0.8.5",
+ "rand 0.10.0",
  "redis",
  "reqwest",
  "rust-embed",
@@ -2429,7 +2449,7 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -2541,7 +2561,7 @@ dependencies = [
  "libp2p-swarm-test",
  "quick-protobuf",
  "quick-protobuf-codec",
- "rand 0.8.5",
+ "rand 0.10.0",
  "rand_core 0.6.4",
  "thiserror 2.0.18",
  "tokio",
@@ -2562,7 +2582,7 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "tokio",
 ]
 
@@ -2583,7 +2603,7 @@ dependencies = [
  "parking_lot",
  "pin-project",
  "quick-protobuf",
- "rand 0.8.5",
+ "rand 0.10.0",
  "rw-stream-sink",
  "thiserror 2.0.18",
  "tokio",
@@ -2649,7 +2669,7 @@ dependencies = [
  "libp2p-swarm",
  "quick-protobuf",
  "quick-protobuf-codec",
- "rand 0.8.5",
+ "rand 0.10.0",
  "smallvec",
  "thiserror 2.0.18",
  "tracing",
@@ -2679,7 +2699,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "regex",
  "serde",
  "sha2",
@@ -2726,7 +2746,7 @@ dependencies = [
  "p256",
  "quick-protobuf",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "ring",
  "rmp-serde",
  "sec1",
@@ -2759,7 +2779,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "serde",
  "sha2",
  "smallvec",
@@ -2782,7 +2802,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "rand 0.8.5",
+ "rand 0.10.0",
  "smallvec",
  "socket2 0.6.3",
  "tokio",
@@ -2841,7 +2861,7 @@ dependencies = [
  "nohash-hasher",
  "parking_lot",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "smallvec",
  "tokio",
  "tracing",
@@ -2874,7 +2894,7 @@ dependencies = [
  "multihash",
  "quick-protobuf",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "snow",
  "static_assertions",
  "thiserror 2.0.18",
@@ -2935,7 +2955,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "tokio",
  "tracing",
  "web-time",
@@ -2972,7 +2992,7 @@ dependencies = [
  "libp2p-yamux",
  "pin-project",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "salsa20",
  "sha3",
  "tokio",
@@ -2995,7 +3015,7 @@ dependencies = [
  "libp2p-yamux",
  "quickcheck",
  "quinn",
- "rand 0.8.5",
+ "rand 0.10.0",
  "ring",
  "rustls",
  "socket2 0.6.3",
@@ -3025,7 +3045,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "static_assertions",
  "thiserror 2.0.18",
  "tokio",
@@ -3050,7 +3070,7 @@ dependencies = [
  "libp2p-swarm-test",
  "quick-protobuf",
  "quick-protobuf-codec",
- "rand 0.8.5",
+ "rand 0.10.0",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -3071,7 +3091,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "rand 0.8.5",
+ "rand 0.10.0",
  "serde",
  "serde_json",
  "smallvec",
@@ -3107,7 +3127,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "rand 0.8.5",
+ "rand 0.10.0",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3135,7 +3155,7 @@ dependencies = [
  "libp2p-yamux",
  "multistream-select",
  "quickcheck-ext",
- "rand 0.8.5",
+ "rand 0.10.0",
  "smallvec",
  "tokio",
  "tracing",
@@ -3245,7 +3265,7 @@ dependencies = [
  "libp2p-webrtc-utils",
  "multihash",
  "quickcheck",
- "rand 0.8.5",
+ "rand 0.10.0",
  "rcgen",
  "stun",
  "thiserror 2.0.18",
@@ -3270,7 +3290,7 @@ dependencies = [
  "libp2p-noise",
  "quick-protobuf",
  "quick-protobuf-codec",
- "rand 0.8.5",
+ "rand 0.10.0",
  "serde",
  "sha2",
  "tinytemplate",
@@ -4153,7 +4173,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf"
 dependencies = [
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
 ]
@@ -4165,7 +4185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d1fe60d06143b2430aa532c94cfe9e29783047f06c0d7fd359a9a51b729fa25"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
 ]
@@ -4434,6 +4454,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
 dependencies = [
+ "chacha20 0.10.0",
  "getrandom 0.4.2",
  "rand_core 0.10.0",
 ]
@@ -5129,7 +5150,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -5140,7 +5161,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -5303,7 +5324,7 @@ dependencies = [
  "futures",
  "libp2p",
  "libp2p-stream",
- "rand 0.8.5",
+ "rand 0.10.0",
  "tokio",
  "tracing",
  "tracing-subscriber",
