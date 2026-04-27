@@ -312,10 +312,11 @@ pub(crate) async fn recv_dial_back_response(
 
 #[cfg(test)]
 mod tests {
+    use prost::Message as ProstMessage;
+
     use crate::v2::generated::structs::{
         DialDataResponse as GenDialDataResponse, Message, message::Msg,
     };
-    use prost::Message as ProstMessage;
 
     #[test]
     fn message_correct_max_size() {
