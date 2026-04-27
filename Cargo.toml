@@ -130,7 +130,7 @@ hickory-proto = { version = "0.25.2", default-features = false }
 hickory-resolver = { version = "0.25.2", default-features = false }
 if-watch = "3.2.2"
 multiaddr = "0.18.1"
-multihash = "0.19.1"
+multihash = "0.19.4"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
