@@ -23,22 +23,22 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     convert::Infallible,
-    num::NonZeroUsize,
     task::{Context, Poll},
 };
 
 use either::Either;
+use hashlink::LruCache;
 use libp2p_core::{
-    connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr,
+    Endpoint, Multiaddr, connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NewExternalAddrCandidate,
+    NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::{self, DialOpts},
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour,
-    NewExternalAddrCandidate, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy,
 };
-use lru::LruCache;
 use thiserror::Error;
 
 use crate::{handler, protocol};
@@ -221,7 +221,7 @@ impl NetworkBehaviour for Behaviour {
                 },
                 self.observed_addresses(),
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one
-                 // outbound.
+            // outbound.
         }
 
         self.direct_connections
@@ -361,7 +361,7 @@ struct Candidates {
 impl Candidates {
     fn new(me: PeerId) -> Self {
         Self {
-            inner: LruCache::new(NonZeroUsize::new(20).expect("20 > 0")),
+            inner: LruCache::new(20),
             me,
         }
     }
@@ -375,7 +375,7 @@ impl Candidates {
             address.push(Protocol::P2p(self.me));
         }
 
-        self.inner.push(address, ());
+        self.inner.insert(address, ());
     }
 
     fn iter(&self) -> impl Iterator<Item = &Multiaddr> {

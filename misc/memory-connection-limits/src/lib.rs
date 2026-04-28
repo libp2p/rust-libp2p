@@ -25,11 +25,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, dummy,
 };
 use sysinfo::MemoryRefreshKind;
 
@@ -82,7 +82,7 @@ const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
         Self {
             max_allowed_bytes,
@@ -95,7 +95,7 @@ impl Behaviour {
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory.
     ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
+    /// New inbound and outbound connections will be denied when the threshold is exceeded.
     pub fn with_max_percentage(percentage: f64) -> Self {
         use sysinfo::{RefreshKind, System};
 
@@ -228,8 +228,7 @@ impl fmt::Display for MemoryUsageLimitExceeded {
         write!(
             f,
             "process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
-            self.process_physical_memory_bytes,
-            self.max_allowed_bytes,
+            self.process_physical_memory_bytes, self.max_allowed_bytes,
         )
     }
 }

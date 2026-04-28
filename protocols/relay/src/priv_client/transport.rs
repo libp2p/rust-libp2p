@@ -27,7 +27,7 @@ use std::{
 
 use futures::{
     channel::{mpsc, oneshot},
-    future::{ready, BoxFuture, FutureExt, Ready},
+    future::{BoxFuture, FutureExt, Ready, ready},
     sink::SinkExt,
     stream::{SelectAll, Stream, StreamExt},
 };
@@ -39,13 +39,13 @@ use libp2p_identity::PeerId;
 use thiserror::Error;
 
 use crate::{
+    RequestId,
     multiaddr_ext::MultiaddrExt,
     priv_client::Connection,
     protocol::{
         outbound_hop,
         outbound_hop::{ConnectError, ReserveError},
     },
-    RequestId,
 };
 
 /// A [`Transport`] enabling client relay capabilities.
@@ -297,12 +297,12 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
                 if before_circuit {
                     relayed_multiaddr
                         .relay_addr
-                        .get_or_insert(Multiaddr::empty())
+                        .get_or_insert_with(Multiaddr::empty)
                         .push(p);
                 } else {
                     relayed_multiaddr
                         .dst_addr
-                        .get_or_insert(Multiaddr::empty())
+                        .get_or_insert_with(Multiaddr::empty)
                         .push(p);
                 }
             }

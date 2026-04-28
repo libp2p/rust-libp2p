@@ -24,7 +24,7 @@
 use std::iter::{Chain, Map};
 
 use either::Either;
-use futures::{future, future::MapOk, TryFutureExt};
+use futures::{TryFutureExt, future, future::MapOk};
 use libp2p_core::{
     either::EitherFuture,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
@@ -42,6 +42,7 @@ impl<A, B> SelectSecurityUpgrade<A, B> {
     /// Combines two upgrades into an `SelectUpgrade`.
     ///
     /// The protocols supported by the first element have a higher priority.
+    #[allow(dead_code)]
     pub fn new(a: A, b: B) -> Self {
         SelectSecurityUpgrade(a, b)
     }

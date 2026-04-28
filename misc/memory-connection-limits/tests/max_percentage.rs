@@ -26,8 +26,8 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
     DialError, Swarm,
+    dial_opts::{DialOpts, PeerCondition},
 };
 use libp2p_swarm_test::SwarmExt;
 use sysinfo::{MemoryRefreshKind, RefreshKind};
@@ -59,7 +59,10 @@ async fn max_percentage() {
 
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
-    let max_allowed_bytes = current_mem + CONNECTION_LIMIT * 1024 * 1024;
+    // These tests use connections as unit to test the memory limit.
+    // Each connection consumes approximately 1MB of memory, so we give
+    // one connection as buffer for test stability (CONNECTION_LIMIT - 1) on line 35.
+    let max_allowed_bytes = current_mem + (CONNECTION_LIMIT - 1) * 1024 * 1024;
     network.behaviour_mut().connection_limits = Behaviour::with_max_percentage(
         max_allowed_bytes as f64 / system_info.total_memory() as f64,
     );

@@ -32,14 +32,14 @@ use std::{
 };
 
 use fnv::FnvHashSet;
-use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
-    dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::{self, DialOpts},
 };
 use thiserror::Error;
 use tracing::Level;
@@ -47,6 +47,7 @@ use web_time::Instant;
 
 pub use crate::query::QueryStats;
 use crate::{
+    K_VALUE,
     addresses::Addresses,
     bootstrap,
     handler::{Handler, HandlerEvent, HandlerIn, RequestId},
@@ -56,11 +57,9 @@ use crate::{
     protocol::{ConnectionType, KadPeer, ProtocolConfig},
     query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState},
     record::{
-        self,
+        self, ProviderRecord, Record,
         store::{self, RecordStore},
-        ProviderRecord, Record,
     },
-    K_VALUE,
 };
 
 /// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
@@ -724,7 +723,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetClosestPeers`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -737,7 +736,7 @@ where
     /// Note that the result is capped after exceeds K_VALUE
     ///
     /// The result of the query is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetClosestPeers`].
     pub fn get_n_closest_peers<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -794,7 +793,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetRecord`].
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -853,7 +852,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`Event::OutboundQueryProgressed{QueryResult::PutRecord}`].
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::PutRecord`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -943,10 +942,10 @@ where
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
     pub fn remove_record(&mut self, key: &record::Key) {
-        if let Some(r) = self.store.get(key) {
-            if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                self.store.remove(key)
-            }
+        if let Some(r) = self.store.get(key)
+            && r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage())
+        {
+            self.store.remove(key)
         }
     }
 
@@ -967,8 +966,8 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
-    /// with one such event per bootstrapping query.
+    /// reported via [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::Bootstrap`]
+    /// events, with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
@@ -1020,7 +1019,8 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::StartProviding}`].
+    /// reported via [`Event::OutboundQueryProgressed`] with `result`
+    /// [`QueryResult::StartProviding`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -1056,7 +1056,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`Event::OutboundQueryProgressed{QueryResult::GetProviders}`].
+    /// reported via [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetProviders`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -1170,7 +1170,9 @@ where
 
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
-                tracing::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+                tracing::debug!(
+                    "Switching to client-mode because we no longer have any confirmed external addresses"
+                );
 
                 Mode::Client
             }
@@ -1184,7 +1186,9 @@ where
                     let confirmed_external_addresses =
                         to_comma_separated_list(confirmed_external_addresses);
 
-                    tracing::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    tracing::debug!(
+                        "Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable"
+                    );
                 }
 
                 Mode::Server
@@ -1230,7 +1234,7 @@ where
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.peers.addresses.insert(peer.node_id, addrs);
             }
-            query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
+            query.on_success(source, others_iter.map(|kp| kp.node_id))
         }
     }
 
@@ -1331,22 +1335,21 @@ where
                 if old_status != new_status {
                     entry.update(new_status)
                 }
-                if let Some(address) = address {
-                    if entry.value().insert(address) {
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            Event::RoutingUpdated {
-                                peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
-                    }
+                if let Some(address) = address
+                    && entry.value().insert(address)
+                {
+                    self.queued_events
+                        .push_back(ToSwarm::GenerateEvent(Event::RoutingUpdated {
+                            peer,
+                            is_new_peer: false,
+                            addresses: entry.value().clone(),
+                            old_peer: None,
+                            bucket_range: self
+                                .kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
+                        }))
                 }
             }
 
@@ -2464,8 +2467,8 @@ where
                     let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
-                        ref mut step,
-                        ref mut found_a_record,
+                        step,
+                        found_a_record,
                         cache_candidates,
                     } = &mut query.info
                     {
@@ -2586,10 +2589,10 @@ where
         }
 
         // Poll bootstrap periodically and automatically.
-        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
-            if let Err(e) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {e}");
-            }
+        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx)
+            && let Err(e) = self.bootstrap()
+        {
+            tracing::warn!("Failed to trigger bootstrap: {e}");
         }
 
         loop {
@@ -2768,7 +2771,7 @@ pub enum Event {
         result: QueryResult,
         /// Execution statistics from the query.
         stats: QueryStats,
-        /// Indicates which event this is, if therer are multiple responses for a single query.
+        /// Indicates which event this is, if there are multiple responses for a single query.
         step: ProgressStep,
     },
 
@@ -2951,12 +2954,6 @@ pub enum GetRecordError {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
-    #[error("the quorum failed; needed {quorum} peers")]
-    QuorumFailed {
-        key: record::Key,
-        records: Vec<PeerRecord>,
-        quorum: NonZeroUsize,
-    },
     #[error("the request timed out")]
     Timeout { key: record::Key },
 }
@@ -2965,7 +2962,6 @@ impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
     pub fn key(&self) -> &record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }
@@ -2975,7 +2971,6 @@ impl GetRecordError {
     /// consuming the error.
     pub fn into_key(self) -> record::Key {
         match self {
-            GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
             GetRecordError::NotFound { key, .. } => key,
         }

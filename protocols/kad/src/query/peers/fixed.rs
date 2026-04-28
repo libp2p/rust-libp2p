@@ -84,12 +84,12 @@ impl FixedPeersIter {
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
     pub(crate) fn on_success(&mut self, peer: &PeerId) -> bool {
-        if let State::Waiting { num_waiting } = &mut self.state {
-            if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
-                *state = PeerState::Succeeded;
-                *num_waiting -= 1;
-                return true;
-            }
+        if let State::Waiting { num_waiting } = &mut self.state
+            && let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer)
+        {
+            *state = PeerState::Succeeded;
+            *num_waiting -= 1;
+            return true;
         }
         false
     }
@@ -105,12 +105,12 @@ impl FixedPeersIter {
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
     pub(crate) fn on_failure(&mut self, peer: &PeerId) -> bool {
-        if let State::Waiting { num_waiting } = &mut self.state {
-            if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
-                *state = PeerState::Failed;
-                *num_waiting -= 1;
-                return true;
-            }
+        if let State::Waiting { num_waiting } = &mut self.state
+            && let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer)
+        {
+            *state = PeerState::Failed;
+            *num_waiting -= 1;
+            return true;
         }
         false
     }

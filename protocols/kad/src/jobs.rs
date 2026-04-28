@@ -72,7 +72,7 @@ use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::record::{self, store::RecordStore, ProviderRecord, Record};
+use crate::record::{self, ProviderRecord, Record, store::RecordStore};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -111,10 +111,10 @@ impl<T> PeriodicJob<T> {
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
     fn check_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
-        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
-            if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
-                return true;
-            }
+        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state
+            && (now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending())
+        {
+            return true;
         }
         false
     }

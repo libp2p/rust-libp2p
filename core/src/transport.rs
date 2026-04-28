@@ -62,7 +62,7 @@ static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 pub enum PortUse {
     /// Always allocate a new port for the dial.
     New,
-    /// Best effor reusing of an existing port.
+    /// Best effort reusing of an existing port.
     ///
     /// If there is no listener present that can be used to dial, a new port is allocated.
     #[default]

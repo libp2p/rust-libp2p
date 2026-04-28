@@ -29,19 +29,26 @@ use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
+#[cfg(feature = "partial_messages")]
+use crate::extensions::partial_messages::PartialMessage;
 use crate::{
+    ValidationError,
     config::ValidationMode,
     handler::HandlerEvent,
     rpc_proto::proto,
     topic::TopicHash,
     types::{
-        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
-        RawMessage, RpcIn, Subscription, SubscriptionAction,
+        ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
+        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, SubscriptionOpts,
     },
-    ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
+
+pub(crate) const GOSSIPSUB_1_3_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.3.0"),
+    kind: PeerKind::Gossipsubv1_3,
+};
 
 pub(crate) const GOSSIPSUB_1_2_0_PROTOCOL: ProtocolId = ProtocolId {
     protocol: StreamProtocol::new("/meshsub/1.2.0"),
@@ -79,6 +86,7 @@ impl Default for ProtocolConfig {
         Self {
             validation_mode: ValidationMode::Strict,
             protocol_ids: vec![
+                GOSSIPSUB_1_3_0_PROTOCOL,
                 GOSSIPSUB_1_2_0_PROTOCOL,
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
@@ -337,7 +345,9 @@ impl Decoder for GossipsubCodec {
                         );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Message dropped. Message source was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
@@ -556,12 +566,38 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
+            let extensions_msg = rpc_control.extensions.map(|extensions| Extensions {
+                partial_messages: extensions.partialMessages,
+            });
+
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
             control_msgs.extend(graft_msgs);
             control_msgs.extend(prune_msgs);
             control_msgs.extend(idontwant_msgs);
+            control_msgs.push(ControlAction::Extensions(extensions_msg));
         }
+
+        #[cfg(feature = "partial_messages")]
+        let partial_message = rpc.partial.and_then(|partial_proto| {
+            let Some(topic_id_bytes) = partial_proto.topicID else {
+                tracing::debug!("Partial message without topic_id, discarding");
+                return None;
+            };
+            let topic_hash = TopicHash::from_raw(String::from_utf8_lossy(&topic_id_bytes));
+
+            let Some(group_id) = partial_proto.groupID else {
+                tracing::debug!("Partial message without group_id, discarding");
+                return None;
+            };
+
+            Some(PartialMessage {
+                topic_hash,
+                group_id,
+                metadata: partial_proto.partsMetadata,
+                body: partial_proto.partialMessage,
+            })
+        });
 
         Ok(Some(HandlerEvent::Message {
             rpc: RpcIn {
@@ -576,9 +612,15 @@ impl Decoder for GossipsubCodec {
                             SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
+                        options: SubscriptionOpts {
+                            requests_partial: sub.requestsPartial.unwrap_or_default(),
+                            supports_partial: sub.supportsPartial.unwrap_or_default(),
+                        },
                     })
                     .collect(),
                 control_msgs,
+                #[cfg(feature = "partial_messages")]
+                partial_message,
             },
             invalid_messages,
         }))
@@ -595,8 +637,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config, types::RpcOut, Behaviour, ConfigBuilder, IdentTopic as Topic,
-        MessageAuthenticity, Version,
+        Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
+        config::Config, types::RpcOut,
     };
 
     #[derive(Clone, Debug)]
@@ -659,6 +701,7 @@ mod tests {
             let rpc = RpcOut::Publish {
                 message: message.clone(),
                 timeout: Delay::new(Duration::from_secs(1)),
+                message_id: MessageId(vec![0, 0]),
             };
 
             let mut codec =

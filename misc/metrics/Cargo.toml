@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -30,7 +30,7 @@ libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-relay = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-pin-project = "1.1.5"
+pin-project = "1.1.11"
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
