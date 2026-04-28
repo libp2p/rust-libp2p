@@ -237,20 +237,17 @@ async fn closing_relay_listener_expires_external_address() {
                 assert_eq!(closed_id, listener_id);
                 assert_eq!(addresses, vec![client_addr_with_peer_id.clone()]);
                 listener_closed = true;
-                if external_addr_expired {
-                    break;
-                }
             }
             SwarmEvent::ExternalAddrExpired { address } => {
                 assert_eq!(address, client_addr_with_peer_id);
                 external_addr_expired = true;
-                if listener_closed {
-                    break;
-                }
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             SwarmEvent::ExpiredListenAddr { .. } => {}
             e => panic!("{e:?}"),
+        }
+        if listener_closed && external_addr_expired {
+            break;
         }
     }
 
