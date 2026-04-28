@@ -89,17 +89,9 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
 
 /// Extract the port from a multiaddr if it contains TCP or UDP protocols.
 /// This works for QUIC addresses since they use UDP underneath.
-fn extract_port(addr: &Multiaddr) -> Option<u16> {
-    use Protocol::*;
-
-    for protocol in addr.iter() {
-        match protocol {
-            Tcp(port) | Udp(port) => return Some(port),
-            _ => continue,
-        }
-    }
-
-    None
+fn extract_port(addr: &Multiaddr) -> Option<Protocol<'_>> {
+    addr.iter()
+        .find(|p| matches!(p, Protocol::Tcp(_) | Protocol::Udp(_)))
 }
 
 /// Check if the observed port matches any of our current listening ports.
@@ -111,16 +103,9 @@ fn observed_port_matches_listening_port(
         return false;
     };
 
-    // Check if the observed port matches any of our listening ports
-    for listen_addr in listen_addresses.iter() {
-        if let Some(listen_port) = extract_port(listen_addr) {
-            if observed_port == listen_port {
-                return true;
-            }
-        }
-    }
-
-    false
+    listen_addresses
+        .iter()
+        .any(|addr| extract_port(addr).as_ref() == Some(&observed_port))
 }
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
@@ -370,8 +355,10 @@ impl Behaviour {
         if observed_port_matches_listening_port(observed, &self.listen_addresses) {
             // If the observed port matches any of our listening ports,
             // then port reuse actually worked. Use the original observed address.
-            self.events
-                .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+            if !self.external_addresses.iter().any(|a| a == observed) {
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+            }
         } else {
             // The observed port doesn't match any listening port, which means
             // either this is an inbound connection or an outbound connection
@@ -752,8 +739,9 @@ impl KeyType {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::behaviour::ListenAddresses;
+
+    use super::*;
 
     #[test]
     fn check_multiaddr_matches_peer_id() {
@@ -781,10 +769,10 @@ mod tests {
     fn test_extract_port() {
         // TCP and UDP addresses
         let tcp_addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
-        assert_eq!(extract_port(&tcp_addr), Some(8080));
+        assert_eq!(extract_port(&tcp_addr), Some(Protocol::Tcp(8080)));
 
         let udp_addr: Multiaddr = "/ip4/127.0.0.1/udp/9090".parse().unwrap();
-        assert_eq!(extract_port(&udp_addr), Some(9090));
+        assert_eq!(extract_port(&udp_addr), Some(Protocol::Udp(9090)));
 
         // Addresses without ports
         let no_port_addr: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
