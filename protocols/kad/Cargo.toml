@@ -33,7 +33,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "test-util"] }
 futures-timer = "3.0"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { workspace = true }
