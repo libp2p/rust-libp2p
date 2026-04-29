@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = { workspace = true }
 salsa20 = "0.10"
-sha3 = "0.10"
+sha3 = "0.11"
 tracing = { workspace = true }
 rand = "0.8"
 pin-project = "1.1.11"
