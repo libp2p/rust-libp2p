@@ -2533,7 +2533,7 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand_core 0.10.0",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
