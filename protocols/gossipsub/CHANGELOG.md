@@ -28,6 +28,10 @@
 - Implement gossipsub 1.3 partial messages extension.
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 
+- Fix full-message publishing to peers that request partial messages when the publisher does not
+  support partial messages.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
 
