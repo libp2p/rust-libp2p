@@ -57,9 +57,22 @@ impl Connection {
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
         let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
+            let channel = ev.channel();
+
+            // The browser-to-browser signaling spec uses an `init` data channel
+            // purely to ensure ICE info is included in the SDP offer; it is
+            // closed by the initiator as soon as the connection is established
+            // (spec step 8). Forwarding it as a regular libp2p substream would
+            // race the initiator's close against the responder's
+            // multistream-select on a soon-to-be-dead channel.
+            if channel.label() == "init" {
+                tracing::trace!("Discarding inbound `init` data channel from signaling");
+                return;
+            }
+
             tracing::trace!("New data channel");
 
-            if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
+            if let Err(e) = tx_ondatachannel.try_send(channel) {
                 if e.is_full() {
                     tracing::warn!("Remote is opening too many data channels, we can't keep up!");
                     return;

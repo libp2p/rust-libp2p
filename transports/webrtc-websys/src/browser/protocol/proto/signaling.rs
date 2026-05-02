@@ -16,8 +16,8 @@ use super::*;
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SignalingMessage {
-    pub type_pb: signaling::mod_SignalingMessage::Type,
-    pub data: String,
+    pub type_pb: Option<signaling::mod_SignalingMessage::Type>,
+    pub data: Option<String>,
 }
 
 impl<'a> MessageRead<'a> for SignalingMessage {
@@ -25,8 +25,8 @@ impl<'a> MessageRead<'a> for SignalingMessage {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.type_pb = r.read_enum(bytes)?,
-                Ok(18) => msg.data = r.read_string(bytes)?.to_owned(),
+                Ok(8) => msg.type_pb = Some(r.read_enum(bytes)?),
+                Ok(18) => msg.data = Some(r.read_string(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -38,13 +38,13 @@ impl<'a> MessageRead<'a> for SignalingMessage {
 impl MessageWrite for SignalingMessage {
     fn get_size(&self) -> usize {
         0
-        + if self.type_pb == signaling::mod_SignalingMessage::Type::SDP_OFFER { 0 } else { 1 + sizeof_varint(*(&self.type_pb) as u64) }
-        + if self.data == String::default() { 0 } else { 1 + sizeof_len((&self.data).len()) }
+        + self.type_pb.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.type_pb != signaling::mod_SignalingMessage::Type::SDP_OFFER { w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?; }
-        if self.data != String::default() { w.write_with_tag(18, |w| w.write_string(&**&self.data))?; }
+        if let Some(ref s) = self.type_pb { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.data { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         Ok(())
     }
 }

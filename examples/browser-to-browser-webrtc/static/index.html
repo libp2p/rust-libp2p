@@ -471,8 +471,8 @@
                     }
                     break;
 
-                case 'connectionEstablished':
-                    log(context, `Connected to peer: ${event.peerId}`, 'success');
+                case 'relayConnectionEstablished':
+                    log(context, `Connected to peer via relay: ${event.peer_id}`, 'success');
                     updateConnectionStatus(context, 'relay', true);
 
                     const statusEl = document.getElementById(`${context}-status`);
@@ -481,13 +481,17 @@
                     break;
 
                 case 'webrtcConnectionEstablished':
-                    log(context, `WebRTC direct connection established with: ${event.peerId}`, 'success');
+                    log(context, `WebRTC direct connection established with: ${event.peer_id}`, 'success');
                     updateConnectionStatus(context, 'webrtc', true);
                     log(context, 'Connection is now independent of the relay server!', 'success');
                     break;
 
+                case 'pingSuccess':
+                    log(context, `Ping to ${event.peer_id}: ${event.rtt_ms}ms`, 'info');
+                    break;
+
                 case 'error':
-                    log(context, `Error: ${event.message}`, 'error');
+                    log(context, `Error: ${event.msg}`, 'error');
                     break;
             }
         }

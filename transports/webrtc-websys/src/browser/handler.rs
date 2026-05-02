@@ -21,8 +21,15 @@ pub enum ToBehaviourEvent {
 /// Events sent from the Behaviour to the Handler.
 #[derive(Debug)]
 pub enum FromBehaviourEvent {
-    /// Start signaling with this peer
-    InitiateSignaling,
+    /// Start signaling with this peer.
+    ///
+    /// `is_dialer` is true when *we* requested the dial that produced the
+    /// underlying relay connection. The dialing side always takes the
+    /// initiator role; the responding side waits for the remote to open the
+    /// signaling stream. Without this bit, an asymmetric dial (only one side
+    /// asked to connect) would deadlock whenever the dialer happened to lose
+    /// a peer-id tie-break.
+    InitiateSignaling { is_dialer: bool },
 }
 
 /// The current status of the signaling process for this handler.
@@ -69,18 +76,12 @@ enum HandlerType {
 /// Handles connection, behaviour and signaling related events.
 #[derive(Debug)]
 pub struct SignalingHandler {
-    local_peer_id: PeerId,
     peer: PeerId,
     handler_type: HandlerType,
 }
 
 impl SignalingHandler {
-    pub fn new(
-        local_peer_id: PeerId,
-        peer: PeerId,
-        config: SignalingConfig,
-        is_noop: bool,
-    ) -> Self {
+    pub fn new(peer: PeerId, config: SignalingConfig, is_noop: bool) -> Self {
         let handler_type = if is_noop {
             HandlerType::Noop
         } else {
@@ -93,25 +94,15 @@ impl SignalingHandler {
             }
         };
 
-        Self {
-            local_peer_id,
-            peer,
-            handler_type,
-        }
+        Self { peer, handler_type }
     }
 
     /// Create a handler for an already established WebRTC connection.
-    pub fn new_established_webrtc(local_peer_id: PeerId, peer: PeerId) -> Self {
+    pub fn new_established_webrtc(peer: PeerId) -> Self {
         Self {
-            local_peer_id,
             peer,
             handler_type: HandlerType::EstablishedWebRTC,
         }
-    }
-
-    /// Defines whether a peer should be the initiator of the signaling process.
-    fn should_be_initiator(&self, remote_peer: &PeerId) -> bool {
-        self.local_peer_id < *remote_peer
     }
 
     /// Check if signaling should be retried based on the error and current state.
@@ -294,23 +285,28 @@ impl ConnectionHandler for SignalingHandler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        let should_be_initiator = self.should_be_initiator(&self.peer);
         if let (
             HandlerType::Signaling {
                 signaling_status, ..
             },
-            FromBehaviourEvent::InitiateSignaling,
+            FromBehaviourEvent::InitiateSignaling { is_dialer },
         ) = (&mut self.handler_type, event)
         {
             if *signaling_status == SignalingStatus::Idle
                 || *signaling_status == SignalingStatus::WaitingForRetry
             {
-                if should_be_initiator {
+                if is_dialer {
                     *signaling_status = SignalingStatus::AwaitingInitiation;
-                    tracing::trace!("Signaling status updated to `AwaitingInitiation`");
+                    tracing::trace!(
+                        "Signaling status -> AwaitingInitiation (we dialed {})",
+                        self.peer
+                    );
                 } else {
                     *signaling_status = SignalingStatus::Negotiating;
-                    tracing::trace!("Signaling status updated to `Negotiating`");
+                    tracing::trace!(
+                        "Signaling status -> Negotiating (waiting for {} to initiate)",
+                        self.peer
+                    );
                 }
             }
         }

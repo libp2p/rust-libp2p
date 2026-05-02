@@ -69,6 +69,7 @@ gloo-timers = { version = "0.3.0", features = ["futures"] }
 serde_json = "1.0.140"
 async-trait = "0.1.89"
 quick-protobuf = "0.8.1"
+unsigned-varint = { workspace = true, features = ["std", "futures"] }
 web-time.workspace = true
 
 [lints]

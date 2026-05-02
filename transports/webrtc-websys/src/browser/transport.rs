@@ -2,11 +2,11 @@ use std::{
     collections::{HashMap, VecDeque},
     future::Future,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
-use futures::{channel::oneshot, lock::Mutex, task::AtomicWaker};
+use futures::{channel::oneshot, task::AtomicWaker};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
@@ -138,15 +138,17 @@ impl libp2p_core::Transport for Transport {
         let peer_id = Self::extract_peer_id(&addr)
             .ok_or_else(|| TransportError::Other(Error::InvalidMultiaddr(addr.to_string())))?;
 
-        let pending_dials = self.pending_dials.clone();
+        // Register the dial intent synchronously so that the behaviour's
+        // `poll` can recognise this peer as one we initiated towards before
+        // signaling begins. This is what tells the signaling handler to take
+        // the initiator role.
+        let (tx, rx) = oneshot::channel();
+        self.pending_dials
+            .lock()
+            .expect("pending_dials mutex poisoned")
+            .insert(peer_id, tx);
 
         Ok(Box::pin(async move {
-            let (tx, rx) = oneshot::channel();
-            {
-                let mut dials = pending_dials.lock().await;
-                dials.insert(peer_id, tx);
-            }
-
             let connection = rx.await.map_err(|_| {
                 Error::Connection("WebRTC connection establishment cancelled".to_string())
             })?;
@@ -161,12 +163,10 @@ impl libp2p_core::Transport for Transport {
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         self.poll_waker.register(cx.waker());
 
-        let established_connections = self.established_connections.clone();
-
-        let Some(mut connections) = established_connections.try_lock() else {
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
-        };
+        let mut connections = self
+            .established_connections
+            .lock()
+            .expect("established_connections mutex poisoned");
 
         if let Some(conn_request) = connections.pop_front() {
             if let Some((&listener_id, _)) = self.listeners.iter().next() {

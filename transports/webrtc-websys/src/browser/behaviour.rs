@@ -1,11 +1,11 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::Poll,
     time::Duration,
 };
 
-use futures::{channel::oneshot, lock::Mutex, task::AtomicWaker};
+use futures::{channel::oneshot, task::AtomicWaker};
 use libp2p_core::{multiaddr::Protocol, PeerId};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 use tracing::info;
@@ -19,36 +19,25 @@ use crate::browser::{
 #[derive(Clone, Debug)]
 pub struct SignalingConfig {
     pub(crate) max_signaling_retries: u8,
-    pub(crate) max_ice_gathering_attempts: u8,
     pub(crate) signaling_delay: Duration,
     pub(crate) connection_establishment_delay_in_millis: Duration,
     pub(crate) max_connection_establishment_checks: u32,
-    #[allow(dead_code)]
-    pub(crate) ice_gathering_timeout: Duration,
-    pub(crate) local_peer_id: PeerId,
     pub(crate) stun_servers: Option<Vec<String>>,
 }
 
 impl SignalingConfig {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         max_retries: u8,
-        max_ice_gathering_attempts: u8,
         signaling_delay: Duration,
         connection_establishment_delay_in_millis: Duration,
         max_connection_establishment_checks: u32,
-        ice_gathering_timeout: Duration,
-        local_peer_id: PeerId,
         stun_servers: Option<Vec<String>>,
     ) -> Self {
         Self {
             max_signaling_retries: max_retries,
-            max_ice_gathering_attempts,
             signaling_delay,
             connection_establishment_delay_in_millis,
             max_connection_establishment_checks,
-            ice_gathering_timeout,
-            local_peer_id,
             stun_servers,
         }
     }
@@ -132,13 +121,9 @@ impl NetworkBehaviour for Behaviour {
             self.webrtc_connections.insert(connection_id, peer);
 
             // Return a no-op handler for established WebRTC connections
-            Ok(SignalingHandler::new_established_webrtc(
-                self.signaling_config.local_peer_id,
-                peer,
-            ))
+            Ok(SignalingHandler::new_established_webrtc(peer))
         } else {
             Ok(SignalingHandler::new(
-                self.signaling_config.local_peer_id,
                 peer,
                 self.signaling_config.clone(),
                 false,
@@ -165,10 +150,7 @@ impl NetworkBehaviour for Behaviour {
             self.webrtc_connections.insert(connection_id, peer);
 
             // Return a no-op handler for established WebRTC connections
-            Ok(SignalingHandler::new_established_webrtc(
-                self.signaling_config.local_peer_id,
-                peer,
-            ))
+            Ok(SignalingHandler::new_established_webrtc(peer))
         } else if has_circuit {
             info!(
                 "Outbound relay connection to peer {} - preparing for WebRTC signaling",
@@ -176,7 +158,6 @@ impl NetworkBehaviour for Behaviour {
             );
 
             Ok(SignalingHandler::new(
-                self.signaling_config.local_peer_id,
                 peer,
                 self.signaling_config.clone(),
                 false,
@@ -188,7 +169,6 @@ impl NetworkBehaviour for Behaviour {
                 addr
             );
             Ok(SignalingHandler::new(
-                self.signaling_config.local_peer_id,
                 peer,
                 self.signaling_config.clone(),
                 true,
@@ -254,29 +234,28 @@ impl NetworkBehaviour for Behaviour {
     ) {
         match event {
             ToBehaviourEvent::WebRTCConnectionSuccess(connection) => {
-                let pending_dials = self.pending_dials.clone();
-                let established_connections = self.established_connections.clone();
-                let transport_waker = self.transport_waker.clone();
+                let mut pending = self
+                    .pending_dials
+                    .lock()
+                    .expect("pending_dials mutex poisoned");
+                if let Some(sender) = pending.remove(&peer_id) {
+                    let _ = sender.send(connection);
+                } else {
+                    tracing::info!(
+                        "No pending dial found, treating as inbound for peer {}",
+                        peer_id
+                    );
 
-                wasm_bindgen_futures::spawn_local(async move {
-                    let mut pending = pending_dials.lock().await;
-                    if let Some(sender) = pending.remove(&peer_id) {
-                        let _ = sender.send(connection);
-                    } else {
-                        tracing::info!(
-                            "No pending dial found, treating as inbound for peer {}",
-                            peer_id
-                        );
-
-                        let mut established = established_connections.lock().await;
-                        established.push_back(ConnectionRequest {
+                    drop(pending);
+                    self.established_connections
+                        .lock()
+                        .expect("established_connections mutex poisoned")
+                        .push_back(ConnectionRequest {
                             peer_id,
                             connection,
                         });
-
-                        transport_waker.wake();
-                    }
-                });
+                    self.transport_waker.wake();
+                }
 
                 self.peers.remove(&peer_id);
 
@@ -291,12 +270,10 @@ impl NetworkBehaviour for Behaviour {
 
                 self.peers.remove(&peer_id);
 
-                // Notify any waiting dial
-                let pending_dials = self.pending_dials.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    let mut pending = pending_dials.lock().await;
-                    pending.remove(&peer_id);
-                });
+                self.pending_dials
+                    .lock()
+                    .expect("pending_dials mutex poisoned")
+                    .remove(&peer_id);
             }
             ToBehaviourEvent::SignalingRetry => {
                 if let Some(state) = self.peers.get_mut(&peer_id) {
@@ -332,12 +309,23 @@ impl NetworkBehaviour for Behaviour {
                 && state.is_relay_connection
                 && now.duration_since(state.discovered_at) >= delay
             {
+                // Whoever requested the dial owns the initiator role. The spec's
+                // "convention to prevent both sides initiating" only protects the
+                // case where both peers dialed each other simultaneously; in the
+                // common asymmetric case, deferring on the dialer side would
+                // deadlock because the remote has no reason to initiate.
+                let is_dialer = self
+                    .pending_dials
+                    .lock()
+                    .expect("pending_dials mutex poisoned")
+                    .contains_key(peer_id);
+
                 state.initiated = true;
 
                 return Poll::Ready(ToSwarm::NotifyHandler {
                     peer_id: *peer_id,
                     handler: NotifyHandler::One(state.connection_id),
-                    event: FromBehaviourEvent::InitiateSignaling,
+                    event: FromBehaviourEvent::InitiateSignaling { is_dialer },
                 });
             }
         }

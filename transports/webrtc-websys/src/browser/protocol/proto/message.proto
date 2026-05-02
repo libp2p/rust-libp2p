@@ -7,7 +7,7 @@ message SignalingMessage {
     SDP_ANSWER = 1;
     ICE_CANDIDATE = 2;
   }
-  
-  Type type = 1;
-  string data = 2;  
+
+  optional Type type = 1;
+  optional string data = 2;
 }

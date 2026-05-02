@@ -91,14 +91,10 @@ impl BrowserTransport {
         let stun_servers = ["stun:stun.l.google.com:19302"];
 
         let signaling_config = SignalingConfig::new(
-            3, // max retries
-            100, /* max ice gathering
-                * attempts */
-            std::time::Duration::from_millis(0), // signaling delay
-            std::time::Duration::from_millis(100), // connection check delay
-            300,                                 // max connection checks (30 seconds)
-            std::time::Duration::from_secs(10),  // ICE gathering timeout
-            keypair.public().to_peer_id(),       // The local peer's peer_id
+            3,                                     // max signaling retries
+            std::time::Duration::from_millis(0),   // signaling delay
+            std::time::Duration::from_millis(100), // per-check delay during connection establishment
+            300,                                   // max connection-establishment checks (~30s)
             Some(stun_servers.iter().map(ToString::to_string).collect()), // stun servers
         );
 
