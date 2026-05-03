@@ -36,7 +36,7 @@ mod proto {
     include!("generated/mod.rs");
     pub use self::{
         envelope_proto::*,
-        peer_record_proto::{mod_PeerRecord::*, PeerRecord},
+        peer_record_proto::{PeerRecord, mod_PeerRecord::*},
     };
 }
 

@@ -25,11 +25,11 @@ use std::{error::Error, net::Ipv4Addr, time::Duration};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    autonat,
-    core::{multiaddr::Protocol, Multiaddr},
+    PeerId, autonat,
+    core::{Multiaddr, multiaddr::Protocol},
     identify, identity, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId,
+    tcp, yamux,
 };
 use tracing_subscriber::EnvFilter;
 

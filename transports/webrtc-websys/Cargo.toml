@@ -8,13 +8,12 @@ license = "MIT"
 name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.4.1"
+version = "0.5.0"
 publish = true
 
 [dependencies]
 bytes = "1"
 futures = { workspace = true }
-getrandom = { workspace = true, features = ["js"] }
 hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
@@ -31,7 +30,7 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 thiserror = { workspace = true }
 tracing = { workspace = true, features = ["attributes"] }
 wasm-bindgen = { version = "0.2.90" }
-wasm-bindgen-futures = { version = "0.4.42" }
+wasm-bindgen-futures = { workspace = true }
 web-sys = { version = "0.3.70", features = [
   "RtcPeerConnection",
   "RtcConfiguration",
@@ -71,6 +70,9 @@ async-trait = "0.1.89"
 quick-protobuf = "0.8.1"
 unsigned-varint = { workspace = true, features = ["std", "futures"] }
 web-time.workspace = true
+
+[target.'cfg(target_family="wasm")'.dependencies]
+getrandom = { workspace = true }
 
 [lints]
 workspace = true

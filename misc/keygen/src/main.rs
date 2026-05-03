@@ -63,10 +63,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let peer_id = keypair.public().into();
             assert_eq!(
-                    PeerId::from_str(&config.identity.peer_id)?,
-                    peer_id,
-                    "Expect peer id derived from private key and peer id retrieved from config to match."
-                );
+                PeerId::from_str(&config.identity.peer_id)?,
+                peer_id,
+                "Expect peer id derived from private key and peer id retrieved from config to match."
+            );
 
             (peer_id, keypair)
         }
@@ -96,12 +96,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let prefix = prefix.clone();
                     let tx = tx.clone();
 
-                    thread::spawn(move || loop {
-                        let keypair = identity::Keypair::generate_ed25519();
-                        let peer_id = keypair.public().to_peer_id();
-                        let base58 = peer_id.to_base58();
-                        if base58[8..].starts_with(&prefix) {
-                            tx.send((peer_id, keypair)).expect("to send");
+                    thread::spawn(move || {
+                        loop {
+                            let keypair = identity::Keypair::generate_ed25519();
+                            let peer_id = keypair.public().to_peer_id();
+                            let base58 = peer_id.to_base58();
+                            if base58[8..].starts_with(&prefix) {
+                                tx.send((peer_id, keypair)).expect("to send");
+                            }
                         }
                     });
                 }

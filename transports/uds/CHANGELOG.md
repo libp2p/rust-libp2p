@@ -1,3 +1,10 @@
+## 0.44.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+- Rename Config to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
+  See [PR 6190](https://github.com/libp2p/rust-libp2p/pull/6190).
+
 ## 0.43.0
 
 - Remove `async-std` support.

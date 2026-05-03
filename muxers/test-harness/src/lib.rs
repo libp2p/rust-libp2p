@@ -7,11 +7,11 @@ use std::{
     time::Duration,
 };
 
-use futures::{future, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stream, StreamExt};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stream, StreamExt, future};
 use libp2p_core::{
+    StreamMuxer, UpgradeInfo,
     muxing::StreamMuxerExt,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    StreamMuxer, UpgradeInfo,
 };
 
 use crate::future::{BoxFuture, Either, FutureExt};

@@ -63,7 +63,7 @@ pub use select::ConnectionHandlerSelect;
 use smallvec::SmallVec;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
-use crate::{connection::AsStrHashEq, StreamProtocol};
+use crate::{StreamProtocol, connection::AsStrHashEq};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///

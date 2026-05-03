@@ -20,17 +20,17 @@ futures = { workspace = true }
 console_error_panic_hook = "0.1"
 tracing = { workspace = true }
 libp2p-swarm = { workspace = true }
-libp2p = { path = "../../libp2p", features = ["relay", "noise", "yamux", "ed25519", "macros", "identify", "ping", "wasm-bindgen"] }
-libp2p-identity = { version = "0.2" }
-libp2p-webrtc-utils = { version = "0.3"}
-libp2p-relay = { workspace = true}
-libp2p-core = { workspace = true}
+libp2p = { path = "../../libp2p", features = ["relay", "noise", "yamux", "ed25519", "macros", "identify", "ping"] }
+libp2p-identity = { workspace = true }
+libp2p-webrtc-utils = { workspace = true }
+libp2p-relay = { workspace = true }
+libp2p-core = { workspace = true }
 libp2p-webrtc-websys = { workspace = true }
 libp2p-websocket-websys = { workspace = true }
 tracing-wasm = "0.2"
 getrandom = { version = "0.2", features = ["js"] }
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
+wasm-bindgen-futures = { workspace = true }
 web-sys = { version = "0.3", features = ["RtcPeerConnection", "RtcDataChannel", "RtcConfiguration", "Window", "Navigator", "MediaDevices"] }
 js-sys = "0.3"
 

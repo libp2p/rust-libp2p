@@ -2,13 +2,13 @@ use std::{error::Error, net::Ipv4Addr, time::Duration};
 
 use clap::Parser;
 use libp2p::{
-    autonat,
+    Multiaddr, SwarmBuilder, autonat,
     futures::StreamExt,
     identify, identity,
     multiaddr::Protocol,
     noise,
-    swarm::{dial_opts::DialOpts, NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, SwarmBuilder,
+    swarm::{NetworkBehaviour, SwarmEvent, dial_opts::DialOpts},
+    tcp, yamux,
 };
 use rand::rngs::OsRng;
 use tracing_subscriber::EnvFilter;
@@ -73,7 +73,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 bytes_sent,
                 result: Ok(()),
             })) => {
-                println!("Tested {tested_addr} with {server}. Sent {bytes_sent} bytes for verification. Everything Ok and verified.");
+                println!(
+                    "Tested {tested_addr} with {server}. Sent {bytes_sent} bytes for verification. Everything Ok and verified."
+                );
             }
             SwarmEvent::Behaviour(BehaviourEvent::Autonat(autonat::v2::client::Event {
                 server,
@@ -81,7 +83,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 bytes_sent,
                 result: Err(e),
             })) => {
-                println!("Tested {tested_addr} with {server}. Sent {bytes_sent} bytes for verification. Failed with {e:?}.");
+                println!(
+                    "Tested {tested_addr} with {server}. Sent {bytes_sent} bytes for verification. Failed with {e:?}."
+                );
             }
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 println!("External address confirmed: {address}");

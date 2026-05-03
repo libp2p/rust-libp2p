@@ -24,10 +24,10 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
 use crate::{
-    error::ConfigBuilderError,
-    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
-    types::{Message, MessageId, PeerKind},
     TopicHash,
+    error::ConfigBuilderError,
+    protocol::{FLOODSUB_PROTOCOL, ProtocolConfig, ProtocolId},
+    types::{Message, MessageId, PeerKind},
 };
 
 /// The types of message validation that can be employed by gossipsub.
@@ -125,6 +125,8 @@ pub struct Config {
     gossip_retransimission: u32,
     max_messages_per_rpc: Option<usize>,
     max_ihave_length: usize,
+    #[cfg(feature = "partial_messages")]
+    max_metadata_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
     connection_handler_queue_len: usize,
@@ -425,6 +427,13 @@ impl Config {
         self.max_ihave_length
     }
 
+    /// The maximum number of metadata messages to send per peer during heartbeat gossip.
+    /// The default is 1000.
+    #[cfg(feature = "partial_messages")]
+    pub fn max_metadata_length(&self) -> usize {
+        self.max_metadata_length
+    }
+
     /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
     /// within a heartbeat.
     pub fn max_ihave_messages(&self) -> usize {
@@ -538,6 +547,8 @@ impl Default for ConfigBuilder {
                 gossip_retransimission: 3,
                 max_messages_per_rpc: None,
                 max_ihave_length: 5000,
+                #[cfg(feature = "partial_messages")]
+                max_metadata_length: 1000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -972,6 +983,14 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum number of metadata messages to send per peer during heartbeat gossip.
+    /// The default is 1000.
+    #[cfg(feature = "partial_messages")]
+    pub fn max_metadata_gossip(&mut self, max_metadata_length: usize) -> &mut Self {
+        self.config.max_metadata_length = max_metadata_length;
+        self
+    }
+
     /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
     /// within a heartbeat.
     pub fn max_ihave_messages(&mut self, max_ihave_messages: usize) -> &mut Self {
@@ -1180,7 +1199,7 @@ mod test {
     use libp2p_core::UpgradeInfo;
 
     use super::*;
-    use crate::{topic::IdentityHash, Topic};
+    use crate::{Topic, topic::IdentityHash};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

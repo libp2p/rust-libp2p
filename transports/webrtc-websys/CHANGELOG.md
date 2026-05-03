@@ -1,9 +1,15 @@
-## 0.4.1
+## 0.5.0
+
 - Implement browser-to-browser WebRTC connection establishment over circuit relay v2.
 - Add `SignalingBehaviour` for coordinating WebRTC signaling between browser peers.
 - Add `SignalingHandler` for managing WebRTC offer/answer exchange over relay connections.
 - Add support for automatic WebRTC connection upgrade from relay connections.
 - Add configurable signaling parameters (retry attempts, timeouts, ICE gathering).
+- Require `getrandom/js` feature only under `wasm` target.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
 ## 0.4.0
 

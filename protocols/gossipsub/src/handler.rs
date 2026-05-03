@@ -24,23 +24,23 @@ use std::{
 };
 
 use asynchronous_codec::Framed;
-use futures::{future::Either, prelude::*, StreamExt};
-use libp2p_core::upgrade::DeniedUpgrade;
+use futures::{StreamExt, future::Either, prelude::*};
+use libp2p_core::{PeerId, upgrade::DeniedUpgrade};
 use libp2p_swarm::{
+    Stream,
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
     },
-    Stream,
 };
 use web_time::Instant;
 
 use crate::{
+    ValidationError,
     protocol::{GossipsubCodec, ProtocolConfig},
     queue::Queue,
     rpc_proto::proto,
     types::{PeerKind, RawMessage, RpcIn, RpcOut},
-    ValidationError,
 };
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
@@ -89,6 +89,9 @@ pub enum Handler {
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
 pub struct EnabledHandler {
+    /// Remote `PeerId` for this `ConnectionHandler`.
+    peer_id: PeerId,
+
     /// Upgrade configuration for the gossipsub protocol.
     listen_protocol: ProtocolConfig,
 
@@ -153,7 +156,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
@@ -162,8 +165,13 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub(crate) fn new(protocol_config: ProtocolConfig, message_queue: Queue) -> Self {
+    pub(crate) fn new(
+        peer_id: PeerId,
+        protocol_config: ProtocolConfig,
+        message_queue: Queue,
+    ) -> Self {
         Handler::Enabled(EnabledHandler {
+            peer_id,
             listen_protocol: protocol_config,
             inbound_substream: None,
             outbound_substream: None,
@@ -224,13 +232,13 @@ impl EnabledHandler {
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     > {
-        if !self.peer_kind_sent {
-            if let Some(peer_kind) = self.peer_kind.as_ref() {
-                self.peer_kind_sent = true;
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    HandlerEvent::PeerKind(*peer_kind),
-                ));
-            }
+        if !self.peer_kind_sent
+            && let Some(peer_kind) = self.peer_kind.as_ref()
+        {
+            self.peer_kind_sent = true;
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                HandlerEvent::PeerKind(*peer_kind),
+            ));
         }
 
         // determine if we need to create the outbound stream
@@ -254,6 +262,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
+                        tracing::debug!(peer=%self.peer_id, ?message, "Sending gossipsub message");
                         match message {
                             RpcOut::Publish {
                                 message: _,
@@ -265,6 +274,7 @@ impl EnabledHandler {
                                 ref mut timeout,
                                 ..
                             } => {
+                                #[allow(clippy::collapsible_match)]
                                 if Pin::new(timeout).poll(cx).is_ready() {
                                     // Inform the behaviour and end the poll.
                                     self.outbound_substream =
@@ -278,7 +288,7 @@ impl EnabledHandler {
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
-                            message.into_protobuf(),
+                            Box::new(message.into_protobuf()),
                         ));
                         continue;
                     }
@@ -290,7 +300,7 @@ impl EnabledHandler {
                 Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
                     match Sink::poll_ready(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
-                            match Sink::start_send(Pin::new(&mut substream), message) {
+                            match Sink::start_send(Pin::new(&mut substream), *message) {
                                 Ok(()) => {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
