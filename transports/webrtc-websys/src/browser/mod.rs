@@ -6,8 +6,8 @@ pub(crate) mod transport;
 
 pub use behaviour::{Behaviour, SignalingConfig, SignalingEvent};
 pub use protocol::{
-    ProtocolHandler, Signaling, SignalingProtocolUpgrade, SIGNALING_PROTOCOL_ID,
-    SIGNALING_STREAM_PROTOCOL,
+    ProtocolHandler, SIGNALING_PROTOCOL_ID, SIGNALING_STREAM_PROTOCOL, Signaling,
+    SignalingProtocolUpgrade,
 };
 pub use stream::SignalingStream;
 pub use transport::{Config, Transport};

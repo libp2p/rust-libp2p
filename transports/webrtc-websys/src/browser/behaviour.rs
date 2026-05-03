@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures::{channel::oneshot, task::AtomicWaker};
-use libp2p_core::{multiaddr::Protocol, PeerId};
+use libp2p_core::{PeerId, multiaddr::Protocol};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, NotifyHandler, ToSwarm};
 use tracing::info;
 use web_time::Instant;

@@ -5,7 +5,7 @@ use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 
 use crate::browser::protocol::proto::signaling::SignalingMessage;
 
-/// A wrapper over an async stream for reading and writing a [`SignalingMessage`].
+/// A wrapper over an async stream for reading and writing `SignalingMessage`s.
 ///
 /// Each message is length-prefixed with an unsigned-varint, per the
 /// [WebRTC signaling spec](https://github.com/libp2p/specs/blob/master/webrtc/webrtc.md#signaling-protocol).
@@ -42,7 +42,7 @@ where
     }
 }
 
-/// Encodes a [`SignalingMessage`] with an unsigned-varint length prefix and writes it.
+/// Encodes a `SignalingMessage` with an unsigned-varint length prefix and writes it.
 pub(crate) async fn write_message<W>(mut writer: W, message: SignalingMessage) -> io::Result<()>
 where
     W: AsyncWrite + Unpin,
@@ -62,7 +62,7 @@ where
     Ok(())
 }
 
-/// Reads a length-prefixed [`SignalingMessage`] from the stream.
+/// Reads a length-prefixed `SignalingMessage` from the stream.
 pub(crate) async fn read_message<R>(mut reader: R) -> io::Result<SignalingMessage>
 where
     R: AsyncRead + Unpin,

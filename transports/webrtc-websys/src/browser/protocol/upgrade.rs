@@ -4,7 +4,7 @@ use futures::{AsyncRead, AsyncWrite};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::StreamProtocol;
 
-use crate::browser::{stream::SignalingStream, SIGNALING_STREAM_PROTOCOL};
+use crate::browser::{SIGNALING_STREAM_PROTOCOL, stream::SignalingStream};
 
 pub struct SignalingProtocolUpgrade;
 

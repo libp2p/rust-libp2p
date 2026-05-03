@@ -1,10 +1,10 @@
 use std::{str::FromStr, sync::Arc};
 
-use futures::{channel::mpsc, task::AtomicWaker, StreamExt};
+use futures::{StreamExt, channel::mpsc, task::AtomicWaker};
 use js_sys::{Object, Reflect};
 use libp2p::{
-    identify, identity::Keypair, multiaddr::Protocol, noise, ping, swarm::SwarmEvent, yamux,
-    Multiaddr, Swarm, Transport,
+    Multiaddr, Swarm, Transport, identify, identity::Keypair, multiaddr::Protocol, noise, ping,
+    swarm::SwarmEvent, yamux,
 };
 use libp2p_core::{muxing::StreamMuxerBox, upgrade::Version};
 use libp2p_swarm::NetworkBehaviour;
@@ -91,8 +91,8 @@ impl BrowserTransport {
         let stun_servers = ["stun:stun.l.google.com:19302"];
 
         let signaling_config = SignalingConfig::new(
-            3,                                     // max signaling retries
-            std::time::Duration::from_millis(0),   // signaling delay
+            3,                                                            // max signaling retries
+            std::time::Duration::from_millis(0),                          // signaling delay
             std::time::Duration::from_millis(100), // per-check delay during connection establishment
             300,                                   // max connection-establishment checks (~30s)
             Some(stun_servers.iter().map(ToString::to_string).collect()), // stun servers

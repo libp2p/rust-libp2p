@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use async_trait::async_trait;
-use futures::{channel::mpsc, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt, channel::mpsc};
 use tracing::{info, instrument};
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState,
@@ -12,14 +12,14 @@ use web_sys::{
 };
 
 use crate::{
+    Connection,
     browser::{
-        protocol::proto::signaling::{mod_SignalingMessage::Type, SignalingMessage},
-        stream::{read_message, write_message},
         SignalingConfig, SignalingStream,
+        protocol::proto::signaling::{SignalingMessage, mod_SignalingMessage::Type},
+        stream::{read_message, write_message},
     },
     connection::RtcPeerConnection,
     error::Error,
-    Connection,
 };
 
 // Implementation of WebRTC signaling protocol. This implementation follows
@@ -168,6 +168,12 @@ impl ProtocolHandler {
     }
 }
 
+fn peer_connection_from_event(event: &web_sys::Event) -> Option<web_sys::RtcPeerConnection> {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<web_sys::RtcPeerConnection>().ok())
+}
+
 impl ProtocolHandler {
     fn setup_peer_connection_state_callbacks(
         &self,
@@ -177,12 +183,10 @@ impl ProtocolHandler {
 
         let states = self.states.clone();
         let ice_connection_callback = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(target) = event.target() {
-                if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
-                    let state = safe_ice_connection_state_from_js(pc.ice_connection_state().into());
-                    tracing::debug!("ICE connection state changed to: {:?}", state);
-                    states.borrow_mut().ice_connection = state;
-                }
+            if let Some(pc) = peer_connection_from_event(&event) {
+                let state = safe_ice_connection_state_from_js(pc.ice_connection_state().into());
+                tracing::debug!("ICE connection state changed to: {:?}", state);
+                states.borrow_mut().ice_connection = state;
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         connection
@@ -190,12 +194,10 @@ impl ProtocolHandler {
 
         let states = self.states.clone();
         let ice_gathering_callback = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(target) = event.target() {
-                if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
-                    let state = safe_ice_gathering_state_from_js(pc.ice_gathering_state().into());
-                    tracing::debug!("ICE gathering state changed to: {:?}", state);
-                    states.borrow_mut().ice_gathering = state;
-                }
+            if let Some(pc) = peer_connection_from_event(&event) {
+                let state = safe_ice_gathering_state_from_js(pc.ice_gathering_state().into());
+                tracing::debug!("ICE gathering state changed to: {:?}", state);
+                states.borrow_mut().ice_gathering = state;
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         connection
@@ -203,12 +205,10 @@ impl ProtocolHandler {
 
         let states = self.states.clone();
         let peer_connection_callback = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(target) = event.target() {
-                if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
-                    let state = safe_peer_connection_state_from_js(pc.connection_state().into());
-                    tracing::debug!("Peer connection state changed to: {:?}", state);
-                    states.borrow_mut().peer_connection = state;
-                }
+            if let Some(pc) = peer_connection_from_event(&event) {
+                let state = safe_peer_connection_state_from_js(pc.connection_state().into());
+                tracing::debug!("Peer connection state changed to: {:?}", state);
+                states.borrow_mut().peer_connection = state;
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         connection
@@ -216,12 +216,10 @@ impl ProtocolHandler {
 
         let states = self.states.clone();
         let signaling_callback = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(target) = event.target() {
-                if let Some(pc) = target.dyn_ref::<web_sys::RtcPeerConnection>() {
-                    let state = safe_signaling_state_from_js(pc.signaling_state().into());
-                    tracing::debug!("Signaling state changed to: {:?}", state);
-                    states.borrow_mut().signaling = state;
-                }
+            if let Some(pc) = peer_connection_from_event(&event) {
+                let state = safe_signaling_state_from_js(pc.signaling_state().into());
+                tracing::debug!("Signaling state changed to: {:?}", state);
+                states.borrow_mut().signaling = state;
             }
         }) as Box<dyn FnMut(web_sys::Event)>);
         connection.set_onsignalingstatechange(Some(signaling_callback.as_ref().unchecked_ref()));

@@ -15,8 +15,8 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 
 use crate::{
-    browser::{behaviour::Behaviour, SignalingConfig},
     Connection, Error,
+    browser::{SignalingConfig, behaviour::Behaviour},
 };
 
 /// Config for the [`Transport`].
@@ -168,23 +168,23 @@ impl libp2p_core::Transport for Transport {
             .lock()
             .expect("established_connections mutex poisoned");
 
-        if let Some(conn_request) = connections.pop_front() {
-            if let Some((&listener_id, _)) = self.listeners.iter().next() {
-                let peer_id = conn_request.peer_id;
+        if let (Some(conn_request), Some((&listener_id, _))) =
+            (connections.pop_front(), self.listeners.iter().next())
+        {
+            let peer_id = conn_request.peer_id;
 
-                let webrtc_addr = format!("/webrtc/p2p/{}", peer_id)
-                    .parse::<Multiaddr>()
-                    .expect("valid webrtc address");
+            let webrtc_addr = format!("/webrtc/p2p/{}", peer_id)
+                .parse::<Multiaddr>()
+                .expect("valid webrtc address");
 
-                let upgrade = Box::pin(async move { Ok((peer_id, conn_request.connection)) });
+            let upgrade = Box::pin(async move { Ok((peer_id, conn_request.connection)) });
 
-                return Poll::Ready(TransportEvent::Incoming {
-                    listener_id,
-                    upgrade,
-                    local_addr: webrtc_addr.clone(),
-                    send_back_addr: webrtc_addr,
-                });
-            }
+            return Poll::Ready(TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr: webrtc_addr.clone(),
+                send_back_addr: webrtc_addr,
+            });
         }
 
         Poll::Pending

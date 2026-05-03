@@ -1,13 +1,13 @@
 use std::task::Poll;
 
 use futures::FutureExt;
-use libp2p_core::{upgrade::ReadyUpgrade, PeerId};
+use libp2p_core::{PeerId, upgrade::ReadyUpgrade};
 use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol};
 use tracing::instrument;
 
 use crate::browser::{
-    protocol::signaling::ProtocolHandler, Signaling, SignalingConfig, SignalingStream,
-    SIGNALING_STREAM_PROTOCOL,
+    SIGNALING_STREAM_PROTOCOL, Signaling, SignalingConfig, SignalingStream,
+    protocol::signaling::ProtocolHandler,
 };
 
 /// Events sent from the Handler to the Behaviour.
@@ -285,15 +285,16 @@ impl ConnectionHandler for SignalingHandler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        if let (
-            HandlerType::Signaling {
-                signaling_status, ..
-            },
-            FromBehaviourEvent::InitiateSignaling { is_dialer },
-        ) = (&mut self.handler_type, event)
-        {
-            if *signaling_status == SignalingStatus::Idle
-                || *signaling_status == SignalingStatus::WaitingForRetry
+        match (&mut self.handler_type, event) {
+            (
+                HandlerType::Signaling {
+                    signaling_status, ..
+                },
+                FromBehaviourEvent::InitiateSignaling { is_dialer },
+            ) if matches!(
+                *signaling_status,
+                SignalingStatus::Idle | SignalingStatus::WaitingForRetry
+            ) =>
             {
                 if is_dialer {
                     *signaling_status = SignalingStatus::AwaitingInitiation;
@@ -309,6 +310,7 @@ impl ConnectionHandler for SignalingHandler {
                     );
                 }
             }
+            _ => {}
         }
     }
 
@@ -323,7 +325,7 @@ impl ConnectionHandler for SignalingHandler {
         >,
     ) {
         match &mut self.handler_type {
-            HandlerType::Noop | HandlerType::EstablishedWebRTC => return,
+            HandlerType::Noop | HandlerType::EstablishedWebRTC => {}
             HandlerType::Signaling {
                 role,
                 signaling_status,

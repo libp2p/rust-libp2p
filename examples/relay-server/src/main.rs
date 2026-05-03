@@ -29,10 +29,11 @@ use std::{
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
+    PeerId, Swarm,
     core::{Multiaddr, multiaddr::Protocol},
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId, Swarm,
+    tcp, yamux,
 };
 use tracing_subscriber::EnvFilter;
 
