@@ -91,10 +91,12 @@ impl BrowserTransport {
         let stun_servers = ["stun:stun.l.google.com:19302"];
 
         let signaling_config = SignalingConfig::new(
-            3,                                                            // max signaling retries
-            std::time::Duration::from_millis(0),                          // signaling delay
-            std::time::Duration::from_millis(100), // per-check delay during connection establishment
-            300,                                   // max connection-establishment checks (~30s)
+            3,                                   // max signaling retries
+            std::time::Duration::from_millis(0), // signaling delay
+            std::time::Duration::from_millis(100), /* per-check delay
+                                                  * during connection
+                                                  * establishment */
+            300, // max connection-establishment checks (~30s)
             Some(stun_servers.iter().map(ToString::to_string).collect()), // stun servers
         );
 

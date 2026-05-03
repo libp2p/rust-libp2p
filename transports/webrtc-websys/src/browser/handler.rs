@@ -379,29 +379,27 @@ impl ConnectionHandler for SignalingHandler {
                         let _ = tx.send(signaling_result);
                     });
                 }
-                libp2p_swarm::handler::ConnectionEvent::DialUpgradeError(error) => {
+                libp2p_swarm::handler::ConnectionEvent::DialUpgradeError(error)
                     if *role == Some(SignalingRole::Initiator)
-                        || *signaling_status == SignalingStatus::Negotiating
-                    {
-                        tracing::error!(
-                            "Outbound signaling upgrade failed with peer {}: {:?}",
-                            self.peer,
-                            error
-                        );
-                        *signaling_status = SignalingStatus::Fail;
-                    }
+                        || *signaling_status == SignalingStatus::Negotiating =>
+                {
+                    tracing::error!(
+                        "Outbound signaling upgrade failed with peer {}: {:?}",
+                        self.peer,
+                        error
+                    );
+                    *signaling_status = SignalingStatus::Fail;
                 }
-                libp2p_swarm::handler::ConnectionEvent::ListenUpgradeError(error) => {
+                libp2p_swarm::handler::ConnectionEvent::ListenUpgradeError(error)
                     if *role == Some(SignalingRole::Responder)
-                        || *signaling_status == SignalingStatus::Negotiating
-                    {
-                        tracing::error!(
-                            "Inbound signaling upgrade failed with peer {}: {:?}",
-                            self.peer,
-                            error
-                        );
-                        *signaling_status = SignalingStatus::Fail;
-                    }
+                        || *signaling_status == SignalingStatus::Negotiating =>
+                {
+                    tracing::error!(
+                        "Inbound signaling upgrade failed with peer {}: {:?}",
+                        self.peer,
+                        error
+                    );
+                    *signaling_status = SignalingStatus::Fail;
                 }
                 _ => {}
             },
