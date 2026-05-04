@@ -691,13 +691,21 @@ where
         let candidates = self.publish_peers(&topic_hash);
 
         #[cfg(feature = "partial_messages")]
-        let candidates = candidates
-            .filter(|peer_id| {
-                !self
-                    .partial_messages_extension
-                    .requests_partial(peer_id, &topic_hash)
-            })
-            .collect();
+        let candidates = if self
+            .partial_messages_extension
+            .opts(&topic_hash)
+            .is_some_and(|opts| opts.supports_partial)
+        {
+            candidates
+                .filter(|peer_id| {
+                    !self
+                        .partial_messages_extension
+                        .requests_partial(peer_id, &topic_hash)
+                })
+                .collect()
+        } else {
+            candidates.collect()
+        };
         #[cfg(not(feature = "partial_messages"))]
         let candidates = candidates.collect();
 
