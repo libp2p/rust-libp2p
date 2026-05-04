@@ -27,7 +27,7 @@ use std::{io, mem::size_of};
 
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, Bytes, BytesMut};
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use prost::Message;
 
 use super::handshake::proto;
 use crate::{Error, protocol::PublicKey};
@@ -47,9 +47,8 @@ static_assertions::const_assert! {
 pub(crate) struct Codec<S> {
     session: S,
 
-    // We reuse write and encryption buffers across multiple messages to avoid reallocations.
+    // We reuse the encryption buffer across multiple messages to avoid reallocations.
     // We cannot reuse read and decryption buffers because we cannot return borrowed data.
-    write_buffer: BytesMut,
     encrypt_buffer: BytesMut,
 }
 
@@ -57,7 +56,6 @@ impl<S> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
-            write_buffer: BytesMut::default(),
             encrypt_buffer: BytesMut::default(),
         }
     }
@@ -103,19 +101,11 @@ impl Encoder for Codec<snow::HandshakeState> {
     type Item<'a> = &'a proto::NoiseHandshakePayload;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let item_size = item.get_size();
+        let encoded = item.encode_to_vec();
 
-        self.write_buffer.resize(item_size, 0);
-        let mut writer = Writer::new(&mut self.write_buffer[..item_size]);
-        item.write_message(&mut writer)
-            .expect("Protobuf encoding to succeed");
-
-        encrypt(
-            &self.write_buffer[..item_size],
-            dst,
-            &mut self.encrypt_buffer,
-            |item, buffer| self.session.write_message(item, buffer),
-        )?;
+        encrypt(&encoded, dst, &mut self.encrypt_buffer, |item, buffer| {
+            self.session.write_message(item, buffer)
+        })?;
 
         Ok(())
     }
@@ -133,14 +123,12 @@ impl Decoder for Codec<snow::HandshakeState> {
             return Ok(None);
         };
 
-        let mut reader = BytesReader::from_bytes(&cleartext[..]);
-        let pb =
-            proto::NoiseHandshakePayload::from_reader(&mut reader, &cleartext).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Failed decoding handshake payload",
-                )
-            })?;
+        let pb = proto::NoiseHandshakePayload::decode(&cleartext[..]).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Failed decoding handshake payload",
+            )
+        })?;
 
         Ok(Some(pb))
     }

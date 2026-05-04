@@ -1,3 +1,8 @@
+## 0.2.14
+
+- Revert migration from `prost` to `quick-protobuf`; this reintroduces the `protoc` build-time dependency (revert of [PR 3312]).
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
 ## 0.2.13
 
 - Turn the `quick-protobuf` dependency optional to only the features which require it.

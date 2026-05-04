@@ -3,8 +3,8 @@
 use std::{io, marker::PhantomData};
 
 use asynchronous_codec::{Decoder, Encoder};
-use bytes::{Buf, BufMut, BytesMut};
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
+use bytes::{Buf, BytesMut};
+use prost::Message;
 
 mod generated;
 
@@ -13,8 +13,9 @@ pub use generated::test as proto;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
 ///
-/// to prefix messages with their length and uses [`quick_protobuf`] and a provided
-/// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
+/// to prefix messages with their length and uses [`prost`] and a provided
+/// `struct` implementing [`prost::Message`] to do the encoding.
+#[derive(Debug, Clone)]
 pub struct Codec<In, Out = In> {
     max_message_len_bytes: usize,
     phantom: PhantomData<(In, Out)>,
@@ -34,39 +35,27 @@ impl<In, Out> Codec<In, Out> {
     }
 }
 
-impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
+impl<In: Message, Out> Encoder for Codec<In, Out> {
     type Item<'a> = In;
     type Error = Error;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        write_length(&item, dst);
-        write_message(&item, dst)?;
+        let message_length = item.encoded_len();
+
+        let mut uvi_buf = unsigned_varint::encode::usize_buffer();
+        let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
+        dst.reserve(encoded_length.len() + message_length);
+        dst.extend_from_slice(encoded_length);
+
+        item.encode(dst).map_err(io::Error::other)?;
 
         Ok(())
     }
 }
 
-/// Write the message's length (i.e. `size`) to `dst` as a variable-length integer.
-fn write_length(message: &impl MessageWrite, dst: &mut BytesMut) {
-    let message_length = message.get_size();
-
-    let mut uvi_buf = unsigned_varint::encode::usize_buffer();
-    let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
-
-    dst.extend_from_slice(encoded_length);
-}
-
-/// Write the message itself to `dst`.
-fn write_message(item: &impl MessageWrite, dst: &mut BytesMut) -> io::Result<()> {
-    let mut writer = Writer::new(BytesMutWriterBackend::new(dst));
-    item.write_message(&mut writer).map_err(io::Error::other)?;
-
-    Ok(())
-}
-
 impl<In, Out> Decoder for Codec<In, Out>
 where
-    Out: for<'a> MessageRead<'a>,
+    Out: Message + Default,
 {
     type Item = Out;
     type Error = Error;
@@ -80,7 +69,7 @@ where
 
         if message_length > self.max_message_len_bytes {
             return Err(Error(io::Error::new(
-                io::ErrorKind::PermissionDenied,
+                io::ErrorKind::InvalidData,
                 format!(
                     "message with {message_length}b exceeds maximum of {}b",
                     self.max_message_len_bytes
@@ -99,78 +88,17 @@ where
         // Safe to advance buffer now.
         src.advance(varint_length);
 
-        let message = src.split_to(message_length);
+        let message_bytes = src.split_to(message_length);
 
-        let mut reader = BytesReader::from_bytes(&message);
-        let message = Self::Item::from_reader(&mut reader, &message)
+        let message = Self::Item::decode(&message_bytes[..])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         Ok(Some(message))
     }
 }
 
-struct BytesMutWriterBackend<'a> {
-    dst: &'a mut BytesMut,
-}
-
-impl<'a> BytesMutWriterBackend<'a> {
-    fn new(dst: &'a mut BytesMut) -> Self {
-        Self { dst }
-    }
-}
-
-impl WriterBackend for BytesMutWriterBackend<'_> {
-    fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
-        self.dst.put_u8(x);
-
-        Ok(())
-    }
-
-    fn pb_write_u32(&mut self, x: u32) -> quick_protobuf::Result<()> {
-        self.dst.put_u32_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_i32(&mut self, x: i32) -> quick_protobuf::Result<()> {
-        self.dst.put_i32_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_f32(&mut self, x: f32) -> quick_protobuf::Result<()> {
-        self.dst.put_f32_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_u64(&mut self, x: u64) -> quick_protobuf::Result<()> {
-        self.dst.put_u64_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_i64(&mut self, x: i64) -> quick_protobuf::Result<()> {
-        self.dst.put_i64_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_f64(&mut self, x: f64) -> quick_protobuf::Result<()> {
-        self.dst.put_f64_le(x);
-
-        Ok(())
-    }
-
-    fn pb_write_all(&mut self, buf: &[u8]) -> quick_protobuf::Result<()> {
-        self.dst.put_slice(buf);
-
-        Ok(())
-    }
-}
-
 #[derive(thiserror::Error, Debug)]
-#[error("Failed to encode/decode message")]
+#[error(transparent)]
 pub struct Error(#[from] io::Error);
 
 impl From<Error> for io::Error {
@@ -181,8 +109,6 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-
     use asynchronous_codec::FramedRead;
     use futures::{FutureExt, StreamExt, io::Cursor};
     use quickcheck::{Arbitrary, Gen, QuickCheck};
@@ -197,10 +123,7 @@ mod tests {
         let mut read = FramedRead::new(Cursor::new(&mut src), codec);
         let err = read.next().now_or_never().unwrap().unwrap().unwrap_err();
 
-        assert_eq!(
-            err.source().unwrap().to_string(),
-            "message with 100b exceeds maximum of 1b"
-        )
+        assert_eq!(err.to_string(), "message with 100b exceeds maximum of 1b")
     }
 
     #[test]
@@ -263,11 +186,36 @@ mod tests {
         }
     }
 
-    #[derive(Debug)]
+    /// Dummy message type for tests that don't need real decoding.
+    #[derive(Debug, Default)]
     struct Dummy;
 
-    impl<'a> MessageRead<'a> for Dummy {
-        fn from_reader(_: &mut BytesReader, _: &'a [u8]) -> quick_protobuf::Result<Self> {
+    impl Message for Dummy {
+        fn encode_raw(&self, _buf: &mut impl bytes::BufMut)
+        where
+            Self: Sized,
+        {
+            todo!()
+        }
+
+        fn merge_field(
+            &mut self,
+            _tag: u32,
+            _wire_type: prost::encoding::WireType,
+            _buf: &mut impl bytes::Buf,
+            _ctx: prost::encoding::DecodeContext,
+        ) -> Result<(), prost::DecodeError>
+        where
+            Self: Sized,
+        {
+            todo!()
+        }
+
+        fn encoded_len(&self) -> usize {
+            todo!()
+        }
+
+        fn clear(&mut self) {
             todo!()
         }
     }

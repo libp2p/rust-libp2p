@@ -47,7 +47,7 @@ use libp2p_swarm::{
 };
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
-use quick_protobuf::{MessageWrite, Writer};
+use prost::Message as _;
 use rand::{
     seq::{IteratorRandom, SliceRandom},
     thread_rng,
@@ -3054,12 +3054,7 @@ where
                         key: None,
                     };
 
-                    let mut buf = Vec::with_capacity(message.get_size());
-                    let mut writer = Writer::new(&mut buf);
-
-                    message
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
+                    let buf = message.encode_to_vec();
 
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
