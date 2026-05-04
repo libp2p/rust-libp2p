@@ -1,5 +1,8 @@
 ## 0.45.0
 
+- Update DNS transport internals to support `hickory-resolver` 0.26.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 - refactor: `Resolver` no longer requires `#[async_trait]`
   See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
 

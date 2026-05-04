@@ -1,5 +1,8 @@
 ## 0.49.0
 
+- Update packet parsing internals to support `hickory-proto` 0.26.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

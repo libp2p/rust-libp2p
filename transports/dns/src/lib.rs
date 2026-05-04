@@ -506,16 +506,16 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                     Ok(lookup) => {
                         let mut addrs = Vec::new();
                         for record in lookup.answers() {
-                            if let RData::TXT(txt) = &record.data {
-                                if let Some(chars) = txt.txt_data.first() {
-                                    match parse_dnsaddr_txt(chars) {
-                                        Err(e) => {
-                                            // Skip over seemingly invalid entries.
-                                            tracing::debug!("Invalid TXT record: {:?}", e);
-                                        }
-                                        Ok(a) => {
-                                            addrs.push(a);
-                                        }
+                            if let RData::TXT(txt) = &record.data
+                                && let Some(chars) = txt.txt_data.first()
+                            {
+                                match parse_dnsaddr_txt(chars) {
+                                    Err(e) => {
+                                        // Skip over seemingly invalid entries.
+                                        tracing::debug!("Invalid TXT record: {:?}", e);
+                                    }
+                                    Ok(a) => {
+                                        addrs.push(a);
                                     }
                                 }
                             }
