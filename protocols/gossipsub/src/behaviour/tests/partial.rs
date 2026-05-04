@@ -1728,6 +1728,45 @@ fn test_partial_messages_two_node_exchange() {
     assert_eq!(recv_body.as_ref().unwrap()[0], 0b10101010);
 }
 
+/// Verifies that a peer subscribed without partial-message support still sends
+/// full publish messages to peers that request and support partial messages.
+#[test]
+fn test_full_publish_to_partial_peer_when_local_does_not_support_partial() {
+    let (mut gs, _, _, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(0)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .create_network();
+
+    let topic_hash = topics[0].clone();
+    let (_peer, mut queue) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        true, // requests_partial
+        true, // supports_partial
+    );
+
+    let publish_data = vec![1, 2, 3, 4];
+    gs.publish(topic_hash.clone(), publish_data.clone())
+        .expect("Full publish to partial peer should succeed");
+
+    let mut published = None;
+    while !queue.is_empty() {
+        if let Some(RpcOut::Publish { message, .. }) = queue.try_pop() {
+            published = Some(message);
+            break;
+        }
+    }
+
+    let published = published.expect("Partial peer should receive a full publish message");
+    assert_eq!(published.topic, topic_hash);
+    assert_eq!(published.data, publish_data);
+}
+
 /// Verifies that:
 /// - Partial messages are only sent to peers with `supports_partial: true`.
 /// - Peers with `supports_partial: false` are filtered out from `publish_partial`.
