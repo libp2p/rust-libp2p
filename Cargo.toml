@@ -119,6 +119,7 @@ libp2p-yamux = { version = "0.48.0", path = "muxers/yamux" }
 
 # External dependencies
 asynchronous-codec = { version = "0.7.0" }
+bytes = "1.11.1"
 env_logger = "0.11"
 futures = "0.3.30"
 futures-bounded = { version = "0.3", features = ["tokio"] }
@@ -130,7 +131,7 @@ hickory-proto = { version = "0.26.1", default-features = false }
 hickory-resolver = { version = "0.26.1", default-features = false }
 if-watch = "3.2.2"
 multiaddr = "0.18.1"
-multihash = "0.19.4"
+multihash = "0.19.5"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
