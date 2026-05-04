@@ -16,7 +16,7 @@ if-watch = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-rand = "0.8.3"
+rand = "0.10.0"
 smallvec = "1.15.1"
 socket2 = { version = "0.6.3", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true }
