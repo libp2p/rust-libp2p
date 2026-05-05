@@ -452,7 +452,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 #[test]
 fn test_ignore_too_many_ihaves() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
+        .max_ihave_messages_heartbeat(10)
         .build()
         .unwrap();
     // build gossipsub with full mesh
@@ -529,8 +529,8 @@ fn test_ignore_too_many_ihaves() {
 #[test]
 fn test_ignore_too_many_messages_in_ihave() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(10)
+        .max_ihave_messages_heartbeat(10)
+        .max_control_messages(10)
         .build()
         .unwrap();
     // build gossipsub with full mesh
@@ -610,8 +610,8 @@ fn test_ignore_too_many_messages_in_ihave() {
 #[test]
 fn test_limit_number_of_message_ids_inside_ihave() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(100)
+        .max_ihave_messages_heartbeat(10)
+        .max_control_messages(100)
         .build()
         .unwrap();
     // build gossipsub with full mesh
