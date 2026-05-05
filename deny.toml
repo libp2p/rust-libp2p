@@ -15,6 +15,7 @@ yanked = "warn"
 ignore = [
     "RUSTSEC-2024-0436",
     # No safe upgrade is available; this is pulled in through webrtc-dtls.
+    # Tracked in #6240.
     "RUSTSEC-2025-0141",
     # rand 0.8/0.9/0.10 are updated to patched releases in Cargo.lock.
     # rand 0.7.3 remains through cuckoofilter -> libp2p-floodsub, and
