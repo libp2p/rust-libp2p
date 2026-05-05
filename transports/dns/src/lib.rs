@@ -39,9 +39,8 @@
 //! On Unix systems, if no custom configuration is given, [hickory-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
-//!   1) This fails if `/etc/resolv.conf` does not exist. This is the case on
-//!      all versions of Android. [`tokio::Transport::system`] returns that
-//!      failure as an [`std::io::Error`].
+//!   1) This fails if `/etc/resolv.conf` does not exist. This is the case on all versions of
+//!      Android. [`tokio::Transport::system`] returns that failure as an [`std::io::Error`].
 //!   2) DNS configuration is only evaluated during startup. Runtime changes are thus ignored.
 //!   3) DNS resolution is obviously done in process and consequently not using any system APIs
 //!      (like libc's `gethostbyname`). Again this is problematic on platforms like Android, where

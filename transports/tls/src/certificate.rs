@@ -26,8 +26,7 @@ use std::sync::Arc;
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use x509_parser::asn1_rs::ToDer;
-use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
+use x509_parser::{asn1_rs::ToDer, prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
