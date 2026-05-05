@@ -70,26 +70,15 @@ pub mod tokio {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
             let (cfg, opts) = system_conf::read_system_conf().map_err(crate::system_conf_error)?;
-            Self::try_custom(inner, cfg, opts).map_err(crate::resolver_error_to_io)
+            Self::custom(inner, cfg, opts).map_err(crate::resolver_error_to_io)
         }
 
         /// Creates a [`Transport`] with a custom resolver configuration
         /// and options.
         ///
-        /// Panics if the underlying Hickory resolver cannot be constructed. Use
-        /// [`Self::try_custom`] to handle this case.
+        /// Returns an error if the underlying Hickory resolver cannot be
+        /// constructed.
         pub fn custom(
-            inner: T,
-            cfg: hickory_resolver::config::ResolverConfig,
-            opts: hickory_resolver::config::ResolverOpts,
-        ) -> Transport<T> {
-            Self::try_custom(inner, cfg, opts).expect("hickory resolver construction to be valid")
-        }
-
-        /// Creates a [`Transport`] with a custom resolver configuration
-        /// and options, returning an error if the underlying Hickory resolver
-        /// cannot be constructed.
-        pub fn try_custom(
             inner: T,
             cfg: hickory_resolver::config::ResolverConfig,
             opts: hickory_resolver::config::ResolverOpts,
@@ -657,7 +646,7 @@ mod tests {
     ) {
         let config = ResolverConfig::udp_and_tcp(&hickory_resolver::config::QUAD9);
         let opts = ResolverOpts::default();
-        let transport = tokio::Transport::try_custom(transport, config, opts).unwrap();
+        let transport = tokio::Transport::custom(transport, config, opts).unwrap();
         let rt = ::tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()

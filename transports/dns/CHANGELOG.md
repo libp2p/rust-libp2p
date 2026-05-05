@@ -14,9 +14,8 @@
   helper methods like `ResolveError::is_no_records_found()`.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
-### Added
-
-- Add `tokio::Transport::try_custom` for fallible custom resolver construction.
+- Change `tokio::Transport::custom` to return `Result<_, ResolveError>`
+  instead of panicking when Hickory rejects resolver construction.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
 ### Fixed

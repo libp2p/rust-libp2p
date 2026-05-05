@@ -90,17 +90,6 @@ impl<T: AuthenticatedMultiplexedTransport>
         self,
         cfg: libp2p_dns::ResolverConfig,
         opts: libp2p_dns::ResolverOpts,
-    ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
-    {
-        self.without_any_other_transports()
-            .with_dns_config(cfg, opts)
-    }
-
-    /// See [`SwarmBuilder::try_with_dns_config`].
-    pub fn try_with_dns_config(
-        self,
-        cfg: libp2p_dns::ResolverConfig,
-        opts: libp2p_dns::ResolverOpts,
     ) -> Result<
         SwarmBuilder<
             super::provider::Tokio,
@@ -109,7 +98,7 @@ impl<T: AuthenticatedMultiplexedTransport>
         libp2p_dns::ResolveError,
     > {
         self.without_any_other_transports()
-            .try_with_dns_config(cfg, opts)
+            .with_dns_config(cfg, opts)
     }
 }
 #[cfg(feature = "relay")]

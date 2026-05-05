@@ -287,7 +287,7 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .try_with_dns_config(
+            .with_dns_config(
                 libp2p_dns::ResolverConfig::default(),
                 libp2p_dns::ResolverOpts::default(),
             )
@@ -307,6 +307,7 @@ mod tests {
                 libp2p_dns::ResolverConfig::default(),
                 libp2p_dns::ResolverOpts::default(),
             )
+            .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -335,6 +336,7 @@ mod tests {
                 libp2p_dns::ResolverConfig::default(),
                 libp2p_dns::ResolverOpts::default(),
             )
+            .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
