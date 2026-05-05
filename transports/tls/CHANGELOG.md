@@ -3,7 +3,8 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
-- Update `rustls-webpki` in the lockfile.
+- Update `rustls-webpki` in the lockfile and use its contextual
+  signature-algorithm errors.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
 ## 0.6.3
