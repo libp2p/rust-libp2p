@@ -885,6 +885,16 @@ where
         partial_message: P,
     ) -> Result<(), PublishError> {
         let topic_hash = topic.into();
+        if self
+            .partial_messages_extension
+            .opts(&topic_hash)
+            .is_some_and(|opts| !opts.supports_partial)
+        {
+            return Err(PublishError::Partial(
+                partial_messages::PartialError::PartialNotSupportedForTopic,
+            ));
+        }
+
         let candidates = self
             .publish_peers(&topic_hash)
             .filter(|peer_id| {
