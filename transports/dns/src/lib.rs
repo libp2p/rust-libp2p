@@ -598,7 +598,7 @@ where
 #[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
-    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
+    use hickory_resolver::config::QUAD9;
     use libp2p_core::{
         Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
@@ -612,7 +612,7 @@ mod tests {
         transport: T,
         test_fn: impl FnOnce(tokio::Transport<T>) -> F,
     ) {
-        let config = ResolverConfig::quad9();
+        let config = ResolverConfig::udp_and_tcp(&QUAD9);
         let opts = ResolverOpts::default();
         let transport = tokio::Transport::custom(transport, config, opts);
         let rt = ::tokio::runtime::Builder::new_current_thread()
@@ -754,14 +754,8 @@ mod tests {
                     );
 
                     match &dial_errs[0] {
-                        Error::ResolveError(e) => match e.kind() {
-                            ResolveErrorKind::Proto(ProtoError { kind, .. })
-                                if matches!(
-                                    kind.as_ref(),
-                                    ProtoErrorKind::NoRecordsFound { .. }
-                                ) => {}
-                            _ => panic!("Unexpected DNS error: {e:?}"),
-                        },
+                        Error::ResolveError(e) if e.is_no_records_found() => {}
+                        Error::ResolveError(e) => panic!("Unexpected DNS error: {e:?}"),
                         other => {
                             panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
                         }
