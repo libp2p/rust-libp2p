@@ -133,10 +133,13 @@ impl State {
             tracing::warn!(topic=%topic_hash, "Tried to enable partials while already enabled");
             return;
         }
-        self.topics.insert(topic_hash, LocalTopic {
-            requests_partials: requests_partial,
-            partial_messages: Default::default(),
-        });
+        self.topics.insert(
+            topic_hash,
+            LocalTopic {
+                requests_partials: requests_partial,
+                partial_messages: Default::default(),
+            },
+        );
     }
 
     /// Called by the [`Behaviour`](crate::Behaviour) when a peer has disconnected.
