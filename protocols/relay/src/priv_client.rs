@@ -40,12 +40,16 @@ use futures::{
     ready,
     stream::StreamExt,
 };
-use libp2p_core::{Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
+use libp2p_core::{
+    Endpoint, Multiaddr,
+    multiaddr::Protocol,
+    transport::{ListenerId, PortUse},
+};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
     NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm, ListenerClosed},
     dial_opts::DialOpts,
     dummy,
 };
@@ -100,6 +104,12 @@ pub struct Behaviour {
     /// `/p2p-circuit` address we reserved on it.
     reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
+    /// Stores the [`ListenerId`] to the [`ConnectionId`] of the relay connection
+    /// that the listener's reservation is on. This allows us to expire external addresses
+    /// when a listener closes, but only if no other listener still holds a
+    /// reservation for the same address.
+    listener_id_to_connection_id: HashMap<ListenerId, ConnectionId>,
+
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Infallible>>>,
 
@@ -114,6 +124,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         from_transport,
         directly_connected_peers: Default::default(),
         reservation_addresses: Default::default(),
+        listener_id_to_connection_id: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -148,12 +159,40 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
+            self.listener_id_to_connection_id
+                .retain(|_, cid| *cid != connection_id);
             if let Some((addr, ReservationStatus::Confirmed)) =
                 self.reservation_addresses.remove(&connection_id)
             {
                 self.queued_actions
                     .push_back(ToSwarm::ExternalAddrExpired(addr));
             }
+        }
+    }
+
+    fn on_listener_closed(&mut self, ListenerClosed { listener_id, .. }: ListenerClosed) {
+        let Some(connection_id) = self.listener_id_to_connection_id.remove(&listener_id) else {
+            return;
+        };
+
+        // Only expire the external address if no other listener still holds
+        // a reservation on the same connection. During reservation replacement the new listener is
+        // registered before the old one closes, so there will still be another entry, so we should
+        // not emit the event to expire the address address.
+        let listenr_and_connection = self
+            .listener_id_to_connection_id
+            .values()
+            .any(|cid| *cid == connection_id);
+
+        if listenr_and_connection {
+            return;
+        }
+
+        if let Some((addr, ReservationStatus::Confirmed)) =
+            self.reservation_addresses.remove(&connection_id)
+        {
+            self.queued_actions
+                .push_back(ToSwarm::ExternalAddrExpired(addr));
         }
     }
 }
@@ -222,6 +261,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
+            FromSwarm::ListenerClosed(listener_closed) => self.on_listener_closed(listener_closed),
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.reservation_addresses.remove(&connection_id);
                 self.pending_handler_commands.remove(&connection_id);
@@ -285,6 +325,7 @@ impl NetworkBehaviour for Behaviour {
 
         let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
             Some(transport::TransportToBehaviourMsg::ListenReq {
+                listener_id,
                 relay_peer_id,
                 relay_addr,
                 to_listener,
@@ -295,6 +336,8 @@ impl NetworkBehaviour for Behaviour {
                     .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => {
+                        self.listener_id_to_connection_id
+                            .insert(listener_id, *connection_id);
                         self.reservation_addresses.insert(
                             *connection_id,
                             (
@@ -319,6 +362,8 @@ impl NetworkBehaviour for Behaviour {
                             .build();
                         let relayed_connection_id = opts.connection_id();
 
+                        self.listener_id_to_connection_id
+                            .insert(listener_id, relayed_connection_id);
                         self.reservation_addresses.insert(
                             relayed_connection_id,
                             (
