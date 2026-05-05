@@ -9,6 +9,10 @@
   returned `RData` values by record type.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
+- Return a DNS resolve error instead of panicking if a generic `Dns` lookup
+  succeeds with no returned IP addresses.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 - Update DNS transport internals to support `hickory-resolver` 0.26.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 

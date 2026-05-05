@@ -437,7 +437,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                     let mut ips = ips.iter();
                     let one = ips
                         .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                        .ok_or_else(|| Error::ResolveError("No Matching Records Found".into()))?;
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -766,6 +766,64 @@ mod tests {
         }
 
         test_tokio(CustomTransport, run);
+    }
+
+    #[test]
+    fn dns_empty_lookup_ip_returns_resolve_error() {
+        use hickory_resolver::{
+            lookup::Lookup,
+            lookup_ip::LookupIp,
+            proto::{
+                op::Query,
+                rr::{Name, RecordType},
+            },
+        };
+
+        #[derive(Clone)]
+        struct EmptyLookupResolver;
+
+        fn empty_lookup(name: String, record_type: RecordType) -> Lookup {
+            let query = Query::query(
+                Name::from_ascii(name).expect("test domain name should be valid"),
+                record_type,
+            );
+            Lookup::new_with_max_ttl(query, std::iter::empty())
+        }
+
+        impl Resolver for EmptyLookupResolver {
+            async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError> {
+                Ok(empty_lookup(name, RecordType::A).into())
+            }
+
+            async fn ipv4_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty_lookup(name, RecordType::A))
+            }
+
+            async fn ipv6_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty_lookup(name, RecordType::AAAA))
+            }
+
+            async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty_lookup(name, RecordType::TXT))
+            }
+        }
+
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        rt.block_on(async {
+            let resolver = EmptyLookupResolver;
+            let proto = Protocol::Dns("example.com".into());
+
+            match resolve::<std::io::Error, _>(&proto, &resolver).await {
+                Err(Error::ResolveError(_)) => {}
+                Err(e) => panic!("Unexpected error: {e:?}"),
+                Ok(_) => panic!("Unexpected success."),
+            }
+        });
     }
 
     #[test]
