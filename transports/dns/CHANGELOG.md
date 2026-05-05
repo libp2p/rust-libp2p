@@ -1,5 +1,8 @@
 ## 0.45.0
 
+- Update `hickory` dependencies to `v0.26`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 - refactor: `Resolver` no longer requires `#[async_trait]`
   See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
 
