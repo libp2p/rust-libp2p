@@ -1,5 +1,6 @@
 ## 0.5.0
 
+- Implements `Default` trait for `Fingerprint` type.
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
