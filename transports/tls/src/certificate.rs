@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
+use x509_parser::asn1_rs::ToDer;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -60,10 +61,30 @@ fn supported_signature_algorithms() -> Vec<rustls::pki_types::AlgorithmIdentifie
     ]
 }
 
+fn algorithm_identifier_value(
+    algorithm_identifier: &AlgorithmIdentifier<'_>,
+) -> Result<Vec<u8>, webpki::Error> {
+    let mut content = algorithm_identifier
+        .algorithm
+        .to_der_vec()
+        .map_err(|_| webpki::Error::BadDer)?;
+
+    if let Some(parameters) = &algorithm_identifier.parameters {
+        content.extend(parameters.to_der_vec().map_err(|_| webpki::Error::BadDer)?);
+    }
+
+    Ok(content)
+}
+
 fn unsupported_signature_algorithm(signature_algorithm: &AlgorithmIdentifier<'_>) -> webpki::Error {
+    let signature_algorithm_id = match algorithm_identifier_value(signature_algorithm) {
+        Ok(id) => id,
+        Err(err) => return err,
+    };
+
     webpki::Error::UnsupportedSignatureAlgorithmContext(
         webpki::UnsupportedSignatureAlgorithmContext {
-            signature_algorithm_id: signature_algorithm.algorithm.as_bytes().to_vec(),
+            signature_algorithm_id,
             supported_algorithms: supported_signature_algorithms(),
         },
     )
@@ -73,10 +94,19 @@ fn unsupported_signature_algorithm_for_public_key(
     signature_algorithm: &AlgorithmIdentifier<'_>,
     public_key_algorithm: &AlgorithmIdentifier<'_>,
 ) -> webpki::Error {
+    let signature_algorithm_id = match algorithm_identifier_value(signature_algorithm) {
+        Ok(id) => id,
+        Err(err) => return err,
+    };
+    let public_key_algorithm_id = match algorithm_identifier_value(public_key_algorithm) {
+        Ok(id) => id,
+        Err(err) => return err,
+    };
+
     webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(
         webpki::UnsupportedSignatureAlgorithmForPublicKeyContext {
-            signature_algorithm_id: signature_algorithm.algorithm.as_bytes().to_vec(),
-            public_key_algorithm_id: public_key_algorithm.algorithm.as_bytes().to_vec(),
+            signature_algorithm_id,
+            public_key_algorithm_id,
         },
     )
 }
@@ -532,8 +562,15 @@ impl P2pCertificate<'_> {
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use x509_parser::asn1_rs::FromDer;
 
     use super::*;
+
+    fn parse_algorithm_identifier(der: &[u8]) -> AlgorithmIdentifier<'_> {
+        let (remaining, algorithm_identifier) = AlgorithmIdentifier::from_der(der).unwrap();
+        assert!(remaining.is_empty());
+        algorithm_identifier
+    }
 
     #[test]
     fn sanity_check() {
@@ -544,6 +581,54 @@ mod tests {
 
         assert!(parsed_cert.verify().is_ok());
         assert_eq!(keypair.public(), parsed_cert.extension.public_key);
+    }
+
+    #[test]
+    fn unsupported_signature_algorithm_error_uses_der_algorithm_identifier() {
+        let algorithm_identifier = parse_algorithm_identifier(&hex!("300a06082a8648ce3d040302"));
+
+        let err = unsupported_signature_algorithm(&algorithm_identifier);
+
+        match err {
+            webpki::Error::UnsupportedSignatureAlgorithmContext(context) => {
+                assert_eq!(
+                    context.signature_algorithm_id,
+                    rustls::pki_types::alg_id::ECDSA_SHA256.as_ref()
+                );
+                assert!(
+                    context
+                        .supported_algorithms
+                        .contains(&rustls::pki_types::alg_id::ECDSA_SHA256)
+                );
+            }
+            err => panic!("unexpected error: {err:?}"),
+        }
+    }
+
+    #[test]
+    fn unsupported_public_key_error_uses_der_algorithm_identifiers() {
+        let signature_algorithm = parse_algorithm_identifier(&hex!("300a06082a8648ce3d040302"));
+        let public_key_algorithm =
+            parse_algorithm_identifier(&hex!("300d06092a864886f70d0101010500"));
+
+        let err = unsupported_signature_algorithm_for_public_key(
+            &signature_algorithm,
+            &public_key_algorithm,
+        );
+
+        match err {
+            webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(context) => {
+                assert_eq!(
+                    context.signature_algorithm_id,
+                    rustls::pki_types::alg_id::ECDSA_SHA256.as_ref()
+                );
+                assert_eq!(
+                    context.public_key_algorithm_id,
+                    rustls::pki_types::alg_id::RSA_ENCRYPTION.as_ref()
+                );
+            }
+            err => panic!("unexpected error: {err:?}"),
+        }
     }
 
     macro_rules! check_cert {

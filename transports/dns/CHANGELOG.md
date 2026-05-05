@@ -20,8 +20,8 @@
 
 ### Fixed
 
-- Return a DNS resolve error instead of panicking if a generic `Dns` lookup
-  succeeds with no returned IP addresses.
+- Return a DNS resolve error instead of panicking if `Dns`, `Dns4`, or `Dns6`
+  lookups succeed with no matching records.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
 ### Changed

@@ -1,7 +1,15 @@
 ## 0.57.0
 
-- Change `SwarmBuilder::with_dns_config` to return `Result<_, libp2p_dns::ResolveError>`
-  instead of panicking when Hickory rejects resolver construction.
+- Change `SwarmBuilder::with_dns_config` on the DNS, QUIC, and other-transport
+  builder phases to return `Result<_, libp2p_dns::ResolveError>` instead of
+  panicking when Hickory rejects resolver construction.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
+- Update the re-exported `libp2p::dns` API for `hickory-resolver` 0.26:
+  `libp2p::dns::tokio::Transport::custom` now returns `Result`,
+  `libp2p::dns::ResolveError` is Hickory's `NetError`,
+  `libp2p::dns::ResolveErrorKind` is no longer re-exported, and hidden public
+  `Resolver` lookup methods now return Hickory's generic `Lookup`.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.

@@ -30,17 +30,18 @@
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
 //! The [`tokio::Transport`] is enabled by default under the `tokio` feature.
-//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
-//! `tokio-dns-over-https-rustls` features.
-//! For more information about these features, please refer to the documentation
-//! of [trust-dns-resolver].
+//! Additional resolver transports are controlled by `hickory-resolver`
+//! features.
+//! For more information about these features, please refer to the
+//! [hickory-resolver] documentation.
 //! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
 //!
-//! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
+//! On Unix systems, if no custom configuration is given, [hickory-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
-//!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is the case on all
-//!      versions of Android.
+//!   1) This fails if `/etc/resolv.conf` does not exist. This is the case on
+//!      all versions of Android. [`tokio::Transport::system`] returns that
+//!      failure as an [`std::io::Error`].
 //!   2) DNS configuration is only evaluated during startup. Runtime changes are thus ignored.
 //!   3) DNS resolution is obviously done in process and consequently not using any system APIs
 //!      (like libc's `gethostbyname`). Again this is problematic on platforms like Android, where
@@ -51,7 +52,7 @@
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
-//! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+//! [hickory-resolver]: https://docs.rs/hickory-resolver
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -343,6 +344,8 @@ where
             if !dial_errors.is_empty() {
                 Err(Error::Dial(dial_errors))
             } else {
+                // No single DNS query owns this error: all lookups succeeded, but none produced
+                // a protocol compatible with the dialed address.
                 Err(Error::ResolveError(no_records_found(Query::default())))
             }
         }
