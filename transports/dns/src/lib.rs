@@ -69,8 +69,8 @@ pub mod tokio {
     impl<T> Transport<T> {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
-            let (cfg, opts) = system_conf::read_system_conf().map_err(crate::invalid_data)?;
-            Self::try_custom(inner, cfg, opts).map_err(crate::invalid_data)
+            let (cfg, opts) = system_conf::read_system_conf().map_err(crate::system_conf_error)?;
+            Self::try_custom(inner, cfg, opts).map_err(crate::resolver_error_to_io)
         }
 
         /// Creates a [`Transport`] with a custom resolver configuration
@@ -572,6 +572,34 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
     io::Error::new(io::ErrorKind::InvalidData, e)
 }
 
+#[cfg(all(
+    feature = "tokio",
+    unix,
+    not(any(target_os = "android", target_vendor = "apple"))
+))]
+fn system_conf_error(e: ResolveError) -> io::Error {
+    resolver_error_to_io(e)
+}
+
+#[cfg(all(
+    feature = "tokio",
+    not(all(unix, not(any(target_os = "android", target_vendor = "apple"))))
+))]
+fn system_conf_error(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
+    io::Error::other(e)
+}
+
+#[cfg(feature = "tokio")]
+fn resolver_error_to_io(e: ResolveError) -> io::Error {
+    let kind = match &e {
+        hickory_resolver::net::NetError::Io(source) => source.kind(),
+        hickory_resolver::net::NetError::Timeout => io::ErrorKind::TimedOut,
+        _ => io::ErrorKind::Other,
+    };
+
+    io::Error::new(kind, e)
+}
+
 #[doc(hidden)]
 pub trait Resolver {
     fn lookup_ip(
@@ -782,6 +810,16 @@ mod tests {
         }
 
         test_tokio(CustomTransport, run);
+    }
+
+    #[test]
+    fn resolver_error_to_io_preserves_io_kind_and_source() {
+        let error = resolver_error_to_io(ResolveError::from(std::io::Error::from(
+            std::io::ErrorKind::PermissionDenied,
+        )));
+
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(error.get_ref().is_some());
     }
 
     #[test]
