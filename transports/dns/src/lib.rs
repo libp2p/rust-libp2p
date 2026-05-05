@@ -70,28 +70,36 @@ pub mod tokio {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
             let (cfg, opts) = system_conf::read_system_conf().map_err(crate::invalid_data)?;
-            Ok(Self::custom(inner, cfg, opts))
+            Self::try_custom(inner, cfg, opts).map_err(crate::invalid_data)
         }
 
         /// Creates a [`Transport`] with a custom resolver configuration
         /// and options.
+        ///
+        /// Panics if the underlying Hickory resolver cannot be constructed. Use
+        /// [`Self::try_custom`] to handle this case.
         pub fn custom(
             inner: T,
             cfg: hickory_resolver::config::ResolverConfig,
             opts: hickory_resolver::config::ResolverOpts,
         ) -> Transport<T> {
-            Transport {
+            Self::try_custom(inner, cfg, opts).expect("hickory resolver construction to be valid")
+        }
+
+        /// Creates a [`Transport`] with a custom resolver configuration
+        /// and options, returning an error if the underlying Hickory resolver
+        /// cannot be constructed.
+        pub fn try_custom(
+            inner: T,
+            cfg: hickory_resolver::config::ResolverConfig,
+            opts: hickory_resolver::config::ResolverOpts,
+        ) -> Result<Transport<T>, crate::ResolveError> {
+            Ok(Transport {
                 inner: Arc::new(Mutex::new(inner)),
                 resolver: TokioResolver::builder_with_config(cfg, TokioRuntimeProvider::default())
                     .with_options(opts)
-                    .build()
-                    // With libp2p-dns' Hickory features (`system-config` and `tokio`),
-                    // `build` does not validate the caller-provided config or options.
-                    // It only returns an error for Hickory feature combinations that construct
-                    // TLS config, which this crate does not enable. Exposing the `Result` is
-                    // tracked in libp2p/rust-libp2p#6420 for the next breaking release.
-                    .expect("hickory resolver construction to be infallible"),
-            }
+                    .build()?,
+            })
         }
     }
 }
@@ -605,7 +613,7 @@ mod tests {
     ) {
         let config = ResolverConfig::udp_and_tcp(&hickory_resolver::config::QUAD9);
         let opts = ResolverOpts::default();
-        let transport = tokio::Transport::custom(transport, config, opts);
+        let transport = tokio::Transport::try_custom(transport, config, opts).unwrap();
         let rt = ::tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()

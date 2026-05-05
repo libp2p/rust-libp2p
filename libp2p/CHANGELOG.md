@@ -1,5 +1,8 @@
 ## 0.57.0
 
+- Add `SwarmBuilder::try_with_dns_config` for fallible custom DNS resolver construction.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 - Raise MSRV to 1.88.0.

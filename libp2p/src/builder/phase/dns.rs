@@ -30,19 +30,45 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, DnsPhase<T>> {
+    /// Builds the DNS transport with a custom resolver configuration.
+    ///
+    /// Panics if the underlying Hickory resolver cannot be constructed. Use
+    /// [`Self::try_with_dns_config`] to handle this case.
     pub fn with_dns_config(
         self,
         cfg: libp2p_dns::ResolverConfig,
         opts: libp2p_dns::ResolverOpts,
     ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
     {
-        SwarmBuilder {
+        self.try_with_dns_config(cfg, opts)
+            .expect("hickory resolver construction to be valid")
+    }
+
+    /// Builds the DNS transport with a custom resolver configuration.
+    ///
+    /// Returns an error if the underlying Hickory resolver cannot be constructed.
+    pub fn try_with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> Result<
+        SwarmBuilder<
+            super::provider::Tokio,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
+        libp2p_dns::ResolveError,
+    > {
+        Ok(SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: WebsocketPhase {
-                transport: libp2p_dns::tokio::Transport::custom(self.phase.transport, cfg, opts),
+                transport: libp2p_dns::tokio::Transport::try_custom(
+                    self.phase.transport,
+                    cfg,
+                    opts,
+                )?,
             },
-        }
+        })
     }
 }
 
