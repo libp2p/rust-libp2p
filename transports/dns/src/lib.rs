@@ -85,7 +85,12 @@ pub mod tokio {
                 resolver: TokioResolver::builder_with_config(cfg, TokioRuntimeProvider::default())
                     .with_options(opts)
                     .build()
-                    .expect("resolver configuration to be valid"),
+                    // With libp2p-dns' Hickory features (`system-config` and `tokio`),
+                    // `build` does not validate the caller-provided config or options.
+                    // It only returns an error for Hickory feature combinations that construct
+                    // TLS config, which this crate does not enable. Exposing the `Result` is
+                    // tracked in libp2p/rust-libp2p#6420 for the next breaking release.
+                    .expect("hickory resolver construction to be infallible"),
             }
         }
     }
