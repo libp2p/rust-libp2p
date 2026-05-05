@@ -3,6 +3,12 @@
 - Add `tokio::Transport::try_custom` for fallible custom resolver construction.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
+- Change the hidden public `Resolver` trait's `ipv4_lookup`, `ipv6_lookup`,
+  and `txt_lookup` methods to return Hickory's generic `Lookup` type. Custom
+  resolver implementations must update their method signatures and filter
+  returned `RData` values by record type.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 - Update DNS transport internals to support `hickory-resolver` 0.26.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
