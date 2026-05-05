@@ -115,7 +115,16 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*};
-use hickory_resolver::{ConnectionProvider, lookup::Lookup, lookup_ip::LookupIp, proto::rr::RData};
+use hickory_resolver::{
+    ConnectionProvider,
+    lookup::Lookup,
+    lookup_ip::LookupIp,
+    net::NoRecords,
+    proto::{
+        op::{Query, ResponseCode},
+        rr::RData,
+    },
+};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
     net::NetError as ResolveError,
@@ -144,6 +153,10 @@ const MAX_DNS_LOOKUPS: usize = 32;
 /// being dialed that are considered for further lookups as a
 /// result of a single `/dnsaddr` lookup.
 const MAX_TXT_RECORDS: usize = 16;
+
+fn no_records_found(query: Query) -> ResolveError {
+    NoRecords::new(query, ResponseCode::NoError).into()
+}
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
 /// You shouldn't need to use this type directly. Use [`tokio::Transport`] instead.
@@ -341,7 +354,7 @@ where
             if !dial_errors.is_empty() {
                 Err(Error::Dial(dial_errors))
             } else {
-                Err(Error::ResolveError("No Matching Records Found".into()))
+                Err(Error::ResolveError(no_records_found(Query::default())))
             }
         }
         .boxed()
@@ -434,10 +447,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .lookup_ip(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
+                    let query = ips.query().clone();
                     let mut ips = ips.iter();
                     let one = ips
                         .next()
-                        .ok_or_else(|| Error::ResolveError("No Matching Records Found".into()))?;
+                        .ok_or_else(|| Error::ResolveError(no_records_found(query)))?;
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -457,6 +471,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .ipv4_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(lookup) => {
+                    let query = lookup.query().clone();
                     let mut ips = lookup.answers().iter().filter_map(|record| {
                         if let RData::A(ip) = &record.data {
                             Some(Ipv4Addr::from(*ip))
@@ -466,7 +481,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                     });
                     let one = ips
                         .next()
-                        .ok_or_else(|| Error::ResolveError("No Matching Records Found".into()))?;
+                        .ok_or_else(|| Error::ResolveError(no_records_found(query)))?;
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -486,6 +501,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .ipv6_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(lookup) => {
+                    let query = lookup.query().clone();
                     let mut ips = lookup.answers().iter().filter_map(|record| {
                         if let RData::AAAA(ip) = &record.data {
                             Some(Ipv6Addr::from(*ip))
@@ -495,7 +511,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                     });
                     let one = ips
                         .next()
-                        .ok_or_else(|| Error::ResolveError("No Matching Records Found".into()))?;
+                        .ok_or_else(|| Error::ResolveError(no_records_found(query)))?;
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -731,7 +747,7 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(Error::ResolveError(_)) => {}
+                Err(Error::ResolveError(e)) if e.is_no_records_found() => {}
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
@@ -769,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn dns_empty_lookup_ip_returns_resolve_error() {
+    fn empty_dns_lookups_return_no_records_error() {
         use hickory_resolver::{
             lookup::Lookup,
             lookup_ip::LookupIp,
@@ -815,13 +831,18 @@ mod tests {
             .unwrap();
 
         rt.block_on(async {
-            let resolver = EmptyLookupResolver;
-            let proto = Protocol::Dns("example.com".into());
+            for proto in [
+                Protocol::Dns("example.com".into()),
+                Protocol::Dns4("example.com".into()),
+                Protocol::Dns6("example.com".into()),
+            ] {
+                let resolver = EmptyLookupResolver;
 
-            match resolve::<std::io::Error, _>(&proto, &resolver).await {
-                Err(Error::ResolveError(_)) => {}
-                Err(e) => panic!("Unexpected error: {e:?}"),
-                Ok(_) => panic!("Unexpected success."),
+                match resolve::<std::io::Error, _>(&proto, &resolver).await {
+                    Err(Error::ResolveError(e)) if e.is_no_records_found() => {}
+                    Err(e) => panic!("Unexpected error: {e:?}"),
+                    Ok(_) => panic!("Unexpected success."),
+                }
             }
         });
     }
