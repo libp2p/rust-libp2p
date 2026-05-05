@@ -1349,7 +1349,7 @@ where
         // IHAVE flood protection
         let peer_have = self.count_received_ihave.entry(*peer_id).or_insert(0);
         *peer_have += 1;
-        if *peer_have > self.config.max_ihave_messages() {
+        if *peer_have > self.config.max_ihave_messages_heartbeat() {
             tracing::debug!(
                 peer=%peer_id,
                 "IHAVE: peer has advertised too many times ({}) within this heartbeat \
@@ -1360,7 +1360,7 @@ where
         }
 
         if let Some(iasked) = self.count_sent_iwant.get(peer_id)
-            && *iasked >= self.config.max_ihave_length()
+            && *iasked >= self.config.max_control_messages()
         {
             tracing::debug!(
                 peer=%peer_id,
@@ -1419,8 +1419,8 @@ where
         if !iwant_ids.is_empty() {
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
-            if *iasked + iask > self.config.max_ihave_length() {
-                iask = self.config.max_ihave_length().saturating_sub(*iasked);
+            if *iasked + iask > self.config.max_control_messages() {
+                iask = self.config.max_control_messages().saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -2801,7 +2801,7 @@ where
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
-            if message_ids.len() > self.config.max_ihave_length() {
+            if message_ids.len() > self.config.max_control_messages() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
                     "too many messages for gossip; will truncate IHAVE list ({} messages)",
@@ -2843,12 +2843,12 @@ where
             for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
-                if peer_message_ids.len() > self.config.max_ihave_length() {
+                if peer_message_ids.len() > self.config.max_control_messages() {
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_ihave_length());
-                    peer_message_ids.truncate(self.config.max_ihave_length());
+                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_control_messages());
+                    peer_message_ids.truncate(self.config.max_control_messages());
                 }
 
                 // send an IHAVE message
@@ -3600,19 +3600,7 @@ where
                 }
 
                 // Handle messages
-                for (count, raw_message) in rpc.messages.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
+                for raw_message in rpc.messages {
                     self.handle_received_message(raw_message, &propagation_source);
                 }
 
@@ -3622,20 +3610,7 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more control messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
-
+                for control_msg in rpc.control_msgs {
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,
