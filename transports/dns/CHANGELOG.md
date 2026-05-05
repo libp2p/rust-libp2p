@@ -1,7 +1,6 @@
 ## 0.45.0
 
-- Add `tokio::Transport::try_custom` for fallible custom resolver construction.
-  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+### Breaking
 
 - Change the hidden public `Resolver` trait's `ipv4_lookup`, `ipv6_lookup`,
   and `txt_lookup` methods to return Hickory's generic `Lookup` type. Custom
@@ -9,9 +8,18 @@
   returned `RData` values by record type.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
+### Added
+
+- Add `tokio::Transport::try_custom` for fallible custom resolver construction.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
+### Fixed
+
 - Return a DNS resolve error instead of panicking if a generic `Dns` lookup
   succeeds with no returned IP addresses.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
+### Changed
 
 - Update DNS transport internals to support `hickory-resolver` 0.26.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
