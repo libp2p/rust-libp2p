@@ -8,6 +8,12 @@
   returned `RData` values by record type.
   See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
 
+- Replace the re-exported `ResolveError` type with Hickory's `NetError` and
+  remove the `ResolveErrorKind` re-export. Code matching `ResolveErrorKind`
+  should match Hickory's `NetError` / `DnsError` variants directly, or use
+  helper methods like `ResolveError::is_no_records_found()`.
+  See [PR 6418](https://github.com/libp2p/rust-libp2p/pull/6418).
+
 ### Added
 
 - Add `tokio::Transport::try_custom` for fallible custom resolver construction.
