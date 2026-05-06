@@ -219,9 +219,9 @@ fn test_full_data_provider_to_requester() {
 
     let mut state1 = State::default();
     let mut state2 = State::default();
-    // Both subscribe to the topic with partial support
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    // Both enable partial support for the topic.
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
 
     // Set up peer subscriptions (each knows about the other)
     state1.peer_subscribed(
@@ -351,8 +351,8 @@ fn test_overlap_exchange() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -484,8 +484,8 @@ fn test_symmetric_half_exchange() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -623,8 +623,8 @@ fn test_no_redundant_transfer() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -707,7 +707,7 @@ fn test_heartbeat_ttl_expiry() {
     let peer2 = PeerId::random();
     let peer3 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -778,7 +778,7 @@ fn test_peer_disconnect_cleanup() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -858,82 +858,6 @@ fn test_peer_disconnect_cleanup() {
 }
 
 /// Verifies that:
-/// - When we unsubscribe from a topic, our local partial message state is cleaned up.
-/// - Before unsubscribe, a peer metadata update triggers a `Publish` response when local partial
-///   cache exists.
-/// - After re-subscribing, receiving the same metadata-only update is treated as fresh
-///   (`EmitEvent`) because local partial cache was removed.
-#[test]
-fn test_unsubscribe_cleanup() {
-    let topic_hash = TopicHash::from_raw("test-topic");
-    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-    let peer2 = PeerId::random();
-    let peer3 = PeerId::random();
-    let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state1.peer_subscribed(
-        &peer2,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    state1.peer_subscribed(
-        &peer3,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    // Publish to a different peer to populate local cache without syncing peer2 state.
-    let mut message = Bitmap::new(group_id);
-    message.fill_parts(0b11111111);
-    let _actions = state1
-        .handle_publish(topic_hash.clone(), message, HashSet::from([peer3]))
-        .expect("Publish should succeed");
-
-    // Receive from peer2 - should return Publish (we have cached local partial and no
-    // tracked knowledge that peer2 already has this data)
-    let peer2_partial = PartialMessage {
-        group_id: group_id.to_vec(),
-        topic_hash: topic_hash.clone(),
-        body: None,
-        metadata: Some(vec![0b00000000]), // peer2 has nothing
-    };
-    let received_actions = state1.handle_received(peer2, peer2_partial.clone());
-    assert!(
-        received_actions
-            .iter()
-            .any(|a| matches!(a, ReceivedAction::Publish(_))),
-        "Before unsubscribe: should return Publish since we have cached local partial"
-    );
-    // Unsubscribe from the topic
-    state1.unsubscribe(&topic_hash);
-    // Re-subscribe to the topic
-    state1.subscribe(topic_hash.clone(), true, true);
-    state1.peer_subscribed(
-        &peer2,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    // Receive the same partial again from peer2
-    // Since our local cache was cleaned up, should return EmitEvent (no local partial)
-    let received_actions_after = state1.handle_received(peer2, peer2_partial.clone());
-    assert_eq!(received_actions_after.len(), 1);
-    assert!(
-        received_actions_after
-            .iter()
-            .any(|a| matches!(a, ReceivedAction::EmitEvent { .. })),
-        "After unsubscribe: should return EmitEvent since local partial cache was cleaned up"
-    );
-}
-
-/// Verifies that:
 /// - When a peer unsubscribes from a topic, their partial message state for that topic is cleaned
 ///   up.
 /// - After the peer re-subscribes, we treat them as fresh (no knowledge of what they have).
@@ -943,7 +867,7 @@ fn test_peer_unsubscribed_cleanup() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -1012,9 +936,9 @@ fn test_peer_unsubscribed_preserves_other_topics() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    // Subscribe to both topics
-    state1.subscribe(topic1.clone(), true, true);
-    state1.subscribe(topic2.clone(), true, true);
+    // Enable partial support for both topics.
+    state1.enable_partials_for_topic(topic1.clone(), true);
+    state1.enable_partials_for_topic(topic2.clone(), true);
     // Peer2 subscribes to both topics
     state1.peer_subscribed(
         &peer2,
@@ -1111,7 +1035,7 @@ fn test_subscription_options_tracking() {
     let peer2 = PeerId::random();
     let peer3 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     // Peer1: requests and supports partial
     state1.peer_subscribed(
         &peer1,
@@ -1198,7 +1122,7 @@ fn test_handle_received_penalizes_invalid_action_from_metadata() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     state.peer_subscribed(
         &peer,
         topic_hash.clone(),
@@ -1242,7 +1166,7 @@ fn test_metadata_only_update_unchanged_returns_empty() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     state.peer_subscribed(
         &peer,
         topic_hash.clone(),
@@ -1291,7 +1215,7 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     let peer_a = PeerId::random();
     let peer_b = PeerId::random();
     let mut state_a = State::default();
-    state_a.subscribe(topic_hash.clone(), true, true);
+    state_a.enable_partials_for_topic(topic_hash.clone(), true);
     state_a.peer_subscribed(
         &peer_b,
         topic_hash.clone(),
@@ -1404,7 +1328,7 @@ fn test_heartbeat_excludes_mesh_and_fanout_peers() {
     let published_peer = PeerId::random();
     let mut state = State::default();
 
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
 
     for peer in &[mesh_peer, fanout_peer, gossip_peer, published_peer] {
         state.peer_subscribed(
@@ -1486,7 +1410,7 @@ fn test_heartbeat_requests_partial_false_gets_metadata_only() {
     let metadata_only_peer = PeerId::random();
     let cache_peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     // Peer that requests partial data.
     state.peer_subscribed(
         &requests_peer,
@@ -1575,7 +1499,7 @@ fn test_heartbeat_max_metadata_length() {
     let gossip_peer = PeerId::random();
     let cache_peer = PeerId::random(); // Used to cache the messages
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
 
     for peer in [&gossip_peer, &cache_peer] {
         state.peer_subscribed(

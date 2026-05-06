@@ -114,36 +114,32 @@ pub struct PartialAction {
 /// Partial message state for sent and received messages.
 #[derive(Default)]
 pub(crate) struct State {
-    /// Our subscription options per topic and respective cached partial messages we are
-    /// publishing.
-    pub(crate) subscriptions: HashMap<TopicHash, LocalSubscription>,
+    /// Whether we request per topic and the respective cached partial messages we are
+    /// publishing. Only present if partial message support is enabled for that topic.
+    pub(crate) topics: HashMap<TopicHash, LocalTopic>,
     /// Per-peer partial state
     pub(crate) peer_subscriptions: HashMap<TopicHash, HashMap<PeerId, RemoteSubscription>>,
 }
 
 impl State {
-    /// Called by the [`Behaviour`](crate::Behaviour) when we subscribed to the topic.
-    pub(crate) fn subscribe(
+    /// Called by the [`Behaviour`](crate::Behaviour) when partial messages are enabled.
+    /// Will do nothing if previously called for a topic.
+    pub(crate) fn enable_partials_for_topic(
         &mut self,
         topic_hash: TopicHash,
-        supports_partial: bool,
         requests_partial: bool,
     ) {
-        self.subscriptions.insert(
+        if self.topics.contains_key(&topic_hash) {
+            tracing::warn!(topic=%topic_hash, "Tried to enable partials while already enabled");
+            return;
+        }
+        self.topics.insert(
             topic_hash,
-            LocalSubscription {
-                options: SubscriptionOpts {
-                    requests_partial,
-                    supports_partial,
-                },
+            LocalTopic {
+                requests_partials: requests_partial,
                 partial_messages: Default::default(),
             },
         );
-    }
-
-    /// Called by the [`Behaviour`](crate::Behaviour) when we unsubscribed from the topic.
-    pub(crate) fn unsubscribe(&mut self, topic_hash: &TopicHash) {
-        self.subscriptions.remove(&topic_hash.clone());
     }
 
     /// Called by the [`Behaviour`](crate::Behaviour) when a peer has disconnected.
@@ -203,8 +199,8 @@ impl State {
             }
         }
 
-        for subscription in self.subscriptions.values_mut() {
-            subscription.partial_messages.retain(|_, partial| {
+        for local_topic in self.topics.values_mut() {
+            local_topic.partial_messages.retain(|_, partial| {
                 partial.ttl -= 1;
                 partial.ttl != 0
             });
@@ -212,12 +208,7 @@ impl State {
 
         // Emit gossip.
         let mut actions = vec![];
-        let all_topics: HashSet<_> = mesh.keys().chain(fanout.keys()).collect();
-        for topic_hash in all_topics {
-            let Some(subscription) = self.subscriptions.get(topic_hash) else {
-                continue;
-            };
-
+        for (topic_hash, local_topic) in self.topics.iter() {
             let Some(subscription_peers) = self.peer_subscriptions.get_mut(topic_hash) else {
                 tracing::trace!("Skipping sending partials on topic, no peer subscriptions for it");
                 continue;
@@ -246,7 +237,7 @@ impl State {
 
             for (peer_id, remote_subscription) in to_msg_peers {
                 let mut num_messages = 0;
-                for (group_id, local_partial) in subscription.partial_messages.iter() {
+                for (group_id, local_partial) in local_topic.partial_messages.iter() {
                     if num_messages == max_metadata_length {
                         break;
                     }
@@ -301,6 +292,13 @@ impl State {
         peer_id: PeerId,
         message: PartialMessage,
     ) -> Vec<ReceivedAction> {
+        let Some(local_topic) = self.topics.get(&message.topic_hash) else {
+            // We do not support partial messages for this topic.
+            tracing::debug!(peer = %peer_id, group_id = ?message.group_id, topic = ?message.topic_hash,
+                "Received partial message for unsupported topic");
+            return vec![];
+        };
+
         // If we don't have any peer yet subscribed to this topic, insert it.
         // We might have received a message from a peer not subscribed to a topic.
         let topic = self
@@ -360,11 +358,7 @@ impl State {
 
         // Check if we already have this partial,
         // if not, just return it to the application layer.
-        let Some(local_partial) = self
-            .subscriptions
-            .get_mut(&message.topic_hash)
-            .and_then(|t| t.partial_messages.get(&message.group_id))
-        else {
+        let Some(local_partial) = local_topic.partial_messages.get(&message.group_id) else {
             return vec![ReceivedAction::EmitEvent {
                 topic_hash: message.topic_hash,
                 peer_id,
@@ -458,10 +452,17 @@ impl State {
     }
 
     /// Get our partial opts for a topic (used by Behaviour when sending Subscribe)
-    pub(crate) fn opts(&self, topic: &TopicHash) -> Option<SubscriptionOpts> {
-        self.subscriptions
-            .get(topic)
-            .map(|subscription| subscription.options)
+    pub(crate) fn opts(&self, topic: &TopicHash) -> SubscriptionOpts {
+        match self.topics.get(topic) {
+            None => SubscriptionOpts {
+                requests_partial: false,
+                supports_partial: false,
+            },
+            Some(local_topic) => SubscriptionOpts {
+                requests_partial: local_topic.requests_partials,
+                supports_partial: true,
+            },
+        }
     }
 
     /// Check if the peer has sent us message on the provided topic and group_id.
@@ -486,6 +487,12 @@ impl State {
         partial_message: P,
         recipients: HashSet<PeerId>,
     ) -> Result<Vec<PublishAction>, PublishError> {
+        let Some(topic_partials) = self.topics.get_mut(&topic_hash) else {
+            return Err(PublishError::Partial(
+                PartialError::PartialNotSupportedForTopic,
+            ));
+        };
+
         if recipients.is_empty() {
             tracing::debug!(topic = %topic_hash, "Recipient list for publishing partial message is empty");
             return Err(PublishError::NoPeersSubscribedToTopic);
@@ -524,7 +531,6 @@ impl State {
         }
 
         // Cache the sent partial
-        let topic_partials = self.subscriptions.entry(topic_hash).or_default();
         topic_partials.partial_messages.insert(
             partial_message.group_id(),
             LocalPartial {
@@ -697,12 +703,12 @@ impl AsRef<[u8]> for PeerMetadata {
     }
 }
 
-/// Local per-topic subscription state.
+/// Local per-topic state.
 /// Holds the subscription configuration and a cache of sent partial messages.
 #[derive(Default)]
-pub(crate) struct LocalSubscription {
-    /// Subscription options, None if we have not subscribe to the topic.
-    options: SubscriptionOpts,
+pub(crate) struct LocalTopic {
+    /// Whether we should actively request partial messages from the peer on subscription.
+    requests_partials: bool,
     /// Partial messages we have sent us on the topic subscription.
     partial_messages: HashMap<Vec<u8>, LocalPartial>,
 }
@@ -775,8 +781,9 @@ pub enum PartialError {
 
     /// Application-specific validation failed.
     ValidationFailed,
-    /// Local subscription does not allow partial messages for this topic.
-    /// Should send full messages instead, or re-subscribe with supports_partial = true.
+
+    /// Local node does not allow partial messages for this topic.
+    /// Should send full messages instead or activate partial messages for this topic.
     PartialNotSupportedForTopic,
 }
 
@@ -813,7 +820,7 @@ impl std::fmt::Display for PartialError {
             PartialError::PartialNotSupportedForTopic => {
                 write!(
                     f,
-                    "Local subscription does not allow partial messages for this topic."
+                    "Local node does not allow partial messages for this topic."
                 )
             }
         }
