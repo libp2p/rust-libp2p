@@ -234,7 +234,8 @@ impl TryFrom<proto::Identify> for Info {
             .signedPeerRecord
             .and_then(|b| {
                 let envelope = SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok()?;
-                let peer_record = PeerRecord::from_signed_envelope(envelope).ok()?;
+                let peer_record =
+                    PeerRecord::from_signed_envelope_legacy_or_interop(envelope).ok()?;
                 (peer_record.peer_id() == identify_public_key.to_peer_id()).then_some((
                     peer_record.addresses().to_vec(),
                     Some(peer_record.into_signed_envelope()),
@@ -401,5 +402,29 @@ mod tests {
         let parsed_message = proto::Identify::from_reader(&mut BytesReader::from_bytes(&buf), &buf)
             .expect("read to succeed");
         assert_eq!(message, parsed_message)
+    }
+
+    #[test]
+    fn uses_interop_signed_peer_record_addresses() {
+        let identity = identity::Keypair::generate_ed25519();
+        let listen_addr: Multiaddr = "/ip4/192.0.2.1/tcp/1234".parse().unwrap();
+        let ignored_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4321".parse().unwrap();
+        let signed_peer_record =
+            PeerRecord::new_interop(&identity, vec![listen_addr.clone()]).unwrap();
+        let signed_envelope = signed_peer_record.into_signed_envelope();
+
+        let info = Info::try_from(proto::Identify {
+            agentVersion: Some("agent".into()),
+            listenAddrs: vec![ignored_addr.to_vec()],
+            observedAddr: None,
+            protocolVersion: Some("proto".into()),
+            protocols: vec![],
+            publicKey: Some(identity.public().encode_protobuf()),
+            signedPeerRecord: Some(signed_envelope.clone().into_protobuf_encoding()),
+        })
+        .expect("interop signed peer records to be accepted");
+
+        assert_eq!(info.listen_addrs, vec![listen_addr]);
+        assert_eq!(info.signed_peer_record, Some(signed_envelope));
     }
 }
