@@ -103,12 +103,7 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*};
-use hickory_resolver::{
-    ConnectionProvider,
-    lookup::Lookup,
-    lookup_ip::LookupIp,
-    proto::rr::{RData, RecordType},
-};
+use hickory_resolver::{ConnectionProvider, lookup::Lookup, lookup_ip::LookupIp, proto::rr::RData};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
     net::NetError as ResolveError,
@@ -583,15 +578,15 @@ where
     }
 
     async fn ipv4_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.lookup(name, RecordType::A).await
+        self.ipv4_lookup(name).await
     }
 
     async fn ipv6_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.lookup(name, RecordType::AAAA).await
+        self.ipv6_lookup(name).await
     }
 
     async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.lookup(name, RecordType::TXT).await
+        self.txt_lookup(name).await
     }
 }
 
