@@ -33,10 +33,10 @@
 //! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
 //! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
-//! of [trust-dns-resolver].
+//! of [hickory-resolver].
 //! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
 //!
-//! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
+//! On Unix systems, if no custom configuration is given, [hickory-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
 //!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is the case on all
@@ -51,7 +51,7 @@
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
-//! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+//! [hickory-resolver]: https://docs.rs/hickory-resolver
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -59,7 +59,7 @@
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{TokioResolver, name_server::TokioConnectionProvider, system_conf};
+    use hickory_resolver::{TokioResolver, net::runtime::TokioRuntimeProvider, system_conf};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
@@ -69,7 +69,8 @@ pub mod tokio {
     impl<T> Transport<T> {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
-            let (cfg, opts) = system_conf::read_system_conf()?;
+            let (cfg, opts) = system_conf::read_system_conf()
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
             Ok(Self::custom(inner, cfg, opts))
         }
 
@@ -82,12 +83,10 @@ pub mod tokio {
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioResolver::builder_with_config(
-                    cfg,
-                    TokioConnectionProvider::default(),
-                )
-                .with_options(opts)
-                .build(),
+                resolver: TokioResolver::builder_with_config(cfg, TokioRuntimeProvider::default())
+                    .with_options(opts)
+                    .build()
+                    .expect("valid resolver config should build"),
             }
         }
     }
@@ -104,14 +103,10 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*};
+use hickory_resolver::{ConnectionProvider, lookup::Lookup, lookup_ip::LookupIp, proto::rr::RData};
 pub use hickory_resolver::{
-    ResolveError, ResolveErrorKind,
     config::{ResolverConfig, ResolverOpts},
-};
-use hickory_resolver::{
-    lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
-    lookup_ip::LookupIp,
-    name_server::ConnectionProvider,
+    net::NetError as ResolveError,
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -335,7 +330,7 @@ where
                 Err(Error::Dial(dial_errors))
             } else {
                 Err(Error::ResolveError(
-                    ResolveErrorKind::Message("No Matching Records Found").into(),
+                    ResolveError::from("No Matching Records Found"),
                 ))
             }
         }
@@ -429,7 +424,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .lookup_ip(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
-                    let mut ips = ips.into_iter();
+                    let mut ips = ips.iter();
                     let one = ips
                         .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
@@ -452,7 +447,13 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .ipv4_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
-                    let mut ips = ips.into_iter();
+                    let mut ips = ips
+                        .answers()
+                        .iter()
+                        .filter_map(|record| match &record.data {
+                            RData::A(ip) => Some(Ipv4Addr::from(*ip)),
+                            _ => None,
+                        });
                     let one = ips
                         .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
@@ -461,12 +462,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                             iter::once(one)
                                 .chain(iter::once(two))
                                 .chain(ips)
-                                .map(Ipv4Addr::from)
                                 .map(Protocol::from)
                                 .collect(),
                         ))
                     } else {
-                        Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
+                        Ok(Resolved::One(Protocol::from(one)))
                     }
                 }
                 Err(e) => Err(Error::ResolveError(e)),
@@ -476,7 +476,13 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .ipv6_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
-                    let mut ips = ips.into_iter();
+                    let mut ips = ips
+                        .answers()
+                        .iter()
+                        .filter_map(|record| match &record.data {
+                            RData::AAAA(ip) => Some(Ipv6Addr::from(*ip)),
+                            _ => None,
+                        });
                     let one = ips
                         .next()
                         .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
@@ -485,12 +491,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                             iter::once(one)
                                 .chain(iter::once(two))
                                 .chain(ips)
-                                .map(Ipv6Addr::from)
                                 .map(Protocol::from)
                                 .collect(),
                         ))
                     } else {
-                        Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
+                        Ok(Resolved::One(Protocol::from(one)))
                     }
                 }
                 Err(e) => Err(Error::ResolveError(e)),
@@ -503,8 +508,15 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 .map(move |res| match res {
                     Ok(txts) => {
                         let mut addrs = Vec::new();
-                        for txt in txts {
-                            if let Some(chars) = txt.txt_data().first() {
+                        for txt in txts
+                            .answers()
+                            .iter()
+                            .filter_map(|record| match &record.data {
+                                RData::TXT(txt) => Some(txt),
+                                _ => None,
+                            })
+                        {
+                            if let Some(chars) = txt.txt_data.first() {
                                 match parse_dnsaddr_txt(chars) {
                                     Err(e) => {
                                         // Skip over seemingly invalid entries.
@@ -548,15 +560,13 @@ pub trait Resolver {
     fn ipv4_lookup(
         &self,
         name: String,
-    ) -> impl Future<Output = Result<Ipv4Lookup, ResolveError>> + Send;
+    ) -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
     fn ipv6_lookup(
         &self,
         name: String,
-    ) -> impl Future<Output = Result<Ipv6Lookup, ResolveError>> + Send;
-    fn txt_lookup(
-        &self,
-        name: String,
-    ) -> impl Future<Output = Result<TxtLookup, ResolveError>> + Send;
+    ) -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
+    fn txt_lookup(&self, name: String)
+    -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
 }
 
 impl<C> Resolver for hickory_resolver::Resolver<C>
@@ -567,15 +577,15 @@ where
         self.lookup_ip(name).await
     }
 
-    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError> {
+    async fn ipv4_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
         self.ipv4_lookup(name).await
     }
 
-    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError> {
+    async fn ipv6_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
         self.ipv6_lookup(name).await
     }
 
-    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError> {
+    async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
         self.txt_lookup(name).await
     }
 }
@@ -583,7 +593,7 @@ where
 #[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
-    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
+    use hickory_resolver::config::QUAD9;
     use libp2p_core::{
         Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
@@ -597,7 +607,7 @@ mod tests {
         transport: T,
         test_fn: impl FnOnce(tokio::Transport<T>) -> F,
     ) {
-        let config = ResolverConfig::quad9();
+        let config = ResolverConfig::udp_and_tcp(&QUAD9);
         let opts = ResolverOpts::default();
         let transport = tokio::Transport::custom(transport, config, opts);
         let rt = ::tokio::runtime::Builder::new_current_thread()
@@ -739,14 +749,8 @@ mod tests {
                     );
 
                     match &dial_errs[0] {
-                        Error::ResolveError(e) => match e.kind() {
-                            ResolveErrorKind::Proto(ProtoError { kind, .. })
-                                if matches!(
-                                    kind.as_ref(),
-                                    ProtoErrorKind::NoRecordsFound { .. }
-                                ) => {}
-                            _ => panic!("Unexpected DNS error: {e:?}"),
-                        },
+                        Error::ResolveError(e) if e.is_no_records_found() => {}
+                        Error::ResolveError(e) => panic!("Unexpected DNS error: {e:?}"),
                         other => {
                             panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
                         }
