@@ -33,10 +33,10 @@
 //! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
 //! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
-//! of [trust-dns-resolver].
+//! of [hickory-resolver].
 //! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
 //!
-//! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
+//! On Unix systems, if no custom configuration is given, [hickory-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
 //!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is the case on all
@@ -51,7 +51,7 @@
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
-//! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+//! [hickory-resolver]: https://docs.rs/hickory-resolver
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
