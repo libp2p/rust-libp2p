@@ -19,7 +19,7 @@ async-channel = "2.5.0"
 asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
-bytes = "1.11"
+bytes.workspace = true
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }

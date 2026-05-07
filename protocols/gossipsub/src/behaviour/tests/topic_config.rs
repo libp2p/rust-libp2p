@@ -669,6 +669,8 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         Config::default_max_transmit_size() * 2,
         ValidationMode::None,
         max_transmit_size_map,
+        5000,
+        5000,
     );
     let mut buf = BytesMut::new();
     let rpc = proto::RPC {
@@ -776,6 +778,8 @@ fn test_validation_message_size_within_topic_specific() {
         Config::default_max_transmit_size() * 2,
         ValidationMode::None,
         max_transmit_size_map,
+        5000,
+        5000,
     );
     let mut buf = BytesMut::new();
     let rpc = proto::RPC {

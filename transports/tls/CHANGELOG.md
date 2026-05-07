@@ -6,7 +6,7 @@
 ## 0.6.3
 
 - Enable rustls TLS key logging via `SSLKEYLOGFILE`.
-  See [XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [6357](https://github.com/libp2p/rust-libp2p/pull/6357).
 
 ## 0.6.2
 

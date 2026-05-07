@@ -775,6 +775,9 @@ pub enum PartialError {
 
     /// Application-specific validation failed.
     ValidationFailed,
+    /// Local subscription does not allow partial messages for this topic.
+    /// Should send full messages instead, or re-subscribe with supports_partial = true.
+    PartialNotSupportedForTopic,
 }
 
 impl std::error::Error for PartialError {}
@@ -806,6 +809,12 @@ impl std::fmt::Display for PartialError {
             }
             Self::ValidationFailed => {
                 write!(f, "Validation failed")
+            }
+            PartialError::PartialNotSupportedForTopic => {
+                write!(
+                    f,
+                    "Local subscription does not allow partial messages for this topic."
+                )
             }
         }
     }
