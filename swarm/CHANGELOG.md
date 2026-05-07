@@ -6,6 +6,15 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+- Fix `panic!("cannot extract twice")` in `Connection::poll` when a
+  `SubstreamRequested` is extracted before its `Future::poll` impl has had
+  a chance to store its waker. Without a stored waker, `extract()` could
+  not schedule the cleanup poll that would remove the resulting `Done`
+  entry from `requested_substreams`, and the next outbound-ready iteration
+  would land on the same entry via `iter_mut().next()` and panic. The
+  outbound-extraction site now selects a `Waiting` entry explicitly via
+  `iter_mut().find(...)`, so a stale `Done` entry can never be re-extracted.
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.

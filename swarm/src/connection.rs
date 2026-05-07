@@ -411,7 +411,44 @@ where
                 }
             }
 
-            if let Some(requested_substream) = requested_substreams.iter_mut().next() {
+            // Find the next *Waiting* substream request to pair with a newly
+            // muxer-ready outbound stream.
+            //
+            // We must skip any `SubstreamRequested::Done` entries: `extract()`
+            // transitions the state to `Done` but does not remove the entry
+            // from `requested_substreams` directly — that removal is driven
+            // by the entry's own `Future::poll` returning `Ready(Ok(()))` on
+            // the next `requested_substreams.poll_next_unpin(cx)` call, after
+            // its waker is woken from inside `extract()`.
+            //
+            // That cleanup pass relies on `extracted_waker` being `Some` at
+            // the moment `extract()` runs. The waker is populated by the
+            // `Future::poll` impl when it observes `Poll::Pending` from the
+            // timeout (see the `Waiting` arm of `<SubstreamRequested as
+            // Future>::poll` below), but extraction can happen *before* the
+            // future ever reaches a `Pending` poll: either because the muxer
+            // returned `poll_outbound = Ready` on the same loop iteration as
+            // the request was pushed, or — more subtly — because
+            // `FuturesUnordered`'s ordering for newly-pushed entries means
+            // `iter_mut().next()` can land on an entry that has not yet
+            // completed its initial `Pending` poll. In that case the
+            // `extracted_waker` is `None`, no wake is scheduled, and the
+            // `Done` entry persists until *some other* event drives a poll
+            // of this connection.
+            //
+            // Without this filter, the next outbound-ready iteration's
+            // `iter_mut().next()` would land on that stale `Done` entry and
+            // `extract()` would panic with "cannot extract twice".
+            //
+            // Filtering at extraction time is the precise expression of the
+            // intent ("find a waiting request to fulfil") and is robust
+            // regardless of `FuturesUnordered`'s internal poll-ordering. The
+            // alternative — removing `Done` entries eagerly — is not possible
+            // through `FuturesUnordered`'s public API while iterating it.
+            if let Some(requested_substream) = requested_substreams
+                .iter_mut()
+                .find(|r| matches!(r, SubstreamRequested::Waiting { .. }))
+            {
                 match muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
@@ -853,6 +890,66 @@ mod tests {
             connection.handler.error.unwrap(),
             StreamUpgradeError::Timeout
         ))
+    }
+
+    /// Regression test for "cannot extract twice".
+    ///
+    /// Constructs the minimal failure shape directly on a `FuturesUnordered`:
+    /// push a `SubstreamRequested` and call `extract()` *before* the future
+    /// has been polled, so `extracted_waker` is `None`. The entry is now in
+    /// `Done` state but lacks the wake call that would let `poll_next` clean
+    /// it up.
+    ///
+    /// Before the fix, `iter_mut().next()` would return that stale `Done`
+    /// entry on the next outbound-ready iteration of `Connection::poll` and
+    /// `extract()` would panic. After the fix, the iter site filters to
+    /// `Waiting` entries only — no panic, and the `Done` entry is allowed to
+    /// be cleaned up by a later `poll_next` whenever its waker (or
+    /// `FuturesUnordered`'s internal scheduling) drives it.
+    #[test]
+    fn iter_mut_skips_done_substream_requested_entries() {
+        let mut requested: FuturesUnordered<SubstreamRequested<(), DeniedUpgrade>> =
+            FuturesUnordered::new();
+
+        // Two pushes that are never `poll_next`'d, so neither future has
+        // stored a waker — this mirrors the bug condition where extraction
+        // races ahead of the future's first `Poll::Pending`.
+        requested.push(SubstreamRequested::new(
+            (),
+            Duration::from_secs(60),
+            DeniedUpgrade,
+        ));
+        requested.push(SubstreamRequested::new(
+            (),
+            Duration::from_secs(60),
+            DeniedUpgrade,
+        ));
+
+        // First extraction: pick a Waiting entry and extract.
+        let first = requested
+            .iter_mut()
+            .find(|r| matches!(r, SubstreamRequested::Waiting { .. }))
+            .expect("first call must find a Waiting entry");
+        let _ = first.extract();
+
+        // After extract, one entry is Done. `iter_mut().next()` would
+        // surface that Done — the filter must skip past it to the remaining
+        // Waiting entry.
+        let second = requested
+            .iter_mut()
+            .find(|r| matches!(r, SubstreamRequested::Waiting { .. }))
+            .expect("second call must skip the Done entry and find the other Waiting");
+        let _ = second.extract();
+
+        // After both extracts, all entries are Done. `find(Waiting)` returns
+        // None. Critically, no panic.
+        assert!(
+            requested
+                .iter_mut()
+                .find(|r| matches!(r, SubstreamRequested::Waiting { .. }))
+                .is_none(),
+            "no Waiting entries remain; the filter must not surface Done entries"
+        );
     }
 
     #[test]
