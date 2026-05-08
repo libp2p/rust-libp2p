@@ -17,7 +17,7 @@ Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
 <!--
 We ask every contributor to disclose AI assistance. This is not a filter — AI-assisted PRs
 are accepted. We just need to know what was used and you need to vouch for what you submit.
-We also ask contributors to be considerate of the reviewer's time. Please keep AI generated text brief and to the point.
+We also ask contributors to be considerate of the reviewer's time. Please keep AI-generated text brief and to the point.
 
 Please do not delete this section.
 -->
