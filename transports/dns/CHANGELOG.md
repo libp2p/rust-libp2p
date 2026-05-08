@@ -2,6 +2,8 @@
 
 - Update `hickory` dependencies to `v0.26`.
   See [PR 6423](https://github.com/libp2p/rust-libp2p/pull/6423)
+  `ResolveError` now aliases hickory's `NetError`,
+  `ResolveErrorKind` is no longer re exported as it was deprecated.  `Resolver` trait lookup methods now return `Lookup`.
 
 - refactor: `Resolver` no longer requires `#[async_trait]`
   See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
