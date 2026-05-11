@@ -1,11 +1,11 @@
 use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    Transport,
-};
 #[cfg(feature = "relay")]
 use libp2p_core::{Negotiated, UpgradeInfo};
+use libp2p_core::{
+    Transport,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 

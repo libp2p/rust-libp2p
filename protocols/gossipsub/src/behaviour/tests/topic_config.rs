@@ -28,6 +28,7 @@ use libp2p_swarm::{ConnectionId, NetworkBehaviour, ToSwarm};
 
 use super::DefaultBehaviourTestBuilder;
 use crate::{
+    Event, IdentTopic as Topic, PublishError, ValidationMode,
     config::{Config, ConfigBuilder, TopicMeshConfig},
     error::ValidationError,
     handler::HandlerEvent,
@@ -35,7 +36,6 @@ use crate::{
     rpc_proto::proto,
     topic::TopicHash,
     types::{RawMessage, RpcIn, RpcOut},
-    Event, IdentTopic as Topic, PublishError, ValidationMode,
 };
 
 /// Test that specific topic configurations are correctly applied
@@ -636,6 +636,8 @@ fn test_validation_error_message_size_too_large_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: vec![],
         },
@@ -667,6 +669,8 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         Config::default_max_transmit_size() * 2,
         ValidationMode::None,
         max_transmit_size_map,
+        5000,
+        5000,
     );
     let mut buf = BytesMut::new();
     let rpc = proto::RPC {
@@ -680,6 +684,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        partial: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -740,6 +745,8 @@ fn test_validation_message_size_within_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                #[cfg(feature = "partial_messages")]
+                partial_message: None,
             },
             invalid_messages: vec![],
         },
@@ -771,6 +778,8 @@ fn test_validation_message_size_within_topic_specific() {
         Config::default_max_transmit_size() * 2,
         ValidationMode::None,
         max_transmit_size_map,
+        5000,
+        5000,
     );
     let mut buf = BytesMut::new();
     let rpc = proto::RPC {
@@ -784,6 +793,7 @@ fn test_validation_message_size_within_topic_specific() {
         }],
         subscriptions: vec![],
         control: None,
+        partial: None,
     };
     codec.encode(rpc, &mut buf).unwrap();
 

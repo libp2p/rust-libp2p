@@ -29,19 +29,26 @@ use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
+#[cfg(feature = "partial_messages")]
+use crate::extensions::partial_messages::PartialMessage;
 use crate::{
+    ValidationError,
     config::ValidationMode,
     handler::HandlerEvent,
     rpc_proto::proto,
     topic::TopicHash,
     types::{
-        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
-        RawMessage, RpcIn, Subscription, SubscriptionAction,
+        ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
+        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, SubscriptionOpts,
     },
-    ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
+
+pub(crate) const GOSSIPSUB_1_3_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.3.0"),
+    kind: PeerKind::Gossipsubv1_3,
+};
 
 pub(crate) const GOSSIPSUB_1_2_0_PROTOCOL: ProtocolId = ProtocolId {
     protocol: StreamProtocol::new("/meshsub/1.2.0"),
@@ -72,6 +79,10 @@ pub struct ProtocolConfig {
     pub(crate) default_max_transmit_size: usize,
     /// The max transmit sizes for a topic.
     pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
+    /// The max number of publish messages to decode in a single RPC.
+    pub(crate) max_publish_messages: usize,
+    /// The max number of control messages per type to decode in a single RPC.
+    pub(crate) max_control_messages: usize,
 }
 
 impl Default for ProtocolConfig {
@@ -79,12 +90,15 @@ impl Default for ProtocolConfig {
         Self {
             validation_mode: ValidationMode::Strict,
             protocol_ids: vec![
+                GOSSIPSUB_1_3_0_PROTOCOL,
                 GOSSIPSUB_1_2_0_PROTOCOL,
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
             default_max_transmit_size: 65536,
             max_transmit_sizes: HashMap::new(),
+            max_publish_messages: 500,
+            max_control_messages: 500,
         }
     }
 }
@@ -139,6 +153,8 @@ where
                     self.default_max_transmit_size,
                     self.validation_mode,
                     self.max_transmit_sizes,
+                    self.max_publish_messages,
+                    self.max_control_messages,
                 ),
             ),
             protocol_id.kind,
@@ -162,6 +178,8 @@ where
                     self.default_max_transmit_size,
                     self.validation_mode,
                     self.max_transmit_sizes,
+                    self.max_publish_messages,
+                    self.max_control_messages,
                 ),
             ),
             protocol_id.kind,
@@ -178,6 +196,10 @@ pub struct GossipsubCodec {
     codec: quick_protobuf_codec::Codec<proto::RPC>,
     /// Maximum transmit sizes per topic, with a default if not specified.
     max_transmit_sizes: HashMap<TopicHash, usize>,
+    /// The max number of publish messages to decode in a single RPC.
+    max_publish_messages: usize,
+    /// The max number of control messages per type to decode in a single RPC.
+    max_control_messages: usize,
 }
 
 impl GossipsubCodec {
@@ -185,12 +207,16 @@ impl GossipsubCodec {
         max_length: usize,
         validation_mode: ValidationMode,
         max_transmit_sizes: HashMap<TopicHash, usize>,
+        max_publish_messages: usize,
+        max_control_messages: usize,
     ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
             max_transmit_sizes,
+            max_publish_messages,
+            max_control_messages,
         }
     }
 
@@ -265,14 +291,44 @@ impl Encoder for GossipsubCodec {
     }
 }
 
+// Truncate oversized RPC messages and emit a single warning with dropped count.
+fn truncate_excess<T>(items: &mut Vec<T>, max: usize, kind: &str) {
+    let original = items.len();
+    if original > max {
+        tracing::debug!(
+            kind = kind,
+            received = original,
+            kept = max,
+            dropped = original - max,
+            "Received more gossipsub entries than permitted; truncating"
+        );
+        items.truncate(max);
+    }
+}
+
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
     type Error = quick_protobuf_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let Some(rpc) = self.codec.decode(src)? else {
+        let Some(mut rpc) = self.codec.decode(src)? else {
             return Ok(None);
         };
+
+        // Limit messages
+        truncate_excess(&mut rpc.publish, self.max_publish_messages, "publish");
+
+        let mut control = rpc.control.take().unwrap_or_default();
+        truncate_excess(&mut control.ihave, self.max_control_messages, "IHAVE");
+        truncate_excess(&mut control.iwant, self.max_control_messages, "IWANT");
+        truncate_excess(&mut control.graft, self.max_control_messages, "GRAFT");
+        truncate_excess(&mut control.prune, self.max_control_messages, "PRUNE");
+        truncate_excess(
+            &mut control.idontwant,
+            self.max_control_messages,
+            "IDONTWANT",
+        );
+
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
         // Store any invalid messages.
@@ -337,7 +393,9 @@ impl Decoder for GossipsubCodec {
                         );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Message dropped. Message source was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
@@ -474,94 +532,112 @@ impl Decoder for GossipsubCodec {
 
         let mut control_msgs = Vec::new();
 
-        if let Some(rpc_control) = rpc.control {
-            // Collect the gossipsub control messages
-            let ihave_msgs: Vec<ControlAction> = rpc_control
-                .ihave
-                .into_iter()
-                .map(|ihave| {
-                    ControlAction::IHave(IHave {
-                        topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
-                        message_ids: ihave
-                            .message_ids
-                            .into_iter()
-                            .map(MessageId::from)
-                            .collect::<Vec<_>>(),
-                    })
+        // Collect the gossipsub control messages
+        let ihave_msgs: Vec<ControlAction> = control
+            .ihave
+            .into_iter()
+            .map(|ihave| {
+                ControlAction::IHave(IHave {
+                    topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
+                    message_ids: ihave
+                        .message_ids
+                        .into_iter()
+                        .map(MessageId::from)
+                        .collect::<Vec<_>>(),
                 })
-                .collect();
+            })
+            .collect();
+        control_msgs.extend(ihave_msgs);
 
-            let iwant_msgs: Vec<ControlAction> = rpc_control
-                .iwant
-                .into_iter()
-                .map(|iwant| {
-                    ControlAction::IWant(IWant {
-                        message_ids: iwant
-                            .message_ids
-                            .into_iter()
-                            .map(MessageId::from)
-                            .collect::<Vec<_>>(),
-                    })
+        let iwant_msgs: Vec<ControlAction> = control
+            .iwant
+            .into_iter()
+            .map(|iwant| {
+                ControlAction::IWant(IWant {
+                    message_ids: iwant
+                        .message_ids
+                        .into_iter()
+                        .map(MessageId::from)
+                        .collect::<Vec<_>>(),
                 })
-                .collect();
+            })
+            .collect();
+        control_msgs.extend(iwant_msgs);
 
-            let graft_msgs: Vec<ControlAction> = rpc_control
-                .graft
-                .into_iter()
-                .map(|graft| {
-                    ControlAction::Graft(Graft {
-                        topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
-                    })
+        let graft_msgs: Vec<ControlAction> = control
+            .graft
+            .into_iter()
+            .map(|graft| {
+                ControlAction::Graft(Graft {
+                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
                 })
-                .collect();
+            })
+            .collect();
+        control_msgs.extend(graft_msgs);
 
-            let mut prune_msgs = Vec::new();
-
-            for prune in rpc_control.prune {
-                // filter out invalid peers
-                let peers = prune
-                    .peers
-                    .into_iter()
-                    .filter_map(|info| {
-                        info.peer_id
-                            .as_ref()
-                            .and_then(|id| PeerId::from_bytes(id).ok())
-                            .map(|peer_id|
+        let mut prune_messages = Vec::new();
+        for prune in control.prune {
+            // filter out invalid peers
+            let peers = prune
+                .peers
+                .into_iter()
+                .filter_map(|info| {
+                    info.peer_id
+                        .as_ref()
+                        .and_then(|id| PeerId::from_bytes(id).ok())
+                        .map(|peer_id|
                                     //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
                                     PeerInfo {
                                         peer_id: Some(peer_id),
                                     })
-                    })
-                    .collect::<Vec<PeerInfo>>();
-
-                let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-                prune_msgs.push(ControlAction::Prune(Prune {
-                    topic_hash,
-                    peers,
-                    backoff: prune.backoff,
-                }));
-            }
-
-            let idontwant_msgs: Vec<ControlAction> = rpc_control
-                .idontwant
-                .into_iter()
-                .map(|idontwant| {
-                    ControlAction::IDontWant(IDontWant {
-                        message_ids: idontwant
-                            .message_ids
-                            .into_iter()
-                            .map(MessageId::from)
-                            .collect::<Vec<_>>(),
-                    })
                 })
                 .collect();
-
-            control_msgs.extend(ihave_msgs);
-            control_msgs.extend(iwant_msgs);
-            control_msgs.extend(graft_msgs);
-            control_msgs.extend(prune_msgs);
-            control_msgs.extend(idontwant_msgs);
+            let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
+            prune_messages.push(ControlAction::Prune(Prune {
+                topic_hash,
+                peers,
+                backoff: prune.backoff,
+            }));
         }
+        control_msgs.extend(prune_messages);
+
+        let mut idontwant_messages = Vec::new();
+        for idontwant in control.idontwant {
+            idontwant_messages.push(ControlAction::IDontWant(IDontWant {
+                message_ids: idontwant
+                    .message_ids
+                    .into_iter()
+                    .map(MessageId::from)
+                    .collect::<Vec<_>>(),
+            }));
+        }
+        control_msgs.extend(idontwant_messages);
+
+        let extensions_msg = control.extensions.map(|extensions| Extensions {
+            partial_messages: extensions.partialMessages,
+        });
+        control_msgs.push(ControlAction::Extensions(extensions_msg));
+
+        #[cfg(feature = "partial_messages")]
+        let partial_message = rpc.partial.and_then(|partial_proto| {
+            let Some(topic_id_bytes) = partial_proto.topicID else {
+                tracing::debug!("Partial message without topic_id, discarding");
+                return None;
+            };
+            let topic_hash = TopicHash::from_raw(String::from_utf8_lossy(&topic_id_bytes));
+
+            let Some(group_id) = partial_proto.groupID else {
+                tracing::debug!("Partial message without group_id, discarding");
+                return None;
+            };
+
+            Some(PartialMessage {
+                topic_hash,
+                group_id,
+                metadata: partial_proto.partsMetadata,
+                body: partial_proto.partialMessage,
+            })
+        });
 
         Ok(Some(HandlerEvent::Message {
             rpc: RpcIn {
@@ -576,9 +652,15 @@ impl Decoder for GossipsubCodec {
                             SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
+                        options: SubscriptionOpts {
+                            requests_partial: sub.requestsPartial.unwrap_or_default(),
+                            supports_partial: sub.supportsPartial.unwrap_or_default(),
+                        },
                     })
                     .collect(),
                 control_msgs,
+                #[cfg(feature = "partial_messages")]
+                partial_message,
             },
             invalid_messages,
         }))
@@ -595,8 +677,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config, types::RpcOut, Behaviour, ConfigBuilder, IdentTopic as Topic,
-        MessageAuthenticity, Version,
+        Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
+        config::Config, types::RpcOut,
     };
 
     #[derive(Clone, Debug)]
@@ -662,8 +744,13 @@ mod tests {
                 message_id: MessageId(vec![0, 0]),
             };
 
-            let mut codec =
-                GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, HashMap::new());
+            let mut codec = GossipsubCodec::new(
+                u32::MAX as usize,
+                ValidationMode::Strict,
+                HashMap::new(),
+                5000,
+                1000,
+            );
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();

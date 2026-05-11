@@ -30,7 +30,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 
 use super::handshake::proto;
-use crate::{protocol::PublicKey, Error};
+use crate::{Error, protocol::PublicKey};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;

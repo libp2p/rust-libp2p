@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "The libp2p swarm"
-version = "0.47.1"
+version = "0.48.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -25,27 +25,29 @@ multistream-select = { workspace = true }
 rand = { workspace = true }
 smallvec = "1.15.1"
 tracing = { workspace = true }
-wasm-bindgen-futures = { version = "0.4.42", optional = true }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 tokio = { workspace = true, features = ["rt"], optional = true }
 
+[target.'cfg(target_family="wasm")'.dependencies]
+getrandom = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+
 [features]
 macros = ["dep:libp2p-swarm-derive"]
 tokio = ["dep:tokio"]
-wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 
 [dev-dependencies]
 either = "1.11.0"
 futures = { workspace = true }
-libp2p-identify = { path = "../protocols/identify" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-identify = { path = "../protocols/identify" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-identity = { workspace = true, features = ["ed25519"] }
-libp2p-kad = { path = "../protocols/kad" }                          # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-ping = { path = "../protocols/ping" }                        # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-plaintext = { path = "../transports/plaintext" }             # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-swarm-derive = { path = "../swarm-derive" }                  # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] }# Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-kad = { path = "../protocols/kad" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-ping = { path = "../protocols/ping" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-plaintext = { path = "../transports/plaintext" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-swarm-derive = { path = "../swarm-derive" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-yamux = { path = "../muxers/yamux" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 trybuild = "1.0.116"

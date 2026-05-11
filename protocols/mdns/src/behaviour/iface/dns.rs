@@ -24,7 +24,7 @@ use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use rand::{Rng, distributions::Alphanumeric, thread_rng};
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 

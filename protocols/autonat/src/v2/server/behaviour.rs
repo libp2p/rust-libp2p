@@ -5,19 +5,19 @@ use std::{
 };
 
 use either::Either;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm, NetworkBehaviour,
+    ToSwarm,
     dial_opts::{DialOpts, PeerCondition},
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
-    NetworkBehaviour, ToSwarm,
+    dummy,
 };
 use rand_core::{OsRng, RngCore};
 
 use crate::v2::server::handler::{
-    dial_back,
+    Handler, dial_back,
     dial_request::{self, DialBackCommand, DialBackStatus},
-    Handler,
 };
 
 pub struct Behaviour<R = OsRng>
@@ -90,13 +90,12 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event {
-            if let Some(DialBackCommand { back_channel, .. }) =
+        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event
+            && let Some(DialBackCommand { back_channel, .. }) =
                 self.dialing_dial_back.remove(&connection_id)
-            {
-                let dial_back_status = DialBackStatus::DialErr;
-                let _ = back_channel.send(Err(dial_back_status));
-            }
+        {
+            let dial_back_status = DialBackStatus::DialErr;
+            let _ = back_channel.send(Err(dial_back_status));
         }
     }
 

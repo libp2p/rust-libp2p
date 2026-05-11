@@ -3,14 +3,14 @@ name = "libp2p-noise"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Cryptographic handshake protocol using the noise framework."
-version = "0.46.1"
+version = "0.47.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-bytes = "1"
+bytes.workspace = true
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }

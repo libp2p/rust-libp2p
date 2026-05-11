@@ -4,19 +4,19 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{channel::mpsc, StreamExt};
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use futures::{StreamExt, channel::mpsc};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    self as swarm, dial_opts::DialOpts, ConnectionDenied, ConnectionId, FromSwarm,
-    NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    self as swarm, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, dial_opts::DialOpts,
 };
 use swarm::{
-    behaviour::ConnectionEstablished, dial_opts::PeerCondition, ConnectionClosed, DialError,
-    DialFailure,
+    ConnectionClosed, DialError, DialFailure, behaviour::ConnectionEstablished,
+    dial_opts::PeerCondition,
 };
 
-use crate::{handler::Handler, shared::Shared, Control};
+use crate::{Control, handler::Handler, shared::Shared};
 
 /// A generic behaviour for stream-oriented protocols.
 pub struct Behaviour {

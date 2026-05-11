@@ -22,7 +22,7 @@ use std::{fmt, io};
 
 use asynchronous_codec::{BytesMut, Decoder, Encoder, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
+use libp2p_core::{PeerRecord, SignedEnvelope, peer_record, signed_envelope};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
@@ -637,7 +637,7 @@ pub struct UnmappableStatusCode(proto::ResponseStatus);
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub(crate) use self::rendezvous::pb::{mod_Message::*, Message};
+    pub(crate) use self::rendezvous::pb::{Message, mod_Message::*};
 }
 
 #[cfg(test)]

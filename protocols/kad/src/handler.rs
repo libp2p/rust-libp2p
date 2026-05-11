@@ -28,21 +28,21 @@ use std::{
 
 use either::Either;
 use futures::{channel::oneshot, prelude::*, stream::SelectAll};
-use libp2p_core::{upgrade, ConnectedPoint};
+use libp2p_core::{ConnectedPoint, upgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 
 use crate::{
+    QueryId,
     behaviour::Mode,
     protocol::{
         KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
     },
     record::{self, Record},
-    QueryId,
 };
 
 const MAX_NUM_STREAMS: usize = 32;
@@ -739,7 +739,7 @@ impl ConnectionHandler for Handler {
                 Poll::Ready((Ok(Ok(Some(response))), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         process_kad_response(response, query_id),
-                    ))
+                    ));
                 }
                 Poll::Ready((Ok(Ok(None)), _)) => {
                     continue;
@@ -750,7 +750,7 @@ impl ConnectionHandler for Handler {
                             error: HandlerQueryErr::Io(e),
                             query_id,
                         },
-                    ))
+                    ));
                 }
                 Poll::Ready((Err(_timeout), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -758,7 +758,7 @@ impl ConnectionHandler for Handler {
                             error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
                             query_id,
                         },
-                    ))
+                    ));
                 }
                 Poll::Pending => {}
             }
@@ -767,13 +767,13 @@ impl ConnectionHandler for Handler {
                 return Poll::Ready(event);
             }
 
-            if self.outbound_substreams.len() < MAX_NUM_STREAMS {
-                if let Some((msg, id)) = self.pending_messages.pop_front() {
-                    self.queue_new_stream(id, msg);
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
-                    });
-                }
+            if self.outbound_substreams.len() < MAX_NUM_STREAMS
+                && let Some((msg, id)) = self.pending_messages.pop_front()
+            {
+                self.queue_new_stream(id, msg);
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
+                });
             }
 
             return Poll::Pending;

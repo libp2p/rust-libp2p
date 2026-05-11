@@ -23,15 +23,15 @@ use std::{
     sync::Arc,
 };
 
-use futures::{future::BoxFuture, AsyncRead, AsyncWrite, FutureExt};
+use futures::{AsyncRead, AsyncWrite, FutureExt, future::BoxFuture};
 use futures_rustls::TlsStream;
 use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
     UpgradeInfo,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use rustls::{pki_types::ServerName, CommonState};
+use rustls::{CommonState, pki_types::ServerName};
 
 use crate::{certificate, certificate::P2pCertificate};
 

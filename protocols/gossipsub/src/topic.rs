@@ -65,7 +65,7 @@ impl Hasher for Sha256Hash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(
     feature = "metrics",
     derive(prometheus_client::encoding::EncodeLabelSet)

@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::Framed;
 use futures::prelude::*;
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 use libp2p_swarm::Stream;
 use thiserror::Error;
 

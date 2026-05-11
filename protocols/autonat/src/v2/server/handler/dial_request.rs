@@ -7,26 +7,26 @@ use std::{
 
 use either::Either;
 use futures::{
-    channel::{mpsc, oneshot},
     AsyncRead, AsyncWrite, SinkExt, StreamExt,
+    channel::{mpsc, oneshot},
 };
 use futures_bounded::FuturesSet;
 use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
 use rand_core::RngCore;
 
 use crate::v2::{
-    generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
+    DIAL_REQUEST_PROTOCOL, Nonce,
+    generated::structs::{DialStatus, mod_DialResponse::ResponseStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::Event,
-    Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug, PartialEq)]

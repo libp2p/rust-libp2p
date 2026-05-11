@@ -1,5 +1,5 @@
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{dummy, NetworkBehaviour};
+use libp2p_swarm::{NetworkBehaviour, dummy};
 
 use crate::store::Store;
 
@@ -8,7 +8,7 @@ use crate::store::Store;
 /// Usage:
 /// ```
 /// use libp2p::swarm::NetworkBehaviour;
-/// use libp2p_peer_store::{memory_store::MemoryStore, Behaviour};
+/// use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
 ///
 /// // `identify::Behaviour` broadcasts listen addresses of the peer,
 /// // `peer_store::Behaviour` will then capture the resulting

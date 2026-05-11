@@ -3,7 +3,7 @@ name = "libp2p-webtransport-websys"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "WebTransport for libp2p under WASM environment"
-version = "0.5.2"
+version = "0.6.0"
 authors = [
     "Yiannis Marangos <yiannis@eiger.co>",
     "oblique <psyberbits@gmail.com>",

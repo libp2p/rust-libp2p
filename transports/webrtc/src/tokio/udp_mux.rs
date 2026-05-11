@@ -29,14 +29,14 @@ use std::{
 
 use async_trait::async_trait;
 use futures::{
+    StreamExt,
     channel::oneshot,
     future::{BoxFuture, FutureExt, OptionFuture},
     stream::FuturesUnordered,
-    StreamExt,
 };
 use stun::{
     attributes::ATTR_USERNAME,
-    message::{is_message as is_stun_message, Message as STUNMessage},
+    message::{Message as STUNMessage, is_message as is_stun_message},
 };
 use thiserror::Error;
 use tokio::{io::ReadBuf, net::UdpSocket};

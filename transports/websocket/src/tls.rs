@@ -20,7 +20,7 @@
 
 use std::{fmt, io, sync::Arc};
 
-use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
+use futures_rustls::{TlsAcceptor, TlsConnector, rustls};
 
 /// TLS configuration.
 #[derive(Clone)]

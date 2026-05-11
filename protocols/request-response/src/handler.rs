@@ -24,8 +24,8 @@ use std::{
     collections::VecDeque,
     fmt, io,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     task::{Context, Poll},
     time::Duration,
@@ -36,18 +36,18 @@ use futures::{
     prelude::*,
 };
 use libp2p_swarm::{
+    SubstreamProtocol,
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, StreamUpgradeError,
     },
-    SubstreamProtocol,
 };
 pub use protocol::ProtocolSupport;
 use smallvec::SmallVec;
 
 use crate::{
-    codec::Codec, handler::protocol::Protocol, InboundRequestId, OutboundRequestId,
-    EMPTY_QUEUE_SHRINK_THRESHOLD,
+    EMPTY_QUEUE_SHRINK_THRESHOLD, InboundRequestId, OutboundRequestId, codec::Codec,
+    handler::protocol::Protocol,
 };
 
 /// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.

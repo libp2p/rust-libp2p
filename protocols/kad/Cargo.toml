@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "1"
+bytes.workspace = true
 either = "1.11"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }

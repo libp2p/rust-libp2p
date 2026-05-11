@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_perf::{
+    RunParams,
     client::{self},
-    server, RunParams,
+    server,
 };
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;

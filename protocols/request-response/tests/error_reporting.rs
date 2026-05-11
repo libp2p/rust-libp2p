@@ -1,6 +1,6 @@
 use std::{io, iter, pin::pin, time::Duration};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use futures::{future::pending, prelude::*};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;

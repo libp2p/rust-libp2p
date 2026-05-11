@@ -23,8 +23,8 @@ use std::{io, iter, pin::Pin};
 use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::{
-    io::{AsyncRead, AsyncWrite},
     Future, SinkExt, StreamExt,
+    io::{AsyncRead, AsyncWrite},
 };
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::PeerId;

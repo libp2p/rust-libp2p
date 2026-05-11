@@ -60,7 +60,7 @@ pub mod codec {
 
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
-    use serde::{de::DeserializeOwned, Serialize};
+    use serde::{Serialize, de::DeserializeOwned};
 
     pub struct Codec<Req, Resp> {
         /// Max request size in bytes
