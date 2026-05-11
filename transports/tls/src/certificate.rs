@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
+use x509_parser::{asn1_rs::ToDer, prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
@@ -43,6 +43,56 @@ const P2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
 // Similarly, hash functions with an output length less than 256 bits MUST NOT be used.
 static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
+
+const SUPPORTED_SIGNATURE_ALGORITHMS: &[rustls::pki_types::AlgorithmIdentifier] = &[
+    rustls::pki_types::alg_id::RSA_PKCS1_SHA256,
+    rustls::pki_types::alg_id::RSA_PKCS1_SHA384,
+    rustls::pki_types::alg_id::RSA_PKCS1_SHA512,
+    rustls::pki_types::alg_id::ECDSA_SHA256,
+    rustls::pki_types::alg_id::ECDSA_SHA384,
+    rustls::pki_types::alg_id::RSA_PSS_SHA256,
+    rustls::pki_types::alg_id::RSA_PSS_SHA384,
+    rustls::pki_types::alg_id::RSA_PSS_SHA512,
+    rustls::pki_types::alg_id::ED25519,
+];
+
+fn algorithm_identifier_value(
+    algorithm: &x509_parser::x509::AlgorithmIdentifier<'_>,
+) -> Result<Vec<u8>, webpki::Error> {
+    let mut value = algorithm
+        .algorithm
+        .to_der_vec()
+        .map_err(|_| webpki::Error::BadDer)?;
+    if let Some(parameters) = &algorithm.parameters {
+        value.extend(parameters.to_der_vec().map_err(|_| webpki::Error::BadDer)?);
+    }
+    Ok(value)
+}
+
+fn unsupported_signature_algorithm(
+    signature_algorithm: &x509_parser::x509::AlgorithmIdentifier<'_>,
+) -> Result<webpki::Error, webpki::Error> {
+    Ok(webpki::Error::UnsupportedSignatureAlgorithmContext(
+        webpki::UnsupportedSignatureAlgorithmContext {
+            signature_algorithm_id: algorithm_identifier_value(signature_algorithm)?,
+            supported_algorithms: SUPPORTED_SIGNATURE_ALGORITHMS.to_vec(),
+        },
+    ))
+}
+
+fn unsupported_signature_algorithm_for_public_key(
+    signature_algorithm: &x509_parser::x509::AlgorithmIdentifier<'_>,
+    public_key_algorithm: &x509_parser::x509::AlgorithmIdentifier<'_>,
+) -> Result<webpki::Error, webpki::Error> {
+    Ok(
+        webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(
+            webpki::UnsupportedSignatureAlgorithmForPublicKeyContext {
+                signature_algorithm_id: algorithm_identifier_value(signature_algorithm)?,
+                public_key_algorithm_id: algorithm_identifier_value(public_key_algorithm)?,
+            },
+        ),
+    )
+}
 
 #[derive(Debug)]
 pub(crate) struct AlwaysResolvesCert(Arc<rustls::sign::CertifiedKey>);
@@ -305,9 +355,14 @@ impl P2pCertificate<'_> {
         use rustls::SignatureScheme::*;
 
         let current_signature_scheme = self.signature_scheme()?;
+        let signature_algorithm = &self.certificate.signature_algorithm;
+        let pki_algorithm = &self.certificate.tbs_certificate.subject_pki.algorithm;
         if signature_scheme != current_signature_scheme {
             // This certificate was signed with a different signature scheme
-            return Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey);
+            return Err(unsupported_signature_algorithm_for_public_key(
+                signature_algorithm,
+                pki_algorithm,
+            )?);
         }
 
         let verification_algorithm: &dyn signature::VerificationAlgorithm = match signature_scheme {
@@ -318,7 +373,7 @@ impl P2pCertificate<'_> {
             ECDSA_NISTP384_SHA384 => &signature::ECDSA_P384_SHA384_ASN1,
             ECDSA_NISTP521_SHA512 => {
                 // See https://github.com/briansmith/ring/issues/824
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm(signature_algorithm)?);
             }
             RSA_PSS_SHA256 => &signature::RSA_PSS_2048_8192_SHA256,
             RSA_PSS_SHA384 => &signature::RSA_PSS_2048_8192_SHA384,
@@ -326,14 +381,16 @@ impl P2pCertificate<'_> {
             ED25519 => &signature::ED25519,
             ED448 => {
                 // See https://github.com/briansmith/ring/issues/463
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm(signature_algorithm)?);
             }
             // Similarly, hash functions with an output length less than 256 bits
             // MUST NOT be used, due to the possibility of collision attacks.
             // In particular, MD5 and SHA1 MUST NOT be used.
-            RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            _ => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            RSA_PKCS1_SHA1 => return Err(unsupported_signature_algorithm(signature_algorithm)?),
+            ECDSA_SHA1_Legacy => {
+                return Err(unsupported_signature_algorithm(signature_algorithm)?);
+            }
+            _ => return Err(unsupported_signature_algorithm(signature_algorithm)?),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
         let key = signature::UnparsedPublicKey::new(
@@ -446,7 +503,7 @@ impl P2pCertificate<'_> {
 
                 // Default hash algo is SHA-1, however:
                 // In particular, MD5 and SHA1 MUST NOT be used.
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+                return Err(unsupported_signature_algorithm(signature_algorithm)?);
             }
         }
 
@@ -472,7 +529,7 @@ impl P2pCertificate<'_> {
             {
                 return Ok(ECDSA_NISTP521_SHA512);
             }
-            return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+            return Err(unsupported_signature_algorithm(signature_algorithm)?);
         }
 
         if signature_algorithm.algorithm == OID_SIG_ED25519 {
@@ -482,7 +539,7 @@ impl P2pCertificate<'_> {
             return Ok(ED448);
         }
 
-        Err(webpki::Error::UnsupportedSignatureAlgorithm)
+        Err(unsupported_signature_algorithm(signature_algorithm)?)
     }
 }
 
@@ -547,7 +604,47 @@ mod tests {
 
         let cert = parse_unverified(cert).unwrap();
 
-        assert!(cert.signature_scheme().is_err());
+        match cert.signature_scheme() {
+            Err(webpki::Error::UnsupportedSignatureAlgorithmContext(ctx)) => {
+                assert!(
+                    !ctx.signature_algorithm_id.is_empty(),
+                    "signature_algorithm_id must carry the offending OID bytes",
+                );
+                assert!(
+                    !ctx.supported_algorithms.is_empty(),
+                    "supported_algorithms must list libp2p's accepted set",
+                );
+            }
+            other => panic!("expected UnsupportedSignatureAlgorithmContext, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn signature_scheme_mismatch_carries_both_oids() {
+        // Ed25519 cert verified against an RSA-PSS scheme triggers the
+        // public-key-vs-signature mismatch branch in `verify_signature`.
+        let cert: &[u8] = include_bytes!("./test_assets/ed25519.der");
+
+        let cert = parse_unverified(cert).unwrap();
+        let err = cert
+            .verify_signature(rustls::SignatureScheme::RSA_PSS_SHA256, &[], &[])
+            .unwrap_err();
+
+        match err.0 {
+            webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(ctx) => {
+                assert!(
+                    !ctx.signature_algorithm_id.is_empty(),
+                    "signature_algorithm_id must carry the offending OID bytes",
+                );
+                assert!(
+                    !ctx.public_key_algorithm_id.is_empty(),
+                    "public_key_algorithm_id must carry the certificate's SPKI OID bytes",
+                );
+            }
+            other => {
+                panic!("expected UnsupportedSignatureAlgorithmForPublicKeyContext, got {other:?}")
+            }
+        }
     }
 
     #[test]

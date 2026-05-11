@@ -16,7 +16,7 @@ libp2p-identity = { workspace = true }
 rcgen = { workspace = true }
 ring = { workspace = true }
 thiserror = { workspace = true }
-webpki = { version = "0.103", package = "rustls-webpki", features = ["std"] }
+webpki = { version = "0.103.9", package = "rustls-webpki", features = ["std"] }
 x509-parser = "0.17.0"
 yasna = "0.5.2"
 

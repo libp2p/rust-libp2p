@@ -1,3 +1,11 @@
+## unreleased
+
+- Return the context-bearing `webpki::Error::UnsupportedSignatureAlgorithmContext`
+  and `UnsupportedSignatureAlgorithmForPublicKeyContext` variants from
+  certificate verification, so failures surface the offending signature
+  and public-key algorithm OIDs instead of a bare enum. Bumps the minimum
+  `rustls-webpki` to `v0.103.9` for the new variants.
+
 ## 0.7.0
 
 - Raise MSRV to 1.88.0.
