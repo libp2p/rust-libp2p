@@ -58,11 +58,10 @@ pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 pub mod codec {
     use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
-    use async_trait::async_trait;
     use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
-    use serde::{de::DeserializeOwned, Serialize};
+    use serde::{Serialize, de::DeserializeOwned};
 
     pub struct Codec<Req, Resp> {
         /// Max request size in bytes.
@@ -106,7 +105,6 @@ pub mod codec {
         }
     }
 
-    #[async_trait]
     impl<Req, Resp> crate::Codec for Codec<Req, Resp>
     where
         Req: Send + Serialize + DeserializeOwned,
@@ -203,7 +201,7 @@ mod tests {
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
 
-    use crate::{cbor::codec::Codec, Codec as _};
+    use crate::{Codec as _, cbor::codec::Codec};
 
     #[tokio::test]
     async fn test_codec() {

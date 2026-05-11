@@ -1,6 +1,6 @@
 use std::{
     convert::Infallible,
-    future::{ready, Ready},
+    future::{Ready, ready},
 };
 
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};

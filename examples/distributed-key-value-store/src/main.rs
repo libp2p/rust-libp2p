@@ -25,7 +25,7 @@ use std::error::Error;
 use futures::stream::StreamExt;
 use libp2p::{
     kad,
-    kad::{store::MemoryStore, Mode},
+    kad::{Mode, store::MemoryStore},
     mdns, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,

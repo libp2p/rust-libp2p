@@ -9,11 +9,11 @@ use futures::channel::oneshot;
 use futures_bounded::StreamSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
 
-use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL};
+use crate::v2::{DIAL_BACK_PROTOCOL, Nonce, protocol};
 
 pub struct Handler {
     inbound: StreamSet<io::Result<IncomingNonce>>,
@@ -22,7 +22,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: StreamSet::new(Duration::from_secs(5), 2),
+            inbound: StreamSet::new(|| futures_bounded::Delay::tokio(Duration::from_secs(5)), 2),
         }
     }
 }
@@ -71,7 +71,9 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => {
+            }) =>
+            {
+                #[allow(clippy::collapsible_match)]
                 if self.inbound.try_push(perform_dial_back(protocol)).is_err() {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }

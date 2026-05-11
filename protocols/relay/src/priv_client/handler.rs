@@ -31,21 +31,21 @@ use futures::{
     future::FutureExt,
 };
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, upgrade::ReadyUpgrade, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol, upgrade::ReadyUpgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound},
 };
 
 use crate::{
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
     client::Connection,
     priv_client,
     priv_client::{transport, transport::ToListenerMsg},
     proto,
     protocol::{self, inbound_stop, outbound_hop},
-    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
 };
 
 /// The maximum number of circuits being denied concurrently.
@@ -142,19 +142,19 @@ impl Handler {
             queued_events: Default::default(),
             pending_streams: Default::default(),
             inflight_reserve_requests: futures_bounded::FuturesTupleSet::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_inbound_circuit_requests: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_circuit_deny_requests: futures_bounded::FuturesSet::new(
-                DENYING_CIRCUIT_TIMEOUT,
+                move || futures_bounded::Delay::tokio(DENYING_CIRCUIT_TIMEOUT),
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
             reservation: Reservation::None,
@@ -431,6 +431,7 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inflight_inbound_circuit_requests
                     .try_push(inbound_stop::handle_open_circuit(stream))
@@ -522,23 +523,22 @@ impl Reservation {
             to_listener,
             ..
         } = self
+            && !pending_msgs.is_empty()
         {
-            if !pending_msgs.is_empty() {
-                match to_listener.poll_ready(cx) {
-                    Poll::Ready(Ok(())) => {
-                        if let Err(e) = to_listener
-                            .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
-                        {
-                            tracing::debug!("Failed to sent pending message to listener: {:?}", e);
-                            *self = Reservation::None;
-                        }
-                    }
-                    Poll::Ready(Err(e)) => {
-                        tracing::debug!("Channel to listener failed: {:?}", e);
+            match to_listener.poll_ready(cx) {
+                Poll::Ready(Ok(())) => {
+                    if let Err(e) = to_listener
+                        .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
+                    {
+                        tracing::debug!("Failed to sent pending message to listener: {:?}", e);
                         *self = Reservation::None;
                     }
-                    Poll::Pending => {}
                 }
+                Poll::Ready(Err(e)) => {
+                    tracing::debug!("Channel to listener failed: {:?}", e);
+                    *self = Reservation::None;
+                }
+                Poll::Pending => {}
             }
         }
     }

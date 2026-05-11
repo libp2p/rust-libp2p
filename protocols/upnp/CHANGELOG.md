@@ -1,8 +1,20 @@
-## 0.5.1
+## 0.7.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+## 0.6.0
+
+- Change `Event::NewExternalAddr` and `Event::ExpiredExternalAddr` from tuple variants to struct variants
+  that include both local and external addresses. This allows users to correlate which local listen
+  address was mapped to which external address.
+  - `Event::NewExternalAddr` now contains `local_addr` and `external_addr` fields
+  - `Event::ExpiredExternalAddr` now contains `local_addr` and `external_addr` fields
+  See [PR 6121](https://github.com/libp2p/rust-libp2p/pull/6121).
 
 - Skip port mapping when an active port mapping is present.
-  Previously, the behavior would skip creating new mappings if any mapping 
-  (active or inactive or pending) existed for the same port. Now it correctly only 
+  Previously, the behavior would skip creating new mappings if any mapping
+  (active or inactive or pending) existed for the same port. Now it correctly only
   checks active mappings on the gateway.
   See [PR 6127](https://github.com/libp2p/rust-libp2p/pull/6127).
 
@@ -24,7 +36,7 @@
 ## 0.4.0
 
 - update igd-next to 0.15.1.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5625](https://github.com/libp2p/rust-libp2p/pull/5625).
 
 <!-- Update to libp2p-core v0.43.0 -->
 

@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
-use libp2p_core::{multiaddr, Multiaddr, PeerRecord, SignedEnvelope};
+use libp2p_core::{Multiaddr, PeerRecord, SignedEnvelope, multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;

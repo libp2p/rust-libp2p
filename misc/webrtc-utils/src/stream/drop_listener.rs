@@ -26,8 +26,8 @@ use std::{
 };
 
 use futures::{
-    channel::{oneshot, oneshot::Canceled},
     AsyncRead, AsyncWrite, FutureExt, SinkExt,
+    channel::{oneshot, oneshot::Canceled},
 };
 
 use crate::{

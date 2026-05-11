@@ -21,8 +21,8 @@
 use std::{error::Error, net::IpAddr};
 
 use futures::{
-    channel::{mpsc, oneshot},
     SinkExt, StreamExt,
+    channel::{mpsc, oneshot},
 };
 use igd_next::SearchOptions;
 

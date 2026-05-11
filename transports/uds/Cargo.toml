@@ -3,7 +3,7 @@ name = "libp2p-uds"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Unix domain sockets transport for libp2p"
-version = "0.43.0"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,7 +17,7 @@ tokio = { workspace = true, default-features = false, features = ["net"], option
 tracing = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.10"
+tempfile = "3.27"
 tokio = { workspace = true, features = ["rt", "macros", "io-util"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

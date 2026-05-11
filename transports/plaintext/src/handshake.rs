@@ -26,9 +26,9 @@ use futures::prelude::*;
 use libp2p_identity::{PeerId, PublicKey};
 
 use crate::{
+    Config,
     error::{DecodeError, Error},
     proto::Exchange,
-    Config,
 };
 
 pub(crate) async fn handshake<S>(socket: S, config: Config) -> Result<(S, PublicKey, Bytes), Error>

@@ -1,4 +1,4 @@
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 
 pub(crate) trait MultiaddrExt {
     fn is_relayed(&self) -> bool;

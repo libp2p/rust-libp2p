@@ -2,10 +2,10 @@
 
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll, Waker},
+    task::{Context, Poll, Waker, ready},
 };
 
-use futures::{channel::mpsc, stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, channel::mpsc, stream::FuturesUnordered};
 use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
@@ -307,6 +307,9 @@ mod sdp_tests {
         let fingerprint = parse_fingerprint(sdp).unwrap();
 
         assert_eq!(fingerprint.algorithm(), "sha-256");
-        assert_eq!(fingerprint.to_sdp_format(), "A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89");
+        assert_eq!(
+            fingerprint.to_sdp_format(),
+            "A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89"
+        );
     }
 }

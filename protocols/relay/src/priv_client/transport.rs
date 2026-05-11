@@ -27,7 +27,7 @@ use std::{
 
 use futures::{
     channel::{mpsc, oneshot},
-    future::{ready, BoxFuture, FutureExt, Ready},
+    future::{BoxFuture, FutureExt, Ready, ready},
     sink::SinkExt,
     stream::{SelectAll, Stream, StreamExt},
 };
@@ -39,13 +39,13 @@ use libp2p_identity::PeerId;
 use thiserror::Error;
 
 use crate::{
+    RequestId,
     multiaddr_ext::MultiaddrExt,
     priv_client::Connection,
     protocol::{
         outbound_hop,
         outbound_hop::{ConnectError, ReserveError},
     },
-    RequestId,
 };
 
 /// A [`Transport`] enabling client relay capabilities.
@@ -154,6 +154,7 @@ impl libp2p_core::Transport for Transport {
         let (to_listener, from_behaviour) = mpsc::channel(0);
         self.pending_to_behaviour
             .push_back(TransportToBehaviourMsg::ListenReq {
+                listener_id,
                 relay_peer_id,
                 relay_addr,
                 to_listener,
@@ -459,6 +460,7 @@ pub(crate) enum TransportToBehaviourMsg {
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
+        listener_id: ListenerId,
         relay_peer_id: PeerId,
         relay_addr: Multiaddr,
         to_listener: mpsc::Sender<ToListenerMsg>,

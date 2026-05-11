@@ -26,11 +26,11 @@ use std::{
 use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use tracing::error;
 
@@ -49,7 +49,7 @@ impl Handler {
     pub fn new() -> Self {
         Self {
             inbound: futures_bounded::FuturesSet::new(
-                crate::RUN_TIMEOUT,
+                move || futures_bounded::Delay::tokio(crate::RUN_TIMEOUT),
                 crate::MAX_PARALLEL_RUNS_PER_CONNECTION,
             ),
         }
@@ -87,6 +87,7 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info: _,
             }) => {
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inbound
                     .try_push(crate::protocol::receive_send(protocol).boxed())
@@ -120,7 +121,7 @@ impl ConnectionHandler for Handler {
         loop {
             match self.inbound.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(stats))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }));
                 }
                 Poll::Ready(Ok(Err(e))) => {
                     error!("{e:?}");

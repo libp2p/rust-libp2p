@@ -21,12 +21,12 @@
 use std::fmt::Debug;
 
 use futures::StreamExt;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, dummy,
 };
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -84,8 +84,8 @@ fn two_fields() {
         let _out_event: <Foo as NetworkBehaviour>::ToSwarm = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
-            FooEvent::Identify(event) => {
-                let _: identify::Event = event;
+            FooEvent::Identify(_event) => {
+                let _: identify::Event = _event;
             }
         }
     }
@@ -112,11 +112,11 @@ fn three_fields() {
         let _out_event: <Foo as NetworkBehaviour>::ToSwarm = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
-            FooEvent::Identify(event) => {
-                let _: identify::Event = event;
+            FooEvent::Identify(_event) => {
+                let _: identify::Event = _event;
             }
-            FooEvent::Kad(event) => {
-                let _: libp2p_kad::Event = event;
+            FooEvent::Kad(_event) => {
+                let _: libp2p_kad::Event = _event;
             }
         }
     }

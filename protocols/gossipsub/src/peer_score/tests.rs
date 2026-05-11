@@ -20,7 +20,7 @@
 
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
-use crate::{types::RawMessage, IdentTopic as Topic, Message};
+use crate::{IdentTopic as Topic, Message, types::RawMessage};
 
 // estimates a value within variance
 fn within_variance(value: f64, expected: f64, variance: f64) -> bool {

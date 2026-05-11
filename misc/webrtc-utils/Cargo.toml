@@ -7,12 +7,12 @@ license = "MIT"
 name = "libp2p-webrtc-utils"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.4.0"
+version = "0.5.0"
 publish = true
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-bytes = "1"
+bytes.workspace = true
 futures = { workspace = true }
 hex = "0.4"
 libp2p-core = { workspace = true }

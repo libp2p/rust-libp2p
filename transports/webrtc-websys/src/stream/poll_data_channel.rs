@@ -4,14 +4,14 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     task::{Context, Poll},
 };
 
 use bytes::BytesMut;
-use futures::{task::AtomicWaker, AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite, task::AtomicWaker};
 use libp2p_webrtc_utils::MAX_MSG_LEN;
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
@@ -150,7 +150,7 @@ impl PollDataChannel {
                 return Poll::Pending;
             }
             RtcDataChannelState::Closing | RtcDataChannelState::Closed => {
-                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
             }
             RtcDataChannelState::Open | RtcDataChannelState::__Invalid => {}
             _ => {}

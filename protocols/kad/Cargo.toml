@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "1"
+bytes.workspace = true
 either = "1.11"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }
@@ -24,7 +24,7 @@ quick-protobuf-codec = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 rand = "0.8"
 sha2 = "0.10.8"
-smallvec = "1.13.2"
+smallvec = "1.15.1"
 uint = "0.10"
 futures-timer = "3.0.3"
 web-time = { workspace = true }

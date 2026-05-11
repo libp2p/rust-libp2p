@@ -36,13 +36,13 @@ use futures::{future::BoxFuture, prelude::*, ready};
 use rand::Rng;
 
 use crate::{
+    Stream,
     handler::{
         AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend},
-    Stream,
 };
 
 /// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same type.
@@ -96,13 +96,13 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            if let Some(i) = info.take(&key) {
-                h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                    info: i,
-                    error,
-                }));
-            }
+        if let Some(h) = self.handlers.get_mut(&key)
+            && let Some(i) = info.take(&key)
+        {
+            h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+                info: i,
+                error,
+            }));
         }
     }
 }

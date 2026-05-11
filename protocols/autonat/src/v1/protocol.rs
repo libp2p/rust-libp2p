@@ -20,11 +20,10 @@
 
 use std::io;
 
-use async_trait::async_trait;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{
-    io::{AsyncRead, AsyncWrite},
     SinkExt, StreamExt,
+    io::{AsyncRead, AsyncWrite},
 };
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -39,7 +38,6 @@ pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/a
 #[derive(Clone)]
 pub struct AutoNatCodec;
 
-#[async_trait]
 impl request_response::Codec for AutoNatCodec {
     type Protocol = StreamProtocol;
     type Request = DialRequest;

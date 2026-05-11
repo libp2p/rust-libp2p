@@ -28,7 +28,7 @@ use libp2p_swarm::StreamProtocol;
 use prometheus_client::{
     collector::Collector,
     encoding::{DescriptorEncoder, EncodeMetric},
-    metrics::{counter::Counter, gauge::ConstGauge, MetricType},
+    metrics::{MetricType, counter::Counter, gauge::ConstGauge},
     registry::Registry,
 };
 
@@ -134,10 +134,9 @@ impl<TBvEv> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
             num_established,
             ..
         } = event
+            && *num_established == 0
         {
-            if *num_established == 0 {
-                self.peers.remove(*peer_id);
-            }
+            self.peers.remove(*peer_id);
         }
     }
 }

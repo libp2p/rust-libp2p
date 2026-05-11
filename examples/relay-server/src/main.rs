@@ -29,7 +29,7 @@ use std::{
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    core::{multiaddr::Protocol, Multiaddr},
+    core::{Multiaddr, multiaddr::Protocol},
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,

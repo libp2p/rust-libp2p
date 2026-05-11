@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use futures::{future, AsyncRead, AsyncWrite, StreamExt};
+use futures::{AsyncRead, AsyncWrite, StreamExt, future};
 use libp2p_core::{
-    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
+    Multiaddr, Transport, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
 };
 use libp2p_pnet::{PnetConfig, PreSharedKey};
-use libp2p_swarm::{dummy, Config, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent, dummy};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 

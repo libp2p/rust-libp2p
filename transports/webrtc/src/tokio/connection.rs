@@ -25,6 +25,7 @@ use std::{
 };
 
 use futures::{
+    StreamExt,
     channel::{
         mpsc,
         oneshot::{self, Sender},
@@ -33,7 +34,6 @@ use futures::{
     lock::Mutex as FutMutex,
     ready,
     stream::FuturesUnordered,
-    StreamExt,
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use webrtc::{

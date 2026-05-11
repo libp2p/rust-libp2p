@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-swarm-test"
-version = "0.6.0"
+version = "0.7.0"
 edition.workspace = true
 rust-version = { workspace = true }
 license = "MIT"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.80"
+async-trait = "0.1.89"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-plaintext = { workspace = true }

@@ -5,15 +5,15 @@ use std::{
 };
 
 use libp2p_core::{
+    Endpoint, Multiaddr,
     multiaddr::Protocol,
     transport::{ListenerId, PortUse},
-    Endpoint, Multiaddr,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenOpts,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, FromSwarm, ListenOpts, ListenerClosed, ListenerError,
+    NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, derive_prelude::NewListener, dummy,
 };
 use libp2p_swarm_test::SwarmExt;
 

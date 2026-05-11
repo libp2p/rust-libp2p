@@ -20,7 +20,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::{types::Subscription, TopicHash};
+use crate::{TopicHash, types::Subscription};
 
 pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
@@ -225,22 +225,27 @@ mod test {
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t2.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
         ];
 
@@ -262,10 +267,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
         ];
 
@@ -291,14 +298,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
         ];
 
@@ -324,10 +334,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
+                options: Default::default(),
             },
         ];
 
@@ -353,22 +365,27 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[4].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[0].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[1].clone(),
+                options: Default::default(),
             },
         ];
 
@@ -390,10 +407,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
         ];
 
@@ -416,14 +435,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t3,
+                options: Default::default(),
             },
         ];
 

@@ -30,21 +30,21 @@ use std::{
 use either::Either;
 use futures::future;
 use libp2p_core::{
+    ConnectedPoint,
     multiaddr::Multiaddr,
     upgrade::{DeniedUpgrade, ReadyUpgrade},
-    ConnectedPoint,
 };
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
 
-use crate::{behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS, protocol, PROTOCOL_NAME};
+use crate::{PROTOCOL_NAME, behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS, protocol};
 
 #[derive(Debug)]
 pub enum Command {
@@ -87,8 +87,14 @@ impl Handler {
         Self {
             endpoint,
             queued_events: Default::default(),
-            inbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
-            outbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
+            inbound_stream: futures_bounded::FuturesSet::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                1,
+            ),
+            outbound_stream: futures_bounded::FuturesSet::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                1,
+            ),
             holepunch_candidates,
             attempts: 0,
         }
@@ -148,12 +154,8 @@ impl Handler {
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
-            (),
-            <Self as ConnectionHandler>::InboundProtocol,
-        >,
+        _: ListenUpgradeError<(), <Self as ConnectionHandler>::InboundProtocol>,
     ) {
-        libp2p_core::util::unreachable(error.into_inner());
     }
 
     fn on_dial_upgrade_error(
@@ -237,19 +239,19 @@ impl ConnectionHandler for Handler {
                     Event::InboundConnectNegotiated {
                         remote_addrs: addresses,
                     },
-                ))
+                ));
             }
             Poll::Ready(Ok(Err(error))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::InboundConnectFailed { error },
-                ))
+                ));
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::InboundConnectFailed {
                         error: inbound::Error::Io(io::ErrorKind::TimedOut.into()),
                     },
-                ))
+                ));
             }
             Poll::Pending => {}
         }
@@ -260,19 +262,19 @@ impl ConnectionHandler for Handler {
                     Event::OutboundConnectNegotiated {
                         remote_addrs: addresses,
                     },
-                ))
+                ));
             }
             Poll::Ready(Ok(Err(error))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectFailed { error },
-                ))
+                ));
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectFailed {
                         error: outbound::Error::Io(io::ErrorKind::TimedOut.into()),
                     },
-                ))
+                ));
             }
             Poll::Pending => {}
         }

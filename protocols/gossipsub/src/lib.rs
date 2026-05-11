@@ -98,6 +98,7 @@ mod backoff;
 mod behaviour;
 mod config;
 mod error;
+pub mod extensions;
 mod gossip_promises;
 mod handler;
 mod mcache;
@@ -105,7 +106,7 @@ mod mcache;
 mod metrics;
 mod peer_score;
 mod protocol;
-mod rpc;
+mod queue;
 mod rpc_proto;
 mod subscription_filter;
 mod time_cache;
@@ -116,13 +117,15 @@ mod types;
 #[cfg(feature = "metrics")]
 pub use metrics::Config as MetricsConfig;
 
+#[cfg(feature = "partial_messages")]
+pub use self::extensions::partial_messages;
 pub use self::{
     behaviour::{Behaviour, Event, MessageAuthenticity},
     config::{Config, ConfigBuilder, ValidationMode, Version},
     error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError},
     peer_score::{
-        score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams,
-        PeerScoreThresholds, TopicScoreParams,
+        PeerScoreParams, PeerScoreThresholds, TopicScoreParams, score_parameter_decay,
+        score_parameter_decay_with_base,
     },
     subscription_filter::{
         AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
