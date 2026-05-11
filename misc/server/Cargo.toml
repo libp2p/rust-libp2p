@@ -12,7 +12,7 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.22"
-clap = { version = "4.6.0", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 futures = { workspace = true }
 axum = "0.7"
 libp2p = { workspace = true, features = [

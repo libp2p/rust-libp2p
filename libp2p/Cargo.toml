@@ -88,7 +88,7 @@ yamux = ["dep:libp2p-yamux"]
 upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
-bytes = "1"
+bytes.workspace = true
 either = "1.9.0"
 futures = { workspace = true }
 # TODO feature flag?
