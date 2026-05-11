@@ -6,6 +6,8 @@
   functionality using `Behaviour::set_status` to explicitly set `Status::{Enable,Disable}` to enable or disable
   protocol advertisement.
   See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
+- Expire external address when a relay listener is closed without a replacement reservation.
+  See [PR 6285](https://github.com/libp2p/rust-libp2p/pull/6285).
 
 ## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
