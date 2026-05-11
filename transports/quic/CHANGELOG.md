@@ -1,5 +1,11 @@
 ## 0.14.0
 
+- Add `Config::new_with_provider(keypair, provider)` accepting a custom
+  `rustls::crypto::CryptoProvider` that is threaded into both the
+  client- and server-side TLS configs underneath QUIC. Pairs with the
+  matching libp2p-tls addition. Lets consumers enable the X25519MLKEM768
+  hybrid PQ key-exchange group via `rustls-post-quantum`. Closes
+  [issue 6236](https://github.com/libp2p/rust-libp2p/issues/6236).
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

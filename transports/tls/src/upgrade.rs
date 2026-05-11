@@ -60,6 +60,29 @@ impl Config {
             client: crate::make_client_config(identity, None)?,
         })
     }
+
+    /// Build a libp2p TLS upgrade config with a custom rustls
+    /// [`CryptoProvider`](rustls::crypto::CryptoProvider) injected on both
+    /// the server and client sides.
+    ///
+    /// Pass e.g. `rustls_post_quantum::provider().clone()` to enable the
+    /// X25519MLKEM768 hybrid post-quantum key-exchange group on the
+    /// libp2p TLS handshake. When you don't need to override the default,
+    /// keep using [`Config::new`] — semantically identical.
+    ///
+    /// The same provider is used for both server- and client-side configs
+    /// because the libp2p TLS upgrade negotiates symmetrically (every node
+    /// is both a TLS server and a TLS client). Cloning a `CryptoProvider`
+    /// is cheap.
+    pub fn new_with_provider(
+        identity: &identity::Keypair,
+        provider: rustls::crypto::CryptoProvider,
+    ) -> Result<Self, certificate::GenError> {
+        Ok(Self {
+            server: crate::make_server_config_with_provider(identity, Some(provider.clone()))?,
+            client: crate::make_client_config_with_provider(identity, None, Some(provider))?,
+        })
+    }
 }
 
 impl UpgradeInfo for Config {
