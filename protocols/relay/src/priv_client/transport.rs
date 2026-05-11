@@ -154,6 +154,7 @@ impl libp2p_core::Transport for Transport {
         let (to_listener, from_behaviour) = mpsc::channel(0);
         self.pending_to_behaviour
             .push_back(TransportToBehaviourMsg::ListenReq {
+                listener_id,
                 relay_peer_id,
                 relay_addr,
                 to_listener,
@@ -459,6 +460,7 @@ pub(crate) enum TransportToBehaviourMsg {
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
+        listener_id: ListenerId,
         relay_peer_id: PeerId,
         relay_addr: Multiaddr,
         to_listener: mpsc::Sender<ToListenerMsg>,
