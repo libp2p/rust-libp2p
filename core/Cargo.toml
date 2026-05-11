@@ -23,7 +23,7 @@ multistream-select = { workspace = true }
 parking_lot = "0.12.5"
 pin-project = "1.1.11"
 quick-protobuf = "0.8"
-rand = "0.8"
+rand = "0.10"
 rw-stream-sink = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
