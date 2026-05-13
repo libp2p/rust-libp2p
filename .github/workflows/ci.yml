@@ -307,12 +307,7 @@ jobs:
         with:
           shared-key: semver
       - uses: obi1kenobi/cargo-semver-checks-action@v2
-      - name: Run semver checks on published crates only
-        run: |
-          PACKAGES=$(echo '${{ needs.gather_published_crates.outputs.members }}' \
-            | jq -r '.[] | "--package " + .' \
-            | tr '\n' ' ')
-          cargo semver-checks $PACKAGES
+      - run: cargo semver-checks
 
   rustfmt:
     runs-on: ubuntu-latest
