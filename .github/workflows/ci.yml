@@ -291,7 +291,6 @@ jobs:
           wasm-pack build --target web --out-dir static
 
   semver:
-    needs: [gather_published_crates]
     runs-on: ubuntu-latest
     env:
       # Unset the global `RUSTFLAGS` env to allow warnings.
