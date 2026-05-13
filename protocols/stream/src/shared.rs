@@ -112,7 +112,7 @@ impl Shared {
             return;
         };
 
-        while let Ok(new_stream) = receiver.try_recv() {
+        while let Ok(Some(new_stream)) = receiver.try_next() {
             let _ = new_stream
                 .sender
                 .send(Err(crate::OpenStreamError::Io(io::Error::new(
