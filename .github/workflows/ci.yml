@@ -291,6 +291,7 @@ jobs:
           wasm-pack build --target web --out-dir static
 
   semver:
+    needs: [gather_published_crates]
     runs-on: ubuntu-latest
     env:
       # Unset the global `RUSTFLAGS` env to allow warnings.
@@ -303,8 +304,16 @@ jobs:
       RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          shared-key: semver
       - uses: obi1kenobi/cargo-semver-checks-action@v2
-      - run: cargo semver-checks
+      - name: Run semver checks on published crates only
+        run: |
+          PACKAGES=$(echo '${{ needs.gather_published_crates.outputs.members }}' \
+            | jq -r '.[] | "--package " + .' \
+            | tr '\n' ' ')
+          cargo semver-checks $PACKAGES
 
   rustfmt:
     runs-on: ubuntu-latest
