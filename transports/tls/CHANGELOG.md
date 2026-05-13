@@ -1,5 +1,13 @@
 ## 0.7.0
 
+- Add `make_client_config_with_provider` / `make_server_config_with_provider`
+  free functions and `Config::new_with_provider` constructor that accept
+  an optional `rustls::crypto::CryptoProvider`. Lets consumers plug in
+  alternative providers — notably `rustls-post-quantum` for the
+  X25519MLKEM768 hybrid PQ key-exchange group (IANA codepoint `0x11EC`,
+  draft-ietf-tls-ecdhe-mlkem). Behaviour-preserving: existing
+  `make_*_config` and `Config::new` delegate to the new variants with
+  `None`. Closes [issue 6236](https://github.com/libp2p/rust-libp2p/issues/6236).
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

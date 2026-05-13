@@ -38,15 +38,41 @@ pub use upgrade::{Config, UpgradeError};
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
 
+/// Build a `CryptoProvider` from `ring` with libp2p-tls's required cipher suites.
+///
+/// Used as the default-provider fallback by both the unmodified API
+/// (`make_client_config`, `make_server_config`) and the new `_with_provider`
+/// variants when the caller passes `None`.
+fn default_libp2p_provider() -> rustls::crypto::CryptoProvider {
+    let mut provider = rustls::crypto::ring::default_provider();
+    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
+    provider
+}
+
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
     keypair: &Keypair,
     remote_peer_id: Option<PeerId>,
 ) -> Result<rustls::ClientConfig, certificate::GenError> {
+    make_client_config_with_provider(keypair, remote_peer_id, None)
+}
+
+/// Create a TLS client configuration for libp2p with an optional custom
+/// `rustls::crypto::CryptoProvider`.
+///
+/// Pass `Some(provider)` to enable a non-default provider (for example,
+/// `rustls_post_quantum::provider().clone()` to add the X25519MLKEM768
+/// hybrid post-quantum kx group). When `None`, the default `ring`-based
+/// provider with libp2p's cipher-suite list is used — semantically
+/// identical to `make_client_config`.
+pub fn make_client_config_with_provider(
+    keypair: &Keypair,
+    remote_peer_id: Option<PeerId>,
+    custom_provider: Option<rustls::crypto::CryptoProvider>,
+) -> Result<rustls::ClientConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut provider = rustls::crypto::ring::default_provider();
-    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
+    let provider = custom_provider.unwrap_or_else(default_libp2p_provider);
 
     let cert_resolver = Arc::new(
         AlwaysResolvesCert::new(certificate, &private_key)
@@ -71,10 +97,20 @@ pub fn make_client_config(
 pub fn make_server_config(
     keypair: &Keypair,
 ) -> Result<rustls::ServerConfig, certificate::GenError> {
+    make_server_config_with_provider(keypair, None)
+}
+
+/// Create a TLS server configuration for libp2p with an optional custom
+/// `rustls::crypto::CryptoProvider`.
+///
+/// See [`make_client_config_with_provider`] for the rationale.
+pub fn make_server_config_with_provider(
+    keypair: &Keypair,
+    custom_provider: Option<rustls::crypto::CryptoProvider>,
+) -> Result<rustls::ServerConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut provider = rustls::crypto::ring::default_provider();
-    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
+    let provider = custom_provider.unwrap_or_else(default_libp2p_provider);
 
     let cert_resolver = Arc::new(
         AlwaysResolvesCert::new(certificate, &private_key)

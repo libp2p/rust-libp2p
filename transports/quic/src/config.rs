@@ -77,12 +77,46 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
+        Self::new_inner(keypair, None)
+    }
+
+    /// Build a libp2p-quic config with a custom rustls
+    /// [`CryptoProvider`](rustls::crypto::CryptoProvider) used for both the
+    /// client- and server-side TLS configs underneath QUIC.
+    ///
+    /// Pass e.g. `rustls_post_quantum::provider().clone()` to enable the
+    /// X25519MLKEM768 hybrid post-quantum key-exchange group on the QUIC
+    /// handshake. When you don't need to override the default, keep using
+    /// [`Config::new`] — semantically identical.
+    pub fn new_with_provider(
+        keypair: &libp2p_identity::Keypair,
+        provider: rustls::crypto::CryptoProvider,
+    ) -> Self {
+        Self::new_inner(keypair, Some(provider))
+    }
+
+    /// Internal helper shared by [`Self::new`] and [`Self::new_with_provider`]
+    /// so the two public constructors stay one-liners.
+    fn new_inner(
+        keypair: &libp2p_identity::Keypair,
+        custom_provider: Option<rustls::crypto::CryptoProvider>,
+    ) -> Self {
         let client_tls_config = Arc::new(
-            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+            QuicClientConfig::try_from(
+                libp2p_tls::make_client_config_with_provider(
+                    keypair,
+                    None,
+                    custom_provider.clone(),
+                )
                 .unwrap(),
+            )
+            .unwrap(),
         );
         let server_tls_config = Arc::new(
-            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+            QuicServerConfig::try_from(
+                libp2p_tls::make_server_config_with_provider(keypair, custom_provider).unwrap(),
+            )
+            .unwrap(),
         );
         Self {
             client_tls_config,
