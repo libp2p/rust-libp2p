@@ -352,7 +352,11 @@ impl P2pCertificate<'_> {
             // Similarly, hash functions with an output length less than 256 bits
             // MUST NOT be used, due to the possibility of collision attacks.
             // In particular, MD5 and SHA1 MUST NOT be used.
-            RSA_PKCS1_SHA1 => return Err(unsupported_signature_algorithm(Some(&OID_PKCS1_SHA1WITHRSA))),
+            RSA_PKCS1_SHA1 => {
+                return Err(unsupported_signature_algorithm(Some(
+                    &oid_registry::OID_PKCS1_SHA1WITHRSA,
+                )));
+            }
             ECDSA_SHA1_Legacy => return Err(unsupported_signature_algorithm(None)),
             _ => return Err(unsupported_signature_algorithm(None)),
         };
