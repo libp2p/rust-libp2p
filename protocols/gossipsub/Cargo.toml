@@ -24,7 +24,6 @@ either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = { workspace = true }
-getrandom = { workspace = true }
 hashlink = { workspace = true }
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
