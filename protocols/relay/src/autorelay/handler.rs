@@ -5,8 +5,8 @@ use std::{
 
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::{
-    handler::ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
-    SupportedProtocols,
+    ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol, SupportedProtocols,
+    handler::ConnectionEvent,
 };
 
 use crate::HOP_PROTOCOL_NAME;

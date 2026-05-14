@@ -3090,6 +3090,7 @@ dependencies = [
  "futures-bounded",
  "futures-timer",
  "libp2p-core",
+ "libp2p-identify",
  "libp2p-identity",
  "libp2p-ping",
  "libp2p-plaintext",
