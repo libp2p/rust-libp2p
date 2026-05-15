@@ -1,6 +1,6 @@
 ## 0.50.0
 - Expose `supports_partial` and `requests_partial` flags on `Event::Subscribed` when the `partial_messages` feature is enabled.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6439](https://github.com/libp2p/rust-libp2p/pull/6439).
 
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).
