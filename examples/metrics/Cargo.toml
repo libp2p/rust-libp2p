@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 futures = { workspace = true }
-axum = "0.7"
+axum = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
 opentelemetry = { version = "0.27.0", features = ["metrics"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["metrics"] }
