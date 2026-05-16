@@ -387,7 +387,9 @@ impl NetworkBehaviour for Behaviour {
                 self.disable_reservation(listener_id, true);
             }
             FromSwarm::ListenerClosed(ListenerClosed {
-                listener_id, reason, ..
+                listener_id,
+                reason,
+                ..
             }) => {
                 self.disable_reservation(listener_id, reason.is_err());
             }

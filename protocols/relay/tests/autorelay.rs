@@ -399,8 +399,7 @@ async fn autorelay_blacklists_failing_relay_and_retries_after_cooldown() {
         "autorelay retried during the cooldown window"
     );
 
-    let second_failure_at =
-        wait_for_listener_failure(&mut client, cooldown * 5).await;
+    let second_failure_at = wait_for_listener_failure(&mut client, cooldown * 5).await;
     let elapsed = second_failure_at.duration_since(first_failure_at);
     assert!(
         elapsed >= cooldown,
