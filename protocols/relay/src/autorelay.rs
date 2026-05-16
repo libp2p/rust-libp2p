@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use either::Either;
@@ -12,7 +13,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ExternalAddresses, ListenOpts, NewListenAddr,
+    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
     derive_prelude::{
         AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
         ExpiredListenAddr, ExternalAddrConfirmed, FromSwarm, ListenerClosed, ListenerError,
@@ -65,17 +66,20 @@ enum ReservationStatus {
     Idle,
     Pending { id: ListenerId },
     Active { id: ListenerId },
+    Blacklisted,
 }
 
 #[derive(Debug)]
 pub struct Config {
     max_reservations: NonZeroU8,
+    failure_cooldown: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             max_reservations: NonZeroU8::new(2).unwrap(),
+            failure_cooldown: Duration::from_secs(30),
         }
     }
 }
@@ -83,6 +87,11 @@ impl Default for Config {
 impl Config {
     pub fn set_max_reservations(mut self, max_reservations: NonZeroU8) -> Self {
         self.max_reservations = max_reservations;
+        self
+    }
+
+    pub fn set_failure_cooldown(mut self, duration: Duration) -> Self {
+        self.failure_cooldown = duration;
         self
     }
 }
@@ -161,7 +170,7 @@ impl Behaviour {
         }
     }
 
-    fn disable_reservation(&mut self, id: ListenerId) {
+    fn disable_reservation(&mut self, id: ListenerId, failed: bool) {
         if self.external_reservations.remove(&id).is_some() {
             self.meet_reservation_target();
             return;
@@ -179,9 +188,22 @@ impl Behaviour {
                 }
             )
         {
-            connection.relay_status = RelayStatus::Supported {
-                status: ReservationStatus::Idle,
-            };
+            if failed {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Blacklisted,
+                };
+                self.events.push_back(ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(connection_id),
+                    event: Either::Left(handler::In::Blacklist {
+                        duration: self.config.failure_cooldown,
+                    }),
+                });
+            } else {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
+            }
         }
 
         self.meet_reservation_target();
@@ -359,13 +381,15 @@ impl NetworkBehaviour for Behaviour {
                 }
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. }) => {
-                self.disable_reservation(listener_id);
+                self.disable_reservation(listener_id, false);
             }
             FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
-                self.disable_reservation(listener_id);
+                self.disable_reservation(listener_id, true);
             }
-            FromSwarm::ListenerClosed(ListenerClosed { listener_id, .. }) => {
-                self.disable_reservation(listener_id);
+            FromSwarm::ListenerClosed(ListenerClosed {
+                listener_id, reason, ..
+            }) => {
+                self.disable_reservation(listener_id, reason.is_err());
             }
             _ => {}
         }
@@ -407,6 +431,19 @@ impl NetworkBehaviour for Behaviour {
                 if let Some(id) = drop_listener {
                     self.reservations.remove(&id);
                     self.events.push_back(ToSwarm::RemoveListener { id });
+                    self.meet_reservation_target();
+                }
+            }
+            Out::BlacklistExpired => {
+                if matches!(
+                    connection.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Blacklisted
+                    }
+                ) {
+                    connection.relay_status = RelayStatus::Supported {
+                        status: ReservationStatus::Idle,
+                    };
                     self.meet_reservation_target();
                 }
             }

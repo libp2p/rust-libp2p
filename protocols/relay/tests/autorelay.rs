@@ -365,6 +365,67 @@ async fn autorelay_drops_reservations_when_public_address_appears() {
     }
 }
 
+#[tokio::test]
+async fn autorelay_blacklists_failing_relay_and_retries_after_cooldown() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_rejecting_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let cooldown = Duration::from_secs(1);
+    let mut client = build_client(
+        autorelay::Config::default()
+            .set_max_reservations(NonZeroU8::new(1).unwrap())
+            .set_failure_cooldown(cooldown),
+    );
+    client.dial(relay_addr).unwrap();
+
+    let first_failure_at = wait_for_listener_failure(&mut client, Duration::from_secs(10)).await;
+
+    let early_retry = tokio::time::timeout(
+        cooldown / 2,
+        wait_for_listener_failure(&mut client, cooldown * 5),
+    )
+    .await;
+    assert!(
+        early_retry.is_err(),
+        "autorelay retried during the cooldown window"
+    );
+
+    let second_failure_at =
+        wait_for_listener_failure(&mut client, cooldown * 5).await;
+    let elapsed = second_failure_at.duration_since(first_failure_at);
+    assert!(
+        elapsed >= cooldown,
+        "retry should respect cooldown (elapsed {elapsed:?}, cooldown {cooldown:?})"
+    );
+}
+
+async fn wait_for_listener_failure(
+    client: &mut Swarm<Client>,
+    timeout: Duration,
+) -> std::time::Instant {
+    let sleep = tokio::time::sleep(timeout);
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => panic!("timeout waiting for listener failure"),
+            ev = client.select_next_some() => {
+                if let SwarmEvent::ListenerClosed { reason: Err(_), .. } = ev {
+                    return std::time::Instant::now();
+                }
+            }
+        }
+    }
+}
+
 async fn wait_for_reservation_from_either(
     client: &mut Swarm<Client>,
     peer_a: PeerId,
@@ -424,6 +485,20 @@ where
 }
 
 fn build_relay() -> Swarm<Relay> {
+    build_relay_with_config(relay::Config {
+        reservation_duration: Duration::from_secs(60),
+        ..Default::default()
+    })
+}
+
+fn build_rejecting_relay() -> Swarm<Relay> {
+    build_relay_with_config(relay::Config {
+        max_reservations: 0,
+        ..Default::default()
+    })
+}
+
+fn build_relay_with_config(config: relay::Config) -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = local_key.public().to_peer_id();
     let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
@@ -431,13 +506,7 @@ fn build_relay() -> Swarm<Relay> {
     Swarm::new(
         transport,
         Relay {
-            relay: relay::Behaviour::new(
-                local_peer_id,
-                relay::Config {
-                    reservation_duration: Duration::from_secs(60),
-                    ..Default::default()
-                },
-            ),
+            relay: relay::Behaviour::new(local_peer_id, config),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/autorelay-test/1.0.0".to_owned(),
                 local_key.public(),
