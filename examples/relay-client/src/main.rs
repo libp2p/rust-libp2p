@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let max_reservations = NonZeroU8::new(opts.max_reservations)
         .ok_or("--max-reservations must be greater than zero")?;
-    let autorelay_config = autorelay::Config::default().set_max_reservations(max_reservations.get());
+    let autorelay_config = autorelay::Config::default().set_max_reservations(max_reservations);
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
         .with_tokio()

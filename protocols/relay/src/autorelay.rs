@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
 use either::Either;
@@ -36,8 +36,6 @@ pub struct Behaviour {
     reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
 
     external_reservations: HashMap<ListenerId, PeerId>,
-
-    waker: Option<Waker>,
 }
 
 #[derive(Debug)]
@@ -84,9 +82,8 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn set_max_reservations(mut self, max_reservations: u8) -> Self {
-        assert!(max_reservations > 0);
-        self.max_reservations = NonZeroU8::new(max_reservations).expect("greater than zero");
+    pub fn set_max_reservations(mut self, max_reservations: NonZeroU8) -> Self {
+        self.max_reservations = max_reservations;
         self
     }
 }
@@ -234,10 +231,6 @@ impl Behaviour {
         }
 
         debug_assert!(self.covered_peers().len() <= max);
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
     }
 }
 
@@ -324,7 +317,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::AddressChange(AddressChange {
                 peer_id,
                 connection_id,
-                old,
+                old: _,
                 new,
             }) => {
                 let connection = self
@@ -332,10 +325,7 @@ impl NetworkBehaviour for Behaviour {
                     .get_mut(&(peer_id, connection_id))
                     .expect("valid connection");
 
-                let old_addr = old.get_remote_address();
                 let new_addr = new.get_remote_address();
-
-                debug_assert!(old_addr != new_addr);
 
                 connection.address = new_addr.clone();
             }
@@ -427,12 +417,11 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
-        self.waker.replace(cx.waker().clone());
         Poll::Pending
     }
 }

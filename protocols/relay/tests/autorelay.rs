@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    num::NonZeroU8,
     time::Duration,
 };
 
@@ -91,7 +92,7 @@ async fn autorelay_respects_max_reservations() {
         relay_b.collect::<Vec<_>>().await;
     });
 
-    let mut client = build_client(autorelay::Config::default().set_max_reservations(1));
+    let mut client = build_client(autorelay::Config::default().set_max_reservations(NonZeroU8::new(1).unwrap()));
     client.dial(relay_a_addr.clone()).unwrap();
     client.dial(relay_b_addr.clone()).unwrap();
 
@@ -148,7 +149,7 @@ async fn autorelay_refills_after_connection_drop() {
         relay_b.collect::<Vec<_>>().await;
     });
 
-    let mut client = build_client(autorelay::Config::default().set_max_reservations(1));
+    let mut client = build_client(autorelay::Config::default().set_max_reservations(NonZeroU8::new(1).unwrap()));
     client.dial(relay_a_addr.clone()).unwrap();
     client.dial(relay_b_addr.clone()).unwrap();
 
@@ -208,7 +209,7 @@ async fn autorelay_with_two_reservations_among_five_relays() {
 
     let relay_peers: HashSet<PeerId> = relay_addrs.iter().map(|(p, _)| *p).collect();
 
-    let mut client = build_client(autorelay::Config::default().set_max_reservations(2));
+    let mut client = build_client(autorelay::Config::default().set_max_reservations(NonZeroU8::new(2).unwrap()));
     for (_, addr) in &relay_addrs {
         client.dial(addr.clone()).unwrap();
     }
@@ -307,7 +308,7 @@ async fn autorelay_drops_reservations_when_public_address_appears() {
         relay_b.collect::<Vec<_>>().await;
     });
 
-    let mut client = build_client(autorelay::Config::default().set_max_reservations(2));
+    let mut client = build_client(autorelay::Config::default().set_max_reservations(NonZeroU8::new(2).unwrap()));
     client.dial(relay_a_addr.clone()).unwrap();
     client.dial(relay_b_addr.clone()).unwrap();
 
