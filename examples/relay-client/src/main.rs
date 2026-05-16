@@ -47,26 +47,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("--max-reservations must be greater than zero")?;
     let autorelay_config = autorelay::Config::default().set_max_reservations(max_reservations);
 
-    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
-        .with_tokio()
-        .with_tcp(
-            tcp::Config::default().nodelay(true),
-            noise::Config::new,
-            yamux::Config::default,
-        )?
-        .with_quic()
-        .with_dns()?
-        .with_relay_client(noise::Config::new, yamux::Config::default)?
-        .with_behaviour(|keypair, relay_behaviour| Behaviour {
-            relay_client: relay_behaviour,
-            autorelay: autorelay::Behaviour::new_with_config(autorelay_config),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/autorelay-example/0.1.0".to_owned(),
-                keypair.public(),
-            )),
-            ping: ping::Behaviour::new(ping::Config::new()),
-        })?
-        .build();
+    let mut swarm =
+        libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default().nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )?
+            .with_quic()
+            .with_dns()?
+            .with_relay_client(noise::Config::new, yamux::Config::default)?
+            .with_behaviour(|keypair, relay_behaviour| Behaviour {
+                relay_client: relay_behaviour,
+                autorelay: autorelay::Behaviour::new_with_config(autorelay_config),
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/autorelay-example/0.1.0".to_owned(),
+                    keypair.public(),
+                )),
+                ping: ping::Behaviour::new(ping::Config::new()),
+            })?
+            .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
@@ -78,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tracing::info!(%addr, "Dialing relay");
         swarm.dial(addr.clone())?;
     }
-    
+
     loop {
         tokio::select! {
             event = swarm.select_next_some() => match event {
