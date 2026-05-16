@@ -46,12 +46,11 @@ struct Connection {
 
 impl Connection {
     /// Mark relayed connection as not supported
-    pub(crate) fn disqualify_connection_if_relayed(&mut self)  {
+    pub(crate) fn disqualify_connection_if_relayed(&mut self) {
         if self.address.is_relayed() {
             self.relay_status = RelayStatus::NotSupported;
         }
     }
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,8 +333,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                if let Some((peer_id, connection_id)) =
-                    self.reservations.get(&listener_id).copied()
+                if let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
                 {
                     let connection = self
                         .connections
