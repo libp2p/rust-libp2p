@@ -425,6 +425,150 @@ async fn wait_for_listener_failure(
     }
 }
 
+#[tokio::test]
+async fn autorelay_disabled_does_not_reserve() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Disable);
+    client.dial(relay_addr).unwrap();
+
+    let observed = tokio::time::timeout(
+        Duration::from_secs(3),
+        wait_until(&mut client, Duration::from_secs(5), |event| {
+            matches!(
+                event,
+                SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                    relay::client::Event::ReservationReqAccepted { .. }
+                ))
+            )
+        }),
+    )
+    .await;
+
+    assert!(
+        observed.is_err(),
+        "autorelay opened a reservation while disabled"
+    );
+}
+
+#[tokio::test]
+async fn autorelay_re_enable_triggers_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Disable);
+    client.dial(relay_addr).unwrap();
+
+    let sleep = tokio::time::sleep(Duration::from_secs(3));
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => break,
+            ev = client.select_next_some() => {
+                if matches!(
+                    ev,
+                    SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                        relay::client::Event::ReservationReqAccepted { .. }
+                    ))
+                ) {
+                    panic!("autorelay reserved while disabled");
+                }
+            }
+        }
+    }
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Enable);
+
+    wait_until(&mut client, Duration::from_secs(10), |event| {
+        matches!(
+            event,
+            SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. }
+            ))
+        )
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn autorelay_disable_preserves_active_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client.dial(relay_addr).unwrap();
+
+    wait_until(&mut client, Duration::from_secs(20), |event| {
+        matches!(
+            event,
+            SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. }
+            ))
+        )
+    })
+    .await;
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Disable);
+
+    let sleep = tokio::time::sleep(Duration::from_secs(3));
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => break,
+            ev = client.select_next_some() => {
+                if let SwarmEvent::ListenerClosed { reason: Err(_), .. } = ev {
+                    panic!("disabling autorelay dropped an active reservation");
+                }
+                if let SwarmEvent::ExternalAddrExpired { .. } = ev {
+                    panic!("disabling autorelay expired an external address");
+                }
+            }
+        }
+    }
+}
+
 async fn wait_for_reservation_from_either(
     client: &mut Swarm<Client>,
     peer_a: PeerId,

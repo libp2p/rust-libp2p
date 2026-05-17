@@ -4,7 +4,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
+use std::task::Waker;
 use either::Either;
 use libp2p_core::{
     Endpoint,
@@ -29,6 +29,7 @@ mod handler;
 #[derive(Default, Debug)]
 pub struct Behaviour {
     config: Config,
+    status: Status,
     external_addresses: ExternalAddresses,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
 
@@ -37,6 +38,14 @@ pub struct Behaviour {
     reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
 
     external_reservations: HashMap<ListenerId, PeerId>,
+    waker: Option<Waker>
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Enable,
+    Disable,
 }
 
 #[derive(Debug)]
@@ -105,6 +114,23 @@ impl Behaviour {
         Self {
             config,
             ..Default::default()
+        }
+    }
+
+    pub fn status(&self) -> Status {
+        self.status
+    }
+
+    pub fn set_status(&mut self, status: Status) {
+        if self.status == status {
+            return;
+        }
+        self.status = status;
+        if status == Status::Enable {
+            self.meet_reservation_target();
+            if let Some(waker) = self.waker.take() {
+                waker.wake();
+            }
         }
     }
 
@@ -218,6 +244,10 @@ impl Behaviour {
     }
 
     fn meet_reservation_target(&mut self) {
+        if self.status == Status::Disable {
+            return;
+        }
+
         if self
             .external_addresses
             .iter()
@@ -454,11 +484,14 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
+
+        self.waker = Some(cx.waker().clone());
+
         Poll::Pending
     }
 }
