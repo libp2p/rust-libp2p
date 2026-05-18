@@ -86,7 +86,6 @@ websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
 upnp = ["dep:libp2p-upnp"]
-
 [dependencies]
 bytes.workspace = true
 either = "1.9.0"

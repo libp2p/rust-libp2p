@@ -109,6 +109,8 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use asynchronous_codec::FramedRead;
     use futures::{FutureExt, StreamExt, io::Cursor};
     use quickcheck::{Arbitrary, Gen, QuickCheck};
@@ -123,7 +125,10 @@ mod tests {
         let mut read = FramedRead::new(Cursor::new(&mut src), codec);
         let err = read.next().now_or_never().unwrap().unwrap().unwrap_err();
 
-        assert_eq!(err.to_string(), "message with 100b exceeds maximum of 1b")
+        assert_eq!(
+            err.source().unwrap().to_string(),
+            "message with 100b exceeds maximum of 1b"
+        )
     }
 
     #[test]
