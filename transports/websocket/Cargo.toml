@@ -23,7 +23,7 @@ soketto = "0.8.0"
 tracing = { workspace = true }
 thiserror = { workspace = true }
 url = "2.5"
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["tokio"] }
