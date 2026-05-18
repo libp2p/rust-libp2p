@@ -22,7 +22,7 @@ multihash = { workspace = true }
 multistream-select = { workspace = true }
 parking_lot = "0.12.5"
 prost = { workspace = true }
-pin-project = "1.1.12"
+pin-project = "1.1.13"
 rand = { workspace = true }
 rw-stream-sink = { workspace = true }
 thiserror = { workspace = true }
