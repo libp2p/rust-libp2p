@@ -98,7 +98,7 @@ where
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error(transparent)]
+#[error("Failed to encode/decode message")]
 pub struct Error(#[from] io::Error);
 
 impl From<Error> for io::Error {
@@ -195,7 +195,7 @@ mod tests {
         where
             Self: Sized,
         {
-            todo!()
+            unimplemented!()
         }
 
         fn merge_field(
@@ -208,15 +208,15 @@ mod tests {
         where
             Self: Sized,
         {
-            todo!()
+            unimplemented!()
         }
 
         fn encoded_len(&self) -> usize {
-            todo!()
+            unimplemented!()
         }
 
         fn clear(&mut self) {
-            todo!()
+            unimplemented!()
         }
     }
 }

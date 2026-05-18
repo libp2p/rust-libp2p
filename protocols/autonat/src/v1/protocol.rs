@@ -252,7 +252,7 @@ impl DialResponse {
                     }
                 }
             }
-            _ => {
+            None => {
                 tracing::debug!("Received malformed response message");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,

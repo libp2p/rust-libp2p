@@ -47,8 +47,9 @@ static_assertions::const_assert! {
 pub(crate) struct Codec<S> {
     session: S,
 
-    // We reuse the encryption buffer across multiple messages to avoid reallocations.
+    // We reuse write and encryption buffers across multiple messages to avoid reallocations.
     // We cannot reuse read and decryption buffers because we cannot return borrowed data.
+    write_buffer: BytesMut,
     encrypt_buffer: BytesMut,
 }
 
@@ -56,6 +57,7 @@ impl<S> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
+            write_buffer: BytesMut::default(),
             encrypt_buffer: BytesMut::default(),
         }
     }
@@ -101,11 +103,17 @@ impl Encoder for Codec<snow::HandshakeState> {
     type Item<'a> = &'a proto::NoiseHandshakePayload;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let encoded = item.encode_to_vec();
+        let item_size = item.encoded_len();
+        self.write_buffer.reserve(item.encoded_len());
+        self.write_buffer.clear();
+        item.encode(&mut self.write_buffer)?;
 
-        encrypt(&encoded, dst, &mut self.encrypt_buffer, |item, buffer| {
-            self.session.write_message(item, buffer)
-        })?;
+        encrypt(
+            &self.write_buffer[..item_size],
+            dst,
+            &mut self.encrypt_buffer,
+            |item, buffer| self.session.write_message(item, buffer),
+        )?;
 
         Ok(())
     }

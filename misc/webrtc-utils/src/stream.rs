@@ -263,7 +263,11 @@ where
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
     {
         Some(Message { flag, message }) => {
-            let flag = flag.and_then(|f| Flag::try_from(f).ok());
+            let flag = flag
+                .map(|f| {
+                    Flag::try_from(f).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+                })
+                .transpose()?;
             Poll::Ready(Ok(Some((flag, message))))
         }
         None => Poll::Ready(Ok(None)),

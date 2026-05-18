@@ -8,7 +8,7 @@ use rand::Rng;
 
 use crate::v2::{Nonce, generated::structs as proto};
 
-const REQUEST_MAX_SIZE: usize = 4102;
+const REQUEST_MAX_SIZE: usize = 4104;
 pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
 pub(super) const DATA_LEN_UPPER_BOUND: usize = 100_000u32 as usize;
 pub(super) const DATA_FIELD_LEN_UPPER_BOUND: usize = 4096;
