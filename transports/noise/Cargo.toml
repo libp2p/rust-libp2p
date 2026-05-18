@@ -17,7 +17,7 @@ libp2p-identity = { workspace = true, features = ["ed25519"] }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.3"
+rand = { workspace = true }
 static_assertions = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }

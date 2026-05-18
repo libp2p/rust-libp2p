@@ -14,16 +14,16 @@ categories = ["network-programming", "asynchronous"]
 either = "1.11"
 fnv = "1.0"
 futures = { workspace = true, features = ["executor", "thread-pool"] }
-futures-timer = "3"
+futures-timer = { workspace = true }
 web-time = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 multistream-select = { workspace = true }
 parking_lot = "0.12.5"
-pin-project = "1.1.11"
 prost = { workspace = true }
-rand = "0.8"
+pin-project = "1.1.12"
+rand = { workspace = true }
 rw-stream-sink = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
