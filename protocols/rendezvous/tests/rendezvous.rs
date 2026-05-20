@@ -29,6 +29,11 @@ use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
+#[test]
+fn protocol_ident_is_public() {
+    assert_eq!(rendezvous::PROTOCOL_IDENT, "/rendezvous/1.0.0");
+}
+
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
     let _ = tracing_subscriber::fmt()
