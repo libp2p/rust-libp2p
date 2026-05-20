@@ -1029,6 +1029,55 @@ async fn autorelay_no_relays_available_is_edge_triggered() {
     );
 }
 
+#[tokio::test]
+async fn autorelay_resumes_after_public_address_removed() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let relay_peer = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client.dial(relay_addr).unwrap();
+
+    wait_until(&mut client, Duration::from_secs(15), |event| {
+        matches!(
+            event,
+            SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. }
+            ))
+        )
+    })
+    .await;
+
+    let public_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    client.add_external_address(public_addr.clone());
+
+    wait_until(&mut client, Duration::from_secs(10), |event| {
+        matches!(event, SwarmEvent::ExternalAddrExpired { .. })
+    })
+    .await;
+
+    client.remove_external_address(&public_addr);
+
+    wait_until(&mut client, Duration::from_secs(15), |event| {
+        matches!(
+            event,
+            SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { relay_peer_id, .. }
+            )) if *relay_peer_id == relay_peer
+        )
+    })
+    .await;
+}
+
 async fn wait_for_reservation_from_either(
     client: &mut Swarm<Client>,
     peer_a: PeerId,

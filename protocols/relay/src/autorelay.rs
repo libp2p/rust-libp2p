@@ -5,17 +5,12 @@ use libp2p_core::{
     transport::{ListenerId, PortUse},
 };
 use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
-    derive_prelude::{
-        AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-        DialFailure, ExpiredListenAddr, ExternalAddrConfirmed, FromSwarm, ListenerClosed,
-        ListenerError, Multiaddr, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
-        ToSwarm,
-    },
-    dial_opts::DialOpts,
-    dummy,
-};
+use libp2p_swarm::{ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler, derive_prelude::{
+    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
+    DialFailure, ExpiredListenAddr, ExternalAddrConfirmed, FromSwarm, ListenerClosed,
+    ListenerError, Multiaddr, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
+}, dial_opts::DialOpts, dummy, ExternalAddrExpired};
 use std::task::Waker;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -137,7 +132,8 @@ impl Behaviour {
             return;
         }
         self.status = status;
-        self.events.push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status }));
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status }));
         if status == Status::Enable {
             self.meet_reservation_target();
         }
@@ -407,14 +403,13 @@ impl NetworkBehaviour for Behaviour {
     fn on_swarm_event(&mut self, event: FromSwarm) {
         self.external_addresses.on_swarm_event(&event);
 
-        if let FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) = &event
-            && !addr.is_relayed()
-        {
-            self.remove_all_reservations();
-            return;
-        }
-
         match event {
+            FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) if !addr.is_relayed() => {
+                self.remove_all_reservations();
+            }
+            FromSwarm::ExternalAddrExpired(_) => {
+                self.meet_reservation_target();
+            }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 endpoint,
