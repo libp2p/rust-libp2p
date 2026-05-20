@@ -24,7 +24,7 @@ async fn outbound_inner(
     remote_fingerprint: Fingerprint,
     id_keys: Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    let rtc_peer_connection = RtcPeerConnection::new(remote_fingerprint.algorithm()).await?;
+    let rtc_peer_connection = RtcPeerConnection::new(remote_fingerprint.algorithm(), None).await?;
 
     // Create stream for Noise handshake
     // Must create data channel before Offer is created for it to be included in the SDP
@@ -53,5 +53,5 @@ async fn outbound_inner(
 
     tracing::debug!(peer=%peer_id, "Remote peer identified");
 
-    Ok((peer_id, Connection::new(rtc_peer_connection)))
+    Ok((peer_id, Connection::new(rtc_peer_connection, None)))
 }

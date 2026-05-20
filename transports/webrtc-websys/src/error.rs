@@ -5,7 +5,7 @@ use wasm_bindgen::{JsCast, JsValue};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Invalid multiaddr: {0}")]
-    InvalidMultiaddr(&'static str),
+    InvalidMultiaddr(String),
 
     #[error("JavaScript error: {0}")]
     Js(String),

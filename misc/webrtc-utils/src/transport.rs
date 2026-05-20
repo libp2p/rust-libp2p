@@ -24,6 +24,7 @@ pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerpri
 
             (port, fingerprint)
         }
+
         _ => return None,
     };
 

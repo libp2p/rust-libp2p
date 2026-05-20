@@ -29,6 +29,7 @@ use std::{
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
+    PeerId, Swarm,
     core::{Multiaddr, multiaddr::Protocol},
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
@@ -46,6 +47,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
+    let local_peer_id = PeerId::from(local_key.public());
+    tracing::info!(?local_peer_id, "Local peer id");
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
         .with_tokio()
@@ -55,6 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_quic()
+        .with_dns()?
+        .with_websocket(noise::Config::new, yamux::Config::default)
+        .await?
         .with_behaviour(|key| Behaviour {
             relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -83,6 +89,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
+    listen_on_websocket(&mut swarm, &opt)?;
+
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
             SwarmEvent::Behaviour(event) => {
@@ -96,11 +104,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 println!("{event:?}")
             }
-            SwarmEvent::NewListenAddr { address, .. } => {
+            SwarmEvent::NewListenAddr { mut address, .. } => {
+                address.push(Protocol::P2p(local_peer_id));
                 println!("Listening on {address:?}");
             }
             _ => {}
         }
+    }
+
+    fn listen_on_websocket(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Box<dyn Error>> {
+        match opt.ws_port {
+            Some(port) => {
+                let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
+                    .with(Protocol::Tcp(port))
+                    .with(Protocol::Ws(std::borrow::Cow::Borrowed("/")));
+
+                swarm.listen_on(address.clone())?;
+            }
+            None => {
+                tracing::info!("Does not use websocket");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -132,4 +157,8 @@ struct Opt {
     /// The port used to listen on all interfaces
     #[arg(long)]
     port: u16,
+
+    /// The websocket port used to listen on all interfaces
+    #[arg(long)]
+    ws_port: Option<u16>,
 }
