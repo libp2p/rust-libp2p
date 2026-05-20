@@ -121,6 +121,13 @@ use crate::{
 ///     }
 /// }
 /// ```
+///
+/// ## Manually compose multiple `NetworkBehaviour`s without derive macro
+///
+/// Although it is not the recommended way to compose behaviours, you can gain more
+/// insight into how `rust-libp2p` works under the hood this way.
+/// See the dedicated example for more information.
+
 pub trait NetworkBehaviour: 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: ConnectionHandler;
