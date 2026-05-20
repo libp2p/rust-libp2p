@@ -554,32 +554,6 @@ where
     /// Returns [`Ok(true)`](Ok) if the subscription worked.
     /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, false, false)
-    }
-
-    /// Subscribe to a topic with partial options.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    #[cfg(feature = "partial_messages")]
-    pub fn subscribe_partial<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, true, requests_partial)
-    }
-
-    /// Subscribe to a topic.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    fn subscribe_inner<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        supports_partial: bool,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
@@ -589,6 +563,14 @@ where
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
+
+        #[cfg(not(feature = "partial_messages"))]
+        let (requests_partial, supports_partial) = (false, false);
+        #[cfg(feature = "partial_messages")]
+        let SubscriptionOpts {
+            requests_partial,
+            supports_partial,
+        } = self.partial_messages_extension.opts(&topic_hash);
 
         // send subscription request to all peers
         for peer_id in self.connected_peers.keys().copied().collect::<Vec<_>>() {
@@ -605,10 +587,6 @@ where
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
         self.join(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .subscribe(topic_hash, supports_partial, requests_partial);
 
         tracing::debug!(%topic, "Subscribed to topic");
         Ok(true)
@@ -636,10 +614,6 @@ where
         // call LEAVE(topic)
         // this will remove the topic from the mesh
         self.leave(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .unsubscribe(&topic_hash.clone());
 
         tracing::debug!(topic=%topic_hash, "Unsubscribed from topic");
         true
@@ -700,7 +674,7 @@ where
         let candidates = if self
             .partial_messages_extension
             .opts(&topic_hash)
-            .is_some_and(|opts| opts.supports_partial)
+            .supports_partial
         {
             candidates
                 .filter(|peer_id| {
@@ -876,6 +850,18 @@ where
     }
 
     #[cfg(feature = "partial_messages")]
+    /// Enable partial messages for a topic. This must be called while not subscribed to the topic.
+    /// Partials can be enabled only once per topic.
+    pub fn enable_partials_for_topic(&mut self, topic_hash: TopicHash, requests_partials: bool) {
+        if self.mesh.contains_key(&topic_hash) {
+            tracing::warn!(topic=%topic_hash, "Tried to enable partials while subscribed");
+            return;
+        }
+        self.partial_messages_extension
+            .enable_partials_for_topic(topic_hash, requests_partials);
+    }
+
+    #[cfg(feature = "partial_messages")]
     /// Report an invalid partial message from a peer, originating at the application layer.
     /// This triggers penalties for the peer that sent the invalid partial.
     pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
@@ -891,16 +877,6 @@ where
         partial_message: P,
     ) -> Result<(), PublishError> {
         let topic_hash = topic.into();
-        if self
-            .partial_messages_extension
-            .opts(&topic_hash)
-            .is_some_and(|opts| !opts.supports_partial)
-        {
-            return Err(PublishError::Partial(
-                partial_messages::PartialError::PartialNotSupportedForTopic,
-            ));
-        }
-
         let candidates = self
             .publish_peers(&topic_hash)
             .filter(|peer_id| {
@@ -1406,7 +1382,7 @@ where
             if self
                 .partial_messages_extension
                 .opts(&topic)
-                .is_some_and(|opts| opts.requests_partial)
+                .requests_partial
                 && self
                     .partial_messages_extension
                     .supports_partial(peer_id, &topic)
@@ -3258,24 +3234,15 @@ where
             .mesh
             .keys()
             .cloned()
-            .filter_map(|topic_hash| {
+            .map(|topic_hash| {
                 #[cfg(not(feature = "partial_messages"))]
                 let (requests_partial, supports_partial) = (false, false);
                 #[cfg(feature = "partial_messages")]
                 let (requests_partial, supports_partial) = {
-                    let Some(SubscriptionOpts {
-                        requests_partial,
-                        supports_partial,
-                    }) = self.partial_messages_extension.opts(&topic_hash)
-                    else {
-                        tracing::error!(
-                            "Partial subscription options should exist for subscribed topic"
-                        );
-                        return None;
-                    };
-                    (requests_partial, supports_partial)
+                    let opts = self.partial_messages_extension.opts(&topic_hash);
+                    (opts.requests_partial, opts.supports_partial)
                 };
-                Some((topic_hash, requests_partial, supports_partial))
+                (topic_hash, requests_partial, supports_partial)
             })
             .collect();
 

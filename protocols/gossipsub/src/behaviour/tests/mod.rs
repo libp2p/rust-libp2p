@@ -136,12 +136,9 @@ where
         for t in self.topics {
             let topic = Topic::new(t);
             #[cfg(feature = "partial_messages")]
-            if self.requests_partial {
-                gs.subscribe_partial(&topic, self.requests_partial).unwrap();
-            } else {
-                gs.subscribe(&topic).unwrap();
+            if self.supports_partial || self.requests_partial {
+                gs.enable_partials_for_topic(topic.hash().clone(), self.requests_partial);
             }
-            #[cfg(not(feature = "partial_messages"))]
             gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
