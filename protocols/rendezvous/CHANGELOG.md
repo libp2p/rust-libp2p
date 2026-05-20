@@ -1,5 +1,7 @@
 ## 0.18.0
 
+- Expose `PROTOCOL_IDENT` so users can refer to the rendezvous protocol identifier.
+
 - Port [8fde2dc](https://github.com/libp2p/rust-libp2p/commit/8fde2dc0fae8b433f97c6cdf9ee24f59d51a359c) and make unrequired pub functions private
   See [PR 6364](https://github.com/libp2p/rust-libp2p/pull/6364).
 
