@@ -43,6 +43,8 @@ pub struct Behaviour {
 
     static_relays: HashMap<PeerId, Multiaddr>,
 
+    relays_available: bool,
+
     waker: Option<Waker>,
 }
 
@@ -113,7 +115,12 @@ impl Config {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Event {
+    /// The status of the local node has changed.
     StatusChanged { status: Status },
+    /// No connected peer supports the HOP protocol.
+    NoRelaysAvailable,
+    /// At least one connected peer supports the HOP protocol.
+    RelaysAvailable,
 }
 
 impl Behaviour {
@@ -329,17 +336,38 @@ impl Behaviour {
             }
         }
 
-        let picks: Vec<(PeerId, ConnectionId)> = static_candidates
+        let selected_candidates: Vec<(PeerId, ConnectionId)> = static_candidates
             .into_iter()
             .chain(candidates)
             .take(budget)
             .collect();
 
-        for (peer_id, connection_id) in picks {
+        for (peer_id, connection_id) in selected_candidates {
             self.select_connection_for_reservation(peer_id, connection_id);
         }
 
         debug_assert!(self.covered_peers().len() <= max);
+    }
+
+    fn update_relay_availability(&mut self) {
+        let has_hop_peer = self
+            .connections
+            .values()
+            .any(|info| matches!(info.relay_status, RelayStatus::Supported { .. }));
+
+        match (has_hop_peer, self.relays_available) {
+            (true, false) => {
+                self.relays_available = true;
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::RelaysAvailable));
+            }
+            (false, true) => {
+                self.relays_available = false;
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::NoRelaysAvailable));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -429,6 +457,8 @@ impl NetworkBehaviour for Behaviour {
                     let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
                     self.events.push_back(ToSwarm::Dial { opts });
                 }
+
+                self.update_relay_availability();
             }
             FromSwarm::AddressChange(AddressChange {
                 peer_id,
@@ -522,6 +552,7 @@ impl NetworkBehaviour for Behaviour {
                         status: ReservationStatus::Idle,
                     };
                     self.meet_reservation_target();
+                    self.update_relay_availability();
                 }
             }
             Out::Unsupported => {
@@ -537,6 +568,7 @@ impl NetworkBehaviour for Behaviour {
                     self.events.push_back(ToSwarm::RemoveListener { id });
                     self.meet_reservation_target();
                 }
+                self.update_relay_availability();
             }
             Out::BlacklistExpired => {
                 if matches!(
