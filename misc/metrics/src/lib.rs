@@ -90,6 +90,33 @@ impl Metrics {
             swarm: swarm::Metrics::new(sub_registry),
         }
     }
+
+    /// Create a new set of [`Metrics`] allowing to pass additional protocols
+    /// for Identify classification (e.g. custom Gossipsub protocol IDs).
+    pub fn new_with_identify_allowed_protocols(
+        registry: &mut Registry,
+        extra_allowed_protocols: impl IntoIterator<Item = libp2p_swarm::StreamProtocol>,
+    ) -> Self {
+        let sub_registry = registry.sub_registry_with_prefix("libp2p");
+        Self {
+            #[cfg(feature = "dcutr")]
+            dcutr: dcutr::Metrics::new(sub_registry),
+            #[cfg(feature = "gossipsub")]
+            gossipsub: gossipsub::Metrics::new(sub_registry),
+            #[cfg(feature = "identify")]
+            identify: identify::Metrics::new_with_allowed_protocols(
+                sub_registry,
+                extra_allowed_protocols,
+            ),
+            #[cfg(feature = "kad")]
+            kad: kad::Metrics::new(sub_registry),
+            #[cfg(feature = "ping")]
+            ping: ping::Metrics::new(sub_registry),
+            #[cfg(feature = "relay")]
+            relay: relay::Metrics::new(sub_registry),
+            swarm: swarm::Metrics::new(sub_registry),
+        }
+    }
 }
 
 /// Recorder that can record Swarm and protocol events.
