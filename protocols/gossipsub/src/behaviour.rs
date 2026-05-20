@@ -172,6 +172,12 @@ pub enum Event {
         peer_id: PeerId,
         /// The topic it has subscribed to.
         topic: TopicHash,
+        /// Whether the remote peer indicated it supports partial messages on this topic.
+        #[cfg(feature = "partial_messages")]
+        supports_partial: bool,
+        /// Whether the remote peer indicated it requests partial messages on this topic.
+        #[cfg(feature = "partial_messages")]
+        requests_partial: bool,
     },
     /// A remote unsubscribed from a topic.
     Unsubscribed {
@@ -2181,6 +2187,10 @@ where
                     application_event.push(ToSwarm::GenerateEvent(Event::Subscribed {
                         peer_id: *propagation_source,
                         topic: topic_hash.clone(),
+                        #[cfg(feature = "partial_messages")]
+                        supports_partial: subscription.options.supports_partial,
+                        #[cfg(feature = "partial_messages")]
+                        requests_partial: subscription.options.requests_partial,
                     }));
                 }
                 SubscriptionAction::Unsubscribe => {

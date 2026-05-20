@@ -46,7 +46,7 @@ pub struct FailedMessages {
     pub non_priority: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
     /// The message is considered valid, and it should be delivered and forwarded to the network.
