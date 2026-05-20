@@ -79,7 +79,7 @@ impl Queue {
             | RpcOut::IHave(_)
             | RpcOut::TestExtension
             | RpcOut::IWant(_) => self.non_priority.try_push(message),
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(_) => self.non_priority.try_push(message),
         }
     }

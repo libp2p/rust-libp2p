@@ -378,7 +378,7 @@ pub enum RpcOut {
     /// Send a test extension message.
     TestExtension,
     /// Send a partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     PartialMessage(crate::partial_messages::PartialMessage),
 }
 
@@ -576,7 +576,7 @@ impl From<RpcOut> for proto::RPC {
                 control: None,
                 partial: None,
             },
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                 topic_hash,
                 group_id,
@@ -607,7 +607,7 @@ pub struct RpcIn {
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<ControlAction>,
     /// Partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,
 }
 
@@ -623,7 +623,7 @@ impl fmt::Debug for RpcIn {
         if !self.control_msgs.is_empty() {
             b.field("control_msgs", &self.control_msgs);
         }
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         b.field("partial_messages", &self.partial_message);
 
         b.finish()

@@ -77,7 +77,7 @@ use crate::{
         SubscriptionAction,
     },
 };
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 use crate::{
     extensions::partial_messages::{self, Partial, PublishAction, ReceivedAction},
     types::SubscriptionOpts,
@@ -153,7 +153,7 @@ pub enum Event {
         message: Message,
     },
     /// A new partial message has been received.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     Partial {
         /// Topic on which the partiall was published.
         topic_hash: TopicHash,
@@ -173,10 +173,10 @@ pub enum Event {
         /// The topic it has subscribed to.
         topic: TopicHash,
         /// Whether the remote peer indicated it supports partial messages on this topic.
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         supports_partial: bool,
         /// Whether the remote peer indicated it requests partial messages on this topic.
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         requests_partial: bool,
     },
     /// A remote unsubscribed from a topic.
@@ -322,7 +322,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// Partial Messages extension handler.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     partial_messages_extension: partial_messages::State,
 
     /// Map of topics to list of peers that we publish to, but don't subscribe to.
@@ -488,7 +488,7 @@ where
             data_transform,
             failed_messages: Default::default(),
             gossip_promises: Default::default(),
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             partial_messages_extension: Default::default(),
         })
     }
@@ -564,9 +564,9 @@ where
             return Ok(false);
         }
 
-        #[cfg(not(feature = "partial_messages"))]
+        #[cfg(not(feature = "partial-messages"))]
         let (requests_partial, supports_partial) = (false, false);
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         let SubscriptionOpts {
             requests_partial,
             supports_partial,
@@ -670,7 +670,7 @@ where
 
         let candidates = self.publish_peers(&topic_hash);
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         let candidates = if self
             .partial_messages_extension
             .opts(&topic_hash)
@@ -686,7 +686,7 @@ where
         } else {
             candidates.collect()
         };
-        #[cfg(not(feature = "partial_messages"))]
+        #[cfg(not(feature = "partial-messages"))]
         let candidates = candidates.collect();
 
         let recipients = self.filter_publish_candidates(&topic_hash, candidates);
@@ -849,7 +849,7 @@ where
         recipients
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     /// Enable partial messages for a topic. This must be called while not subscribed to the topic.
     /// Partials can be enabled only once per topic.
     pub fn enable_partials_for_topic(&mut self, topic_hash: TopicHash, requests_partials: bool) {
@@ -861,7 +861,7 @@ where
             .enable_partials_for_topic(topic_hash, requests_partials);
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     /// Report an invalid partial message from a peer, originating at the application layer.
     /// This triggers penalties for the peer that sent the invalid partial.
     pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
@@ -870,7 +870,7 @@ where
         }
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn publish_partial<P: Partial + 'static>(
         &mut self,
         topic: impl Into<TopicHash>,
@@ -1378,7 +1378,7 @@ where
 
             // We should not handle IHAVEs from peers that support partials on topics where we
             // request partial messages.
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             if self
                 .partial_messages_extension
                 .opts(&topic)
@@ -2127,7 +2127,7 @@ where
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension.peer_subscribed(
                         propagation_source,
                         topic_hash.clone(),
@@ -2187,9 +2187,9 @@ where
                     application_event.push(ToSwarm::GenerateEvent(Event::Subscribed {
                         peer_id: *propagation_source,
                         topic: topic_hash.clone(),
-                        #[cfg(feature = "partial_messages")]
+                        #[cfg(feature = "partial-messages")]
                         supports_partial: subscription.options.supports_partial,
-                        #[cfg(feature = "partial_messages")]
+                        #[cfg(feature = "partial-messages")]
                         requests_partial: subscription.options.requests_partial,
                     }));
                 }
@@ -2207,7 +2207,7 @@ where
                         }
                     }
 
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension
                         .peer_unsubscribed(*propagation_source, topic_hash);
 
@@ -2605,12 +2605,12 @@ where
             #[cfg(feature = "metrics")]
             {
                 if let Some(m) = self.metrics.as_mut() {
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     {
                         let mesh_peers = peers.len();
                         m.set_mesh_peers(topic_hash, mesh_peers, false);
                     }
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     {
                         let (partial, full): (Vec<PeerId>, Vec<PeerId>) =
                             peers.iter().partition(|peer_id| {
@@ -2752,7 +2752,7 @@ where
             }
         }
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         {
             let actions = self.partial_messages_extension.heartbeat(
                 &self.mesh,
@@ -2826,7 +2826,7 @@ where
                             .0;
                     // Don't send IHAVE to peers that requested partial messages -
                     // they receive metadata via partial message gossip instead.
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     let filter = filter
                         && !self
                             .partial_messages_extension
@@ -3009,7 +3009,7 @@ where
                     continue;
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 if self
                     .partial_messages_extension
                     .requests_partial(peer_id, topic)
@@ -3140,7 +3140,7 @@ where
                     m.msg_sent(&message.topic, false, message.raw_protobuf_len())
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                     topic_hash,
                     body,
@@ -3235,9 +3235,9 @@ where
             .keys()
             .cloned()
             .map(|topic_hash| {
-                #[cfg(not(feature = "partial_messages"))]
+                #[cfg(not(feature = "partial-messages"))]
                 let (requests_partial, supports_partial) = (false, false);
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 let (requests_partial, supports_partial) = {
                     let opts = self.partial_messages_extension.opts(&topic_hash);
                     (opts.requests_partial, opts.supports_partial)
@@ -3327,7 +3327,7 @@ where
                     m.dec_topic_peers(topic);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 self.partial_messages_extension.peer_disconnected(peer_id);
 
                 // remove from fanout
@@ -3440,10 +3440,10 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
 
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3480,9 +3480,9 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3657,7 +3657,7 @@ where
                     self.handle_prune(&propagation_source, prune_msgs);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 if let Some(partial_message) = rpc.partial_message {
                     if self
                         .peer_score
