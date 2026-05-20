@@ -569,6 +569,261 @@ async fn autorelay_disable_preserves_active_reservation() {
     }
 }
 
+#[tokio::test]
+async fn autorelay_prefers_static_relay() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut opportunistic = build_relay();
+    let opportunistic_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let opportunistic_peer = *opportunistic.local_peer_id();
+    opportunistic.listen_on(opportunistic_addr.clone()).unwrap();
+    opportunistic.add_external_address(opportunistic_addr.clone());
+    tokio::spawn(async move {
+        opportunistic.collect::<Vec<_>>().await;
+    });
+
+    let mut staticr = build_relay();
+    let static_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let static_peer = *staticr.local_peer_id();
+    staticr.listen_on(static_addr.clone()).unwrap();
+    staticr.add_external_address(static_addr.clone());
+    tokio::spawn(async move {
+        staticr.collect::<Vec<_>>().await;
+    });
+
+    let mut client =
+        build_client(autorelay::Config::default().set_max_reservations(NonZeroU8::new(1).unwrap()));
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Disable);
+
+    client.dial(opportunistic_addr).unwrap();
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(static_peer, static_addr);
+
+    // Let both connections establish and identify exchanges complete.
+    let warmup = tokio::time::sleep(Duration::from_secs(3));
+    tokio::pin!(warmup);
+    loop {
+        tokio::select! {
+            _ = &mut warmup => break,
+            _ = client.select_next_some() => {}
+        }
+    }
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .set_status(autorelay::Status::Enable);
+
+    let accepted_peer = wait_until_some(&mut client, Duration::from_secs(15), |event| {
+        if let SwarmEvent::Behaviour(ClientEvent::RelayClient(
+            relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+        )) = event
+        {
+            Some(*relay_peer_id)
+        } else {
+            None
+        }
+    })
+    .await;
+
+    assert_eq!(
+        accepted_peer, static_peer,
+        "autorelay should pick the static relay over the opportunistic one"
+    );
+    assert_ne!(accepted_peer, opportunistic_peer);
+}
+
+#[tokio::test]
+async fn add_static_relay_dials_and_reserves() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let relay_peer = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(relay_peer, relay_addr);
+
+    let accepted_peer = wait_until_some(&mut client, Duration::from_secs(15), |event| {
+        if let SwarmEvent::Behaviour(ClientEvent::RelayClient(
+            relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+        )) = event
+        {
+            Some(*relay_peer_id)
+        } else {
+            None
+        }
+    })
+    .await;
+
+    assert_eq!(accepted_peer, relay_peer);
+}
+
+#[tokio::test]
+async fn remove_static_relay_preserves_active_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let relay_peer = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(relay_peer, relay_addr);
+
+    wait_until(&mut client, Duration::from_secs(15), |event| {
+        matches!(
+            event,
+            SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. }
+            ))
+        )
+    })
+    .await;
+
+    assert!(
+        client
+            .behaviour_mut()
+            .autorelay
+            .remove_static_relay(&relay_peer)
+    );
+
+    let sleep = tokio::time::sleep(Duration::from_secs(3));
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => break,
+            ev = client.select_next_some() => {
+                if let SwarmEvent::ListenerClosed { reason: Err(_), .. } = ev {
+                    panic!("removing static relay dropped an active reservation");
+                }
+                if let SwarmEvent::ExternalAddrExpired { .. } = ev {
+                    panic!("removing static relay expired an external address");
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn static_relay_redials_after_connection_drop() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut relay = build_relay();
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let relay_peer = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client(autorelay::Config::default());
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(relay_peer, relay_addr);
+
+    let conn_id = wait_until_some(&mut client, Duration::from_secs(15), {
+        let mut established_conn: Option<ConnectionId> = None;
+        let mut reservation_seen = false;
+        move |event| {
+            match event {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    endpoint,
+                    ..
+                } if *peer_id == relay_peer && !endpoint.is_relayed() => {
+                    established_conn = Some(*connection_id);
+                }
+                SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                    relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+                )) if *relay_peer_id == relay_peer => {
+                    reservation_seen = true;
+                }
+                _ => {}
+            }
+            if reservation_seen {
+                established_conn
+            } else {
+                None
+            }
+        }
+    })
+    .await;
+
+    assert!(client.close_connection(conn_id));
+
+    wait_until(&mut client, Duration::from_secs(20), {
+        let mut redialed = false;
+        let mut reserved_again = false;
+        move |event| {
+            match event {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } if *peer_id == relay_peer && !endpoint.is_relayed() => {
+                    redialed = true;
+                }
+                SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                    relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+                )) if *relay_peer_id == relay_peer => {
+                    reserved_again = true;
+                }
+                _ => {}
+            }
+            redialed && reserved_again
+        }
+    })
+    .await;
+}
+
+async fn wait_until_some<F, T>(client: &mut Swarm<Client>, timeout: Duration, mut extract: F) -> T
+where
+    F: FnMut(&SwarmEvent<ClientEvent>) -> Option<T>,
+{
+    let sleep = tokio::time::sleep(timeout);
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => panic!("timeout waiting on predicate"),
+            ev = client.select_next_some() => {
+                if let Some(value) = extract(&ev) {
+                    return value;
+                }
+            }
+        }
+    }
+}
+
 async fn wait_for_reservation_from_either(
     client: &mut Swarm<Client>,
     peer_a: PeerId,
