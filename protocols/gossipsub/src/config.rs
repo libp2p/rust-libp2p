@@ -123,7 +123,7 @@ pub struct Config {
     opportunistic_graft_ticks: u64,
     opportunistic_graft_peers: usize,
     gossip_retransimission: u32,
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     max_metadata_length: usize,
     max_publish_messages: usize,
     max_control_messages: usize,
@@ -414,7 +414,7 @@ impl Config {
 
     /// The maximum number of metadata messages to send per peer during heartbeat gossip.
     /// The default is 1000.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn max_metadata_length(&self) -> usize {
         self.max_metadata_length
     }
@@ -541,7 +541,7 @@ impl Default for ConfigBuilder {
                 opportunistic_graft_ticks: 60,
                 opportunistic_graft_peers: 2,
                 gossip_retransimission: 3,
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 max_metadata_length: 1000,
                 max_publish_messages: 5000,
                 max_control_messages: 5000,
@@ -971,7 +971,7 @@ impl ConfigBuilder {
 
     /// The maximum number of metadata messages to send per peer during heartbeat gossip.
     /// The default is 1000.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn max_metadata_gossip(&mut self, max_metadata_length: usize) -> &mut Self {
         self.config.max_metadata_length = max_metadata_length;
         self
