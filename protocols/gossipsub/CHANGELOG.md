@@ -11,6 +11,7 @@
 - Unify gossipsub control-message limits under max_control_messages (replacing per-type control ID caps),
   and truncate control vectors immediately after RPC decode.
   rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
+  Introduce `max_ids_per_control_message` to limit the number of message IDs per control message.
   See [PR 6409](https://github.com/libp2p/rust-libp2p/pull/6409) and [PR 6428](https://github.com/libp2p/rust-libp2p/pull/6428)
 
 - Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.

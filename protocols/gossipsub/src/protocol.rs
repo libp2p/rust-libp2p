@@ -83,6 +83,9 @@ pub struct ProtocolConfig {
     pub(crate) max_publish_messages: usize,
     /// The max number of control messages per type to decode in a single RPC.
     pub(crate) max_control_messages: usize,
+    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
+    /// single RPC.
+    pub(crate) max_ids_per_control_message: usize,
 }
 
 impl Default for ProtocolConfig {
@@ -99,6 +102,7 @@ impl Default for ProtocolConfig {
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 500,
             max_control_messages: 500,
+            max_ids_per_control_message: 5000,
         }
     }
 }
@@ -155,6 +159,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_messages,
+                    self.max_ids_per_control_message,
                 ),
             ),
             protocol_id.kind,
@@ -180,6 +185,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_messages,
+                    self.max_ids_per_control_message,
                 ),
             ),
             protocol_id.kind,
@@ -200,6 +206,9 @@ pub struct GossipsubCodec {
     max_publish_messages: usize,
     /// The max number of control messages per type to decode in a single RPC.
     max_control_messages: usize,
+    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
+    /// single RPC.
+    max_ids_per_control_message: usize,
 }
 
 impl GossipsubCodec {
@@ -209,6 +218,7 @@ impl GossipsubCodec {
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
         max_control_messages: usize,
+        max_ids_per_control_message: usize,
     ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
@@ -217,6 +227,7 @@ impl GossipsubCodec {
             max_transmit_sizes,
             max_publish_messages,
             max_control_messages,
+            max_ids_per_control_message,
         }
     }
 
@@ -542,7 +553,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: ihave
                         .message_ids
                         .into_iter()
-                        .take(self.max_control_messages)
+                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -558,7 +569,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
-                        .take(self.max_control_messages)
+                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -609,7 +620,7 @@ impl Decoder for GossipsubCodec {
                 message_ids: idontwant
                     .message_ids
                     .into_iter()
-                    .take(self.max_control_messages)
+                    .take(self.max_ids_per_control_message)
                     .map(MessageId::from)
                     .collect::<Vec<_>>(),
             }));
