@@ -764,6 +764,7 @@ mod tests {
                 HashMap::new(),
                 5000,
                 1000,
+                5000,
             );
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
