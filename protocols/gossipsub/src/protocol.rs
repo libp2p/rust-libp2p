@@ -29,7 +29,7 @@ use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 use crate::extensions::partial_messages::PartialMessage;
 use crate::{
     ValidationError,
@@ -632,7 +632,7 @@ impl Decoder for GossipsubCodec {
         });
         control_msgs.push(ControlAction::Extensions(extensions_msg));
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         let partial_message = rpc.partial.and_then(|partial_proto| {
             let Some(topic_id_bytes) = partial_proto.topicID else {
                 tracing::debug!("Partial message without topic_id, discarding");
@@ -673,7 +673,7 @@ impl Decoder for GossipsubCodec {
                     })
                     .collect(),
                 control_msgs,
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 partial_message,
             },
             invalid_messages,

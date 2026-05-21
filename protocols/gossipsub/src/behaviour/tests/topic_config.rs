@@ -636,7 +636,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 partial_message: None,
             },
             invalid_messages: vec![],
@@ -745,7 +745,7 @@ fn test_validation_message_size_within_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 partial_message: None,
             },
             invalid_messages: vec![],
