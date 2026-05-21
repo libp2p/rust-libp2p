@@ -7,10 +7,10 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler, derive_prelude::{
     AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-    DialFailure, ExpiredListenAddr, ExternalAddrConfirmed, FromSwarm, ListenerClosed,
+    DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed,
     ListenerError, Multiaddr, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
     ToSwarm,
-}, dial_opts::DialOpts, dummy, ExternalAddrExpired};
+}, dial_opts::DialOpts, dummy};
 use std::task::Waker;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -23,10 +23,11 @@ use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
 
 mod handler;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Behaviour {
     config: Config,
     status: Status,
+    auto_status_change: bool,
     external_addresses: ExternalAddresses,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
 
@@ -41,6 +42,24 @@ pub struct Behaviour {
     relays_available: bool,
 
     waker: Option<Waker>,
+}
+
+impl Default for Behaviour {
+    fn default() -> Self {
+        Self {
+            config: Config::default(),
+            status: Status::Enable,
+            auto_status_change: true,
+            external_addresses: ExternalAddresses::default(),
+            events: VecDeque::new(),
+            connections: HashMap::new(),
+            reservations: HashMap::new(),
+            external_reservations: HashMap::new(),
+            static_relays: HashMap::new(),
+            relays_available: false,
+            waker: None,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,19 +145,52 @@ impl Behaviour {
         }
     }
 
-    /// Sets the status of the local node to enable or disable autorelay.
-    pub fn set_status(&mut self, status: Status) {
-        if self.status == status {
-            return;
+    /// Sets the autorelay status.
+    pub fn set_status(&mut self, status: Option<Status>) {
+        match status {
+            Some(status) => {
+                self.auto_status_change = false;
+                if self.status != status {
+                    self.status = status;
+                    self.events
+                        .push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status }));
+                    if status == Status::Enable {
+                        self.meet_reservation_target();
+                    }
+                }
+            }
+            None => {
+                self.auto_status_change = true;
+                self.determine_status_from_external_addresses();
+            }
         }
-        self.status = status;
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::StatusChanged { status }));
-        if status == Status::Enable {
-            self.meet_reservation_target();
-        }
+
         if let Some(waker) = self.waker.take() {
             waker.wake();
+        }
+    }
+
+    fn determine_status_from_external_addresses(&mut self) {
+        let has_public_addr = self
+            .external_addresses
+            .iter()
+            .any(|addr| !addr.is_relayed());
+        let new_status = if has_public_addr {
+            Status::Disable
+        } else {
+            Status::Enable
+        };
+        if new_status == self.status {
+            return;
+        }
+        self.status = new_status;
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                status: new_status,
+            }));
+        match new_status {
+            Status::Enable => self.meet_reservation_target(),
+            Status::Disable => self.remove_all_reservations(),
         }
     }
 
@@ -295,14 +347,6 @@ impl Behaviour {
             return;
         }
 
-        if self
-            .external_addresses
-            .iter()
-            .any(|addr| !addr.is_relayed())
-        {
-            return;
-        }
-
         let max = self.config.max_reservations.get() as usize;
         let covered = self.covered_peers();
         let budget = max.saturating_sub(covered.len());
@@ -401,15 +445,13 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.external_addresses.on_swarm_event(&event);
+        let change = self.external_addresses.on_swarm_event(&event);
+
+        if self.auto_status_change && change {
+            self.determine_status_from_external_addresses();
+        }
 
         match event {
-            FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) if !addr.is_relayed() => {
-                self.remove_all_reservations();
-            }
-            FromSwarm::ExternalAddrExpired(_) => {
-                self.meet_reservation_target();
-            }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 endpoint,

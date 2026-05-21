@@ -443,7 +443,7 @@ async fn autorelay_disabled_does_not_reserve() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Disable);
+        .set_status(Some(autorelay::Status::Disable));
     client.dial(relay_addr).unwrap();
 
     let observed = tokio::time::timeout(
@@ -483,7 +483,7 @@ async fn autorelay_re_enable_triggers_reservation() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Disable);
+        .set_status(Some(autorelay::Status::Disable));
     client.dial(relay_addr).unwrap();
 
     let sleep = tokio::time::sleep(Duration::from_secs(3));
@@ -507,7 +507,7 @@ async fn autorelay_re_enable_triggers_reservation() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Enable);
+        .set_status(Some(autorelay::Status::Enable));
 
     wait_until(&mut client, Duration::from_secs(10), |event| {
         matches!(
@@ -550,7 +550,7 @@ async fn autorelay_disable_preserves_active_reservation() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Disable);
+        .set_status(Some(autorelay::Status::Disable));
 
     let sleep = tokio::time::sleep(Duration::from_secs(3));
     tokio::pin!(sleep);
@@ -598,7 +598,7 @@ async fn autorelay_prefers_static_relay() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Disable);
+        .set_status(Some(autorelay::Status::Disable));
 
     client.dial(opportunistic_addr).unwrap();
     client
@@ -619,7 +619,7 @@ async fn autorelay_prefers_static_relay() {
     client
         .behaviour_mut()
         .autorelay
-        .set_status(autorelay::Status::Enable);
+        .set_status(Some(autorelay::Status::Enable));
 
     let accepted_peer = wait_until_some(&mut client, Duration::from_secs(15), |event| {
         if let SwarmEvent::Behaviour(ClientEvent::RelayClient(
