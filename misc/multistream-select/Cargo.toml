@@ -11,10 +11,10 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "1"
+bytes.workspace = true
 futures = { workspace = true }
 tracing = { workspace = true }
-pin-project = "1.1.11"
+pin-project = "1.1.13"
 smallvec = "1.15.1"
 unsigned-varint = { workspace = true }
 

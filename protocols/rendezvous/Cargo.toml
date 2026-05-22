@@ -14,7 +14,8 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = { workspace = true }
 bimap = "0.6.3"
 futures = { workspace = true, features = ["std"] }
-futures-timer = "3.0.3"
+futures-timer = { workspace = true }
+hashlink = { workspace = true }
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
@@ -29,6 +30,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
+rand = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "sync", "process", "fs", "net"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

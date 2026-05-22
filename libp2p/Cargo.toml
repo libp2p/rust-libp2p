@@ -20,6 +20,7 @@ full = [
     "ed25519",
     "floodsub",
     "gossipsub",
+    "gossipsub-partial-messages",
     "identify",
     "json",
     "kad",
@@ -42,7 +43,6 @@ full = [
     "tls",
     "tokio",
     "uds",
-    "wasm-bindgen",
     "webrtc-websys",
     "websocket-websys",
     "websocket",
@@ -59,6 +59,7 @@ ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
 floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+gossipsub-partial-messages = ["libp2p-gossipsub?/partial-messages"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 json = ["libp2p-request-response?/json"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
@@ -81,7 +82,6 @@ tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
 tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 webrtc-websys = ['dep:libp2p-webrtc-websys']
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
@@ -90,11 +90,9 @@ yamux = ["dep:libp2p-yamux"]
 upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
-bytes = "1"
+bytes.workspace = true
 either = "1.9.0"
 futures = { workspace = true }
-futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
-getrandom = { workspace = true } # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
 libp2p-allow-block-list = { workspace = true }
@@ -143,6 +141,10 @@ tokio = { workspace = true, features = ["io-util", "io-std", "macros", "rt", "rt
 libp2p-mplex = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[target.'cfg(target_family="wasm")'.dependencies]
+futures-timer = { workspace = true, features = ["wasm-bindgen"] }
+getrandom = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

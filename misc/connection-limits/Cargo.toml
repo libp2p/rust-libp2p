@@ -22,5 +22,6 @@ libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 rand = { workspace = true }
+
 [lints]
 workspace = true

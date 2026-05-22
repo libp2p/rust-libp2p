@@ -16,6 +16,7 @@ libp2p-identity = { workspace = true, features = ["peerid"] }
 libp2p-swarm = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
+
 [dev-dependencies]
 libp2p-swarm-test = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

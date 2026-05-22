@@ -15,7 +15,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
     behaviour::ConnectionEstablished,
 };
-use rand::{Rng, RngExt, SeedableRng, prelude::*, rngs::StdRng};
+use rand::{Rng, RngExt, SeedableRng, prelude::IteratorRandom, rngs::StdRng};
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
