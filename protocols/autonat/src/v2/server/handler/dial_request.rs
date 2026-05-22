@@ -1,7 +1,6 @@
 use std::{
     convert::Infallible,
     io,
-    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
 };
@@ -21,7 +20,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
-use rand::Rng;
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,
@@ -45,24 +43,16 @@ pub struct DialBackCommand {
     pub(crate) back_channel: oneshot::Sender<Result<(), DialBackStatus>>,
 }
 
-pub struct Handler<R> {
+pub struct Handler {
     client_id: PeerId,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     dial_back_cmd_receiver: mpsc::Receiver<DialBackCommand>,
     inbound: FuturesSet<Event>,
-    rng: Arc<Mutex<R>>,
 }
 
-impl<R> Handler<R>
-where
-    R: Rng + Send + 'static,
-{
-    pub(crate) fn new(
-        client_id: PeerId,
-        observed_multiaddr: Multiaddr,
-        rng: Arc<Mutex<R>>,
-    ) -> Self {
+impl Handler {
+    pub(crate) fn new(client_id: PeerId, observed_multiaddr: Multiaddr) -> Self {
         let (dial_back_cmd_sender, dial_back_cmd_receiver) = mpsc::channel(10);
         Self {
             client_id,
@@ -73,15 +63,11 @@ where
                 || futures_bounded::Delay::tokio(Duration::from_secs(10)),
                 10,
             ),
-            rng,
         }
     }
 }
 
-impl<R> ConnectionHandler for Handler<R>
-where
-    R: Rng + Send + 'static,
-{
+impl ConnectionHandler for Handler {
     type FromBehaviour = Infallible;
     type ToBehaviour = Either<DialBackCommand, Event>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -137,10 +123,7 @@ where
                         self.observed_multiaddr.clone(),
                         self.client_id,
                         self.dial_back_cmd_sender.clone(),
-                        {
-                            let mut rng = self.rng.lock().expect("lock to not be poisoned");
-                            DialDataRequest::from_rng(0, &mut *rng).num_bytes
-                        },
+                        DialDataRequest::from_rng(0, &mut rand::rng()).num_bytes,
                     ))
                     .is_err()
                 {

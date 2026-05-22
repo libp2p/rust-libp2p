@@ -1,10 +1,13 @@
 use std::{
     collections::{HashMap, VecDeque},
     io,
-    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
+use crate::v2::server::handler::{
+    Handler, dial_back,
+    dial_request::{self, DialBackCommand, DialBackStatus},
+};
 use either::Either;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
@@ -14,17 +17,8 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     dummy,
 };
-use rand::{Rng, SeedableRng, rngs::StdRng};
 
-use crate::v2::server::handler::{
-    Handler, dial_back,
-    dial_request::{self, DialBackCommand, DialBackStatus},
-};
-
-pub struct Behaviour<R = StdRng>
-where
-    R: Send + Rng + 'static,
-{
+pub struct Behaviour {
     dialing_dial_back: HashMap<ConnectionId, DialBackCommand>,
     pending_events: VecDeque<
         ToSwarm<
@@ -32,33 +26,25 @@ where
             <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
         >,
     >,
-    rng: Arc<Mutex<R>>,
 }
 
-impl Default for Behaviour<StdRng> {
+impl Default for Behaviour {
     fn default() -> Self {
-        Self::new(StdRng::from_rng(&mut rand::rng()))
+        Self::new()
     }
 }
 
-impl<R> Behaviour<R>
-where
-    R: Rng + Send + 'static,
-{
-    pub fn new(rng: R) -> Self {
+impl Behaviour {
+    pub fn new() -> Self {
         Self {
             dialing_dial_back: HashMap::new(),
             pending_events: VecDeque::new(),
-            rng: Arc::new(Mutex::new(rng)),
         }
     }
 }
 
-impl<R> NetworkBehaviour for Behaviour<R>
-where
-    R: Rng + Send + 'static,
-{
-    type ConnectionHandler = Handler<R>;
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = Handler;
 
     type ToSwarm = Event;
 
@@ -72,7 +58,6 @@ where
         Ok(Either::Right(dial_request::Handler::new(
             peer,
             remote_addr.clone(),
-            self.rng.clone(),
         )))
     }
 
@@ -104,7 +89,7 @@ where
         &mut self,
         peer_id: PeerId,
         _connection_id: ConnectionId,
-        event: <Handler<R> as ConnectionHandler>::ToBehaviour,
+        event: <Handler as ConnectionHandler>::ToBehaviour,
     ) {
         match event {
             Either::Left(Either::Left(Ok(_))) => {}
@@ -132,7 +117,7 @@ where
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-    ) -> Poll<ToSwarm<Self::ToSwarm, <Handler<R> as ConnectionHandler>::FromBehaviour>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>> {
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(event);
         }

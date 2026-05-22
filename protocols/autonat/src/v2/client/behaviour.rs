@@ -15,7 +15,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
     behaviour::ConnectionEstablished,
 };
-use rand::{Rng, RngExt, SeedableRng, prelude::IteratorRandom, rngs::StdRng};
+use rand::prelude::IteratorRandom;
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
@@ -57,11 +57,7 @@ impl Default for Config {
     }
 }
 
-pub struct Behaviour<R = StdRng>
-where
-    R: Rng + Send + 'static,
-{
-    rng: R,
+pub struct Behaviour {
     config: Config,
     pending_events: VecDeque<
         ToSwarm<
@@ -74,10 +70,7 @@ where
     peer_info: HashMap<ConnectionId, ConnectionInfo>,
 }
 
-impl<R> NetworkBehaviour for Behaviour<R>
-where
-    R: Rng + Send + 'static,
-{
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<dial_request::Handler, dial_back::Handler>;
 
     type ToSwarm = Event;
@@ -265,13 +258,9 @@ where
     }
 }
 
-impl<R> Behaviour<R>
-where
-    R: Rng + Send + 'static,
-{
-    pub fn new(rng: R, config: Config) -> Self {
+impl Behaviour {
+    pub fn new(config: Config) -> Self {
         Self {
-            rng,
             next_tick: Delay::new(config.probe_interval),
             config,
             pending_events: VecDeque::new(),
@@ -293,7 +282,7 @@ where
                 return;
             };
 
-            let nonce = self.rng.random();
+            let nonce = rand::random();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
@@ -314,7 +303,7 @@ where
     ///
     /// More frequently reported candidates are considered to more likely be external addresses and
     /// thus tested first.
-    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> + use<R> {
+    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> + use<> {
         let mut entries = self
             .address_candidates
             .iter()
@@ -342,7 +331,7 @@ where
             .peer_info
             .iter()
             .filter(|(_, info)| info.supports_autonat)
-            .choose(&mut self.rng)?;
+            .choose(&mut rand::rng())?;
 
         Some((*conn_id, info.peer_id))
     }
@@ -363,14 +352,14 @@ where
     #[doc(hidden)]
     pub fn validate_addr(&mut self, addr: &Multiaddr) {
         if let Some(info) = self.address_candidates.get_mut(addr) {
-            info.status = TestStatus::Received(self.rng.next_u64());
+            info.status = TestStatus::Received(rand::random());
         }
     }
 }
 
-impl Default for Behaviour<StdRng> {
+impl Default for Behaviour {
     fn default() -> Self {
-        Self::new(StdRng::from_rng(&mut rand::rng()), Config::default())
+        Self::new(Config::default())
     }
 }
 

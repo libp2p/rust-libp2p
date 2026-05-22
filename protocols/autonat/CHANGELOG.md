@@ -1,5 +1,11 @@
 ## 0.16.0
 
+- Update to `rand` v0.10.
+  `OsRng` has been renamed to `SysRng` and no longer implements the `Rng` trait (only `TryRng`).
+  For simplicity, the generic RNG parameter has been removed from `v2::client::Behaviour` and `v2::server::Behaviour`.
+  The behaviours now use `rand::rng()` directly.
+  See [PR 6276](https://github.com/libp2p/rust-libp2p/pull/6276)
+
 - refactor: `Codec` no longer requires `#[async_trait]`
   See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
 
