@@ -60,10 +60,10 @@ impl Transport {
     /// ```
     /// use libp2p_identity as identity;
     /// use libp2p_webrtc::tokio::{Certificate, Transport};
-    /// use rand::thread_rng;
+    /// use rand::rng;
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
-    /// let transport = Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
+    /// let transport = Transport::new(id_keys, Certificate::generate(&mut rng()).unwrap());
     /// ```
     pub fn new(id_keys: identity::Keypair, certificate: Certificate) -> Self {
         Self {
@@ -429,7 +429,6 @@ mod tests {
 
     use futures::future::poll_fn;
     use libp2p_core::Transport as _;
-    use rand::thread_rng;
 
     use super::*;
 
@@ -493,7 +492,7 @@ mod tests {
     async fn close_listener() {
         let id_keys = identity::Keypair::generate_ed25519();
         let mut transport =
-            Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
+            Transport::new(id_keys, Certificate::generate(&mut rand::rng()).unwrap());
 
         assert!(
             poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))

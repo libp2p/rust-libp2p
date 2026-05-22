@@ -28,7 +28,7 @@ use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
@@ -138,7 +138,7 @@ async fn ping_protocol() {
         }
     };
 
-    let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+    let num_pings: u8 = rand::rng().random_range(1..100);
 
     let peer2 = async {
         let mut count = 0;
@@ -478,7 +478,7 @@ async fn concurrent_ping_protocol() {
 
     let peer2 = async {
         let mut count = 0;
-        let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+        let num_pings: u8 = rand::rng().random_range(1..100);
         let mut expected_pongs = HashMap::new();
         for i in 0..num_pings {
             let ping_bytes = vec![i];

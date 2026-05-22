@@ -504,7 +504,7 @@ mod tests {
 
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
-    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use rand::{Rng, RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::SHA_256_MH;
@@ -512,8 +512,10 @@ mod tests {
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
             .map(|_| {
-                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &g.r#gen::<[u8; 32]>()).unwrap())
-                    .unwrap()
+                PeerId::from_multihash(
+                    Multihash::wrap(SHA_256_MH, &g.random::<[u8; 32]>()).unwrap(),
+                )
+                .unwrap()
             })
             .collect()
     }
@@ -645,8 +647,8 @@ mod tests {
                 // Report results back to the iterator with a random number of "closer"
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
-                    if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0..iter.config.num_results.get() + 1);
+                    if rng.random_bool(0.75) {
+                        let num_closer = rng.random_range(0..iter.config.num_results.get() + 1);
                         let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);

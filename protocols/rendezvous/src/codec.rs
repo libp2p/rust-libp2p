@@ -25,7 +25,6 @@ use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{PeerRecord, SignedEnvelope, peer_record, signed_envelope};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf_codec::Codec as ProtobufCodec;
-use rand::RngCore;
 
 use crate::DEFAULT_TTL;
 
@@ -115,7 +114,7 @@ impl Cookie {
     /// namespace.
     pub fn for_namespace(namespace: Namespace) -> Self {
         Self {
-            id: rand::thread_rng().next_u64(),
+            id: rand::random(),
             namespace: Some(namespace),
         }
     }

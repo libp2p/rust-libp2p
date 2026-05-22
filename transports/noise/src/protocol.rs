@@ -23,7 +23,7 @@
 use std::sync::LazyLock;
 
 use libp2p_identity as identity;
-use rand::{Rng as _, SeedableRng};
+use rand::TryRng;
 use snow::params::NoiseParams;
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
 use zeroize::Zeroize;
@@ -44,16 +44,16 @@ pub(crate) fn noise_params_into_builder<'b>(
     prologue: &'b [u8],
     private_key: &'b SecretKey,
     remote_public_key: Option<&'b PublicKey>,
-) -> snow::Builder<'b> {
+) -> Result<snow::Builder<'b>, snow::Error> {
     let mut builder = snow::Builder::with_resolver(params, Box::new(Resolver))
-        .prologue(prologue.as_ref())
-        .local_private_key(private_key.as_ref());
+        .prologue(prologue.as_ref())?
+        .local_private_key(private_key.as_ref())?;
 
     if let Some(remote_public_key) = remote_public_key {
-        builder = builder.remote_public_key(remote_public_key.as_ref());
+        builder = builder.remote_public_key(remote_public_key.as_ref())?;
     }
 
-    builder
+    Ok(builder)
 }
 
 /// DH keypair.
@@ -115,8 +115,7 @@ impl Keypair {
 
     /// Create a new X25519 keypair.
     pub(crate) fn new() -> Keypair {
-        let mut sk_bytes = [0u8; 32];
-        rand::thread_rng().fill(&mut sk_bytes);
+        let mut sk_bytes: [u8; 32] = rand::random();
         let sk = SecretKey(sk_bytes); // Copy
         sk_bytes.zeroize();
         Self::from(sk)
@@ -169,7 +168,7 @@ struct Resolver;
 
 impl snow::resolvers::CryptoResolver for Resolver {
     fn resolve_rng(&self) -> Option<Box<dyn snow::types::Random>> {
-        Some(Box::new(Rng(rand::rngs::StdRng::from_entropy())))
+        Some(Box::new(SnowRng(rand::rngs::SysRng)))
     }
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
@@ -209,30 +208,14 @@ impl snow::resolvers::CryptoResolver for Resolver {
     }
 }
 
-/// Wrapper around a CSPRNG to implement `snow::Random` trait for.
-struct Rng(rand::rngs::StdRng);
+/// Wrapper around an OS CSPRNG to implement `snow::Random` trait for.
+struct SnowRng(rand::rngs::SysRng);
 
-impl rand::RngCore for Rng {
-    fn next_u32(&mut self) -> u32 {
-        self.0.next_u32()
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        self.0.next_u64()
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.0.fill_bytes(dest)
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        self.0.try_fill_bytes(dest)
+impl snow::types::Random for SnowRng {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), snow::Error> {
+        self.0.try_fill_bytes(dest).map_err(|_| snow::Error::Rng)
     }
 }
-
-impl rand::CryptoRng for Rng {}
-
-impl snow::types::Random for Rng {}
 
 impl Default for Keypair {
     fn default() -> Self {
@@ -274,12 +257,13 @@ impl snow::types::Dh for Keypair {
         secret.zeroize();
     }
 
-    fn generate(&mut self, rng: &mut dyn snow::types::Random) {
+    fn generate(&mut self, rng: &mut dyn snow::types::Random) -> Result<(), snow::Error> {
         let mut secret = [0u8; 32];
-        rng.fill_bytes(&mut secret);
+        rng.try_fill_bytes(&mut secret)?;
         self.secret = SecretKey(secret); // Copy
         self.public = PublicKey(x25519(secret, X25519_BASEPOINT_BYTES));
         secret.zeroize();
+        Ok(())
     }
 
     fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), snow::Error> {
@@ -320,7 +304,7 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        noise_params_into_builder(PARAMS_XX.clone(), prologue, TEST_KEY.secret(), None)
+        noise_params_into_builder(PARAMS_XX.clone(), prologue, TEST_KEY.secret(), None).unwrap()
     }
 
     // Hack to work around borrow-checker.

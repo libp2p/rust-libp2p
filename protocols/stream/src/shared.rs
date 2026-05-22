@@ -127,7 +127,7 @@ impl Shared {
             .connections
             .iter()
             .filter_map(|(c, p)| (p == &peer).then_some(c))
-            .choose(&mut rand::thread_rng())
+            .choose(&mut rand::rng())
             .and_then(|c| self.senders.get(c));
 
         match maybe_sender {

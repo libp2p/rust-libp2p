@@ -43,7 +43,7 @@ libp2p-swarm = { workspace = true, features = ["macros"] }
 [features]
 default = ["v1", "v2"]
 v1 = ["dep:libp2p-request-response", "dep:web-time"]
-v2 = ["dep:either", "dep:futures-bounded", "dep:thiserror", "dep:rand_core"]
+v2 = ["dep:either", "dep:futures-bounded", "dep:thiserror"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

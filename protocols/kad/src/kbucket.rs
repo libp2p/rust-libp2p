@@ -77,6 +77,7 @@ use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 use bucket::KBucket;
 pub use bucket::NodeStatus;
 pub use entry::*;
+use rand::RngExt;
 use smallvec::SmallVec;
 use web_time::Instant;
 
@@ -170,12 +171,12 @@ impl BucketIndex {
         let mut bytes = [0u8; 32];
         let quot = self.0 / 8;
         for i in 0..quot {
-            bytes[31 - i] = rng.r#gen();
+            bytes[31 - i] = rng.random();
         }
         let rem = (self.0 % 8) as u32;
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
-        bytes[31 - quot] = rng.gen_range(lower..upper) as u8;
+        bytes[31 - quot] = rng.random_range(lower..upper) as u8;
         Distance(U256::from_big_endian(bytes.as_slice()))
     }
 }
@@ -615,7 +616,7 @@ mod tests {
                 let num = g.gen_range(0..usize::min(bucket_size, num_total) + 1);
                 num_total -= num;
                 for _ in 0..num {
-                    let distance = ix.rand_distance(&mut rand::thread_rng());
+                    let distance = ix.rand_distance(&mut rand::rng());
                     let key = local_key.for_distance(distance);
                     let node = Node { key, value: () };
                     let status = NodeStatus::arbitrary(g);
@@ -684,7 +685,7 @@ mod tests {
     #[test]
     fn rand_distance() {
         fn prop(ix: u8) -> bool {
-            let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
+            let d = BucketIndex(ix as usize).rand_distance(&mut rand::rng());
             let n = d.0;
             let b = U256::from(2);
             let e = U256::from(ix);

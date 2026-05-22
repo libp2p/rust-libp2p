@@ -11,7 +11,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use rand::rngs::OsRng;
 
 #[derive(Debug, Parser)]
 #[command(name = "libp2p autonatv2 server")]
@@ -91,7 +90,7 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(key: identity::PublicKey) -> Self {
         Self {
-            autonat: autonat::v2::server::Behaviour::new(OsRng),
+            autonat: autonat::v2::server::Behaviour::new(),
             identify: identify::Behaviour::new(identify::Config::new("/ipfs/0.1.0".into(), key)),
         }
     }

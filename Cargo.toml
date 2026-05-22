@@ -137,9 +137,9 @@ multiaddr = "0.18.1"
 multihash = "0.19.5"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
+rand = "0.10"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
-rand = "0.8.0"
 rcgen = "0.13"
 ring = "0.17.12"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }

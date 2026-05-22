@@ -40,7 +40,6 @@ use std::{
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
 use pin_project::pin_project;
-use rand::RngCore;
 use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
@@ -212,7 +211,7 @@ impl PnetConfig {
         tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut local_nonce);
+        rand::fill(&mut local_nonce);
         socket
             .write_all(&local_nonce)
             .await
