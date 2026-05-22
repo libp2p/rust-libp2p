@@ -184,7 +184,9 @@ impl SecretKey {
     /// Generate a new Ed25519 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(rand::random())
+        let mut secret = ed25519::SecretKey::default();
+        rand::fill(&mut secret);
+        SecretKey(secret)
     }
 
     /// Try to parse an Ed25519 secret key from a byte slice
