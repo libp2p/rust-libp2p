@@ -4,10 +4,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::v2::server::handler::{
-    Handler, dial_back,
-    dial_request::{self, DialBackCommand, DialBackStatus},
-};
 use either::Either;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
@@ -16,6 +12,11 @@ use libp2p_swarm::{
     ToSwarm,
     dial_opts::{DialOpts, PeerCondition},
     dummy,
+};
+
+use crate::v2::server::handler::{
+    Handler, dial_back,
+    dial_request::{self, DialBackCommand, DialBackStatus},
 };
 
 pub struct Behaviour {

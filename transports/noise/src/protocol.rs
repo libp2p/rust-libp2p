@@ -304,7 +304,7 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        noise_params_into_builder(PARAMS_XX.clone(), prologue, TEST_KEY.secret(), None)
+        noise_params_into_builder(PARAMS_XX.clone(), prologue, TEST_KEY.secret(), None).unwrap()
     }
 
     // Hack to work around borrow-checker.

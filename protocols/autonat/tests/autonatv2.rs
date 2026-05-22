@@ -9,7 +9,6 @@ use libp2p_swarm::{
     DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
 };
 use libp2p_swarm_test::SwarmExt;
-
 use tokio::sync::oneshot;
 use tracing_subscriber::EnvFilter;
 
