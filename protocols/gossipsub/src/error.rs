@@ -42,7 +42,7 @@ pub enum PublishError {
     AllQueuesFull(usize),
 
     /// An Error while trying to publish a partial message.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     Partial(crate::extensions::partial_messages::PartialError),
 }
 
