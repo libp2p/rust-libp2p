@@ -127,6 +127,7 @@ pub struct Config {
     max_metadata_length: usize,
     max_publish_messages: usize,
     max_control_messages: usize,
+    max_ids_per_control_message: usize,
     max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
     connection_handler_queue_len: usize,
@@ -430,6 +431,13 @@ impl Config {
         self.max_control_messages
     }
 
+    /// The maximum number of message ids per IHAVE/IWANT/IDONTWANT control message we will
+    /// process in a given RPC. Other control message types (GRAFT, PRUNE) are not affected by
+    /// this limit as they do not contain message IDs. The default is 5000.
+    pub fn max_ids_per_control_message(&self) -> usize {
+        self.max_ids_per_control_message
+    }
+
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
     /// If the message is not received within this window, a broken promise is declared and
     /// the router may apply behavioural penalties. The default is 3 seconds.
@@ -545,6 +553,7 @@ impl Default for ConfigBuilder {
                 max_metadata_length: 1000,
                 max_publish_messages: 5000,
                 max_control_messages: 5000,
+                max_ids_per_control_message: 5000,
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -1062,6 +1071,15 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum number of message ids per IHAVE/IWANT/IDONTWANT control message we will
+    /// process in a single RPC. Other control message types (GRAFT, PRUNE) are not affected by
+    /// this limit as they do not contain message IDs. The default is 5000.
+    pub fn max_ids_per_control_message(&mut self, size: usize) -> &mut Self {
+        self.config.max_ids_per_control_message = size;
+        self.config.protocol.max_ids_per_control_message = size;
+        self
+    }
+
     /// The topic configuration sets mesh parameter sizes for a given topic. Notes on default
     /// below.
     ///
@@ -1172,6 +1190,10 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         let _ = builder.field("max_messages_per_rpc", &self.max_publish_messages);
         let _ = builder.field("max_control_messages", &self.max_control_messages);
+        let _ = builder.field(
+            "max_ids_per_control_message",
+            &self.max_ids_per_control_message,
+        );
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
             &self.max_ihave_messages_heartbeat,
