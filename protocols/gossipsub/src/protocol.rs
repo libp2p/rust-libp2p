@@ -29,7 +29,7 @@ use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 use crate::extensions::partial_messages::PartialMessage;
 use crate::{
     ValidationError,
@@ -83,6 +83,9 @@ pub struct ProtocolConfig {
     pub(crate) max_publish_messages: usize,
     /// The max number of control messages per type to decode in a single RPC.
     pub(crate) max_control_messages: usize,
+    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
+    /// single RPC.
+    pub(crate) max_ids_per_control_message: usize,
 }
 
 impl Default for ProtocolConfig {
@@ -99,6 +102,7 @@ impl Default for ProtocolConfig {
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 500,
             max_control_messages: 500,
+            max_ids_per_control_message: 5000,
         }
     }
 }
@@ -155,6 +159,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_messages,
+                    self.max_ids_per_control_message,
                 ),
             ),
             protocol_id.kind,
@@ -180,6 +185,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_messages,
+                    self.max_ids_per_control_message,
                 ),
             ),
             protocol_id.kind,
@@ -200,6 +206,9 @@ pub struct GossipsubCodec {
     max_publish_messages: usize,
     /// The max number of control messages per type to decode in a single RPC.
     max_control_messages: usize,
+    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
+    /// single RPC.
+    max_ids_per_control_message: usize,
 }
 
 impl GossipsubCodec {
@@ -209,6 +218,7 @@ impl GossipsubCodec {
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
         max_control_messages: usize,
+        max_ids_per_control_message: usize,
     ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
@@ -217,6 +227,7 @@ impl GossipsubCodec {
             max_transmit_sizes,
             max_publish_messages,
             max_control_messages,
+            max_ids_per_control_message,
         }
     }
 
@@ -542,6 +553,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: ihave
                         .message_ids
                         .into_iter()
+                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -557,6 +569,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
+                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -607,6 +620,7 @@ impl Decoder for GossipsubCodec {
                 message_ids: idontwant
                     .message_ids
                     .into_iter()
+                    .take(self.max_ids_per_control_message)
                     .map(MessageId::from)
                     .collect::<Vec<_>>(),
             }));
@@ -618,7 +632,7 @@ impl Decoder for GossipsubCodec {
         });
         control_msgs.push(ControlAction::Extensions(extensions_msg));
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         let partial_message = rpc.partial.and_then(|partial_proto| {
             let Some(topic_id_bytes) = partial_proto.topicID else {
                 tracing::debug!("Partial message without topic_id, discarding");
@@ -659,7 +673,7 @@ impl Decoder for GossipsubCodec {
                     })
                     .collect(),
                 control_msgs,
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 partial_message,
             },
             invalid_messages,
@@ -750,6 +764,7 @@ mod tests {
                 HashMap::new(),
                 5000,
                 1000,
+                5000,
             );
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
