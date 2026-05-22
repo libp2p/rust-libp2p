@@ -29,7 +29,7 @@ zeroize = "1"
 snow = { version = "0.10.0", features = ["ring-resolver"], default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-snow = { version = "0.10.0", features = ["default-resolver"], default-features = false }
+snow = { version = "0.10.0", features = ["default-resolver-crypto"], default-features = false }
 
 [dev-dependencies]
 futures_ringbuf = "0.4.0"
