@@ -46,7 +46,7 @@ pub struct FailedMessages {
     pub non_priority: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
     /// The message is considered valid, and it should be delivered and forwarded to the network.
@@ -358,6 +358,8 @@ pub enum RpcOut {
         requests_partial: bool,
         supports_partial: bool,
     },
+    /// Subscribe to multiple topics in a single RPC (hello packet on new connection).
+    SubscribeMany(Vec<(TopicHash, bool, bool)>),
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
     /// Send a GRAFT control message.
@@ -376,7 +378,7 @@ pub enum RpcOut {
     /// Send a test extension message.
     TestExtension,
     /// Send a partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     PartialMessage(crate::partial_messages::PartialMessage),
 }
 
@@ -392,6 +394,7 @@ impl RpcOut {
         matches!(
             self,
             RpcOut::Subscribe { .. }
+                | RpcOut::SubscribeMany(_)
                 | RpcOut::Unsubscribe(_)
                 | RpcOut::Graft(_)
                 | RpcOut::Prune(_)
@@ -428,6 +431,22 @@ impl From<RpcOut> for proto::RPC {
                     requestsPartial: Some(requests_partial),
                     supportsPartial: Some(supports_partial),
                 }],
+                control: None,
+                partial: None,
+            },
+            RpcOut::SubscribeMany(topics) => proto::RPC {
+                publish: Vec::new(),
+                subscriptions: topics
+                    .into_iter()
+                    .map(
+                        |(topic, requests_partial, supports_partial)| proto::SubOpts {
+                            subscribe: Some(true),
+                            topic_id: Some(topic.into_string()),
+                            requestsPartial: Some(requests_partial),
+                            supportsPartial: Some(supports_partial),
+                        },
+                    )
+                    .collect(),
                 control: None,
                 partial: None,
             },
@@ -557,7 +576,7 @@ impl From<RpcOut> for proto::RPC {
                 control: None,
                 partial: None,
             },
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                 topic_hash,
                 group_id,
@@ -588,7 +607,7 @@ pub struct RpcIn {
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<ControlAction>,
     /// Partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,
 }
 
@@ -604,7 +623,7 @@ impl fmt::Debug for RpcIn {
         if !self.control_msgs.is_empty() {
             b.field("control_msgs", &self.control_msgs);
         }
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         b.field("partial_messages", &self.partial_message);
 
         b.finish()

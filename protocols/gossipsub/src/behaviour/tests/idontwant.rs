@@ -199,7 +199,7 @@ fn parses_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![message_id.clone()],
