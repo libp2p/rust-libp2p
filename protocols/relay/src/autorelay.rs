@@ -170,33 +170,10 @@ impl Behaviour {
         }
     }
 
-    fn determine_status_from_external_addresses(&mut self) {
-        let has_public_addr = self
-            .external_addresses
-            .iter()
-            .any(|addr| !addr.is_relayed());
-        let new_status = if has_public_addr {
-            Status::Disable
-        } else {
-            Status::Enable
-        };
-        if new_status == self.status {
-            return;
-        }
-        self.status = new_status;
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
-                status: new_status,
-            }));
-        match new_status {
-            Status::Enable => self.meet_reservation_target(),
-            Status::Disable => self.remove_all_reservations(),
-        }
-    }
-
     /// Register a peer as a static relay.
     ///
     /// This will dial and establish a connection to the peer if it doesn't already have a direct connection.
+    /// Note: Peers that are through a relay cannot be used as a static peer
     pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
         if address.is_relayed() {
             tracing::warn!(%peer_id, %address, "static relay address is relayed. ignoring.");
@@ -223,6 +200,30 @@ impl Behaviour {
 
     pub fn static_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr)> {
         self.static_relays.iter()
+    }
+
+
+    fn determine_status_from_external_addresses(&mut self) {
+        let has_public_addr = self
+            .external_addresses
+            .iter()
+            .any(|addr| !addr.is_relayed());
+
+        let new_status = match has_public_addr {
+            true => Status::Disable,
+            false => Status::Enable
+        };
+        if new_status != self.status {
+            self.status = new_status;
+            self.events
+                .push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                    status: new_status,
+                }));
+            match new_status {
+                Status::Enable => self.meet_reservation_target(),
+                Status::Disable => self.remove_all_reservations(),
+            }
+        }
     }
 
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
