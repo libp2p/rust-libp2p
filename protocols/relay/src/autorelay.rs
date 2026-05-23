@@ -16,7 +16,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
@@ -39,6 +39,8 @@ pub struct Behaviour {
 
     static_relays: HashMap<PeerId, Multiaddr>,
 
+    previous_relays: VecDeque<(PeerId, Multiaddr, Instant)>,
+
     relays_available: bool,
 
     waker: Option<Waker>,
@@ -56,6 +58,7 @@ impl Default for Behaviour {
             reservations: HashMap::new(),
             external_reservations: HashMap::new(),
             static_relays: HashMap::new(),
+            previous_relays: VecDeque::new(),
             relays_available: false,
             waker: None,
         }
@@ -103,6 +106,7 @@ enum ReservationStatus {
 pub struct Config {
     max_reservations: NonZeroU8,
     failure_cooldown: Duration,
+    max_previous_relays: usize,
 }
 
 impl Default for Config {
@@ -110,6 +114,7 @@ impl Default for Config {
         Self {
             max_reservations: NonZeroU8::new(2).unwrap(),
             failure_cooldown: Duration::from_secs(30),
+            max_previous_relays: 16,
         }
     }
 }
@@ -122,6 +127,11 @@ impl Config {
 
     pub fn set_failure_cooldown(mut self, duration: Duration) -> Self {
         self.failure_cooldown = duration;
+        self
+    }
+
+    pub fn set_max_previous_relays(mut self, max: usize) -> Self {
+        self.max_previous_relays = max;
         self
     }
 }
@@ -202,6 +212,29 @@ impl Behaviour {
         self.static_relays.iter()
     }
 
+    pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &Instant)> {
+        self.previous_relays
+            .iter()
+            .map(|(peer, addr, ts)| (peer, addr, ts))
+    }
+
+    fn record_previous_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
+        let max = self.config.max_previous_relays;
+        if max == 0 {
+            return;
+        }
+        self.previous_relays
+            .retain(|(p, _, _)| *p != peer_id);
+        if self.previous_relays.len() >= max {
+            self.previous_relays.pop_front();
+        }
+        self.previous_relays
+            .push_back((peer_id, address, Instant::now()));
+    }
+
+    fn forget_previous_relay(&mut self, peer_id: &PeerId) {
+        self.previous_relays.retain(|(p, _, _)| p != peer_id);
+    }
 
     fn determine_status_from_external_addresses(&mut self) {
         let has_public_addr = self
@@ -305,6 +338,7 @@ impl Behaviour {
             return;
         };
 
+        let mut connection_address = None;
         if let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
             && matches!(
                 connection.relay_status,
@@ -313,6 +347,7 @@ impl Behaviour {
                 }
             )
         {
+            connection_address = Some(connection.address.clone());
             if failed {
                 connection.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Blacklisted,
@@ -329,6 +364,10 @@ impl Behaviour {
                     status: ReservationStatus::Idle,
                 };
             }
+        }
+
+        if let Some(address) = connection_address {
+            self.record_previous_relay(peer_id, address);
         }
 
         self.meet_reservation_target();
@@ -481,12 +520,25 @@ impl NetworkBehaviour for Behaviour {
                     .remove(&(peer_id, connection_id))
                     .expect("valid connection");
 
+                let had_reservation = matches!(
+                    connection.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Active { .. }
+                            | ReservationStatus::Pending { .. }
+                            | ReservationStatus::Blacklisted
+                    }
+                );
+
                 if let RelayStatus::Supported {
                     status: ReservationStatus::Active { id } | ReservationStatus::Pending { id },
                 } = connection.relay_status
                 {
                     self.reservations.remove(&id);
                     self.meet_reservation_target();
+                }
+
+                if had_reservation {
+                    self.record_previous_relay(peer_id, connection.address.clone());
                 }
 
                 if let Some(address) = self.static_relays.get(&peer_id).cloned()
@@ -534,6 +586,7 @@ impl NetworkBehaviour for Behaviour {
                         connection.relay_status = RelayStatus::Supported {
                             status: ReservationStatus::Active { id: listener_id },
                         };
+                        self.forget_previous_relay(&peer_id);
                     }
                     return;
                 }
@@ -600,11 +653,15 @@ impl NetworkBehaviour for Behaviour {
                     } => Some(id),
                     _ => None,
                 };
+                let lost_address = drop_listener.map(|_| connection.address.clone());
                 connection.relay_status = RelayStatus::NotSupported;
                 if let Some(id) = drop_listener {
                     self.reservations.remove(&id);
                     self.events.push_back(ToSwarm::RemoveListener { id });
                     self.meet_reservation_target();
+                }
+                if let Some(address) = lost_address {
+                    self.record_previous_relay(peer_id, address);
                 }
                 self.update_relay_availability();
             }
