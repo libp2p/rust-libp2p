@@ -39,6 +39,8 @@ pub struct Behaviour {
 
     static_relays: HashMap<PeerId, Multiaddr>,
 
+    static_dial_cooldowns: HashMap<PeerId, Instant>,
+
     previous_relays: VecDeque<(PeerId, Multiaddr, Instant)>,
 
     relays_available: bool,
@@ -58,6 +60,7 @@ impl Default for Behaviour {
             reservations: HashMap::new(),
             external_reservations: HashMap::new(),
             static_relays: HashMap::new(),
+            static_dial_cooldowns: HashMap::new(),
             previous_relays: VecDeque::new(),
             relays_available: false,
             waker: None,
@@ -191,7 +194,7 @@ impl Behaviour {
         }
         self.static_relays.insert(peer_id, address.clone());
 
-        if !self.has_direct_connection(&peer_id) {
+        if !self.has_direct_connection(&peer_id) && !self.static_dial_in_cooldown(&peer_id) {
             let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
             self.events.push_back(ToSwarm::Dial { opts });
         }
@@ -205,6 +208,7 @@ impl Behaviour {
     /// Remove peer as a static relay.
     /// This will not close any connections or terminate any existing reservation with the relay
     pub fn remove_static_relay(&mut self, peer_id: &PeerId) -> bool {
+        self.static_dial_cooldowns.remove(peer_id);
         self.static_relays.remove(peer_id).is_some()
     }
 
@@ -216,6 +220,12 @@ impl Behaviour {
         self.previous_relays
             .iter()
             .map(|(peer, addr, ts)| (peer, addr, ts))
+    }
+
+    fn static_dial_in_cooldown(&self, peer_id: &PeerId) -> bool {
+        self.static_dial_cooldowns
+            .get(peer_id)
+            .is_some_and(|deadline| *deadline > Instant::now())
     }
 
     fn record_previous_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
@@ -509,6 +519,10 @@ impl NetworkBehaviour for Behaviour {
 
                 self.connections
                     .insert((peer_id, connection_id), connection);
+
+                if self.static_relays.contains_key(&peer_id) {
+                    self.static_dial_cooldowns.remove(&peer_id);
+                }
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -543,6 +557,7 @@ impl NetworkBehaviour for Behaviour {
 
                 if let Some(address) = self.static_relays.get(&peer_id).cloned()
                     && !self.has_direct_connection(&peer_id)
+                    && !self.static_dial_in_cooldown(&peer_id)
                 {
                     let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
                     self.events.push_back(ToSwarm::Dial { opts });
@@ -615,6 +630,8 @@ impl NetworkBehaviour for Behaviour {
                 ..
             }) if self.static_relays.contains_key(&peer_id) => {
                 tracing::warn!(%peer_id, %error, "dial to static relay failed");
+                self.static_dial_cooldowns
+                    .insert(peer_id, Instant::now() + self.config.failure_cooldown);
             }
             _ => {}
         }
