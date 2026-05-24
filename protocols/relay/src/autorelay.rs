@@ -375,8 +375,8 @@ impl Behaviour {
         };
 
         let mut connection_address = None;
-        let mut blacklist_duration = failed.then(|| self.record_failure(peer_id));
-        
+        let blacklist_duration = failed.then(|| self.record_failure(peer_id));
+
         if let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
             && matches!(
                 connection.relay_status,

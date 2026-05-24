@@ -1376,6 +1376,79 @@ async fn autorelay_previous_relays_is_bounded() {
     assert!(previous.contains(&peers_and_addrs[2].0));
 }
 
+#[tokio::test]
+async fn autorelay_static_relay_dial_cooldown_after_failure() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let cooldown = Duration::from_secs(2);
+    let mut client =
+        build_client(autorelay::Config::default().set_failure_cooldown(cooldown));
+
+    let unreachable_peer = PeerId::random();
+    let unreachable_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(unreachable_peer, unreachable_addr.clone());
+
+    wait_until(&mut client, Duration::from_secs(5), |event| {
+        matches!(
+            event,
+            SwarmEvent::OutgoingConnectionError { peer_id: Some(p), .. } if *p == unreachable_peer
+        )
+    })
+    .await;
+
+    let first_failure_at = std::time::Instant::now();
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(unreachable_peer, unreachable_addr.clone());
+
+    let mut redialed = false;
+    let watch = tokio::time::sleep(cooldown / 2);
+    tokio::pin!(watch);
+    loop {
+        tokio::select! {
+            _ = &mut watch => break,
+            ev = client.select_next_some() => {
+                if matches!(
+                    ev,
+                    SwarmEvent::OutgoingConnectionError { peer_id: Some(p), .. } if p == unreachable_peer
+                ) {
+                    redialed = true;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(!redialed, "autorelay redialed within cooldown");
+
+    let remaining = cooldown
+        .checked_sub(first_failure_at.elapsed())
+        .unwrap_or_default();
+    if !remaining.is_zero() {
+        tokio::time::sleep(remaining + Duration::from_millis(200)).await;
+    }
+
+    client
+        .behaviour_mut()
+        .autorelay
+        .add_static_relay(unreachable_peer, unreachable_addr);
+
+    wait_until(&mut client, Duration::from_secs(5), |event| {
+        matches!(
+            event,
+            SwarmEvent::OutgoingConnectionError { peer_id: Some(p), .. } if *p == unreachable_peer
+        )
+    })
+    .await;
+}
+
 async fn wait_for_reservation_from_either(
     client: &mut Swarm<Client>,
     peer_a: PeerId,
