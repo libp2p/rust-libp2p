@@ -41,6 +41,8 @@ pub struct Behaviour {
 
     static_dial_cooldowns: HashMap<PeerId, Instant>,
 
+    failure_counts: HashMap<PeerId, u32>,
+
     previous_relays: VecDeque<(PeerId, Multiaddr, Instant)>,
 
     relays_available: bool,
@@ -61,6 +63,7 @@ impl Default for Behaviour {
             external_reservations: HashMap::new(),
             static_relays: HashMap::new(),
             static_dial_cooldowns: HashMap::new(),
+            failure_counts: HashMap::new(),
             previous_relays: VecDeque::new(),
             relays_available: false,
             waker: None,
@@ -109,6 +112,7 @@ enum ReservationStatus {
 pub struct Config {
     max_reservations: NonZeroU8,
     failure_cooldown: Duration,
+    failure_cooldown_max: Duration,
     max_previous_relays: usize,
 }
 
@@ -117,6 +121,7 @@ impl Default for Config {
         Self {
             max_reservations: NonZeroU8::new(2).unwrap(),
             failure_cooldown: Duration::from_secs(30),
+            failure_cooldown_max: Duration::from_secs(10 * 60),
             max_previous_relays: 16,
         }
     }
@@ -130,6 +135,11 @@ impl Config {
 
     pub fn set_failure_cooldown(mut self, duration: Duration) -> Self {
         self.failure_cooldown = duration;
+        self
+    }
+
+    pub fn set_failure_cooldown_max(mut self, duration: Duration) -> Self {
+        self.failure_cooldown_max = duration;
         self
     }
 
@@ -246,6 +256,22 @@ impl Behaviour {
         self.previous_relays.retain(|(p, _, _)| p != peer_id);
     }
 
+    fn record_failure(&mut self, peer_id: PeerId) -> Duration {
+        let attempts = self.failure_counts.entry(peer_id).or_insert(0);
+        *attempts = attempts.saturating_add(1);
+        let exponent = attempts.saturating_sub(1).min(20);
+        let scale = 1u64.checked_shl(exponent).unwrap_or(u64::MAX);
+        let base = self.config.failure_cooldown;
+        let scaled = base
+            .checked_mul(scale.min(u32::MAX as u64) as u32)
+            .unwrap_or(self.config.failure_cooldown_max);
+        scaled.min(self.config.failure_cooldown_max)
+    }
+
+    fn clear_failure(&mut self, peer_id: &PeerId) {
+        self.failure_counts.remove(peer_id);
+    }
+
     fn determine_status_from_external_addresses(&mut self) {
         let has_public_addr = self
             .external_addresses
@@ -349,6 +375,8 @@ impl Behaviour {
         };
 
         let mut connection_address = None;
+        let mut blacklist_duration = failed.then(|| self.record_failure(peer_id));
+        
         if let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
             && matches!(
                 connection.relay_status,
@@ -358,21 +386,22 @@ impl Behaviour {
             )
         {
             connection_address = Some(connection.address.clone());
-            if failed {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Blacklisted,
-                };
-                self.events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(connection_id),
-                    event: Either::Left(handler::In::Blacklist {
-                        duration: self.config.failure_cooldown,
-                    }),
-                });
-            } else {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                };
+            match blacklist_duration {
+                Some(duration) => {
+                    connection.relay_status = RelayStatus::Supported {
+                        status: ReservationStatus::Blacklisted,
+                    };
+                    self.events.push_back(ToSwarm::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::One(connection_id),
+                        event: Either::Left(handler::In::Blacklist { duration }),
+                    });
+                },
+                None => {
+                    connection.relay_status = RelayStatus::Supported {
+                        status: ReservationStatus::Idle,
+                    };
+                },
             }
         }
 
@@ -602,6 +631,7 @@ impl NetworkBehaviour for Behaviour {
                             status: ReservationStatus::Active { id: listener_id },
                         };
                         self.forget_previous_relay(&peer_id);
+                        self.clear_failure(&peer_id);
                     }
                     return;
                 }
