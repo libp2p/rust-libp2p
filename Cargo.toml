@@ -119,30 +119,41 @@ libp2p-yamux = { version = "0.48.0", path = "muxers/yamux" }
 
 # External dependencies
 asynchronous-codec = { version = "0.7.0" }
+axum = { version = "0.7.9" }
+criterion = { version = "0.5.1" }
+bytes = "1.11.1"
 env_logger = "0.11"
 futures = "0.3.30"
 futures-bounded = { version = "0.3", features = ["tokio"] }
 futures-rustls = { version = "0.26.0", default-features = false }
-getrandom = "0.2"
+futures-timer = "3.0"
+hex-literal = "0.4"
+getrandom = { version = "0.2", features = ["js"] }
+hashlink = "0.11.0"
+hickory-proto = { version = "0.26.1", default-features = false }
+hickory-resolver = { version = "0.26.1", default-features = false }
 if-watch = "3.2.2"
-hickory-proto = { version = "0.25.2", default-features = false }
-hickory-resolver = { version = "0.25.2", default-features = false }
 multiaddr = "0.18.1"
-multihash = "0.19.1"
+multihash = "0.19.5"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.24"
 quick-protobuf-codec = { version = "0.4.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
+rand = "0.8.0"
 rcgen = "0.13"
 ring = "0.17.12"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
-tokio = { version = "1.50", default-features = false }
+tokio = { version = "1.52", default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 unsigned-varint = { version = "0.8.0" }
+# Pinned to avoid wasm-bindgen >=0.2.109 which breaks gloo-timers 0.2.6 (used by futures-timer for wasm).
+# wasm-bindgen-futures pins wasm-bindgen exactly, so capping it caps wasm-bindgen.
+# Versions 0.4.59-0.4.61 are unusable because they pin yanked js-sys releases (0.3.86-0.3.88).
+# TODO: remove when futures-timer is updated.
+wasm-bindgen-futures = "=0.4.58"
 web-time = "1.1.0"
-hashlink = "0.11.0"
 
 [patch.crates-io]
 
