@@ -276,22 +276,22 @@ fn score(a: &Multiaddr) -> i32 {
         ip4_weight = 1 << 18;
     }
 
-    if a.iter().any(|p| matches!(p, Protocol::WebTransport)) {
-        if let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_))) {
-            return ip4_weight + (1 << 19) + p as i32;
-        }
+    if a.iter().any(|p| matches!(p, Protocol::WebTransport))
+        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
+    {
+        return ip4_weight + (1 << 19) + p as i32;
     }
 
-    if a.iter().any(|p| matches!(p, Protocol::Quic)) {
-        if let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_))) {
-            return ip4_weight + (1 << 17) + p as i32;
-        }
+    if a.iter().any(|p| matches!(p, Protocol::Quic))
+        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
+    {
+        return ip4_weight + (1 << 17) + p as i32;
     }
 
-    if a.iter().any(|p| matches!(p, Protocol::QuicV1)) {
-        if let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_))) {
-            return ip4_weight + p as i32;
-        }
+    if a.iter().any(|p| matches!(p, Protocol::QuicV1))
+        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
+    {
+        return ip4_weight + p as i32;
     }
 
     if let Some(Protocol::Tcp(p)) = a.iter().find(|p| matches!(p, Protocol::Tcp(_))) {
