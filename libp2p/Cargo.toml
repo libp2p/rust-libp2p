@@ -20,6 +20,7 @@ full = [
     "ed25519",
     "floodsub",
     "gossipsub",
+    "gossipsub-partial-messages",
     "identify",
     "json",
     "kad",
@@ -58,6 +59,7 @@ ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
 floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+gossipsub-partial-messages = ["libp2p-gossipsub?/partial-messages"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 json = ["libp2p-request-response?/json"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
