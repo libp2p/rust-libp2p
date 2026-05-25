@@ -53,14 +53,13 @@
 //! [`Behaviour::new_with_subscription_filter_and_transform`] (or the
 //! `_with_subscription_filter` variant). Two implementations are provided:
 //!
-//! - [`subscription_filter::WhitelistSubscriptionFilter`] — accepts only a fixed,
-//!   pre-declared topic set. Recommended when the full topic set is known at construction
-//!   time (for example, Ethereum 2 consensus clients enumerate the
-//!   `/eth2/<fork-digest>/<topic>/ssz_snappy` strings before peering).
-//! - [`subscription_filter::MaxCountSubscriptionFilter`] — wraps an inner filter with
-//!   per-RPC and per-peer accumulation caps. Recommended when the topic set is
-//!   open-ended; choose the cap based on the legitimate topic fan-out of the application
-//!   plus a comfort margin.
+//! - [`subscription_filter::WhitelistSubscriptionFilter`] — accepts only a fixed, pre-declared
+//!   topic set. Recommended when the full topic set is known at construction time (for example,
+//!   Ethereum 2 consensus clients enumerate the `/eth2/<fork-digest>/<topic>/ssz_snappy` strings
+//!   before peering).
+//! - [`subscription_filter::MaxCountSubscriptionFilter`] — wraps an inner filter with per-RPC and
+//!   per-peer accumulation caps. Recommended when the topic set is open-ended; choose the cap based
+//!   on the legitimate topic fan-out of the application plus a comfort margin.
 //!
 //! A minimal hardened constructor:
 //!

@@ -388,14 +388,15 @@ where
     /// [`Config`]. This has no subscription filter and uses no compression.
     ///
     /// The default subscription filter wired in by `F::default()` is
-    /// [`AllowAllSubscriptionFilter`](crate::subscription_filter::AllowAllSubscriptionFilter),
-    /// which imposes no cap on per-RPC or per-peer subscription growth. For deployments that
-    /// accept connections from untrusted peers, prefer
+    /// [`AllowAllSubscriptionFilter`], which imposes no cap on per-RPC or per-peer subscription
+    /// growth. For deployments that accept connections from untrusted peers, prefer
     /// [`Behaviour::new_with_subscription_filter_and_transform`] with
-    /// [`MaxCountSubscriptionFilter`](crate::subscription_filter::MaxCountSubscriptionFilter)
-    /// or
-    /// [`WhitelistSubscriptionFilter`](crate::subscription_filter::WhitelistSubscriptionFilter).
-    /// See the crate root docs for the "Production hardening" section.
+    /// [`MaxCountSubscriptionFilter`] or [`WhitelistSubscriptionFilter`]. See the crate root
+    /// docs for the "Production hardening" section.
+    ///
+    /// [`AllowAllSubscriptionFilter`]: crate::subscription_filter::AllowAllSubscriptionFilter
+    /// [`MaxCountSubscriptionFilter`]: crate::subscription_filter::MaxCountSubscriptionFilter
+    /// [`WhitelistSubscriptionFilter`]: crate::subscription_filter::WhitelistSubscriptionFilter
     pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
