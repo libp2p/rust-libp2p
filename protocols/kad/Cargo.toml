@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes.workspace = true
-either = "1.11"
+either = "1.16"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }
 futures = { workspace = true }
