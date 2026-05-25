@@ -374,41 +374,49 @@ impl Behaviour {
             return;
         };
 
-        let mut connection_address = None;
+        let Some(address) = self
+            .connections
+            .get(&(peer_id, connection_id))
+            .filter(|info| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Active { .. }
+                            | ReservationStatus::Pending { .. }
+                    }
+                )
+            })
+            .map(|info| info.address.clone())
+        else {
+            self.meet_reservation_target();
+            return;
+        };
+
         let blacklist_duration = failed.then(|| self.record_failure(peer_id));
 
-        if let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
-            && matches!(
-                connection.relay_status,
-                RelayStatus::Supported {
-                    status: ReservationStatus::Active { .. } | ReservationStatus::Pending { .. }
-                }
-            )
-        {
-            connection_address = Some(connection.address.clone());
-            match blacklist_duration {
-                Some(duration) => {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Blacklisted,
-                    };
-                    self.events.push_back(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(handler::In::Blacklist { duration }),
-                    });
-                },
-                None => {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
-                },
+        let connection = self
+            .connections
+            .get_mut(&(peer_id, connection_id))
+            .expect("connection is tracked");
+        match blacklist_duration {
+            Some(duration) => {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Blacklisted,
+                };
+                self.events.push_back(ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(connection_id),
+                    event: Either::Left(handler::In::Blacklist { duration }),
+                });
+            }
+            None => {
+                connection.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
             }
         }
 
-        if let Some(address) = connection_address {
-            self.record_previous_relay(peer_id, address);
-        }
-
+        self.record_previous_relay(peer_id, address);
         self.meet_reservation_target();
     }
 
