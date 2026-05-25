@@ -70,6 +70,24 @@ impl PeerRecord {
         Self::from_signed_envelope_impl(envelope, STANDARD_DOMAIN_SEP, STANDARD_PAYLOAD_TYPE)
     }
 
+    /// Attempt to re-construct a [`PeerRecord`] from a [`SignedEnvelope`] using either legacy or
+    /// standard interop format.
+    ///
+    /// Tries the legacy format first and falls back to the standard interop format when the payload
+    /// type does not match the legacy encoding. This preserves legacy validation semantics while
+    /// allowing protocol consumers to accept peer records produced during migration.
+    pub fn from_signed_envelope_legacy_or_interop(
+        envelope: SignedEnvelope,
+    ) -> Result<Self, FromEnvelopeError> {
+        match Self::from_signed_envelope(envelope.clone()) {
+            Ok(record) => Ok(record),
+            Err(FromEnvelopeError::BadPayload(
+                signed_envelope::ReadPayloadError::UnexpectedPayloadType { .. },
+            )) => Self::from_signed_envelope_interop(envelope),
+            Err(err) => Err(err),
+        }
+    }
+
     fn from_signed_envelope_impl(
         envelope: SignedEnvelope,
         domain: &str,
@@ -246,6 +264,30 @@ mod tests {
 
         let envelope = record.to_signed_envelope();
         let reconstructed = PeerRecord::from_signed_envelope_interop(envelope).unwrap();
+
+        assert_eq!(reconstructed, record)
+    }
+
+    #[test]
+    fn roundtrip_envelope_legacy_or_interop_legacy() {
+        let key = Keypair::generate_ed25519();
+
+        let record = PeerRecord::new(&key, vec![HOME.parse().unwrap()]).unwrap();
+
+        let envelope = record.to_signed_envelope();
+        let reconstructed = PeerRecord::from_signed_envelope_legacy_or_interop(envelope).unwrap();
+
+        assert_eq!(reconstructed, record)
+    }
+
+    #[test]
+    fn roundtrip_envelope_legacy_or_interop_interop() {
+        let key = Keypair::generate_ed25519();
+
+        let record = PeerRecord::new_interop(&key, vec![HOME.parse().unwrap()]).unwrap();
+
+        let envelope = record.to_signed_envelope();
+        let reconstructed = PeerRecord::from_signed_envelope_legacy_or_interop(envelope).unwrap();
 
         assert_eq!(reconstructed, record)
     }
