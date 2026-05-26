@@ -4,7 +4,9 @@ use clap::Parser;
 use futures::stream::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
-    identify, identity, noise, ping,
+    identify,
+    identity::Keypair,
+    noise, ping,
     relay::{self, autorelay},
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
@@ -16,7 +18,7 @@ use tracing_subscriber::EnvFilter;
 struct Opts {
     /// Fixed value used to derive a deterministic peer id.
     #[arg(long)]
-    secret_key_seed: u8,
+    secret_key_seed: Option<u8>,
 
     /// List of relay addresses
     #[arg(long = "relay", required = true)]
@@ -121,15 +123,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(_)) => {}
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
-                SwarmEvent::Behaviour(BehaviourEvent::Autorelay(_)) => {}
+                SwarmEvent::Behaviour(BehaviourEvent::Autorelay(e)) => {
+                    tracing::debug!(?e, "Autorelay event");
+                }
                 _ => {}
             },
         }
     }
 }
 
-fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
-    let mut bytes = [0u8; 32];
-    bytes[0] = secret_key_seed;
-    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
+fn generate_ed25519(secret_key_seed: Option<u8>) -> Keypair {
+    match secret_key_seed {
+        Some(secret_key_seed) => {
+            let mut bytes = [0u8; 32];
+            bytes[0] = secret_key_seed;
+            Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
+        }
+        None => Keypair::generate_ed25519(),
+    }
 }
