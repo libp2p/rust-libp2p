@@ -1,3 +1,10 @@
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZeroU8,
+    task::{Context, Poll, Waker},
+    time::{Duration, Instant},
+};
+
 use either::Either;
 use libp2p_core::{
     Endpoint,
@@ -14,13 +21,6 @@ use libp2p_swarm::{
     },
     dial_opts::DialOpts,
     dummy,
-};
-use std::task::Waker;
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    num::NonZeroU8,
-    task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
 use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
@@ -211,8 +211,9 @@ impl Behaviour {
 
     /// Register a peer as a static relay.
     ///
-    /// This will dial and establish a connection to the peer if it doesn't already have a direct connection.
-    /// Note: Peers that are through a relay cannot be used as a static peer
+    /// This will dial and establish a connection to the peer if it doesn't already have a direct
+    /// connection.
+    /// Note that peers that are through a relay cannot be used as a static peer
     pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
         if address.is_relayed() {
             tracing::warn!(%peer_id, %address, "static relay address is relayed. ignoring.");
@@ -224,16 +225,10 @@ impl Behaviour {
             self.evict_for_static_peer(peer_id);
         }
 
-        if !self.has_direct_connection(&peer_id) && !self.static_dial_in_cooldown(&peer_id) {
-            let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
-            self.events.push_back(ToSwarm::Dial { opts });
-            if let Some(waker) = self.waker.take() {
-                waker.wake();
-            }
-            return;
+        if !self.queue_static_dial(peer_id, address) {
+            self.meet_reservation_target();
         }
 
-        self.meet_reservation_target();
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -262,6 +257,15 @@ impl Behaviour {
             .is_some_and(|deadline| *deadline > Instant::now())
     }
 
+    fn queue_static_dial(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
+        if self.has_direct_connection(&peer_id) || self.static_dial_in_cooldown(&peer_id) {
+            return false;
+        }
+        let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
+        self.events.push_back(ToSwarm::Dial { opts });
+        true
+    }
+
     fn record_previous_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
         let max = self.config.max_previous_relays;
         if max == 0 {
@@ -283,12 +287,11 @@ impl Behaviour {
         let attempts = self.failure_counts.entry(peer_id).or_insert(0);
         *attempts = attempts.saturating_add(1);
         let exponent = attempts.saturating_sub(1).min(20);
-        let scale = 1u64.checked_shl(exponent).unwrap_or(u64::MAX);
-        let base = self.config.failure_cooldown;
-        let scaled = base
-            .checked_mul(scale.min(u32::MAX as u64) as u32)
-            .unwrap_or(self.config.failure_cooldown_max);
-        scaled.min(self.config.failure_cooldown_max)
+        let scale = 1u32 << exponent;
+        self.config
+            .failure_cooldown
+            .saturating_mul(scale)
+            .min(self.config.failure_cooldown_max)
     }
 
     fn clear_failure(&mut self, peer_id: &PeerId) {
@@ -319,15 +322,13 @@ impl Behaviour {
     }
 
     fn is_peer_idle(&self, peer_id: &PeerId) -> bool {
-        self.connections
-            .iter()
-            .filter(|((pid, _), _)| pid == peer_id)
-            .any(|((_, _), info)| {
-                info.relay_status
+        self.connections.iter().any(|((pid, _), info)| {
+            pid == peer_id
+                && info.relay_status
                     == RelayStatus::Supported {
                         status: ReservationStatus::Idle,
                     }
-            })
+        })
     }
 
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
@@ -346,11 +347,11 @@ impl Behaviour {
             return;
         }
 
-        if let Some((listener_id, ..)) = self
+        if let Some(listener_id) = self
             .reservations
             .iter()
             .find(|(_, (peer_id, _))| !self.static_relays.contains_key(peer_id))
-            .map(|(listener_id, (peer_id, connection_id))| (*listener_id, *peer_id, *connection_id))
+            .map(|(listener_id, _)| *listener_id)
         {
             self.events
                 .push_back(ToSwarm::RemoveListener { id: listener_id });
@@ -645,15 +646,11 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 if had_reservation {
-                    self.record_previous_relay(peer_id, connection.address.clone());
+                    self.record_previous_relay(peer_id, connection.address);
                 }
 
-                if let Some(address) = self.static_relays.get(&peer_id).cloned()
-                    && !self.has_direct_connection(&peer_id)
-                    && !self.static_dial_in_cooldown(&peer_id)
-                {
-                    let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
-                    self.events.push_back(ToSwarm::Dial { opts });
+                if let Some(address) = self.static_relays.get(&peer_id).cloned() {
+                    self.queue_static_dial(peer_id, address);
                 }
 
                 self.update_relay_availability();
