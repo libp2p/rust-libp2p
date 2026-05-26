@@ -5,12 +5,16 @@ use libp2p_core::{
     transport::{ListenerId, PortUse},
 };
 use libp2p_identity::PeerId;
-use libp2p_swarm::{ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler, derive_prelude::{
-    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-    DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed,
-    ListenerError, Multiaddr, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
-}, dial_opts::DialOpts, dummy};
+use libp2p_swarm::{
+    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
+    derive_prelude::{
+        AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
+        DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
+        NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    },
+    dial_opts::DialOpts,
+    dummy,
+};
 use std::task::Waker;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -114,6 +118,7 @@ pub struct Config {
     failure_cooldown: Duration,
     failure_cooldown_max: Duration,
     max_previous_relays: usize,
+    static_relays: HashMap<PeerId, Multiaddr>,
 }
 
 impl Default for Config {
@@ -123,6 +128,7 @@ impl Default for Config {
             failure_cooldown: Duration::from_secs(30),
             failure_cooldown_max: Duration::from_secs(10 * 60),
             max_previous_relays: 16,
+            static_relays: HashMap::new(),
         }
     }
 }
@@ -147,6 +153,11 @@ impl Config {
         self.max_previous_relays = max;
         self
     }
+
+    pub fn add_static_relay(mut self, peer_id: PeerId, address: Multiaddr) -> Self {
+        self.static_relays.insert(peer_id, address);
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -161,11 +172,16 @@ pub enum Event {
 }
 
 impl Behaviour {
-    pub fn new_with_config(config: Config) -> Self {
-        Self {
+    pub fn new_with_config(mut config: Config) -> Self {
+        let initial_static_relays = std::mem::take(&mut config.static_relays);
+        let mut behaviour = Self {
             config,
             ..Default::default()
+        };
+        for (peer_id, address) in initial_static_relays {
+            behaviour.add_static_relay(peer_id, address);
         }
+        behaviour
     }
 
     /// Sets the autorelay status.
@@ -204,9 +220,17 @@ impl Behaviour {
         }
         self.static_relays.insert(peer_id, address.clone());
 
+        if self.is_peer_idle(&peer_id) {
+            self.evict_for_static_peer(peer_id);
+        }
+
         if !self.has_direct_connection(&peer_id) && !self.static_dial_in_cooldown(&peer_id) {
             let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
             self.events.push_back(ToSwarm::Dial { opts });
+            if let Some(waker) = self.waker.take() {
+                waker.wake();
+            }
+            return;
         }
 
         self.meet_reservation_target();
@@ -243,8 +267,7 @@ impl Behaviour {
         if max == 0 {
             return;
         }
-        self.previous_relays
-            .retain(|(p, _, _)| *p != peer_id);
+        self.previous_relays.retain(|(p, _, _)| *p != peer_id);
         if self.previous_relays.len() >= max {
             self.previous_relays.pop_front();
         }
@@ -280,7 +303,7 @@ impl Behaviour {
 
         let new_status = match has_public_addr {
             true => Status::Disable,
-            false => Status::Enable
+            false => Status::Enable,
         };
         if new_status != self.status {
             self.status = new_status;
@@ -295,10 +318,43 @@ impl Behaviour {
         }
     }
 
+    fn is_peer_idle(&self, peer_id: &PeerId) -> bool {
+        self.connections
+            .iter()
+            .filter(|((pid, _), _)| pid == peer_id)
+            .any(|((_, _), info)| {
+                info.relay_status
+                    == RelayStatus::Supported {
+                        status: ReservationStatus::Idle,
+                    }
+            })
+    }
+
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
         self.connections
             .iter()
             .any(|((pid, _), info)| pid == peer_id && !info.address.is_relayed())
+    }
+
+    fn evict_for_static_peer(&mut self, new_static: PeerId) {
+        let covered = self.covered_peers();
+        if covered.contains(&new_static) {
+            return;
+        }
+        let max = self.config.max_reservations.get() as usize;
+        if covered.len() < max {
+            return;
+        }
+
+        if let Some((listener_id, ..)) = self
+            .reservations
+            .iter()
+            .find(|(_, (peer_id, _))| !self.static_relays.contains_key(peer_id))
+            .map(|(listener_id, (peer_id, connection_id))| (*listener_id, *peer_id, *connection_id))
+        {
+            self.events
+                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        }
     }
 
     fn select_connection_for_reservation(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
@@ -697,6 +753,9 @@ impl NetworkBehaviour for Behaviour {
                     connection.relay_status = RelayStatus::Supported {
                         status: ReservationStatus::Idle,
                     };
+                    if self.static_relays.contains_key(&peer_id) {
+                        self.evict_for_static_peer(peer_id);
+                    }
                     self.meet_reservation_target();
                     self.update_relay_availability();
                 }
