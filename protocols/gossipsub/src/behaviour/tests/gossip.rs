@@ -207,7 +207,7 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![msg_id.clone()],

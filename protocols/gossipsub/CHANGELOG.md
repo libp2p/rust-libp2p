@@ -1,6 +1,7 @@
 ## 0.50.0
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
@@ -10,7 +11,8 @@
 - Unify gossipsub control-message limits under max_control_messages (replacing per-type control ID caps),
   and truncate control vectors immediately after RPC decode.
   rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
-  See [PR 6409](https://github.com/libp2p/rust-libp2p/pull/6409)
+  Introduce `max_ids_per_control_message` to limit the number of message IDs per control message.
+  See [PR 6409](https://github.com/libp2p/rust-libp2p/pull/6409) and [PR 6428](https://github.com/libp2p/rust-libp2p/pull/6428)
 
 - Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
   See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)

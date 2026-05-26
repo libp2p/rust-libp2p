@@ -55,6 +55,7 @@ pub(crate) async fn outbound(
     tracing::debug!(address=%addr, "new outbound connection to address");
 
     let (peer_connection, ufrag) = new_outbound_connection(addr, config, udp_mux).await?;
+    let noise_channel_open_rx = create_noise_data_channel(&peer_connection).await?;
 
     let offer = peer_connection.create_offer(None).await?;
     tracing::debug!(offer=%offer.sdp, "created SDP offer for outbound connection");
@@ -64,7 +65,7 @@ pub(crate) async fn outbound(
     tracing::debug!(?answer, "calculated SDP answer for outbound connection");
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
+    let data_channel = await_noise_data_channel_open(noise_channel_open_rx).await?;
     let peer_id = noise::outbound(
         id_keys,
         data_channel,
@@ -88,6 +89,7 @@ pub(crate) async fn inbound(
     tracing::debug!(address=%addr, ufrag=%remote_ufrag, "new inbound connection from address");
 
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
+    let noise_channel_open_rx = create_noise_data_channel(&peer_connection).await?;
 
     let offer = sdp::offer(addr, &remote_ufrag);
     tracing::debug!(?offer, "calculated SDP offer for inbound connection");
@@ -97,7 +99,7 @@ pub(crate) async fn inbound(
     tracing::debug!(?answer, "created SDP answer for inbound connection");
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
+    let data_channel = await_noise_data_channel_open(noise_channel_open_rx).await?;
     let client_fingerprint = get_remote_fingerprint(&peer_connection).await;
     let peer_id = noise::inbound(
         id_keys,
@@ -203,7 +205,9 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::from_certificate(&cert_bytes)
 }
 
-async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Result<Stream, Error> {
+async fn create_noise_data_channel(
+    conn: &RTCPeerConnection,
+) -> Result<oneshot::Receiver<Arc<DataChannel>>, Error> {
     // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on both ends.
     let data_channel = conn
         .create_data_channel(
@@ -220,6 +224,12 @@ async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Resul
     // Wait until the data channel is opened and detach it.
     crate::tokio::connection::register_data_channel_open_handler(data_channel, tx).await;
 
+    Ok(rx)
+}
+
+async fn await_noise_data_channel_open(
+    rx: oneshot::Receiver<Arc<DataChannel>>,
+) -> Result<Stream, Error> {
     let channel = match futures::future::select(rx, Delay::new(Duration::from_secs(10))).await {
         Either::Left((Ok(channel), _)) => channel,
         Either::Left((Err(_), _)) => {

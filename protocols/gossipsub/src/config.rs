@@ -123,10 +123,11 @@ pub struct Config {
     opportunistic_graft_ticks: u64,
     opportunistic_graft_peers: usize,
     gossip_retransimission: u32,
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     max_metadata_length: usize,
     max_publish_messages: usize,
     max_control_messages: usize,
+    max_ids_per_control_message: usize,
     max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
     connection_handler_queue_len: usize,
@@ -414,7 +415,7 @@ impl Config {
 
     /// The maximum number of metadata messages to send per peer during heartbeat gossip.
     /// The default is 1000.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn max_metadata_length(&self) -> usize {
         self.max_metadata_length
     }
@@ -428,6 +429,13 @@ impl Config {
     /// is 5000.
     pub fn max_control_messages(&self) -> usize {
         self.max_control_messages
+    }
+
+    /// The maximum number of message ids per IHAVE/IWANT/IDONTWANT control message we will
+    /// process in a given RPC. Other control message types (GRAFT, PRUNE) are not affected by
+    /// this limit as they do not contain message IDs. The default is 5000.
+    pub fn max_ids_per_control_message(&self) -> usize {
+        self.max_ids_per_control_message
     }
 
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
@@ -541,10 +549,11 @@ impl Default for ConfigBuilder {
                 opportunistic_graft_ticks: 60,
                 opportunistic_graft_peers: 2,
                 gossip_retransimission: 3,
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 max_metadata_length: 1000,
                 max_publish_messages: 5000,
                 max_control_messages: 5000,
+                max_ids_per_control_message: 5000,
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -971,7 +980,7 @@ impl ConfigBuilder {
 
     /// The maximum number of metadata messages to send per peer during heartbeat gossip.
     /// The default is 1000.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn max_metadata_gossip(&mut self, max_metadata_length: usize) -> &mut Self {
         self.config.max_metadata_length = max_metadata_length;
         self
@@ -1059,6 +1068,15 @@ impl ConfigBuilder {
     pub fn max_control_messages(&mut self, size: usize) -> &mut Self {
         self.config.max_control_messages = size;
         self.config.protocol.max_control_messages = size;
+        self
+    }
+
+    /// The maximum number of message ids per IHAVE/IWANT/IDONTWANT control message we will
+    /// process in a single RPC. Other control message types (GRAFT, PRUNE) are not affected by
+    /// this limit as they do not contain message IDs. The default is 5000.
+    pub fn max_ids_per_control_message(&mut self, size: usize) -> &mut Self {
+        self.config.max_ids_per_control_message = size;
+        self.config.protocol.max_ids_per_control_message = size;
         self
     }
 
@@ -1172,6 +1190,10 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         let _ = builder.field("max_messages_per_rpc", &self.max_publish_messages);
         let _ = builder.field("max_control_messages", &self.max_control_messages);
+        let _ = builder.field(
+            "max_ids_per_control_message",
+            &self.max_ids_per_control_message,
+        );
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
             &self.max_ihave_messages_heartbeat,
