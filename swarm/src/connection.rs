@@ -411,33 +411,26 @@ where
                 }
             }
 
-            // `extract()` leaves `Done` entries behind until the next
-            // `poll_next` cleanup. Skip them when fulfilling a waiting request.
-            if requested_substreams
-                .iter_mut()
-                .any(|r| matches!(r, SubstreamRequested::Waiting { .. }))
-            {
-                match muxing.poll_outbound_unpin(cx)? {
-                    Poll::Pending => {}
-                    Poll::Ready(substream) => {
-                        if let Some((user_data, timeout, upgrade)) = requested_substreams
-                            .iter_mut()
-                            .find_map(SubstreamRequested::extract)
-                        {
-                            negotiating_out.push(StreamUpgrade::new_outbound(
-                                substream,
-                                user_data,
-                                timeout,
-                                upgrade,
-                                *substream_upgrade_protocol_override,
-                                stream_counter.clone(),
-                            ));
-                        }
-
-                        // Go back to the top,
-                        // handler can potentially make progress again.
-                        continue;
+            match muxing.poll_outbound_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(substream) => {
+                    if let Some((user_data, timeout, upgrade)) = requested_substreams
+                        .iter_mut()
+                        .find_map(SubstreamRequested::extract)
+                    {
+                        negotiating_out.push(StreamUpgrade::new_outbound(
+                            substream,
+                            user_data,
+                            timeout,
+                            upgrade,
+                            *substream_upgrade_protocol_override,
+                            stream_counter.clone(),
+                        ));
                     }
+
+                    // Go back to the top,
+                    // handler can potentially make progress again.
+                    continue;
                 }
             }
 
