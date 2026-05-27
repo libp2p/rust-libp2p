@@ -685,6 +685,95 @@ mod tests {
         }
     }
 
+    /// A new listen address is mapped on the gateway, then the listener expires and
+    /// the mapping is removed.
+    #[test]
+    fn new_mapping_then_removed() {
+        let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+        let listener_id = ListenerId::next();
+        let ip: Ipv4Addr = "192.168.1.100".parse().unwrap();
+        let port = 9000u16;
+
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(&waker);
+
+        // NewListenAddr fires → AddMapping enqueued to the gateway.
+        let addr: Multiaddr = format!("/ip4/{ip}/tcp/{port}").parse().unwrap();
+        behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+            listener_id,
+            addr: &addr,
+        }));
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+        ));
+
+        // The gateway confirms the mapping → Active.
+        let mapping = build_mapping(listener_id, ip, port);
+        event_tx
+            .try_send(GatewayEvent::Mapped(mapping.clone()))
+            .expect("channel should have capacity");
+        drain_poll(&mut behaviour, &mut cx);
+        assert!(matches!(
+            behaviour.mappings.get(&listener_id),
+            Some(MappingState::Active(_))
+        ));
+
+        // The listener expires → RemoveMapping enqueued to the gateway.
+        behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+            listener_id,
+            addr: &addr,
+        }));
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::RemoveMapping(_)))
+        ));
+
+        // The gateway confirms the removal → mappings cleared.
+        event_tx
+            .try_send(GatewayEvent::Removed(mapping))
+            .expect("channel should have capacity");
+        drain_poll(&mut behaviour, &mut cx);
+        assert!(behaviour.mappings.is_empty());
+    }
+
+    /// A new listen address is requested to be mapped, but the gateway returns MapFailure.
+    #[test]
+    fn new_mapping_map_failure() {
+        let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+        let listener_id = ListenerId::next();
+        let ip: Ipv4Addr = "192.168.1.100".parse().unwrap();
+        let port = 9000u16;
+
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(&waker);
+
+        // NewListenAddr fires → AddMapping enqueued to the gateway.
+        let addr: Multiaddr = format!("/ip4/{ip}/tcp/{port}").parse().unwrap();
+        behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+            listener_id,
+            addr: &addr,
+        }));
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+        ));
+
+        // The gateway returns MapFailure → Failed state.
+        let mapping = build_mapping(listener_id, ip, port);
+        event_tx
+            .try_send(GatewayEvent::MapFailure(
+                mapping,
+                Box::new(Error::new(ErrorKind::Other, "mock failure")),
+            ))
+            .expect("channel should have capacity");
+        drain_poll(&mut behaviour, &mut cx);
+        assert!(matches!(
+            behaviour.mappings.get(&listener_id),
+            Some(MappingState::Failed { .. })
+        ));
+    }
+
     /// Tests that mapping state and in-flight gateway requests are managed correctly
     /// when a network interface changes (e.g. Wi-Fi → Ethernet): ExpiredListenAddr
     /// for the old address is followed by NewListenAddr for the new address on the
