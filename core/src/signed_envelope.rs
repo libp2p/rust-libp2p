@@ -1,7 +1,7 @@
 use std::fmt;
 
 use libp2p_identity::{Keypair, PublicKey, SigningError};
-use quick_protobuf::{BytesReader, Writer};
+use prost::Message;
 use unsigned_varint::encode::usize_buffer;
 
 use crate::{DecodeError, proto};
@@ -76,8 +76,6 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use quick_protobuf::MessageWrite;
-
         let envelope = proto::Envelope {
             public_key: self.key.encode_protobuf(),
             payload_type: self.payload_type,
@@ -85,28 +83,18 @@ impl SignedEnvelope {
             signature: self.signature,
         };
 
-        let mut buf = Vec::with_capacity(envelope.get_size());
-        let mut writer = Writer::new(&mut buf);
-
-        envelope
-            .write_message(&mut writer)
-            .expect("Encoding to succeed");
-
-        buf
+        envelope.encode_to_vec()
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use quick_protobuf::MessageRead;
-
-        let mut reader = BytesReader::from_bytes(bytes);
-        let envelope = proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError)?;
+        let envelope = proto::Envelope::decode(bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: PublicKey::try_decode_protobuf(&envelope.public_key)?,
-            payload_type: envelope.payload_type.to_vec(),
-            payload: envelope.payload.to_vec(),
-            signature: envelope.signature.to_vec(),
+            payload_type: envelope.payload_type,
+            payload: envelope.payload,
+            signature: envelope.signature,
         })
     }
 }
