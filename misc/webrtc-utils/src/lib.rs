@@ -1,7 +1,7 @@
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::webrtc::pb::{Message, mod_Message::Flag};
+    pub use self::webrtc_pb::{Message, message::Flag};
 }
 
 mod fingerprint;

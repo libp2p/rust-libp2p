@@ -27,7 +27,7 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::{MessageWrite, Writer};
+use prost::Message;
 
 #[cfg(feature = "partial-messages")]
 use crate::extensions::partial_messages::PartialMessage;
@@ -199,7 +199,7 @@ pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
-    codec: quick_protobuf_codec::Codec<proto::RPC>,
+    codec: prost_codec::Codec<proto::Rpc>,
     /// Maximum transmit sizes per topic, with a default if not specified.
     max_transmit_sizes: HashMap<TopicHash, usize>,
     /// The max number of publish messages to decode in a single RPC.
@@ -220,7 +220,7 @@ impl GossipsubCodec {
         max_control_messages: usize,
         max_ids_per_control_message: usize,
     ) -> GossipsubCodec {
-        let codec = quick_protobuf_codec::Codec::new(max_length);
+        let codec = prost_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
@@ -240,7 +240,7 @@ impl GossipsubCodec {
     /// are logged, which prevents error handling in the codec and handler. We simply drop invalid
     /// messages and log warnings, rather than propagating errors through the codec.
     fn verify_signature(message: &proto::Message) -> bool {
-        use quick_protobuf::MessageWrite;
+        use prost::Message;
 
         let Some(from) = message.from.as_ref() else {
             tracing::debug!("Signature verification failed: No source id given");
@@ -282,11 +282,7 @@ impl GossipsubCodec {
         let mut message_sig = message.clone();
         message_sig.signature = None;
         message_sig.key = None;
-        let mut buf = Vec::with_capacity(message_sig.get_size());
-        let mut writer = Writer::new(&mut buf);
-        message_sig
-            .write_message(&mut writer)
-            .expect("Encoding to succeed");
+        let buf = message_sig.encode_to_vec();
         let mut signature_bytes = SIGNING_PREFIX.to_vec();
         signature_bytes.extend_from_slice(&buf);
         public_key.verify(&signature_bytes, signature)
@@ -294,8 +290,8 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item<'a> = proto::RPC;
-    type Error = quick_protobuf_codec::Error;
+    type Item<'a> = proto::Rpc;
+    type Error = prost_codec::Error;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.codec.encode(item, dst)
@@ -319,7 +315,7 @@ fn truncate_excess<T>(items: &mut Vec<T>, max: usize, kind: &str) {
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = quick_protobuf_codec::Error;
+    type Error = prost_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let Some(mut rpc) = self.codec.decode(src)? else {
@@ -351,7 +347,7 @@ impl Decoder for GossipsubCodec {
             // Check the message size to ensure it doesn't bypass the configured max.
             if self
                 .max_transmit_size_for_topic(&topic)
-                .is_some_and(|max| message.get_size() > max)
+                .is_some_and(|max| message.encoded_len() > max)
             {
                 let message = RawMessage {
                     source: None, // don't bother inform the application
@@ -628,19 +624,19 @@ impl Decoder for GossipsubCodec {
         control_msgs.extend(idontwant_messages);
 
         let extensions_msg = control.extensions.map(|extensions| Extensions {
-            partial_messages: extensions.partialMessages,
+            partial_messages: extensions.partial_messages,
         });
         control_msgs.push(ControlAction::Extensions(extensions_msg));
 
         #[cfg(feature = "partial-messages")]
         let partial_message = rpc.partial.and_then(|partial_proto| {
-            let Some(topic_id_bytes) = partial_proto.topicID else {
+            let Some(topic_id_bytes) = partial_proto.topic_id else {
                 tracing::debug!("Partial message without topic_id, discarding");
                 return None;
             };
             let topic_hash = TopicHash::from_raw(String::from_utf8_lossy(&topic_id_bytes));
 
-            let Some(group_id) = partial_proto.groupID else {
+            let Some(group_id) = partial_proto.group_id else {
                 tracing::debug!("Partial message without group_id, discarding");
                 return None;
             };
@@ -648,8 +644,8 @@ impl Decoder for GossipsubCodec {
             Some(PartialMessage {
                 topic_hash,
                 group_id,
-                metadata: partial_proto.partsMetadata,
-                body: partial_proto.partialMessage,
+                metadata: partial_proto.parts_metadata,
+                body: partial_proto.partial_message,
             })
         });
 
@@ -667,8 +663,8 @@ impl Decoder for GossipsubCodec {
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
                         options: SubscriptionOpts {
-                            requests_partial: sub.requestsPartial.unwrap_or_default(),
-                            supports_partial: sub.supportsPartial.unwrap_or_default(),
+                            requests_partial: sub.requests_partial.unwrap_or_default(),
+                            supports_partial: sub.supports_partial.unwrap_or_default(),
                         },
                     })
                     .collect(),
