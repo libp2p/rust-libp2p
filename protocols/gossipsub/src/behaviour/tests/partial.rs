@@ -2033,10 +2033,10 @@ fn test_ihave_not_sent_to_partial_peers() {
 
 /// Verifies that:
 /// - Republishing a partial that adds new parts is not stale and is published normally.
-/// - Republishing a partial whose parts are a subset of the cached one adds nothing new,
-///   so it is detected as stale: `handle_publish` returns no actions.
-/// - A stale republish does NOT overwrite the cached partial: a peer that subsequently
-///   requests the message is served the full cached partial, not the stale subset.
+/// - Republishing a partial whose parts are a subset of the cached one adds nothing new, so it is
+///   detected as stale: `handle_publish` returns no actions.
+/// - A stale republish does NOT overwrite the cached partial: a peer that subsequently requests the
+///   message is served the full cached partial, not the stale subset.
 #[test]
 fn test_handle_publish_skips_stale_partial() {
     let topic_hash = TopicHash::from_raw("test-topic");
