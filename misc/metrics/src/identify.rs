@@ -160,7 +160,7 @@ impl Collector for Peers {
         let mut count_by_listen_addresses: HashMap<String, i64> = Default::default();
         let mut count_by_observed_addresses: HashMap<String, i64> = Default::default();
 
-        for (_, peer_info) in self.0.lock().unwrap().iter() {
+        for peer_info in self.0.lock().unwrap().values() {
             {
                 let mut protocols: Vec<_> = peer_info
                     .protocols

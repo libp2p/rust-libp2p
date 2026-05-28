@@ -223,10 +223,7 @@ pub struct Message {
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Message")
-            .field(
-                "data",
-                &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)),
-            )
+            .field("data", &format_args!("{:<20}", hex_fmt::HexFmt(&self.data)))
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
             .field("topic", &self.topic)
