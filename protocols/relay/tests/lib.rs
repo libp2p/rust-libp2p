@@ -685,7 +685,7 @@ async fn reservation_after_listener_close_emits_fresh_acceptance() {
         relay_peer_id,
         false,
     )
-        .await;
+    .await;
 
     assert!(client.remove_listener(first_listener));
 
@@ -696,11 +696,9 @@ async fn reservation_after_listener_close_emits_fresh_acceptance() {
             SwarmEvent::ListenerClosed { listener_id, .. } if listener_id == first_listener => {
                 first_listener_closed = true;
             }
-            SwarmEvent::ExternalAddrExpired { address }
-            if address == client_addr_with_peer_id =>
-                {
-                    first_addr_expired = true;
-                }
+            SwarmEvent::ExternalAddrExpired { address } if address == client_addr_with_peer_id => {
+                first_addr_expired = true;
+            }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             _ => {}
         }
@@ -717,7 +715,7 @@ async fn reservation_after_listener_close_emits_fresh_acceptance() {
         relay_peer_id,
         false,
     )
-        .await;
+    .await;
 }
 
 fn build_relay() -> Swarm<Relay> {
