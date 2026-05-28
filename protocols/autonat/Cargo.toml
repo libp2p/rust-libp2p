@@ -17,7 +17,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-either = { version = "1.9.0", optional = true }
+either = { version = "1.16.0", optional = true }
 futures = { workspace = true }
 futures-bounded = { workspace = true, optional = true }
 futures-timer = { workspace = true }
