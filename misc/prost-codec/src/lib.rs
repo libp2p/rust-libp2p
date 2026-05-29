@@ -107,6 +107,108 @@ impl From<Error> for io::Error {
     }
 }
 
+/// Extracts the message bytes from a length-prefixed buffer.
+///
+/// Decodes the unsigned varint length prefix and returns the remaining
+/// message bytes. Returns an error if the length prefix is invalid.
+pub fn extract_message_bytes(src: &[u8]) -> io::Result<&[u8]> {
+    let (message_length, remaining) = unsigned_varint::decode::usize(src)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    if remaining.len() < message_length {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "buffer too short for declared message length",
+        ));
+    }
+    Ok(&remaining[..message_length])
+}
+
+/// Decodes a protobuf field key (tag + wire type) and returns just the tag number.
+/// Advances the buffer past the key only (does NOT consume the field value).
+pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<u32> {
+    use prost::encoding::decode_key;
+    let (tag, _wire_type) =
+        decode_key(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(tag)
+}
+
+/// Consumes a complete protobuf field (tag + value) from the buffer.
+///
+/// Returns the field tag. Advances the buffer past the entire field.
+/// This is a high-level helper that hides wire type details from the caller.
+pub fn consume_field(buf: &mut &[u8]) -> io::Result<u32> {
+    use prost::encoding::{WireType, decode_key, decode_varint};
+
+    // Read tag and wire type
+    let (tag, wire_type) =
+        decode_key(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+    // Consume value based on wire type
+    match wire_type {
+        WireType::Varint => {
+            decode_varint(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        }
+        WireType::SixtyFourBit => {
+            if buf.len() < 8 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "buffer underflow",
+                ));
+            }
+            *buf = &buf[8..];
+        }
+        WireType::LengthDelimited => {
+            let len = decode_varint(buf)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                as usize;
+            if buf.len() < len {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "buffer underflow",
+                ));
+            }
+            *buf = &buf[len..];
+        }
+        WireType::StartGroup | WireType::EndGroup => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "groups are not supported",
+            ));
+        }
+        WireType::ThirtyTwoBit => {
+            if buf.len() < 4 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "buffer underflow",
+                ));
+            }
+            *buf = &buf[4..];
+        }
+    }
+
+    Ok(tag)
+}
+
+/// Consumes a length-delimited protobuf message from the buffer.
+///
+/// Returns the message bytes as a slice. Advances the buffer past the message.
+/// This is useful for extracting nested messages without copying.
+pub fn consume_message<'a>(buf: &mut &'a [u8]) -> io::Result<&'a [u8]> {
+    use prost::encoding::decode_varint;
+
+    let len =
+        decode_varint(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))? as usize;
+    if buf.len() < len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "buffer underflow",
+        ));
+    }
+    let msg = &buf[..len];
+    *buf = &buf[len..];
+    Ok(msg)
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error;
