@@ -253,7 +253,7 @@ pub enum Error {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(prost::DecodeError);
 
 fn certhashes_to_string(certhashes: &HashSet<Multihash<64>>) -> String {
     let mut s = String::new();

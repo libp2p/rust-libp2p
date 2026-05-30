@@ -20,6 +20,7 @@ full = [
     "ed25519",
     "floodsub",
     "gossipsub",
+    "gossipsub-partial-messages",
     "identify",
     "json",
     "kad",
@@ -58,6 +59,7 @@ ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
 floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+gossipsub-partial-messages = ["libp2p-gossipsub?/partial-messages"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 json = ["libp2p-request-response?/json"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
@@ -86,7 +88,6 @@ websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
 upnp = ["dep:libp2p-upnp"]
-
 [dependencies]
 bytes.workspace = true
 either = "1.9.0"
@@ -142,7 +143,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(target_family="wasm")'.dependencies]
 futures-timer = { workspace = true, features = ["wasm-bindgen"] }
-getrandom = { workspace = true}
+getrandom = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
