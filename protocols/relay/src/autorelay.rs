@@ -41,7 +41,7 @@ pub struct Behaviour {
 
     external_reservations: HashMap<ListenerId, PeerId>,
 
-    static_relays: HashMap<PeerId, Multiaddr>,
+    static_relays: HashMap<PeerId, Vec<Multiaddr>>,
 
     static_dial_cooldowns: HashMap<PeerId, Instant>,
 
@@ -118,7 +118,7 @@ pub struct Config {
     failure_cooldown: Duration,
     failure_cooldown_max: Duration,
     max_previous_relays: usize,
-    static_relays: HashMap<PeerId, Multiaddr>,
+    static_relays: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 impl Default for Config {
@@ -154,8 +154,13 @@ impl Config {
         self
     }
 
-    pub fn add_static_relay(mut self, peer_id: PeerId, address: Multiaddr) -> Self {
-        self.static_relays.insert(peer_id, address);
+    pub fn add_static_relay(mut self, peer_id: PeerId, addresses: Vec<Multiaddr>) -> Self {
+        let entry = self.static_relays.entry(peer_id).or_default();
+        for addr in addresses {
+            if !entry.contains(&addr) {
+                entry.push(addr);
+            }
+        }
         self
     }
 }
@@ -178,8 +183,10 @@ impl Behaviour {
             config,
             ..Default::default()
         };
-        for (peer_id, address) in initial_static_relays {
-            behaviour.add_static_relay(peer_id, address);
+        for (peer_id, addresses) in initial_static_relays {
+            for address in addresses {
+                behaviour.add_static_relay(peer_id, address);
+            }
         }
         behaviour
     }
@@ -219,13 +226,20 @@ impl Behaviour {
             tracing::warn!(%peer_id, %address, "static relay address is relayed. ignoring.");
             return;
         }
-        self.static_relays.insert(peer_id, address.clone());
+
+        let entry = self.static_relays.entry(peer_id).or_default();
+        if entry.contains(&address) {
+            tracing::warn!(%peer_id, %address, "static relay address already exist");
+        } else {
+            entry.push(address);
+        }
+        let combined = entry.clone();
 
         if self.is_peer_idle(&peer_id) {
             self.evict_for_static_peer(peer_id);
         }
 
-        if !self.queue_static_dial(peer_id, address) {
+        if !self.queue_static_dial(peer_id, combined) {
             self.meet_reservation_target();
         }
 
@@ -241,8 +255,10 @@ impl Behaviour {
         self.static_relays.remove(peer_id).is_some()
     }
 
-    pub fn static_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr)> {
-        self.static_relays.iter()
+    pub fn static_relays(&self) -> impl Iterator<Item = (&PeerId, &[Multiaddr])> {
+        self.static_relays
+            .iter()
+            .map(|(peer, addrs)| (peer, addrs.as_slice()))
     }
 
     pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &Instant)> {
@@ -257,11 +273,14 @@ impl Behaviour {
             .is_some_and(|deadline| *deadline > Instant::now())
     }
 
-    fn queue_static_dial(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
-        if self.has_direct_connection(&peer_id) || self.static_dial_in_cooldown(&peer_id) {
+    fn queue_static_dial(&mut self, peer_id: PeerId, addresses: Vec<Multiaddr>) -> bool {
+        if addresses.is_empty()
+            || self.has_direct_connection(&peer_id)
+            || self.static_dial_in_cooldown(&peer_id)
+        {
             return false;
         }
-        let opts = DialOpts::peer_id(peer_id).addresses(vec![address]).build();
+        let opts = DialOpts::peer_id(peer_id).addresses(addresses).build();
         self.events.push_back(ToSwarm::Dial { opts });
         true
     }
@@ -649,8 +668,8 @@ impl NetworkBehaviour for Behaviour {
                     self.record_previous_relay(peer_id, connection.address);
                 }
 
-                if let Some(address) = self.static_relays.get(&peer_id).cloned() {
-                    self.queue_static_dial(peer_id, address);
+                if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
+                    self.queue_static_dial(peer_id, addresses);
                 }
 
                 self.update_relay_availability();
