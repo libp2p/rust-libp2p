@@ -385,9 +385,7 @@ impl NetworkBehaviour for Behaviour {
                             let waiting: Vec<Mapping> = self
                                 .add_requests
                                 .iter()
-                                .filter(|(_, s)| {
-                                    matches!(s, AddRequestState::WaitingForGateway)
-                                })
+                                .filter(|(_, s)| matches!(s, AddRequestState::WaitingForGateway))
                                 .map(|(m, _)| m.clone())
                                 .collect();
                             for mapping in waiting {
@@ -441,8 +439,7 @@ impl NetworkBehaviour for Behaviour {
                                 if self.mappings.contains_key(&key) {
                                     // Renewal: refresh the timeout in-place.
                                     if let Some((_, timeout)) = self.mappings.get_mut(&key) {
-                                        *timeout =
-                                            Delay::new(Duration::from_secs(MAPPING_TIMEOUT));
+                                        *timeout = Delay::new(Duration::from_secs(MAPPING_TIMEOUT));
                                     }
                                     tracing::debug!(
                                         address=%mapping.internal_addr,
@@ -476,7 +473,9 @@ impl NetworkBehaviour for Behaviour {
                             }
                             GatewayEvent::MapFailure(mapping, err) => {
                                 let retry_count = match self.add_requests.remove(&mapping) {
-                                    Some(AddRequestState::AwaitingResponse { retry_count }) => retry_count,
+                                    Some(AddRequestState::AwaitingResponse { retry_count }) => {
+                                        retry_count
+                                    }
                                     other => {
                                         tracing::warn!(
                                             mapping=?mapping,
@@ -548,8 +547,7 @@ impl NetworkBehaviour for Behaviour {
                                 self.remove_requests.remove(&mapping);
                             }
                             GatewayEvent::RemovalFailure(mapping, err) => {
-                                let Some(retry_count) =
-                                    self.remove_requests.remove(&mapping)
+                                let Some(retry_count) = self.remove_requests.remove(&mapping)
                                 else {
                                     tracing::warn!(
                                         mapping=?mapping,
@@ -590,12 +588,7 @@ impl NetworkBehaviour for Behaviour {
                     }
 
                     // Renew expired and request inactive mappings.
-                    renew_mappings(
-                        &mut self.mappings,
-                        &mut self.add_requests,
-                        gateway,
-                        cx,
-                    );
+                    renew_mappings(&mut self.mappings, &mut self.add_requests, gateway, cx);
                     return Poll::Pending;
                 }
                 _ => return Poll::Pending,
@@ -648,9 +641,7 @@ fn renew_mappings(
         })
         .collect();
     for mapping in to_retry {
-        if let Some(AddRequestState::Failed { retry_count, .. }) =
-            add_requests.remove(&mapping)
-        {
+        if let Some(AddRequestState::Failed { retry_count, .. }) = add_requests.remove(&mapping) {
             if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                 mapping: mapping.clone(),
                 duration: MAPPING_DURATION,
@@ -663,10 +654,7 @@ fn renew_mappings(
                 );
                 // Entry already removed; drop it rather than re-inserting.
             } else {
-                add_requests.insert(
-                    mapping,
-                    AddRequestState::AwaitingResponse { retry_count },
-                );
+                add_requests.insert(mapping, AddRequestState::AwaitingResponse { retry_count });
             }
         }
     }
@@ -704,9 +692,9 @@ fn multiaddr_to_socketaddr_protocol(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Error, ErrorKind};
     use super::*;
     use futures::channel::mpsc;
+    use std::io::{Error, ErrorKind};
     use std::net::Ipv4Addr;
     use std::task::Waker;
 
@@ -780,7 +768,9 @@ mod tests {
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
         assert!(matches!(
-            behaviour.mappings.get(&mapping_key(PortMappingProtocol::TCP, port)),
+            behaviour
+                .mappings
+                .get(&mapping_key(PortMappingProtocol::TCP, port)),
             Some(_)
         ));
 
