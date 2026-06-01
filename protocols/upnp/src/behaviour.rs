@@ -20,16 +20,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use std::{
-    collections::{HashMap, VecDeque},
-    error::Error,
-    hash::{Hash, Hasher},
-    net::{self, IpAddr, SocketAddr, SocketAddrV4},
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
-
 use futures::{Future, StreamExt, channel::oneshot};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -40,6 +30,16 @@ use libp2p_core::{
 use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm, NetworkBehaviour, NewListenAddr,
     ToSwarm, derive_prelude::PeerId, dummy,
+};
+use std::collections::hash_map::Entry::Vacant;
+use std::{
+    collections::{HashMap, VecDeque},
+    error::Error,
+    hash::{Hash, Hasher},
+    net::{self, IpAddr, SocketAddr, SocketAddrV4},
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::tokio::{Gateway, is_addr_global};
@@ -241,7 +241,7 @@ impl NetworkBehaviour for Behaviour {
                 };
 
                 let key = mapping_key(protocol, addr.port());
-                if matches!(self.mappings.get(&key), Some(_)) {
+                if self.mappings.contains_key(&key) {
                     tracing::debug!(
                         multiaddress=%multiaddr,
                         "port from multiaddress is already mapped on the gateway"
@@ -436,25 +436,12 @@ impl NetworkBehaviour for Behaviour {
                                 let key =
                                     mapping_key(mapping.protocol, mapping.internal_addr.port());
 
-                                if self.mappings.contains_key(&key) {
-                                    // Renewal: refresh the timeout in-place.
-                                    if let Some((_, timeout)) = self.mappings.get_mut(&key) {
-                                        *timeout = Delay::new(Duration::from_secs(MAPPING_TIMEOUT));
-                                    }
-                                    tracing::debug!(
-                                        address=%mapping.internal_addr,
-                                        protocol=%mapping.protocol,
-                                        "successfully renewed UPnP mapping for protocol"
-                                    );
-                                } else {
+                                if let Vacant(e) = self.mappings.entry(key) {
                                     // New mapping or retry success: insert the active entry.
-                                    self.mappings.insert(
-                                        key,
-                                        (
-                                            mapping.clone(),
-                                            Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
-                                        ),
-                                    );
+                                    e.insert((
+                                        mapping.clone(),
+                                        Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
+                                    ));
                                     let external_multiaddr =
                                         mapping.external_addr(gateway.external_addr);
                                     self.pending_events.push_back(Event::NewExternalAddr {
@@ -469,6 +456,16 @@ impl NetworkBehaviour for Behaviour {
                                     return Poll::Ready(ToSwarm::ExternalAddrConfirmed(
                                         external_multiaddr,
                                     ));
+                                } else {
+                                    // Renewal: refresh the timeout in-place.
+                                    if let Some((_, timeout)) = self.mappings.get_mut(&key) {
+                                        *timeout = Delay::new(Duration::from_secs(MAPPING_TIMEOUT));
+                                    }
+                                    tracing::debug!(
+                                        address=%mapping.internal_addr,
+                                        protocol=%mapping.protocol,
+                                        "successfully renewed UPnP mapping for protocol"
+                                    );
                                 }
                             }
                             GatewayEvent::MapFailure(mapping, err) => {
@@ -632,10 +629,10 @@ fn renew_mappings(
     let to_retry: Vec<Mapping> = add_requests
         .iter_mut()
         .filter_map(|(mapping, state)| {
-            if let AddRequestState::Failed { next_retry, .. } = state {
-                if Pin::new(next_retry).poll(cx).is_ready() {
-                    return Some(mapping.clone());
-                }
+            if let AddRequestState::Failed { next_retry, .. } = state
+                && Pin::new(next_retry).poll(cx).is_ready()
+            {
+                return Some(mapping.clone());
             }
             None
         })
@@ -694,7 +691,7 @@ fn multiaddr_to_socketaddr_protocol(
 mod tests {
     use super::*;
     use futures::channel::mpsc;
-    use std::io::{Error, ErrorKind};
+    use std::io::Error;
     use std::net::Ipv4Addr;
     use std::task::Waker;
 
@@ -748,7 +745,7 @@ mod tests {
         let port = 9000u16;
 
         let waker = Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
 
         // NewListenAddr fires → AddMapping enqueued to the gateway.
         let addr: Multiaddr = format!("/ip4/{ip}/tcp/{port}").parse().unwrap();
@@ -767,12 +764,11 @@ mod tests {
             .try_send(GatewayEvent::Mapped(mapping.clone()))
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
-        assert!(matches!(
+        assert!(
             behaviour
                 .mappings
-                .get(&mapping_key(PortMappingProtocol::TCP, port)),
-            Some(_)
-        ));
+                .contains_key(&mapping_key(PortMappingProtocol::TCP, port))
+        );
 
         // The listener expires → RemoveMapping enqueued to the gateway.
         behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
@@ -803,7 +799,7 @@ mod tests {
         let port = 9000u16;
 
         let waker = Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
 
         // NewListenAddr fires → AddMapping enqueued to the gateway.
         let addr: Multiaddr = format!("/ip4/{ip}/tcp/{port}").parse().unwrap();
@@ -821,7 +817,7 @@ mod tests {
         event_tx
             .try_send(GatewayEvent::MapFailure(
                 mapping.clone(),
-                Box::new(Error::new(ErrorKind::Other, "mock failure")),
+                Box::new(Error::other("mock failure")),
             ))
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
@@ -846,7 +842,7 @@ mod tests {
         let port = 9000u16;
 
         let waker = Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
 
         // The port is already actively mapped on the gateway for old_ip.
         let old_mapping = build_mapping(listener_id, old_ip, port);
@@ -891,7 +887,7 @@ mod tests {
         event_tx
             .try_send(GatewayEvent::MapFailure(
                 new_mapping,
-                Box::new(Error::new(ErrorKind::Other, "mock failure")),
+                Box::new(Error::other("mock failure")),
             ))
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
@@ -916,7 +912,7 @@ mod tests {
         let port = 9000u16;
 
         let waker = Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
 
         // The port is already actively mapped on the gateway for old_ip.
         let old_mapping = build_mapping(listener_id, old_ip, port);
@@ -988,7 +984,7 @@ mod tests {
         let port = 9000u16;
 
         let waker = Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
 
         // The port is already actively mapped on the gateway for first_ip.
         let mapping = build_mapping(listener_id, first_ip, port);
