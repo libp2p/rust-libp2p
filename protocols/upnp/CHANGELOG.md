@@ -6,7 +6,13 @@
 ## 0.7.0
 
 - Raise MSRV to 1.88.0.
-  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+## 0.7.0
+
+- Raise MSRV to 1.88.0.
+See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Fix panic with "mapping should exist".
+  See [PR 6459](https://github.com/libp2p/rust-libp2p/pull/6459)
 
 ## 0.6.0
 
