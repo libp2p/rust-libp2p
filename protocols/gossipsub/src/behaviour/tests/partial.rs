@@ -219,9 +219,9 @@ fn test_full_data_provider_to_requester() {
 
     let mut state1 = State::default();
     let mut state2 = State::default();
-    // Both subscribe to the topic with partial support
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    // Both enable partial support for the topic.
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
 
     // Set up peer subscriptions (each knows about the other)
     state1.peer_subscribed(
@@ -351,8 +351,8 @@ fn test_overlap_exchange() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -484,8 +484,8 @@ fn test_symmetric_half_exchange() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -623,8 +623,8 @@ fn test_no_redundant_transfer() {
     let peer2 = PeerId::random();
     let mut state1 = State::default();
     let mut state2 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state2.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
+    state2.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -707,7 +707,7 @@ fn test_heartbeat_ttl_expiry() {
     let peer2 = PeerId::random();
     let peer3 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -778,7 +778,7 @@ fn test_peer_disconnect_cleanup() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -834,102 +834,28 @@ fn test_peer_disconnect_cleanup() {
             supports_partial: true,
         },
     );
-    // Publish again - if peer2's metadata was preserved, we'd only send
-    // missing parts (0b10101010). Since it was cleaned up on disconnect,
-    // we send all parts (0b11111111).
-    let actions = state1
-        .handle_publish(topic_hash.clone(), message, HashSet::from([peer2]))
-        .expect("Publish should succeed");
-    assert_eq!(actions.len(), 1);
-    let PublishAction::SendMessage {
-        peer_id,
-        rpc: RpcOut::PartialMessage(partial_msg),
-    } = &actions[0]
-    else {
-        panic!("Expected SendMessage with PartialMessage");
-    };
-    assert_eq!(*peer_id, peer2);
-    // Should send all parts since peer2's metadata was wiped on disconnect
+    // Re-publishing the identical partial would be skipped as stale, so verify cleanup via
+    // heartbeat re-gossip instead: since peer2's metadata was wiped on disconnect, heartbeat
+    // should re-send all parts. (If the state had been preserved, heartbeat would send nothing
+    // because publish_action would find nothing new for peer2.)
+    let empty_mesh = HashMap::new();
+    let empty_fanout = HashMap::new();
+    let actions = state1.heartbeat(&empty_mesh, &empty_fanout, 10, 1.0, 100);
+    let partial_msg = actions
+        .iter()
+        .find_map(|action| match action {
+            PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(pm),
+            } if *peer_id == peer2 => Some(pm),
+            _ => None,
+        })
+        .expect("Reconnected peer should be re-gossiped the partial via heartbeat");
+    // Should send all parts since peer2's metadata was wiped on disconnect.
     let body = partial_msg.body.as_ref().expect("Should have body");
     assert_eq!(
         body[0], 0b11111111,
-        "Should send all parts after reconnect (peer metadata was cleaned up)"
-    );
-}
-
-/// Verifies that:
-/// - When we unsubscribe from a topic, our local partial message state is cleaned up.
-/// - Before unsubscribe, a peer metadata update triggers a `Publish` response when local partial
-///   cache exists.
-/// - After re-subscribing, receiving the same metadata-only update is treated as fresh
-///   (`EmitEvent`) because local partial cache was removed.
-#[test]
-fn test_unsubscribe_cleanup() {
-    let topic_hash = TopicHash::from_raw("test-topic");
-    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-    let peer2 = PeerId::random();
-    let peer3 = PeerId::random();
-    let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
-    state1.peer_subscribed(
-        &peer2,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    state1.peer_subscribed(
-        &peer3,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    // Publish to a different peer to populate local cache without syncing peer2 state.
-    let mut message = Bitmap::new(group_id);
-    message.fill_parts(0b11111111);
-    let _actions = state1
-        .handle_publish(topic_hash.clone(), message, HashSet::from([peer3]))
-        .expect("Publish should succeed");
-
-    // Receive from peer2 - should return Publish (we have cached local partial and no
-    // tracked knowledge that peer2 already has this data)
-    let peer2_partial = PartialMessage {
-        group_id: group_id.to_vec(),
-        topic_hash: topic_hash.clone(),
-        body: None,
-        metadata: Some(vec![0b00000000]), // peer2 has nothing
-    };
-    let received_actions = state1.handle_received(peer2, peer2_partial.clone());
-    assert!(
-        received_actions
-            .iter()
-            .any(|a| matches!(a, ReceivedAction::Publish(_))),
-        "Before unsubscribe: should return Publish since we have cached local partial"
-    );
-    // Unsubscribe from the topic
-    state1.unsubscribe(&topic_hash);
-    // Re-subscribe to the topic
-    state1.subscribe(topic_hash.clone(), true, true);
-    state1.peer_subscribed(
-        &peer2,
-        topic_hash.clone(),
-        SubscriptionOpts {
-            requests_partial: true,
-            supports_partial: true,
-        },
-    );
-    // Receive the same partial again from peer2
-    // Since our local cache was cleaned up, should return EmitEvent (no local partial)
-    let received_actions_after = state1.handle_received(peer2, peer2_partial.clone());
-    assert_eq!(received_actions_after.len(), 1);
-    assert!(
-        received_actions_after
-            .iter()
-            .any(|a| matches!(a, ReceivedAction::EmitEvent { .. })),
-        "After unsubscribe: should return EmitEvent since local partial cache was cleaned up"
+        "Should re-send all parts after reconnect (peer metadata was cleaned up)"
     );
 }
 
@@ -943,7 +869,7 @@ fn test_peer_unsubscribed_cleanup() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     state1.peer_subscribed(
         &peer2,
         topic_hash.clone(),
@@ -977,28 +903,28 @@ fn test_peer_unsubscribed_cleanup() {
             supports_partial: true,
         },
     );
-    // Publish again - if peer2's metadata was preserved, we'd only send
-    // missing parts (0b10101010). Since it was cleaned up on unsubscribe,
-    // we send all parts (0b11111111).
-    let mut new_message = Bitmap::new(group_id);
-    new_message.fill_parts(0b11111111);
-    let actions = state1
-        .handle_publish(topic_hash.clone(), new_message, HashSet::from([peer2]))
-        .expect("Publish should succeed");
-    assert_eq!(actions.len(), 1);
-    let PublishAction::SendMessage {
-        peer_id,
-        rpc: RpcOut::PartialMessage(partial_msg),
-    } = &actions[0]
-    else {
-        panic!("Expected SendMessage with PartialMessage");
-    };
-    assert_eq!(*peer_id, peer2);
-    // Should send all parts since peer2's metadata was wiped on unsubscribe
+    // Re-publishing the identical partial would be skipped as stale, so verify cleanup via
+    // heartbeat re-gossip instead: since peer2's metadata was wiped on unsubscribe, heartbeat
+    // should re-send all parts. (If the state had been preserved, heartbeat would send nothing
+    // because publish_action would find nothing new for peer2.)
+    let empty_mesh = HashMap::new();
+    let empty_fanout = HashMap::new();
+    let actions = state1.heartbeat(&empty_mesh, &empty_fanout, 10, 1.0, 100);
+    let partial_msg = actions
+        .iter()
+        .find_map(|action| match action {
+            PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(pm),
+            } if *peer_id == peer2 => Some(pm),
+            _ => None,
+        })
+        .expect("Re-subscribed peer should be re-gossiped the partial via heartbeat");
+    // Should send all parts since peer2's metadata was wiped on unsubscribe.
     let body = partial_msg.body.as_ref().expect("Should have body");
     assert_eq!(
         body[0], 0b11111111,
-        "Should send all parts after peer re-subscribes (peer metadata was cleaned up)"
+        "Should re-send all parts after peer re-subscribes (peer metadata was cleaned up)"
     );
 }
 
@@ -1012,9 +938,9 @@ fn test_peer_unsubscribed_preserves_other_topics() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer2 = PeerId::random();
     let mut state1 = State::default();
-    // Subscribe to both topics
-    state1.subscribe(topic1.clone(), true, true);
-    state1.subscribe(topic2.clone(), true, true);
+    // Enable partial support for both topics.
+    state1.enable_partials_for_topic(topic1.clone(), true);
+    state1.enable_partials_for_topic(topic2.clone(), true);
     // Peer2 subscribes to both topics
     state1.peer_subscribed(
         &peer2,
@@ -1055,8 +981,7 @@ fn test_peer_unsubscribed_preserves_other_topics() {
     let _ = state1.handle_received(peer2, peer2_partial_topic2);
     // Peer2 unsubscribes from topic1 only
     state1.peer_unsubscribed(peer2, &topic1);
-    // Publish on topic1 - peer2's state was cleared, should send all parts
-    // Re-subscribe peer2 to topic1 first
+    // Re-subscribe peer2 to topic1.
     state1.peer_subscribed(
         &peer2,
         topic1.clone(),
@@ -1065,23 +990,9 @@ fn test_peer_unsubscribed_preserves_other_topics() {
             supports_partial: true,
         },
     );
-    let actions1 = state1
-        .handle_publish(topic1.clone(), message.clone(), HashSet::from([peer2]))
-        .expect("Publish should succeed");
-    let PublishAction::SendMessage {
-        rpc: RpcOut::PartialMessage(partial_msg1),
-        ..
-    } = &actions1[0]
-    else {
-        panic!("Expected SendMessage with PartialMessage");
-    };
-    // Topic1: Should send all parts (state was cleared)
-    let body1 = partial_msg1.body.as_ref().expect("Should have body");
-    assert_eq!(
-        body1[0], 0b11111111,
-        "Topic1: Should send all parts (peer metadata was cleared on unsubscribe)"
-    );
-    // Publish on topic2 - peer2's state was preserved, should send only missing parts
+    // Publish on topic2 first - peer2's state there was preserved, so we should send only the
+    // missing parts. Done before the topic1 heartbeat check so the heartbeat does not alter
+    // peer2's topic2 state.
     let actions2 = state1
         .handle_publish(topic2.clone(), message, HashSet::from([peer2]))
         .expect("Publish should succeed");
@@ -1098,6 +1009,28 @@ fn test_peer_unsubscribed_preserves_other_topics() {
         body2[0], 0b10101010,
         "Topic2: Should send only missing parts (peer metadata preserved)"
     );
+    // Topic1: peer2's state was cleared on unsubscribe. Re-publishing the identical partial
+    // would be skipped as stale, so verify cleanup via heartbeat re-gossip instead: peer2
+    // should be re-sent all parts on topic1.
+    let empty_mesh = HashMap::new();
+    let empty_fanout = HashMap::new();
+    let actions1 = state1.heartbeat(&empty_mesh, &empty_fanout, 10, 1.0, 100);
+    let partial_msg1 = actions1
+        .iter()
+        .find_map(|action| match action {
+            PublishAction::SendMessage {
+                peer_id,
+                rpc: RpcOut::PartialMessage(pm),
+            } if *peer_id == peer2 && pm.topic_hash == topic1 => Some(pm),
+            _ => None,
+        })
+        .expect("topic1 should be re-gossiped to the re-subscribed peer via heartbeat");
+    // Topic1: Should re-send all parts (state was cleared on unsubscribe).
+    let body1 = partial_msg1.body.as_ref().expect("Should have body");
+    assert_eq!(
+        body1[0], 0b11111111,
+        "Topic1: Should re-send all parts (peer metadata was cleared on unsubscribe)"
+    );
 }
 
 /// Verifies that:
@@ -1111,7 +1044,7 @@ fn test_subscription_options_tracking() {
     let peer2 = PeerId::random();
     let peer3 = PeerId::random();
     let mut state1 = State::default();
-    state1.subscribe(topic_hash.clone(), true, true);
+    state1.enable_partials_for_topic(topic_hash.clone(), true);
     // Peer1: requests and supports partial
     state1.peer_subscribed(
         &peer1,
@@ -1198,7 +1131,7 @@ fn test_handle_received_penalizes_invalid_action_from_metadata() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     state.peer_subscribed(
         &peer,
         topic_hash.clone(),
@@ -1242,7 +1175,7 @@ fn test_metadata_only_update_unchanged_returns_empty() {
     let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     let peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     state.peer_subscribed(
         &peer,
         topic_hash.clone(),
@@ -1291,7 +1224,7 @@ fn test_handle_publish_skips_redundant_update_after_receiving_data() {
     let peer_a = PeerId::random();
     let peer_b = PeerId::random();
     let mut state_a = State::default();
-    state_a.subscribe(topic_hash.clone(), true, true);
+    state_a.enable_partials_for_topic(topic_hash.clone(), true);
     state_a.peer_subscribed(
         &peer_b,
         topic_hash.clone(),
@@ -1404,7 +1337,7 @@ fn test_heartbeat_excludes_mesh_and_fanout_peers() {
     let published_peer = PeerId::random();
     let mut state = State::default();
 
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
 
     for peer in &[mesh_peer, fanout_peer, gossip_peer, published_peer] {
         state.peer_subscribed(
@@ -1486,7 +1419,7 @@ fn test_heartbeat_requests_partial_false_gets_metadata_only() {
     let metadata_only_peer = PeerId::random();
     let cache_peer = PeerId::random();
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
     // Peer that requests partial data.
     state.peer_subscribed(
         &requests_peer,
@@ -1575,7 +1508,7 @@ fn test_heartbeat_max_metadata_length() {
     let gossip_peer = PeerId::random();
     let cache_peer = PeerId::random(); // Used to cache the messages
     let mut state = State::default();
-    state.subscribe(topic_hash.clone(), true, true);
+    state.enable_partials_for_topic(topic_hash.clone(), true);
 
     for peer in [&gossip_peer, &cache_peer] {
         state.peer_subscribed(
@@ -1726,6 +1659,45 @@ fn test_partial_messages_two_node_exchange() {
     assert_eq!(*recv_metadata, Some(vec![0b10101010]));
     assert!(recv_body.is_some());
     assert_eq!(recv_body.as_ref().unwrap()[0], 0b10101010);
+}
+
+/// Verifies that a peer subscribed without partial-message support still sends
+/// full publish messages to peers that request and support partial messages.
+#[test]
+fn test_full_publish_to_partial_peer_when_local_does_not_support_partial() {
+    let (mut gs, _, _, topics) = DefaultBehaviourTestBuilder::default()
+        .peer_no(0)
+        .topics(vec!["test-partial".into()])
+        .to_subscribe(true)
+        .create_network();
+
+    let topic_hash = topics[0].clone();
+    let (_peer, mut queue) = add_peer_with_addr_and_kind(
+        &mut gs,
+        slice::from_ref(&topic_hash),
+        false,
+        false,
+        Multiaddr::empty(),
+        Some(PeerKind::Gossipsubv1_3),
+        true, // requests_partial
+        true, // supports_partial
+    );
+
+    let publish_data = vec![1, 2, 3, 4];
+    gs.publish(topic_hash.clone(), publish_data.clone())
+        .expect("Full publish to partial peer should succeed");
+
+    let mut published = None;
+    while !queue.is_empty() {
+        if let Some(RpcOut::Publish { message, .. }) = queue.try_pop() {
+            published = Some(message);
+            break;
+        }
+    }
+
+    let published = published.expect("Partial peer should receive a full publish message");
+    assert_eq!(published.topic, topic_hash);
+    assert_eq!(published.data, publish_data);
 }
 
 /// Verifies that:
@@ -2056,5 +2028,93 @@ fn test_ihave_not_sent_to_partial_peers() {
     assert!(
         normal_peer_ihave_count > 0,
         "Peer with requestsPartial=false should receive IHAVE messages"
+    );
+}
+
+/// Verifies that:
+/// - Republishing a partial that adds new parts is not stale and is published normally.
+/// - Republishing a partial whose parts are a subset of the cached one adds nothing new, so it is
+///   detected as stale: `handle_publish` returns no actions.
+/// - A stale republish does NOT overwrite the cached partial: a peer that subsequently requests the
+///   message is served the full cached partial, not the stale subset.
+#[test]
+fn test_handle_publish_skips_stale_partial() {
+    let topic_hash = TopicHash::from_raw("test-topic");
+    let group_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let peer = PeerId::random();
+    let requester = PeerId::random();
+    let mut state = State::default();
+    state.enable_partials_for_topic(topic_hash.clone(), true);
+    for p in [&peer, &requester] {
+        state.peer_subscribed(
+            p,
+            topic_hash.clone(),
+            SubscriptionOpts {
+                requests_partial: true,
+                supports_partial: true,
+            },
+        );
+    }
+
+    // Publish a partial holding the lower four parts. This caches it locally.
+    let mut message = Bitmap::new(group_id);
+    message.fill_parts(0b00001111);
+    let actions = state
+        .handle_publish(topic_hash.clone(), message, HashSet::from([peer]))
+        .expect("Publish should succeed");
+    assert_eq!(actions.len(), 1, "Initial publish should send one message");
+
+    // Republish a partial that adds the upper four parts. Not stale, should be sent.
+    let mut superset = Bitmap::new(group_id);
+    superset.fill_parts(0b11111111);
+    let actions = state
+        .handle_publish(topic_hash.clone(), superset, HashSet::from([peer]))
+        .expect("Publish should succeed");
+    assert_eq!(
+        actions.len(),
+        1,
+        "Republishing a partial with new parts should not be considered stale"
+    );
+
+    // Republish a partial that is a strict subset of what was already published.
+    // It adds nothing new, so it is stale: no actions are returned.
+    let mut stale = Bitmap::new(group_id);
+    stale.fill_parts(0b00000011);
+    let actions = state
+        .handle_publish(topic_hash.clone(), stale, HashSet::from([peer]))
+        .expect("Publish should succeed");
+    assert!(
+        actions.is_empty(),
+        "Republishing a stale partial (subset of cached parts) should produce no actions"
+    );
+
+    // A fresh peer announces it has no parts. We should respond from the cached partial.
+    // If the stale republish had overwritten the cache, the response would only carry
+    // 0b00000011; instead it must carry the full 0b11111111 that is still cached.
+    let request = PartialMessage {
+        group_id: group_id.to_vec(),
+        topic_hash: topic_hash.clone(),
+        body: None,
+        metadata: Some(vec![0b00000000]),
+    };
+    let mut actions = state.handle_received(requester, request);
+    assert_eq!(actions.len(), 1, "Should respond with the cached partial");
+    let ReceivedAction::Publish(PublishAction::SendMessage {
+        peer_id,
+        rpc: RpcOut::PartialMessage(response),
+    }) = actions.remove(0)
+    else {
+        panic!("Expected a Publish(SendMessage) response");
+    };
+    assert_eq!(peer_id, requester);
+    assert_eq!(
+        response.metadata,
+        Some(vec![0b11111111]),
+        "A stale republish must not overwrite the cached partial"
+    );
+    assert_eq!(
+        response.body.expect("Response should carry a body")[0],
+        0b11111111,
+        "Response should serve all cached parts, not the stale subset"
     );
 }

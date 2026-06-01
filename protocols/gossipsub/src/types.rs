@@ -28,7 +28,7 @@ use futures_timer::Delay;
 use hashlink::LinkedHashMap;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
-use quick_protobuf::MessageWrite;
+use prost::Message as _;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
@@ -46,7 +46,7 @@ pub struct FailedMessages {
     pub non_priority: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
     /// The message is considered valid, and it should be delivered and forwarded to the network.
@@ -186,7 +186,7 @@ impl RawMessage {
             signature: self.signature.clone(),
             key: self.key.clone(),
         };
-        message.get_size()
+        message.encoded_len()
     }
 }
 
@@ -223,10 +223,7 @@ pub struct Message {
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Message")
-            .field(
-                "data",
-                &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)),
-            )
+            .field("data", &format_args!("{:<20}", hex_fmt::HexFmt(&self.data)))
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
             .field("topic", &self.topic)
@@ -358,6 +355,8 @@ pub enum RpcOut {
         requests_partial: bool,
         supports_partial: bool,
     },
+    /// Subscribe to multiple topics in a single RPC (hello packet on new connection).
+    SubscribeMany(Vec<(TopicHash, bool, bool)>),
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
     /// Send a GRAFT control message.
@@ -376,14 +375,14 @@ pub enum RpcOut {
     /// Send a test extension message.
     TestExtension,
     /// Send a partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     PartialMessage(crate::partial_messages::PartialMessage),
 }
 
 impl RpcOut {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
-    pub fn into_protobuf(self) -> proto::RPC {
+    pub fn into_protobuf(self) -> proto::Rpc {
         self.into()
     }
 
@@ -392,6 +391,7 @@ impl RpcOut {
         matches!(
             self,
             RpcOut::Subscribe { .. }
+                | RpcOut::SubscribeMany(_)
                 | RpcOut::Unsubscribe(_)
                 | RpcOut::Graft(_)
                 | RpcOut::Prune(_)
@@ -400,17 +400,17 @@ impl RpcOut {
     }
 }
 
-impl From<RpcOut> for proto::RPC {
+impl From<RpcOut> for proto::Rpc {
     /// Converts the RPC into protobuf format.
     fn from(rpc: RpcOut) -> Self {
         match rpc {
-            RpcOut::Publish { message, .. } => proto::RPC {
+            RpcOut::Publish { message, .. } => proto::Rpc {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
                 control: None,
                 partial: None,
             },
-            RpcOut::Forward { message, .. } => proto::RPC {
+            RpcOut::Forward { message, .. } => proto::Rpc {
                 publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
@@ -420,24 +420,40 @@ impl From<RpcOut> for proto::RPC {
                 topic,
                 requests_partial,
                 supports_partial,
-            } => proto::RPC {
+            } => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: vec![proto::SubOpts {
                     subscribe: Some(true),
                     topic_id: Some(topic.into_string()),
-                    requestsPartial: Some(requests_partial),
-                    supportsPartial: Some(supports_partial),
+                    requests_partial: Some(requests_partial),
+                    supports_partial: Some(supports_partial),
                 }],
                 control: None,
                 partial: None,
             },
-            RpcOut::Unsubscribe(topic) => proto::RPC {
+            RpcOut::SubscribeMany(topics) => proto::Rpc {
+                publish: Vec::new(),
+                subscriptions: topics
+                    .into_iter()
+                    .map(
+                        |(topic, requests_partial, supports_partial)| proto::SubOpts {
+                            subscribe: Some(true),
+                            topic_id: Some(topic.into_string()),
+                            requests_partial: Some(requests_partial),
+                            supports_partial: Some(supports_partial),
+                        },
+                    )
+                    .collect(),
+                control: None,
+                partial: None,
+            },
+            RpcOut::Unsubscribe(topic) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: vec![proto::SubOpts {
                     subscribe: Some(false),
                     topic_id: Some(topic.into_string()),
-                    requestsPartial: None,
-                    supportsPartial: None,
+                    requests_partial: None,
+                    supports_partial: None,
                 }],
                 control: None,
                 partial: None,
@@ -445,7 +461,7 @@ impl From<RpcOut> for proto::RPC {
             RpcOut::IHave(IHave {
                 topic_hash,
                 message_ids,
-            }) => proto::RPC {
+            }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -461,7 +477,7 @@ impl From<RpcOut> for proto::RPC {
                 }),
                 partial: None,
             },
-            RpcOut::IWant(IWant { message_ids }) => proto::RPC {
+            RpcOut::IWant(IWant { message_ids }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -476,7 +492,7 @@ impl From<RpcOut> for proto::RPC {
                 }),
                 partial: None,
             },
-            RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
+            RpcOut::Graft(Graft { topic_hash }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: vec![],
                 control: Some(proto::ControlMessage {
@@ -496,7 +512,7 @@ impl From<RpcOut> for proto::RPC {
                 peers,
                 backoff,
             }) => {
-                proto::RPC {
+                proto::Rpc {
                     publish: Vec::new(),
                     subscriptions: vec![],
                     control: Some(proto::ControlMessage {
@@ -521,7 +537,7 @@ impl From<RpcOut> for proto::RPC {
                     partial: None,
                 }
             }
-            RpcOut::IDontWant(IDontWant { message_ids }) => proto::RPC {
+            RpcOut::IDontWant(IDontWant { message_ids }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -536,7 +552,7 @@ impl From<RpcOut> for proto::RPC {
                 }),
                 partial: None,
             },
-            RpcOut::Extensions(Extensions { partial_messages }) => proto::RPC {
+            RpcOut::Extensions(Extensions { partial_messages }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -545,33 +561,31 @@ impl From<RpcOut> for proto::RPC {
                     graft: vec![],
                     prune: vec![],
                     idontwant: vec![],
-                    extensions: Some(proto::ControlExtensions {
-                        partialMessages: partial_messages,
-                    }),
+                    extensions: Some(proto::ControlExtensions { partial_messages }),
                 }),
                 partial: None,
             },
-            RpcOut::TestExtension => proto::RPC {
+            RpcOut::TestExtension => proto::Rpc {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
                 partial: None,
             },
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                 topic_hash,
                 group_id,
                 metadata,
                 body,
-            }) => proto::RPC {
+            }) => proto::Rpc {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
                 partial: Some(proto::PartialMessagesExtension {
-                    topicID: Some(topic_hash.as_str().as_bytes().to_vec()),
-                    groupID: Some(group_id),
-                    partialMessage: body,
-                    partsMetadata: metadata,
+                    topic_id: Some(topic_hash.as_str().as_bytes().to_vec()),
+                    group_id: Some(group_id),
+                    partial_message: body,
+                    parts_metadata: metadata,
                 }),
             },
         }
@@ -588,7 +602,7 @@ pub struct RpcIn {
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<ControlAction>,
     /// Partial messages extension.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,
 }
 
@@ -604,7 +618,7 @@ impl fmt::Debug for RpcIn {
         if !self.control_msgs.is_empty() {
             b.field("control_msgs", &self.control_msgs);
         }
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         b.field("partial_messages", &self.partial_message);
 
         b.finish()

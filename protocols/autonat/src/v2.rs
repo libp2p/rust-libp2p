@@ -25,7 +25,7 @@ pub(crate) mod protocol;
 pub mod server;
 
 pub(crate) mod generated {
-    #![allow(unreachable_pub)]
+    #![allow(unreachable_pub, clippy::enum_variant_names)]
     include!("v2/generated/mod.rs");
 }
 

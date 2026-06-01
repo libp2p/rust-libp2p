@@ -68,7 +68,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
+                prost_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
             );
 
             let rpc = framed
@@ -123,7 +123,7 @@ pub enum FloodsubError {
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct CodecError(#[from] quick_protobuf_codec::Error);
+pub struct CodecError(#[from] prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -155,7 +155,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
+                prost_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
             );
             framed.send(self.into_rpc()).await?;
             framed.close().await?;

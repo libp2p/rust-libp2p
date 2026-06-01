@@ -10,14 +10,14 @@ repository = "https://github.com/libp2p/rust-libp2p"
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-bytes = "1"
+bytes.workspace = true
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
-quick-protobuf = "0.8"
-rand = "0.8.3"
+prost = { workspace = true }
+rand = { workspace = true }
 static_assertions = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }

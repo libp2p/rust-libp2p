@@ -115,7 +115,6 @@ where
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
-                endpoint: _,
                 ..
             }) => {
                 self.peer_info.insert(

@@ -32,14 +32,16 @@ mod protocol;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;
-    pub(crate) use self::message_v2::pb::{
+    pub use self::message_v2_pb::stop_message::Type as StopMessageType;
+    pub(crate) use self::message_v2_pb::{
         HopMessage, Limit, Peer, Reservation, Status, StopMessage,
-        mod_HopMessage::Type as HopMessageType,
+        hop_message::Type as HopMessageType,
     };
 }
 
-pub use behaviour::{Behaviour, CircuitId, Config, Event, StatusCode, rate_limiter::RateLimiter};
+pub use behaviour::{
+    Behaviour, CircuitId, Config, Event, Status, StatusCode, rate_limiter::RateLimiter,
+};
 pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 /// Types related to the relay protocol inbound.

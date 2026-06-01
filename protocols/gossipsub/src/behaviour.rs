@@ -47,7 +47,7 @@ use libp2p_swarm::{
 };
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
-use quick_protobuf::{MessageWrite, Writer};
+use prost::Message as _;
 use rand::{
     seq::{IteratorRandom, SliceRandom},
     thread_rng,
@@ -77,7 +77,7 @@ use crate::{
         SubscriptionAction,
     },
 };
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 use crate::{
     extensions::partial_messages::{self, Partial, PublishAction, ReceivedAction},
     types::SubscriptionOpts,
@@ -153,7 +153,7 @@ pub enum Event {
         message: Message,
     },
     /// A new partial message has been received.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     Partial {
         /// Topic on which the partiall was published.
         topic_hash: TopicHash,
@@ -172,6 +172,12 @@ pub enum Event {
         peer_id: PeerId,
         /// The topic it has subscribed to.
         topic: TopicHash,
+        /// Whether the remote peer indicated it supports partial messages on this topic.
+        #[cfg(feature = "partial-messages")]
+        supports_partial: bool,
+        /// Whether the remote peer indicated it requests partial messages on this topic.
+        #[cfg(feature = "partial-messages")]
+        requests_partial: bool,
     },
     /// A remote unsubscribed from a topic.
     Unsubscribed {
@@ -316,7 +322,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// Partial Messages extension handler.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     partial_messages_extension: partial_messages::State,
 
     /// Map of topics to list of peers that we publish to, but don't subscribe to.
@@ -482,7 +488,7 @@ where
             data_transform,
             failed_messages: Default::default(),
             gossip_promises: Default::default(),
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             partial_messages_extension: Default::default(),
         })
     }
@@ -548,32 +554,6 @@ where
     /// Returns [`Ok(true)`](Ok) if the subscription worked.
     /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, false, false)
-    }
-
-    /// Subscribe to a topic with partial options.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    #[cfg(feature = "partial_messages")]
-    pub fn subscribe_partial<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, true, requests_partial)
-    }
-
-    /// Subscribe to a topic.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    fn subscribe_inner<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        supports_partial: bool,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
@@ -583,6 +563,14 @@ where
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
+
+        #[cfg(not(feature = "partial-messages"))]
+        let (requests_partial, supports_partial) = (false, false);
+        #[cfg(feature = "partial-messages")]
+        let SubscriptionOpts {
+            requests_partial,
+            supports_partial,
+        } = self.partial_messages_extension.opts(&topic_hash);
 
         // send subscription request to all peers
         for peer_id in self.connected_peers.keys().copied().collect::<Vec<_>>() {
@@ -599,10 +587,6 @@ where
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
         self.join(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .subscribe(topic_hash, supports_partial, requests_partial);
 
         tracing::debug!(%topic, "Subscribed to topic");
         Ok(true)
@@ -630,10 +614,6 @@ where
         // call LEAVE(topic)
         // this will remove the topic from the mesh
         self.leave(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .unsubscribe(&topic_hash.clone());
 
         tracing::debug!(topic=%topic_hash, "Unsubscribed from topic");
         true
@@ -690,15 +670,23 @@ where
 
         let candidates = self.publish_peers(&topic_hash);
 
-        #[cfg(feature = "partial_messages")]
-        let candidates = candidates
-            .filter(|peer_id| {
-                !self
-                    .partial_messages_extension
-                    .requests_partial(peer_id, &topic_hash)
-            })
-            .collect();
-        #[cfg(not(feature = "partial_messages"))]
+        #[cfg(feature = "partial-messages")]
+        let candidates = if self
+            .partial_messages_extension
+            .opts(&topic_hash)
+            .supports_partial
+        {
+            candidates
+                .filter(|peer_id| {
+                    !self
+                        .partial_messages_extension
+                        .requests_partial(peer_id, &topic_hash)
+                })
+                .collect()
+        } else {
+            candidates.collect()
+        };
+        #[cfg(not(feature = "partial-messages"))]
         let candidates = candidates.collect();
 
         let recipients = self.filter_publish_candidates(&topic_hash, candidates);
@@ -861,7 +849,19 @@ where
         recipients
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
+    /// Enable partial messages for a topic. This must be called while not subscribed to the topic.
+    /// Partials can be enabled only once per topic.
+    pub fn enable_partials_for_topic(&mut self, topic_hash: TopicHash, requests_partials: bool) {
+        if self.mesh.contains_key(&topic_hash) {
+            tracing::warn!(topic=%topic_hash, "Tried to enable partials while subscribed");
+            return;
+        }
+        self.partial_messages_extension
+            .enable_partials_for_topic(topic_hash, requests_partials);
+    }
+
+    #[cfg(feature = "partial-messages")]
     /// Report an invalid partial message from a peer, originating at the application layer.
     /// This triggers penalties for the peer that sent the invalid partial.
     pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
@@ -870,7 +870,7 @@ where
         }
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn publish_partial<P: Partial + 'static>(
         &mut self,
         topic: impl Into<TopicHash>,
@@ -1341,7 +1341,7 @@ where
         // IHAVE flood protection
         let peer_have = self.count_received_ihave.entry(*peer_id).or_insert(0);
         *peer_have += 1;
-        if *peer_have > self.config.max_ihave_messages() {
+        if *peer_have > self.config.max_ihave_messages_heartbeat() {
             tracing::debug!(
                 peer=%peer_id,
                 "IHAVE: peer has advertised too many times ({}) within this heartbeat \
@@ -1352,7 +1352,7 @@ where
         }
 
         if let Some(iasked) = self.count_sent_iwant.get(peer_id)
-            && *iasked >= self.config.max_ihave_length()
+            && *iasked >= self.config.max_control_messages()
         {
             tracing::debug!(
                 peer=%peer_id,
@@ -1373,6 +1373,20 @@ where
                     %topic,
                     "IHAVE: Ignoring IHAVE - Not subscribed to topic"
                 );
+                continue;
+            }
+
+            // We should not handle IHAVEs from peers that support partials on topics where we
+            // request partial messages.
+            #[cfg(feature = "partial-messages")]
+            if self
+                .partial_messages_extension
+                .opts(&topic)
+                .requests_partial
+                && self
+                    .partial_messages_extension
+                    .supports_partial(peer_id, &topic)
+            {
                 continue;
             }
 
@@ -1397,8 +1411,8 @@ where
         if !iwant_ids.is_empty() {
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
-            if *iasked + iask > self.config.max_ihave_length() {
-                iask = self.config.max_ihave_length().saturating_sub(*iasked);
+            if *iasked + iask > self.config.max_control_messages() {
+                iask = self.config.max_control_messages().saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -2113,7 +2127,7 @@ where
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension.peer_subscribed(
                         propagation_source,
                         topic_hash.clone(),
@@ -2173,6 +2187,10 @@ where
                     application_event.push(ToSwarm::GenerateEvent(Event::Subscribed {
                         peer_id: *propagation_source,
                         topic: topic_hash.clone(),
+                        #[cfg(feature = "partial-messages")]
+                        supports_partial: subscription.options.supports_partial,
+                        #[cfg(feature = "partial-messages")]
+                        requests_partial: subscription.options.requests_partial,
                     }));
                 }
                 SubscriptionAction::Unsubscribe => {
@@ -2189,7 +2207,7 @@ where
                         }
                     }
 
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension
                         .peer_unsubscribed(*propagation_source, topic_hash);
 
@@ -2587,12 +2605,12 @@ where
             #[cfg(feature = "metrics")]
             {
                 if let Some(m) = self.metrics.as_mut() {
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     {
                         let mesh_peers = peers.len();
                         m.set_mesh_peers(topic_hash, mesh_peers, false);
                     }
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     {
                         let (partial, full): (Vec<PeerId>, Vec<PeerId>) =
                             peers.iter().partition(|peer_id| {
@@ -2734,7 +2752,7 @@ where
             }
         }
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         {
             let actions = self.partial_messages_extension.heartbeat(
                 &self.mesh,
@@ -2779,7 +2797,7 @@ where
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
-            if message_ids.len() > self.config.max_ihave_length() {
+            if message_ids.len() > self.config.max_control_messages() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
                     "too many messages for gossip; will truncate IHAVE list ({} messages)",
@@ -2808,7 +2826,7 @@ where
                             .0;
                     // Don't send IHAVE to peers that requested partial messages -
                     // they receive metadata via partial message gossip instead.
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     let filter = filter
                         && !self
                             .partial_messages_extension
@@ -2821,12 +2839,12 @@ where
             for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
-                if peer_message_ids.len() > self.config.max_ihave_length() {
+                if peer_message_ids.len() > self.config.max_control_messages() {
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_ihave_length());
-                    peer_message_ids.truncate(self.config.max_ihave_length());
+                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_control_messages());
+                    peer_message_ids.truncate(self.config.max_control_messages());
                 }
 
                 // send an IHAVE message
@@ -2991,6 +3009,14 @@ where
                     continue;
                 }
 
+                #[cfg(feature = "partial-messages")]
+                if self
+                    .partial_messages_extension
+                    .requests_partial(peer_id, topic)
+                {
+                    continue;
+                }
+
                 tracing::debug!(%peer_id, message_id=%msg_id, "Sending message to peer");
 
                 self.send_message(
@@ -3032,12 +3058,7 @@ where
                         key: None,
                     };
 
-                    let mut buf = Vec::with_capacity(message.get_size());
-                    let mut writer = Writer::new(&mut buf);
-
-                    message
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
+                    let buf = message.encode_to_vec();
 
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
@@ -3114,7 +3135,7 @@ where
                     m.msg_sent(&message.topic, false, message.raw_protobuf_len())
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                     topic_hash,
                     body,
@@ -3203,28 +3224,25 @@ where
         }
 
         tracing::debug!(peer=%peer_id, "New peer connected");
-        // We need to send our subscriptions to the newly-connected node.
-        for topic_hash in self.mesh.clone().into_keys() {
-            #[cfg(not(feature = "partial_messages"))]
-            let (requests_partial, supports_partial) = (false, false);
-            #[cfg(feature = "partial_messages")]
-            let Some(SubscriptionOpts {
-                requests_partial,
-                supports_partial,
-            }) = self.partial_messages_extension.opts(&topic_hash)
-            else {
-                tracing::error!("Partial subscription options should exist for subscribed topic");
-                return;
-            };
+        // Send all our topic subscriptions to the newly-connected peer in a single hello RPC.
+        let topics: Vec<_> = self
+            .mesh
+            .keys()
+            .cloned()
+            .map(|topic_hash| {
+                #[cfg(not(feature = "partial-messages"))]
+                let (requests_partial, supports_partial) = (false, false);
+                #[cfg(feature = "partial-messages")]
+                let (requests_partial, supports_partial) = {
+                    let opts = self.partial_messages_extension.opts(&topic_hash);
+                    (opts.requests_partial, opts.supports_partial)
+                };
+                (topic_hash, requests_partial, supports_partial)
+            })
+            .collect();
 
-            self.send_message(
-                peer_id,
-                RpcOut::Subscribe {
-                    topic: topic_hash.clone(),
-                    requests_partial,
-                    supports_partial,
-                },
-            );
+        if !topics.is_empty() {
+            self.send_message(peer_id, RpcOut::SubscribeMany(topics));
         }
     }
 
@@ -3304,7 +3322,7 @@ where
                     m.dec_topic_peers(topic);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 self.partial_messages_extension.peer_disconnected(peer_id);
 
                 // remove from fanout
@@ -3417,10 +3435,10 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
 
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3457,9 +3475,9 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3564,19 +3582,7 @@ where
                 }
 
                 // Handle messages
-                for (count, raw_message) in rpc.messages.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
+                for raw_message in rpc.messages {
                     self.handle_received_message(raw_message, &propagation_source);
                 }
 
@@ -3586,20 +3592,7 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more control messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
-
+                for control_msg in rpc.control_msgs {
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,
@@ -3659,7 +3652,7 @@ where
                     self.handle_prune(&propagation_source, prune_msgs);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 if let Some(partial_message) = rpc.partial_message {
                     if self
                         .peer_score
