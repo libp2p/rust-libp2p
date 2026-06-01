@@ -418,8 +418,7 @@ impl NetworkBehaviour for Behaviour {
                             GatewayEvent::Mapped(mapping) => {
                                 self.add_requests.remove(&mapping);
 
-                                let key =
-                                    (mapping.protocol, mapping.internal_addr.port());
+                                let key = (mapping.protocol, mapping.internal_addr.port());
 
                                 if let Vacant(e) = self.mappings.entry(key) {
                                     // New mapping or retry success: insert the active entry.
@@ -468,8 +467,7 @@ impl NetworkBehaviour for Behaviour {
                                     }
                                 };
 
-                                let key =
-                                    (mapping.protocol, mapping.internal_addr.port());
+                                let key = (mapping.protocol, mapping.internal_addr.port());
                                 // Remove the Active entry if present (renewal failure).
                                 let was_active = self.mappings.remove(&key).is_some();
 
