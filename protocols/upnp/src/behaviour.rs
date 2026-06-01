@@ -20,6 +20,16 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{
+    collections::{HashMap, VecDeque, hash_map::Entry::Vacant},
+    error::Error,
+    hash::{Hash, Hasher},
+    net::{self, IpAddr, SocketAddr, SocketAddrV4},
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use futures::{Future, StreamExt, channel::oneshot};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -30,16 +40,6 @@ use libp2p_core::{
 use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm, NetworkBehaviour, NewListenAddr,
     ToSwarm, derive_prelude::PeerId, dummy,
-};
-use std::collections::hash_map::Entry::Vacant;
-use std::{
-    collections::{HashMap, VecDeque},
-    error::Error,
-    hash::{Hash, Hasher},
-    net::{self, IpAddr, SocketAddr, SocketAddrV4},
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
 };
 
 use crate::tokio::{Gateway, is_addr_global};
@@ -508,7 +508,8 @@ impl NetworkBehaviour for Behaviour {
                                         protocol=%mapping.protocol,
                                         "giving up on UPnP mapping after {new_retry_count} attempts"
                                     );
-                                    // In-flight gateway requests entry already removed; leave it gone.
+                                    // In-flight gateway requests entry already removed; leave it
+                                    // gone.
                                 }
 
                                 if was_active {
@@ -689,11 +690,11 @@ fn multiaddr_to_socketaddr_protocol(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{io::Error, net::Ipv4Addr, task::Waker};
+
     use futures::channel::mpsc;
-    use std::io::Error;
-    use std::net::Ipv4Addr;
-    use std::task::Waker;
+
+    use super::*;
 
     fn build_behaviour_with_gateway() -> (
         Behaviour,
@@ -705,7 +706,8 @@ mod tests {
         let gateway = crate::tokio::Gateway {
             sender: req_tx,
             receiver: event_rx,
-            external_addr: "203.0.113.1".parse().unwrap(), // TEST-NET-3 (RFC 5737), passes is_addr_global()
+            external_addr: "203.0.113.1".parse().unwrap(), /* TEST-NET-3 (RFC 5737), passes
+                                                            * is_addr_global() */
         };
         let behaviour = Behaviour {
             state: GatewayState::Available(gateway),
