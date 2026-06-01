@@ -23,7 +23,7 @@
 use std::{
     collections::{HashMap, VecDeque, hash_map::Entry::Vacant},
     error::Error,
-    hash::{Hash, Hasher},
+    hash::Hash,
     net::{self, IpAddr, SocketAddr, SocketAddrV4},
     pin::Pin,
     task::{Context, Poll},
@@ -44,13 +44,8 @@ use libp2p_swarm::{
 
 use crate::tokio::{Gateway, is_addr_global};
 
-/// HashMap key for port-level mapping state.
-/// Using `Discriminant` because `PortMappingProtocol` does not implement `Hash`.
-type MappingKey = (std::mem::Discriminant<PortMappingProtocol>, u16);
-
-fn mapping_key(protocol: PortMappingProtocol, port: u16) -> MappingKey {
-    (std::mem::discriminant(&protocol), port)
-}
+/// HashMap key for port-level mapping state: (protocol, port).
+type MappingKey = (PortMappingProtocol, u16);
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
@@ -107,7 +102,7 @@ pub(crate) enum GatewayEvent {
 }
 
 /// Mapping of a Protocol and Port on the gateway.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Mapping {
     pub(crate) listener_id: ListenerId,
     pub(crate) protocol: PortMappingProtocol,
@@ -126,15 +121,6 @@ impl Mapping {
         self.multiaddr
             .replace(0, |_| Some(addr))
             .expect("multiaddr should be valid")
-    }
-}
-
-impl Hash for Mapping {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.listener_id.hash(state);
-        std::mem::discriminant(&self.protocol).hash(state);
-        self.internal_addr.hash(state);
-        self.multiaddr.hash(state);
     }
 }
 
@@ -240,8 +226,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let key = mapping_key(protocol, addr.port());
-                if self.mappings.contains_key(&key) {
+                if self.mappings.contains_key(&(protocol, addr.port())) {
                     tracing::debug!(
                         multiaddress=%multiaddr,
                         "port from multiaddress is already mapped on the gateway"
@@ -320,7 +305,7 @@ impl NetworkBehaviour for Behaviour {
                     }
                     GatewayState::Available(gateway) => {
                         if let Some((mapping, _state)) =
-                            self.mappings.remove(&mapping_key(protocol, addr.port()))
+                            self.mappings.remove(&(protocol, addr.port()))
                         {
                             if let Err(err) = gateway
                                 .sender
@@ -434,7 +419,7 @@ impl NetworkBehaviour for Behaviour {
                                 self.add_requests.remove(&mapping);
 
                                 let key =
-                                    mapping_key(mapping.protocol, mapping.internal_addr.port());
+                                    (mapping.protocol, mapping.internal_addr.port());
 
                                 if let Vacant(e) = self.mappings.entry(key) {
                                     // New mapping or retry success: insert the active entry.
@@ -484,7 +469,7 @@ impl NetworkBehaviour for Behaviour {
                                 };
 
                                 let key =
-                                    mapping_key(mapping.protocol, mapping.internal_addr.port());
+                                    (mapping.protocol, mapping.internal_addr.port());
                                 // Remove the Active entry if present (renewal failure).
                                 let was_active = self.mappings.remove(&key).is_some();
 
@@ -769,7 +754,7 @@ mod tests {
         assert!(
             behaviour
                 .mappings
-                .contains_key(&mapping_key(PortMappingProtocol::TCP, port))
+                .contains_key(&(PortMappingProtocol::TCP, port))
         );
 
         // The listener expires → RemoveMapping enqueued to the gateway.
@@ -849,7 +834,7 @@ mod tests {
         // The port is already actively mapped on the gateway for old_ip.
         let old_mapping = build_mapping(listener_id, old_ip, port);
         behaviour.mappings.insert(
-            mapping_key(old_mapping.protocol, old_mapping.internal_addr.port()),
+            (old_mapping.protocol, old_mapping.internal_addr.port()),
             (
                 old_mapping.clone(),
                 Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
@@ -919,7 +904,7 @@ mod tests {
         // The port is already actively mapped on the gateway for old_ip.
         let old_mapping = build_mapping(listener_id, old_ip, port);
         behaviour.mappings.insert(
-            mapping_key(old_mapping.protocol, old_mapping.internal_addr.port()),
+            (old_mapping.protocol, old_mapping.internal_addr.port()),
             (
                 old_mapping.clone(),
                 Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
@@ -964,7 +949,7 @@ mod tests {
         assert_eq!(
             behaviour
                 .mappings
-                .get(&mapping_key(PortMappingProtocol::TCP, port))
+                .get(&(PortMappingProtocol::TCP, port))
                 .map(|(m, _)| m),
             Some(&new_mapping)
         );
@@ -991,7 +976,7 @@ mod tests {
         // The port is already actively mapped on the gateway for first_ip.
         let mapping = build_mapping(listener_id, first_ip, port);
         behaviour.mappings.insert(
-            mapping_key(mapping.protocol, mapping.internal_addr.port()),
+            (mapping.protocol, mapping.internal_addr.port()),
             (
                 mapping.clone(),
                 Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
