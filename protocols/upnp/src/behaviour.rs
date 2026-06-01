@@ -602,7 +602,7 @@ fn renew_mappings(
     gateway: &mut Gateway,
     cx: &mut Context<'_>,
 ) {
-    for (_key, (mapping, timeout)) in mappings.iter_mut() {
+    for (mapping, timeout) in mappings.values_mut() {
         // Skip if a request for this mapping is already in-flight.
         if add_requests.contains_key(mapping) {
             continue;
