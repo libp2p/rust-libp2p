@@ -121,8 +121,8 @@ pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<()> {
             "buffer too short for declared message length",
         ));
     }
-    // Advance buffer past the length prefix
-    *buf = remaining;
+    // Advance buffer past the length prefix, capping at the end of the buffer.
+    *buf = &remaining[..message_length];
     Ok(())
 }
 

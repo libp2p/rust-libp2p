@@ -82,8 +82,6 @@ pub struct ProtocolConfig {
     pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
     /// The max number of publish messages to decode in a single RPC.
     pub(crate) max_publish_messages: usize,
-    /// The max number of control messages per type to decode in a single RPC.
-    pub(crate) max_control_messages: usize,
     /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
     /// subscription in a single RPC. Messages exceeding this size will be rejected.
     pub(crate) max_control_message_size: usize,
@@ -102,7 +100,6 @@ impl Default for ProtocolConfig {
             default_max_transmit_size: 65536,
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 500,
-            max_control_messages: 500,
             max_control_message_size: 5120, // 5KB
         }
     }
@@ -159,7 +156,6 @@ where
                     self.validation_mode,
                     self.max_transmit_sizes,
                     self.max_publish_messages,
-                    self.max_control_messages,
                     self.max_control_message_size,
                 ),
             ),
@@ -185,7 +181,6 @@ where
                     self.validation_mode,
                     self.max_transmit_sizes,
                     self.max_publish_messages,
-                    self.max_control_messages,
                     self.max_control_message_size,
                 ),
             ),
@@ -205,8 +200,6 @@ pub struct GossipsubCodec {
     max_transmit_sizes: HashMap<TopicHash, usize>,
     /// The max number of publish messages to decode in a single RPC.
     max_publish_messages: usize,
-    /// The max number of control messages per type to decode in a single RPC.
-    max_control_messages: usize,
     /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
     /// subscription in a single RPC. Messages exceeding this size will be rejected.
     max_control_message_size: usize,
@@ -218,7 +211,6 @@ impl GossipsubCodec {
         validation_mode: ValidationMode,
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
-        max_control_messages: usize,
         max_control_message_size: usize,
     ) -> GossipsubCodec {
         let codec = prost_codec::Codec::new(max_length);
@@ -227,7 +219,6 @@ impl GossipsubCodec {
             codec,
             max_transmit_sizes,
             max_publish_messages,
-            max_control_messages,
             max_control_message_size,
         }
     }
@@ -299,11 +290,10 @@ impl Encoder for GossipsubCodec {
 
 /// Validate RPC limits by parsing the wire format without allocating.
 ///
-/// Note: `src` should already be the message bytes WITHOUT the length prefix.
+/// Note: `src` should be the message bytes with the length prefix.
 fn validate_rpc_limits(
     mut buf: &[u8],
     max_publish_messages: usize,
-    max_control_messages: usize,
     max_control_message_size: usize,
 ) -> io::Result<()> {
     // Consume length prefix and get message bytes from length-prefixed buffer for validation
@@ -342,7 +332,6 @@ fn validate_rpc_limits(
             3 => {
                 let control_bytes = consume_message(&mut buf)?;
                 let field_size = control_bytes.len();
-                validate_control_message(control_bytes, max_control_messages)?;
                 control_size += field_size;
                 if control_size > max_control_message_size {
                     return Err(io::Error::new(
@@ -360,25 +349,6 @@ fn validate_rpc_limits(
     Ok(())
 }
 
-/// Validates a ControlMessage and checks message count limits.
-fn validate_control_message(control_bytes: &[u8], max_control_messages: usize) -> io::Result<()> {
-    let mut control_remaining = control_bytes;
-    let mut control_count = 0;
-    while !control_remaining.is_empty() {
-        decode_field_tag(&mut control_remaining)?;
-        control_count += 1;
-        if control_count > max_control_messages {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "too many control messages",
-            ));
-        }
-        // Skip sub-message bytes (size is validated at RPC level)
-        consume_message(&mut control_remaining)?;
-    }
-    Ok(())
-}
-
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
     type Error = prost_codec::Error;
@@ -388,7 +358,6 @@ impl Decoder for GossipsubCodec {
         validate_rpc_limits(
             src.as_ref(),
             self.max_publish_messages,
-            self.max_control_messages,
             self.max_control_message_size,
         )?;
 
@@ -818,7 +787,6 @@ mod tests {
                 ValidationMode::Strict,
                 HashMap::new(),
                 5000,
-                1000,
                 5000,
             );
             let mut buf = BytesMut::new();
@@ -858,7 +826,6 @@ mod tests {
             ValidationMode::Strict,
             HashMap::new(),
             500,
-            500,
             5000,
         );
 
@@ -882,7 +849,6 @@ mod tests {
             u32::MAX as usize,
             ValidationMode::Strict,
             HashMap::new(),
-            500,
             500,
             5000,
         );
@@ -911,7 +877,6 @@ mod tests {
             u32::MAX as usize,
             ValidationMode::Strict,
             HashMap::new(),
-            500,
             500,
             100, // max_control_message_size: 100 bytes
         );
@@ -943,7 +908,6 @@ mod tests {
             ValidationMode::Strict,
             HashMap::new(),
             500,
-            500,
             100, // max_control_message_size: 100 bytes
         );
 
@@ -974,7 +938,6 @@ mod tests {
             ValidationMode::Strict,
             HashMap::new(),
             500,
-            500,
             100, // max_control_message_size: 100 bytes
         );
 
@@ -1004,7 +967,6 @@ mod tests {
             u32::MAX as usize,
             ValidationMode::Anonymous,
             HashMap::new(),
-            500,
             500,
             5120, // 5KB max_control_message_size
         );
@@ -1044,7 +1006,6 @@ mod tests {
             u32::MAX as usize,
             ValidationMode::Strict,
             HashMap::new(),
-            500,
             500,
             100, // max_control_message_size: 100 bytes
         );

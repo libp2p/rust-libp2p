@@ -1063,14 +1063,6 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum number of control messages by type we will process in a single RPC. The default
-    /// is 5000.
-    pub fn max_control_messages(&mut self, size: usize) -> &mut Self {
-        self.config.max_control_messages = size;
-        self.config.protocol.max_control_messages = size;
-        self
-    }
-
     /// The maximum byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
     /// subscription we will process in a single RPC. Messages exceeding this size will be rejected.
     /// The default is 5120 (5KB).
