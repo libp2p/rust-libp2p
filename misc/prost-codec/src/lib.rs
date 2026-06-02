@@ -139,7 +139,7 @@ pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<u32> {
 ///
 /// Returns the message bytes as a slice. Advances the buffer past the message.
 /// This is useful for extracting nested messages without copying.
-pub fn consume_message<'a>(buf: &mut &'a [u8]) -> io::Result<&'a [u8]> {
+pub fn consume_message(buf: &mut &[u8]) -> io::Result<()> {
     use prost::encoding::decode_varint;
 
     let len =
@@ -150,9 +150,8 @@ pub fn consume_message<'a>(buf: &mut &'a [u8]) -> io::Result<&'a [u8]> {
             "buffer underflow",
         ));
     }
-    let msg = &buf[..len];
     *buf = &buf[len..];
-    Ok(msg)
+    Ok(())
 }
 
 #[cfg(test)]

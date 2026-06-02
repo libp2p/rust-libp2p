@@ -302,24 +302,12 @@ fn validate_rpc_limits(
     let mut publish_count = 0;
     let mut control_size = 0;
     while !buf.is_empty() {
-        let tag = decode_field_tag(&mut buf)?;
         let field_start = buf;
+        let tag = decode_field_tag(&mut buf)?;
+        consume_message(&mut buf)?;
         match tag {
-            // Subscription (1) - accumulate control size
-            1 => {
-                consume_message(&mut buf)?;
-                let field_size = field_start.len() - buf.len();
-                control_size += field_size;
-                if control_size > max_control_message_size {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "rpc control size exceeds max control message size",
-                    ));
-                }
-            }
             // Publish (2) - count messages
             2 => {
-                consume_message(&mut buf)?;
                 publish_count += 1;
                 if publish_count > max_publish_messages {
                     return Err(io::Error::new(
@@ -329,9 +317,8 @@ fn validate_rpc_limits(
                 }
             }
             // Control message - validate and accumulate size
-            3 => {
-                let control_bytes = consume_message(&mut buf)?;
-                let field_size = control_bytes.len();
+            1 | 3 => {
+                let field_size = field_start.len() - buf.len();
                 control_size += field_size;
                 if control_size > max_control_message_size {
                     return Err(io::Error::new(
@@ -341,9 +328,7 @@ fn validate_rpc_limits(
                 }
             }
             // Unknown fields - skip
-            _ => {
-                consume_message(&mut buf)?;
-            }
+            _ => {}
         }
     }
     Ok(())
