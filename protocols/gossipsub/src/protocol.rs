@@ -24,11 +24,11 @@ use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::prelude::*;
-use prost::encoding::{decode_key, skip_field, DecodeContext};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use prost::Message;
+use prost::encoding::{DecodeContext, decode_key, skip_field};
 use prost_codec::consume_message_prefix;
 
 #[cfg(feature = "partial-messages")]
@@ -304,8 +304,10 @@ fn validate_rpc_limits(
     let mut control_size = 0;
     while !buf.is_empty() {
         let field_start = buf;
-        let (tag, wire_type) = decode_key(&mut buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        skip_field(wire_type, tag, &mut buf, DecodeContext::default()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let (tag, wire_type) =
+            decode_key(&mut buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        skip_field(wire_type, tag, &mut buf, DecodeContext::default())
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         match tag {
             // Publish (2) - count messages
             2 => {

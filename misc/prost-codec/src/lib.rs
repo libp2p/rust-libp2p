@@ -81,7 +81,10 @@ where
         let varint_length = src.len() - remaining.len();
 
         // Ensure we can read an entire message.
-        if src.len() < (message_length + varint_length) {
+        if message_length
+            .checked_add(varint_length)
+            .is_none_or(|total_length| src.len() < total_length)
+        {
             return Ok(None);
         }
 
