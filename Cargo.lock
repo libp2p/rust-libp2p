@@ -3038,6 +3038,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-dns-websys"
+version = "0.1.0-alpha"
+dependencies = [
+ "futures",
+ "js-sys",
+ "libp2p-core",
+ "parking_lot",
+ "send_wrapper 0.6.0",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "thiserror 2.0.18",
+ "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "libp2p-floodsub"
 version = "0.48.0"
 dependencies = [
