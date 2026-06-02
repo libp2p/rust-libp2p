@@ -126,34 +126,6 @@ pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Decodes a protobuf field key (tag + wire type) and returns just the tag number.
-/// Advances the buffer past the key only (does NOT consume the field value).
-pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<u32> {
-    use prost::encoding::decode_key;
-    let (tag, _wire_type) =
-        decode_key(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(tag)
-}
-
-/// Consumes a length-delimited protobuf message from the buffer.
-///
-/// Returns the message bytes as a slice. Advances the buffer past the message.
-/// This is useful for extracting nested messages without copying.
-pub fn consume_message(buf: &mut &[u8]) -> io::Result<()> {
-    use prost::encoding::decode_varint;
-
-    let len =
-        decode_varint(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))? as usize;
-    if buf.len() < len {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "buffer underflow",
-        ));
-    }
-    *buf = &buf[len..];
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error;
