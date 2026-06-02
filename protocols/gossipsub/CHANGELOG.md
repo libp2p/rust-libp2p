@@ -11,11 +11,12 @@
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
   See [PR 6356](https://github.com/libp2p/rust-libp2p/pull/6356)
 
-- Unify gossipsub control-message limits under max_control_messages (replacing per-type control ID caps),
-  and truncate control vectors immediately after RPC decode.
+- Unify gossipsub control-message limits under cumulative byte size validation, replacing per-type 
+  control ID caps. Control messages and subscriptions are now validated against `max_control_message_size` 
+  (default 5KB) which limits the total byte size of all control messages in an RPC.
   Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
-  Introduce `max_control_message_size` (default 5KB) to limit the byte size of each control message,
-  replacing the previous `max_ids_per_control_message` limit.
+  Rename `max_control_messages` to `max_control_messages_sent` to clarify it limits IHAVE messages 
+  sent during gossip and IWANT requests received.
   See [PR 6409](https://github.com/libp2p/rust-libp2p/pull/6409) and [PR 6428](https://github.com/libp2p/rust-libp2p/pull/6428)
 
 - Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.

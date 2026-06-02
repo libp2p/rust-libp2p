@@ -829,35 +829,8 @@ mod tests {
     }
 
     #[test]
-    fn max_control_messages() {
-        let mut codec = GossipsubCodec::new(
-            u32::MAX as usize,
-            ValidationMode::Strict,
-            HashMap::new(),
-            500,
-            5000,
-        );
-
-        // Create RPC with 501 publish messages (one over limit)
-        let rpc = proto::Rpc {
-            control: Some(proto::ControlMessage {
-                ihave: (0..501).map(|_| proto::ControlIHave::default()).collect(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let mut buf = BytesMut::new();
-        codec.encode(rpc, &mut buf).unwrap();
-        let result = codec.decode(&mut buf);
-
-        let err = result.unwrap_err().source().unwrap().to_string();
-        assert_eq!(err, "too many control messages");
-    }
-
-    #[test]
-    fn max_control_message_size_ihave() {
-        // Use a small max_control_message_size (100 bytes) to test size limit
+    fn max_cumulative_control_size() {
+        // Use a small max_control_message_size (100 bytes) to test cumulative limit
         let mut codec = GossipsubCodec::new(
             u32::MAX as usize,
             ValidationMode::Strict,
@@ -865,82 +838,23 @@ mod tests {
             500,
             100, // max_control_message_size: 100 bytes
         );
-
-        // Create RPC with IHAVE containing many message IDs that exceeds 100 bytes
+        // Create RPC with multiple IHAVE messages whose cumulative size exceeds 100 bytes
+        // Each IHAVE has a topic_id and 10 message IDs (roughly 30-40 bytes each)
         let rpc = proto::Rpc {
             control: Some(proto::ControlMessage {
-                ihave: vec![proto::ControlIHave {
-                    topic_id: Some("test-topic".to_string()),
-                    message_ids: (0..100).map(|i| vec![i as u8]).collect(),
-                }],
+                ihave: (0..5)
+                    .map(|i| proto::ControlIHave {
+                        topic_id: Some(format!("topic-{}", i)),
+                        message_ids: (0..10).map(|j| vec![j as u8]).collect(),
+                    })
+                    .collect(),
                 ..Default::default()
             }),
             ..Default::default()
         };
-
         let mut buf = BytesMut::new();
         codec.encode(rpc, &mut buf).unwrap();
         let result = codec.decode(&mut buf);
-
-        let err = result.unwrap_err().source().unwrap().to_string();
-        assert_eq!(err, "rpc control size exceeds max control message size");
-    }
-    #[test]
-    fn max_control_message_size_iwant() {
-        // Use a small max_control_message_size (100 bytes) to test size limit
-        let mut codec = GossipsubCodec::new(
-            u32::MAX as usize,
-            ValidationMode::Strict,
-            HashMap::new(),
-            500,
-            100, // max_control_message_size: 100 bytes
-        );
-
-        // Create RPC with IWANT containing many message IDs that exceeds 100 bytes
-        let rpc = proto::Rpc {
-            control: Some(proto::ControlMessage {
-                iwant: vec![proto::ControlIWant {
-                    message_ids: (0..100).map(|i| vec![i as u8]).collect(),
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let mut buf = BytesMut::new();
-        codec.encode(rpc, &mut buf).unwrap();
-        let result = codec.decode(&mut buf);
-
-        let err = result.unwrap_err().source().unwrap().to_string();
-        assert_eq!(err, "rpc control size exceeds max control message size");
-    }
-
-    #[test]
-    fn max_control_message_size_idontwant() {
-        // Use a small max_control_message_size (100 bytes) to test size limit
-        let mut codec = GossipsubCodec::new(
-            u32::MAX as usize,
-            ValidationMode::Strict,
-            HashMap::new(),
-            500,
-            100, // max_control_message_size: 100 bytes
-        );
-
-        // Create RPC with IDONTWANT containing many message IDs that exceeds 100 bytes
-        let rpc = proto::Rpc {
-            control: Some(proto::ControlMessage {
-                idontwant: vec![proto::ControlIDontWant {
-                    message_ids: (0..100).map(|i| vec![i as u8]).collect(),
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let mut buf = BytesMut::new();
-        codec.encode(rpc, &mut buf).unwrap();
-        let result = codec.decode(&mut buf);
-
         let err = result.unwrap_err().source().unwrap().to_string();
         assert_eq!(err, "rpc control size exceeds max control message size");
     }

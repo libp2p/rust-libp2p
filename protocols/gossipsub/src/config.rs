@@ -126,8 +126,8 @@ pub struct Config {
     #[cfg(feature = "partial-messages")]
     max_metadata_length: usize,
     max_publish_messages: usize,
-    max_control_messages: usize,
     max_control_message_size: usize,
+    max_control_messages_sent: usize,
     max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
     connection_handler_queue_len: usize,
@@ -425,10 +425,11 @@ impl Config {
         self.max_publish_messages
     }
 
-    /// The maximum number of control messages by type we will process in a given RPC. The default
-    /// is 5000.
-    pub fn max_control_messages(&self) -> usize {
-        self.max_control_messages
+    /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
+    /// This limits the number of IHAVE messages sent during gossip and IWANT requests received.
+    /// The default is 5000.
+    pub fn max_control_messages_sent(&self) -> usize {
+        self.max_control_messages_sent
     }
 
     /// The maximum byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
@@ -552,7 +553,7 @@ impl Default for ConfigBuilder {
                 #[cfg(feature = "partial-messages")]
                 max_metadata_length: 1000,
                 max_publish_messages: 5000,
-                max_control_messages: 5000,
+                max_control_messages_sent: 5000,
                 max_control_message_size: 5120, // 5KB
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
@@ -993,6 +994,14 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
+    /// This limits the number of IHAVE messages sent during gossip and IWANT requests received.
+    /// The default is 5000.
+    pub fn max_control_messages_sent(&mut self, max_control_messages: usize) -> &mut Self {
+        self.config.max_control_messages_sent = max_control_messages;
+        self
+    }
+
     /// By default, gossipsub will reject messages that are sent to us that has the same message
     /// source as we have specified locally. Enabling this, allows these messages and prevents
     /// penalizing the peer that sent us the message. Default is false.
@@ -1181,7 +1190,7 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         let _ = builder.field("max_messages_per_rpc", &self.max_publish_messages);
-        let _ = builder.field("max_control_messages", &self.max_control_messages);
+        let _ = builder.field("max_control_messages_sent", &self.max_control_messages_sent);
         let _ = builder.field("max_control_message_size", &self.max_control_message_size);
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
