@@ -32,7 +32,7 @@ mod topic;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub(crate) use self::floodsub::pb::{Message, RPC, mod_RPC::SubOpts};
+    pub(crate) use self::floodsub_pb::{Message, Rpc as RPC, rpc::SubOpts};
 }
 
 #[allow(deprecated)]

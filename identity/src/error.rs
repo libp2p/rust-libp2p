@@ -76,6 +76,19 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
+    pub(crate) fn unknown_key_type(key_type: i32) -> Self {
+        Self {
+            msg: format!("unknown key type {key_type}"),
+            source: None,
+        }
+    }
+
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
         Self {

@@ -492,7 +492,7 @@ impl Handler {
                     src_peer_id: stop_command.src_peer_id,
                     src_connection_id: stop_command.src_connection_id,
                     inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto::Status::CONNECTION_FAILED,
+                    status: proto::Status::ConnectionFailed,
                     error,
                 },
             ));
@@ -742,7 +742,7 @@ impl ConnectionHandler for Handler {
                         src_peer_id: connect.src_peer_id,
                         src_connection_id: connect.src_connection_id,
                         inbound_circuit_req: connect.inbound_circuit_req,
-                        status: proto::Status::CONNECTION_FAILED, // Best fit?
+                        status: proto::Status::ConnectionFailed, // Best fit?
                         error: outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
                     },
                 ));
