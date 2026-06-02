@@ -291,13 +291,18 @@ impl Encoder for GossipsubCodec {
 /// Validate RPC limits by parsing the wire format without allocating.
 ///
 /// Note: `src` should be the message bytes with the length prefix.
+///
+/// Returns Some(true) if the message can be read, Some(false) if the buffer is too short, or an
+/// error if a limit was violated.
 fn validate_rpc_limits(
     mut buf: &[u8],
     max_publish_messages: usize,
     max_control_message_size: usize,
-) -> io::Result<()> {
+) -> io::Result<bool> {
     // Consume length prefix and get message bytes from length-prefixed buffer for validation
-    consume_message_prefix(&mut buf)?;
+    if !consume_message_prefix(&mut buf)? {
+        return Ok(false);
+    }
 
     let mut publish_count = 0;
     let mut control_size = 0;
@@ -331,7 +336,7 @@ fn validate_rpc_limits(
             _ => {}
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 impl Decoder for GossipsubCodec {
@@ -340,11 +345,13 @@ impl Decoder for GossipsubCodec {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // Pre-validate: discard if limits exceeded
-        validate_rpc_limits(
+        if !validate_rpc_limits(
             src.as_ref(),
             self.max_publish_messages,
             self.max_control_message_size,
-        )?;
+        )? {
+            return Ok(None);
+        };
 
         // Safe to decode with prost
         let Some(mut rpc) = self.codec.decode(src)? else {

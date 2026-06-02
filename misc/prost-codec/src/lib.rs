@@ -104,7 +104,7 @@ where
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("Failed to encode/decode message")]
+#[error("Failed to encode/decode message: {0}")]
 pub struct Error(#[from] io::Error);
 
 impl From<Error> for io::Error {
@@ -115,21 +115,21 @@ impl From<Error> for io::Error {
 
 /// Consumes the length prefix from a length-prefixed buffer and returns the message bytes.
 ///
-/// Decodes the unsigned varint length prefix, advances the buffer past the prefix,
-/// and returns a slice of the message bytes. Returns an error if the length prefix
-/// is invalid or the buffer is too short.
-pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<()> {
-    let (message_length, remaining) = unsigned_varint::decode::usize(buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+/// Decodes the unsigned varint length prefix. If there are enough bytes available, it advances the
+/// buffer past the prefix, and return `Some(true)`. Returns `Some(false)` if the buffer is too
+/// short for prefix or message and an error if the length prefix is invalid.
+pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<bool> {
+    let (message_length, remaining) = match unsigned_varint::decode::usize(buf) {
+        Ok((len, remaining)) => (len, remaining),
+        Err(unsigned_varint::decode::Error::Insufficient) => return Ok(false),
+        Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+    };
     if remaining.len() < message_length {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "buffer too short for declared message length",
-        ));
+        return Ok(false);
     }
     // Advance buffer past the length prefix, capping at the end of the buffer.
     *buf = &remaining[..message_length];
-    Ok(())
+    Ok(true)
 }
 
 /// Decodes a protobuf field key (tag + wire type) and returns them.
