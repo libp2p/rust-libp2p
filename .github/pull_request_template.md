@@ -12,6 +12,22 @@ Related https://github.com/libp2p/rust-libp2p/issues/ABCD.
 Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
 -->
 
+## AI Assistance Disclosure
+
+<!--
+We ask every contributor to disclose AI assistance. This is not a filter — AI-assisted PRs
+are accepted. We just need to know what was used and you need to vouch for what you submit.
+We also ask contributors to be considerate of reviewer's time. Please keep AI-generated text brief and to the point.
+
+Please do not delete this section.
+-->
+
+**Tools used** _(required — write `none` if no AI was used)_: _e.g. none / Claude Code / Copilot / Cursor / ChatGPT_
+
+**Attestation** _(required)_:
+
+- [ ] I have read every line of this diff, understand what it does, and can explain it in review.
+
 ## Notes & open questions
 
 <!--

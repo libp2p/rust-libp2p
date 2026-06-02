@@ -12,15 +12,15 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-either = "1.11.0"
+either = "1.16.0"
 futures = { workspace = true }
-futures-timer = "3.0"
+futures-timer = { workspace = true }
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+prost = { workspace = true }
+prost-codec = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 hashlink = { workspace = true }
