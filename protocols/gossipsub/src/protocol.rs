@@ -97,10 +97,10 @@ impl Default for ProtocolConfig {
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
-            default_max_transmit_size: 65536,
+            default_max_transmit_size: 65536, // 64KB
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 500,
-            max_control_message_size: 5120, // 5KB
+            max_control_message_size: 16384, // 16KB
         }
     }
 }
