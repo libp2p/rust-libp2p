@@ -1412,7 +1412,10 @@ where
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
             if *iasked + iask > self.config.max_control_messages_sent() {
-                iask = self.config.max_control_messages_sent().saturating_sub(*iasked);
+                iask = self
+                    .config
+                    .max_control_messages_sent()
+                    .saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -2843,7 +2846,8 @@ where
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_control_messages_sent());
+                    peer_message_ids
+                        .partial_shuffle(&mut rng, self.config.max_control_messages_sent());
                     peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
