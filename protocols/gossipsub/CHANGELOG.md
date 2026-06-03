@@ -2,7 +2,7 @@
 - Simplify gossipsub control message validation by scanning protobuf bytes before decoding
   to validate cumulative control message size, rather than decoding then counting individual IDs
   to prevent memory amplification from decoding.
-  Introduce `max_control_message_size` (default 5KB) to limit total control bytes in an RPC.
+  Introduce `max_control_message_size` (default 16KB) to limit total control bytes in an RPC.
   Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
   Rename `max_control_messages` to `max_control_messages_sent`.
   See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
