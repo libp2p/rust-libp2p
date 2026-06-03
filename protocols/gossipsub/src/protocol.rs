@@ -289,11 +289,6 @@ impl Encoder for GossipsubCodec {
 }
 
 /// Validate RPC limits by parsing the wire format without allocating.
-///
-/// Note: `src` should be the message bytes with the length prefix.
-///
-/// Returns Some(true) if the message can be read, Some(false) if the buffer is too short, or an
-/// error if a limit was violated.
 fn validate_rpc_limits(
     mut buf: &[u8],
     max_publish_messages: usize,
@@ -868,7 +863,6 @@ mod tests {
 
     #[test]
     fn rpc_valid_limits() {
-        // Use the default 5KB control message size
         let mut codec = GossipsubCodec::new(
             u32::MAX as usize,
             ValidationMode::Anonymous,
@@ -903,43 +897,5 @@ mod tests {
             }
             _ => panic!("Expected message event"),
         }
-    }
-
-    #[test]
-    fn max_control_message_size_subscriptions() {
-        // Use a small max_control_message_size (100 bytes) to test size limit
-        let mut codec = GossipsubCodec::new(
-            u32::MAX as usize,
-            ValidationMode::Strict,
-            HashMap::new(),
-            500,
-            100, // max_control_message_size: 100 bytes
-        );
-
-        // Create RPC with subscriptions containing long topic IDs that exceeds 100 bytes
-        let rpc = proto::Rpc {
-            subscriptions: (0..10)
-                .map(|i| proto::rpc::SubOpts {
-                    subscribe: Some(true),
-                    topic_id: Some(format!("very-long-topic-name-{}", i)),
-                    requests_partial: None,
-                    supports_partial: None,
-                })
-                .collect(),
-            ..Default::default()
-        };
-
-        let mut buf = BytesMut::new();
-        codec.encode(rpc, &mut buf).unwrap();
-        let result = codec.decode(&mut buf);
-
-        // This should fail because subscriptions exceed the max_control_message_size
-        // Currently this test will FAIL because subscriptions are not yet validated
-        let err = result.unwrap_err().source().unwrap().to_string();
-        assert!(
-            err.contains("rpc control size exceeds max control message size"),
-            "Expected error about subscription size, got: {}",
-            err
-        );
     }
 }

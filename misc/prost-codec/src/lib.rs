@@ -113,11 +113,8 @@ impl From<Error> for io::Error {
     }
 }
 
-/// Consumes the length prefix from a length-prefixed buffer and returns the message bytes.
-///
-/// Decodes the unsigned varint length prefix. If there are enough bytes available, it advances the
-/// buffer past the prefix, and return `Some(true)`. Returns `Some(false)` if the buffer is too
-/// short for prefix or message and an error if the length prefix is invalid.
+/// Consumes the varint length prefix from a length-prefixed buffer.
+/// Advances the buffer past the prefix, positioning it at the message bytes.
 pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<bool> {
     let (message_length, remaining) = match unsigned_varint::decode::usize(buf) {
         Ok((len, remaining)) => (len, remaining),
@@ -140,7 +137,6 @@ pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<(u32, WireType)> {
 }
 
 /// Consumes a length-delimited protobuf message from the buffer.
-///
 /// Advances the buffer past the message.
 pub fn consume_message(wire_type: WireType, tag: u32, buf: &mut &[u8]) -> io::Result<()> {
     use prost::encoding::skip_field;

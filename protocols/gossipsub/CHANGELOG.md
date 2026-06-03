@@ -5,7 +5,7 @@
   Introduce `max_control_message_size` (default 5KB) to limit total control bytes in an RPC.
   Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
   Rename `max_control_messages` to `max_control_messages_sent`.
-  See [PR #XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
 
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).

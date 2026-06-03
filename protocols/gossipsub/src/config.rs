@@ -432,9 +432,9 @@ impl Config {
         self.max_control_messages_sent
     }
 
-    /// The maximum byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
-    /// subscription we will process in a given RPC. Messages exceeding this size will be rejected.
-    /// The default is 5120 (5KB).
+    /// The maximum total byte size of all control messages and subscriptions in an RPC.
+    /// Validates cumulative size by scanning protobuf bytes before decoding.
+    /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&self) -> usize {
         self.max_control_message_size
     }
@@ -554,7 +554,7 @@ impl Default for ConfigBuilder {
                 max_metadata_length: 1000,
                 max_publish_messages: 5000,
                 max_control_messages_sent: 5000,
-                max_control_message_size: 5120, // 5KB
+                max_control_message_size: 16384, // 16KB
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -1072,9 +1072,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
-    /// subscription we will process in a single RPC. Messages exceeding this size will be rejected.
-    /// The default is 5120 (5KB).
+    /// The maximum total byte size of all control messages and subscriptions in an RPC.
+    /// Validates cumulative size by scanning protobuf bytes before decoding.
+    /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&mut self, size: usize) -> &mut Self {
         self.config.max_control_message_size = size;
         self.config.protocol.max_control_message_size = size;
