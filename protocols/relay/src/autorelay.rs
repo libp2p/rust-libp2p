@@ -643,10 +643,9 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                let connection = self
-                    .connections
-                    .remove(&(peer_id, connection_id))
-                    .expect("valid connection");
+                let Some(connection) = self.connections.remove(&(peer_id, connection_id)) else {
+                    return;
+                };
 
                 let had_reservation = matches!(
                     connection.relay_status,
@@ -681,10 +680,9 @@ impl NetworkBehaviour for Behaviour {
                 old: _,
                 new,
             }) => {
-                let connection = self
-                    .connections
-                    .get_mut(&(peer_id, connection_id))
-                    .expect("valid connection");
+                let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+                    return;
+                };
 
                 let new_addr = new.get_remote_address();
 
@@ -697,10 +695,10 @@ impl NetworkBehaviour for Behaviour {
 
                 if let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
                 {
-                    let connection = self
-                        .connections
-                        .get_mut(&(peer_id, connection_id))
-                        .expect("valid connection");
+                    let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
+                    else {
+                        return;
+                    };
 
                     if matches!(
                         connection.relay_status,
@@ -756,10 +754,9 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let connection = self
-            .connections
-            .get_mut(&(peer_id, connection_id))
-            .expect("valid connection");
+        let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+            return;
+        };
 
         match event {
             Out::Supported => {
