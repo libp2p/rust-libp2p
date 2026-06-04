@@ -16,8 +16,8 @@
 //! `/dnsaddr` is always resolved (browsers cannot look up TXT records, so this
 //! is the gap worth filling such as dialing `/dnsaddr/bootstrap.libp2p.io`).
 //! `/dns`, `/dns4` and `/dns6` are governed by [`DnsResolution`], which defaults
-//! to [`DnsResolution::Auto`]: addresses containing a `/webrtc-direct` (or any future specific protocols) are
-//! resolved to `/ip4`/`/ip6` (that transport needs a numeric IP), while
+//! to [`DnsResolution::Auto`]: addresses containing a `/webrtc-direct` (or any future specific
+//! protocols) are resolved to `/ip4`/`/ip6` (that transport needs a numeric IP), while
 //! everything else is passed through unchanged, because the name-bound TLS
 //! transports (WebSocket, WebTransport) resolve hostnames natively and need the
 //! hostname preserved for SNI and certificate validation. Override via
