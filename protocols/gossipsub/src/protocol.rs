@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{collections::HashMap, convert::Infallible, pin::Pin};
+use std::{collections::HashMap, convert::Infallible, io, pin::Pin};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -28,6 +28,7 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use prost::Message;
+use prost_codec::{consume_message, consume_message_prefix, decode_field_tag};
 
 #[cfg(feature = "partial-messages")]
 use crate::extensions::partial_messages::PartialMessage;
@@ -81,11 +82,9 @@ pub struct ProtocolConfig {
     pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
     /// The max number of publish messages to decode in a single RPC.
     pub(crate) max_publish_messages: usize,
-    /// The max number of control messages per type to decode in a single RPC.
-    pub(crate) max_control_messages: usize,
-    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
-    /// single RPC.
-    pub(crate) max_ids_per_control_message: usize,
+    /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
+    /// subscription in a single RPC. Messages exceeding this size will be rejected.
+    pub(crate) max_control_message_size: usize,
 }
 
 impl Default for ProtocolConfig {
@@ -98,11 +97,10 @@ impl Default for ProtocolConfig {
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
-            default_max_transmit_size: 65536,
+            default_max_transmit_size: 65536, // 64KB
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 500,
-            max_control_messages: 500,
-            max_ids_per_control_message: 5000,
+            max_control_message_size: 16384, // 16KB
         }
     }
 }
@@ -158,8 +156,7 @@ where
                     self.validation_mode,
                     self.max_transmit_sizes,
                     self.max_publish_messages,
-                    self.max_control_messages,
-                    self.max_ids_per_control_message,
+                    self.max_control_message_size,
                 ),
             ),
             protocol_id.kind,
@@ -184,8 +181,7 @@ where
                     self.validation_mode,
                     self.max_transmit_sizes,
                     self.max_publish_messages,
-                    self.max_control_messages,
-                    self.max_ids_per_control_message,
+                    self.max_control_message_size,
                 ),
             ),
             protocol_id.kind,
@@ -204,11 +200,9 @@ pub struct GossipsubCodec {
     max_transmit_sizes: HashMap<TopicHash, usize>,
     /// The max number of publish messages to decode in a single RPC.
     max_publish_messages: usize,
-    /// The max number of control messages per type to decode in a single RPC.
-    max_control_messages: usize,
-    /// The max number of message ids per IHAVE/IWANT/IDONTWANT control message to decode in a
-    /// single RPC.
-    max_ids_per_control_message: usize,
+    /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
+    /// subscription in a single RPC. Messages exceeding this size will be rejected.
+    max_control_message_size: usize,
 }
 
 impl GossipsubCodec {
@@ -217,8 +211,7 @@ impl GossipsubCodec {
         validation_mode: ValidationMode,
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
-        max_control_messages: usize,
-        max_ids_per_control_message: usize,
+        max_control_message_size: usize,
     ) -> GossipsubCodec {
         let codec = prost_codec::Codec::new(max_length);
         GossipsubCodec {
@@ -226,8 +219,7 @@ impl GossipsubCodec {
             codec,
             max_transmit_sizes,
             max_publish_messages,
-            max_control_messages,
-            max_ids_per_control_message,
+            max_control_message_size,
         }
     }
 
@@ -240,8 +232,6 @@ impl GossipsubCodec {
     /// are logged, which prevents error handling in the codec and handler. We simply drop invalid
     /// messages and log warnings, rather than propagating errors through the codec.
     fn verify_signature(message: &proto::Message) -> bool {
-        use prost::Message;
-
         let Some(from) = message.from.as_ref() else {
             tracing::debug!("Signature verification failed: No source id given");
             return false;
@@ -298,19 +288,50 @@ impl Encoder for GossipsubCodec {
     }
 }
 
-// Truncate oversized RPC messages and emit a single warning with dropped count.
-fn truncate_excess<T>(items: &mut Vec<T>, max: usize, kind: &str) {
-    let original = items.len();
-    if original > max {
-        tracing::debug!(
-            kind = kind,
-            received = original,
-            kept = max,
-            dropped = original - max,
-            "Received more gossipsub entries than permitted; truncating"
-        );
-        items.truncate(max);
+/// Validate RPC limits by parsing the wire format without allocating.
+fn validate_rpc_limits(
+    mut buf: &[u8],
+    max_publish_messages: usize,
+    max_control_message_size: usize,
+) -> io::Result<bool> {
+    // Consume length prefix and get message bytes from length-prefixed buffer for validation
+    if !consume_message_prefix(&mut buf)? {
+        return Ok(false);
     }
+
+    let mut publish_count = 0;
+    let mut control_size = 0;
+    while !buf.is_empty() {
+        let field_start = buf;
+        let (tag, wire_type) = decode_field_tag(&mut buf)?;
+        consume_message(wire_type, tag, &mut buf)?;
+        match tag {
+            // Publish (2) - count messages
+            2 => {
+                publish_count += 1;
+                if publish_count > max_publish_messages {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "too many publish messages",
+                    ));
+                }
+            }
+            // Control message - validate and accumulate size
+            1 | 3 => {
+                let field_size = field_start.len() - buf.len();
+                control_size += field_size;
+                if control_size > max_control_message_size {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "rpc control size exceeds max control message size",
+                    ));
+                }
+            }
+            // Unknown fields - skip
+            _ => {}
+        }
+    }
+    Ok(true)
 }
 
 impl Decoder for GossipsubCodec {
@@ -318,23 +339,19 @@ impl Decoder for GossipsubCodec {
     type Error = prost_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let Some(mut rpc) = self.codec.decode(src)? else {
+        // Pre-validate: discard if limits exceeded
+        if !validate_rpc_limits(
+            src.as_ref(),
+            self.max_publish_messages,
+            self.max_control_message_size,
+        )? {
             return Ok(None);
         };
 
-        // Limit messages
-        truncate_excess(&mut rpc.publish, self.max_publish_messages, "publish");
-
-        let mut control = rpc.control.take().unwrap_or_default();
-        truncate_excess(&mut control.ihave, self.max_control_messages, "IHAVE");
-        truncate_excess(&mut control.iwant, self.max_control_messages, "IWANT");
-        truncate_excess(&mut control.graft, self.max_control_messages, "GRAFT");
-        truncate_excess(&mut control.prune, self.max_control_messages, "PRUNE");
-        truncate_excess(
-            &mut control.idontwant,
-            self.max_control_messages,
-            "IDONTWANT",
-        );
+        // Safe to decode with prost
+        let Some(mut rpc) = self.codec.decode(src)? else {
+            return Ok(None);
+        };
 
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
@@ -537,6 +554,7 @@ impl Decoder for GossipsubCodec {
             });
         }
 
+        let control = rpc.control.take().unwrap_or_default();
         let mut control_msgs = Vec::new();
 
         // Collect the gossipsub control messages
@@ -549,7 +567,6 @@ impl Decoder for GossipsubCodec {
                     message_ids: ihave
                         .message_ids
                         .into_iter()
-                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -565,7 +582,6 @@ impl Decoder for GossipsubCodec {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
-                        .take(self.max_ids_per_control_message)
                         .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
@@ -616,7 +632,6 @@ impl Decoder for GossipsubCodec {
                 message_ids: idontwant
                     .message_ids
                     .into_iter()
-                    .take(self.max_ids_per_control_message)
                     .map(MessageId::from)
                     .collect::<Vec<_>>(),
             }));
@@ -679,7 +694,7 @@ impl Decoder for GossipsubCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{error::Error, time::Duration};
 
     use futures_timer::Delay;
     use libp2p_identity::Keypair;
@@ -759,7 +774,6 @@ mod tests {
                 ValidationMode::Strict,
                 HashMap::new(),
                 5000,
-                1000,
                 5000,
             );
             let mut buf = BytesMut::new();
@@ -790,5 +804,98 @@ mod tests {
 
         assert_eq!(protocol_config.protocol_ids[0].protocol, "/foosub");
         assert_eq!(protocol_config.protocol_ids[1].protocol, "/floodsub/1.0.0");
+    }
+
+    #[test]
+    fn max_publish_messages() {
+        let mut codec = GossipsubCodec::new(
+            u32::MAX as usize,
+            ValidationMode::Strict,
+            HashMap::new(),
+            500,
+            5000,
+        );
+
+        // Create RPC with 501 publish messages (one over limit)
+        let rpc = proto::Rpc {
+            publish: (0..501).map(|_| proto::Message::default()).collect(),
+            ..Default::default()
+        };
+
+        let mut buf = BytesMut::new();
+        codec.encode(rpc, &mut buf).unwrap();
+        let result = codec.decode(&mut buf);
+
+        let err = result.unwrap_err().source().unwrap().to_string();
+        assert_eq!(err, "too many publish messages");
+    }
+
+    #[test]
+    fn max_cumulative_control_size() {
+        // Use a small max_control_message_size (100 bytes) to test cumulative limit
+        let mut codec = GossipsubCodec::new(
+            u32::MAX as usize,
+            ValidationMode::Strict,
+            HashMap::new(),
+            500,
+            100, // max_control_message_size: 100 bytes
+        );
+        // Create RPC with multiple IHAVE messages whose cumulative size exceeds 100 bytes
+        // Each IHAVE has a topic_id and 10 message IDs (roughly 30-40 bytes each)
+        let rpc = proto::Rpc {
+            control: Some(proto::ControlMessage {
+                ihave: (0..5)
+                    .map(|i| proto::ControlIHave {
+                        topic_id: Some(format!("topic-{}", i)),
+                        message_ids: (0..10).map(|j| vec![j as u8]).collect(),
+                    })
+                    .collect(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut buf = BytesMut::new();
+        codec.encode(rpc, &mut buf).unwrap();
+        let result = codec.decode(&mut buf);
+        let err = result.unwrap_err().source().unwrap().to_string();
+        assert_eq!(err, "rpc control size exceeds max control message size");
+    }
+
+    #[test]
+    fn rpc_valid_limits() {
+        let mut codec = GossipsubCodec::new(
+            u32::MAX as usize,
+            ValidationMode::Anonymous,
+            HashMap::new(),
+            500,
+            5120, // 5KB max_control_message_size
+        );
+
+        // Create RPC with exactly 500 publish messages (at the limit)
+        // Use a small IHAVE that fits within 5KB
+        let rpc = proto::Rpc {
+            publish: (0..500).map(|_| proto::Message::default()).collect(),
+            control: Some(proto::ControlMessage {
+                ihave: vec![proto::ControlIHave {
+                    topic_id: Some("test-topic".to_string()),
+                    message_ids: (0..10).map(|i| vec![i as u8]).collect(),
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut buf = BytesMut::new();
+        codec.encode(rpc, &mut buf).unwrap();
+        let result = codec.decode(&mut buf);
+
+        // Should succeed
+        let event = result.unwrap().expect("Should accept RPC at limits");
+        match event {
+            HandlerEvent::Message { rpc, .. } => {
+                assert_eq!(rpc.messages.len(), 500, "Should have 500 messages");
+            }
+            _ => panic!("Expected message event"),
+        }
     }
 }

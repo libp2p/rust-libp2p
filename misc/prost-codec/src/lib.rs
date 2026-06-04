@@ -4,7 +4,10 @@ use std::{io, marker::PhantomData};
 
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BytesMut};
-use prost::Message;
+use prost::{
+    Message,
+    encoding::{DecodeContext, WireType},
+};
 
 mod generated;
 
@@ -81,7 +84,10 @@ where
         let varint_length = src.len() - remaining.len();
 
         // Ensure we can read an entire message.
-        if src.len() < (message_length + varint_length) {
+        if message_length
+            .checked_add(varint_length)
+            .is_none_or(|total_length| src.len() < total_length)
+        {
             return Ok(None);
         }
 
@@ -98,13 +104,44 @@ where
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("Failed to encode/decode message")]
+#[error("Failed to encode/decode message: {0}")]
 pub struct Error(#[from] io::Error);
 
 impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         e.0
     }
+}
+
+/// Consumes the varint length prefix from a length-prefixed buffer.
+/// Advances the buffer past the prefix, positioning it at the message bytes.
+pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<bool> {
+    let (message_length, remaining) = match unsigned_varint::decode::usize(buf) {
+        Ok((len, remaining)) => (len, remaining),
+        Err(unsigned_varint::decode::Error::Insufficient) => return Ok(false),
+        Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+    };
+    if remaining.len() < message_length {
+        return Ok(false);
+    }
+    // Advance buffer past the length prefix, capping at the end of the buffer.
+    *buf = &remaining[..message_length];
+    Ok(true)
+}
+
+/// Decodes a protobuf field key (tag + wire type) and returns them.
+/// Advances the buffer past the key only (does NOT consume the field value).
+pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<(u32, WireType)> {
+    use prost::encoding::decode_key;
+    decode_key(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+/// Consumes a length-delimited protobuf message from the buffer.
+/// Advances the buffer past the message.
+pub fn consume_message(wire_type: WireType, tag: u32, buf: &mut &[u8]) -> io::Result<()> {
+    use prost::encoding::skip_field;
+    skip_field(wire_type, tag, buf, DecodeContext::default())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 #[cfg(test)]
