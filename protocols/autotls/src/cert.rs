@@ -1,4 +1,5 @@
 use rcgen::{CertificateParams, DistinguishedName, KeyPair, PKCS_ECDSA_P256_SHA256};
+use rustls::pki_types::{CertificateDer, pem::PemObject};
 use x509_parser::prelude::*;
 
 /// Errors produced while handling certificate material.
@@ -9,7 +10,7 @@ pub enum Error {
     Rcgen(#[from] rcgen::Error),
     /// The PEM certificate chain could not be parsed.
     #[error("failed to parse PEM certificate chain")]
-    Pem(#[source] std::io::Error),
+    Pem(#[source] rustls::pki_types::pem::Error),
     /// The certificate chain contained no certificates.
     #[error("the certificate chain was empty")]
     EmptyChain,
@@ -54,8 +55,7 @@ impl CertKey {
 /// The Unix timestamp at which the leaf certificate of the chain expires, used to
 /// schedule renewal.
 pub fn not_after_unix(chain_pem: &str) -> Result<i64, Error> {
-    let mut reader = chain_pem.as_bytes();
-    let chain = rustls_pemfile::certs(&mut reader)
+    let chain = CertificateDer::pem_slice_iter(chain_pem.as_bytes())
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::Pem)?;
     let leaf = chain.first().ok_or(Error::EmptyChain)?;
