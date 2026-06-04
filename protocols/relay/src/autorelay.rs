@@ -394,7 +394,8 @@ impl Behaviour {
         let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
-                tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection");
+                tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection; marking relay connection ineligible");
+                info.relay_status = RelayStatus::NotSupported;
                 return;
             }
         };
