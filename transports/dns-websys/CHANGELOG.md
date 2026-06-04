@@ -1,4 +1,4 @@
-## 0.1.0
+## 0.1.0-alpha
 
 - Support DNS transport for wasm32 targets that resolves DNS components over DNS-over-HTTPS (DoH).
   `/dnsaddr` is always resolved, however `/dns`, `/dns4` and `/dns6` are governed by the

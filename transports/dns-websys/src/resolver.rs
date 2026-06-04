@@ -34,7 +34,7 @@ pub enum DnsResolution {
     Never,
 }
 
-/// Configuration for the DNS-over-HTTPS [`Resolver`].
+/// Configuration for the DNS-over-HTTPS Resolver.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// A DoH endpoint that answers GET queries in the JSON (`application/dns-json`) format.
