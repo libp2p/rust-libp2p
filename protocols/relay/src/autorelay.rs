@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     num::NonZeroU8,
     task::{Context, Poll, Waker},
     time::{Duration, Instant},
@@ -518,8 +518,8 @@ impl Behaviour {
             return;
         }
 
-        let mut static_candidates = Vec::new();
-        let mut candidates = HashMap::new();
+        let mut static_candidates = BTreeMap::new();
+        let mut candidates: BTreeMap<_, ConnectionId> = BTreeMap::new();
         for ((peer_id, connection_id), info) in self.connections.iter() {
             if covered.contains(peer_id) {
                 continue;
@@ -531,13 +531,15 @@ impl Behaviour {
             {
                 continue;
             }
-            if self.static_relays.contains_key(peer_id) {
-                if !static_candidates.iter().any(|(p, _)| p == peer_id) {
-                    static_candidates.push((*peer_id, *connection_id));
-                }
+            let bucket = if self.static_relays.contains_key(peer_id) {
+                &mut static_candidates
             } else {
-                candidates.entry(*peer_id).or_insert(*connection_id);
-            }
+                &mut candidates
+            };
+            bucket
+                .entry(*peer_id)
+                .and_modify(|existing| *existing = (*existing).min(*connection_id))
+                .or_insert(*connection_id);
         }
 
         let selected_candidates: Vec<(PeerId, ConnectionId)> = static_candidates
