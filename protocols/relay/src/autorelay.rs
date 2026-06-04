@@ -647,6 +647,10 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
+                if !self.connections.keys().any(|(pid, _)| *pid == peer_id) {
+                    self.clear_failure(&peer_id);
+                }
+
                 let had_reservation = matches!(
                     connection.relay_status,
                     RelayStatus::Supported {
