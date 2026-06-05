@@ -1,6 +1,9 @@
 ## 0.4.0
 
 - Raise MSRV to 1.88.0.
+- Add `decode_field_tag`, `consume_message`, and `consume_message_prefix` helper functions
+  for parsing protobuf wire format without allocating.
+  See [PR 6428](https://github.com/libp2p/rust-libp2p/pull/6428).
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - Migrate from `prost` 0.11 to `prost` 0.14.
 - Replace `UviBytes`-based framing with manual unsigned-varint encoding/decoding for improved performance.

@@ -1352,7 +1352,7 @@ where
         }
 
         if let Some(iasked) = self.count_sent_iwant.get(peer_id)
-            && *iasked >= self.config.max_control_messages()
+            && *iasked >= self.config.max_control_messages_sent()
         {
             tracing::debug!(
                 peer=%peer_id,
@@ -1411,8 +1411,11 @@ where
         if !iwant_ids.is_empty() {
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
-            if *iasked + iask > self.config.max_control_messages() {
-                iask = self.config.max_control_messages().saturating_sub(*iasked);
+            if *iasked + iask > self.config.max_control_messages_sent() {
+                iask = self
+                    .config
+                    .max_control_messages_sent()
+                    .saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -2797,7 +2800,7 @@ where
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
-            if message_ids.len() > self.config.max_control_messages() {
+            if message_ids.len() > self.config.max_control_messages_sent() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
                     "too many messages for gossip; will truncate IHAVE list ({} messages)",
@@ -2839,12 +2842,13 @@ where
             for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
-                if peer_message_ids.len() > self.config.max_control_messages() {
+                if peer_message_ids.len() > self.config.max_control_messages_sent() {
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_control_messages());
-                    peer_message_ids.truncate(self.config.max_control_messages());
+                    peer_message_ids
+                        .partial_shuffle(&mut rng, self.config.max_control_messages_sent());
+                    peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
                 // send an IHAVE message
