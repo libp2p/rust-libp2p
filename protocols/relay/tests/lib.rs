@@ -476,6 +476,91 @@ async fn propagate_connect_error_to_unknown_peer_to_dialer() {
 }
 
 #[tokio::test]
+async fn deny_circuit_to_connected_peer_without_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut dst = build_client();
+    let dst_peer_id = *dst.local_peer_id();
+    dst.dial(relay_addr.clone()).unwrap();
+
+    let mut relay_saw_dst = false;
+    let mut dst_connected = false;
+    while !(relay_saw_dst && dst_connected) {
+        tokio::select! {
+            event = relay.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
+                    if peer_id == dst_peer_id {
+                        relay_saw_dst = true;
+                    }
+                }
+            }
+            event = dst.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
+                    if peer_id == relay_peer_id {
+                        dst_connected = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut src = build_client();
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    let opts = DialOpts::from(dst_addr.clone());
+    let circuit_connection_id = opts.connection_id();
+
+    src.dial(opts).unwrap();
+
+    let (failed_address, error) = loop {
+        tokio::select! {
+            _ = relay.select_next_some() => {}
+            _ = dst.select_next_some() => {}
+            event = src.select_next_some() => {
+                if let SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    error: DialError::Transport(mut errors),
+                    ..
+                } = event
+                {
+                    if connection_id == circuit_connection_id {
+                        assert_eq!(errors.len(), 1);
+                        break errors.remove(0);
+                    }
+                }
+            }
+        }
+    };
+
+    // This is a bit wonky but we need to get the source error
+    let error = error
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ConnectError>()
+        .unwrap();
+
+    assert_eq!(failed_address, dst_addr);
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ConnectError::NoReservation
+    ));
+}
+
+#[tokio::test]
 async fn reuse_connection() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
