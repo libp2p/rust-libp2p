@@ -2,8 +2,10 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     num::NonZeroU8,
     task::{Context, Poll, Waker},
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+use web_time::Instant;
 
 use either::Either;
 use libp2p_core::{
