@@ -1,8 +1,12 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr},
+    time::Duration,
+};
 
+use url::Url;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, Response};
+use web_sys::{AbortSignal, Request, RequestInit, Response};
 
 use crate::web_context::WebContext;
 
@@ -18,6 +22,8 @@ pub const GOOGLE: &str = "https://dns.google/resolve";
 const TYPE_A: u16 = 1;
 const TYPE_AAAA: u16 = 28;
 const TYPE_TXT: u16 = 16;
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Policy for resolving `/dns`, `/dns4` and `/dns6` components to IP addresses.
 ///
@@ -41,6 +47,8 @@ pub struct Config {
     endpoint: String,
     /// Resoluton for how `/dns`, `/dns4` and `/dns6` components are handled.
     dns_resolution: DnsResolution,
+    /// Timeout for a single DoH request.
+    timeout: Duration,
 }
 
 impl Default for Config {
@@ -55,6 +63,7 @@ impl Config {
         Config {
             endpoint: endpoint.into(),
             dns_resolution: DnsResolution::default(),
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 
@@ -72,6 +81,12 @@ impl Config {
     /// components.
     pub fn dns_resolution(mut self, policy: DnsResolution) -> Self {
         self.dns_resolution = policy;
+        self
+    }
+
+    /// Sets the timeout for a single DoH request. Defaults to 10 seconds.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
         self
     }
 }
@@ -125,13 +140,8 @@ impl Resolver {
     /// whose record type matches `qtype`. An empty result means the lookup
     /// succeeded but no matching records exist.
     async fn query(&self, name: &str, qtype: u16) -> Result<Vec<String>, ResolveError> {
-        let url = format!(
-            "{}?name={}&type={}",
-            self.config.endpoint,
-            encode_name(name),
-            qtype
-        );
-        let body = doh_get(&url).await?;
+        let url = build_query_url(&self.config.endpoint, name, qtype)?;
+        let body = doh_get(url.as_str(), self.config.timeout).await?;
         let response: DohResponse =
             serde_json::from_str(&body).map_err(|e| ResolveError::Parse(e.to_string()))?;
         if response.status != 0 {
@@ -162,9 +172,22 @@ struct DohAnswer {
     data: String,
 }
 
+fn build_query_url(endpoint: &str, name: &str, qtype: u16) -> Result<Url, ResolveError> {
+    let mut url = Url::parse(endpoint).map_err(|e| ResolveError::Url(e.to_string()))?;
+    url.query_pairs_mut()
+        .append_pair("name", name)
+        .append_pair("type", &qtype.to_string());
+    Ok(url)
+}
+
 /// Issues the actual `fetch` for a DoH JSON query and returns the response body.
-async fn doh_get(url: &str) -> Result<String, ResolveError> {
-    let request = Request::new_with_str(url).map_err(js_error)?;
+async fn doh_get(url: &str, timeout: Duration) -> Result<String, ResolveError> {
+    let opts = RequestInit::new();
+    opts.set_signal(Some(&AbortSignal::timeout_with_f64(
+        timeout.as_millis() as f64
+    )));
+
+    let request = Request::new_with_str_and_init(url, &opts).map_err(js_error)?;
     request
         .headers()
         .set("accept", "application/dns-json")
@@ -189,11 +212,6 @@ async fn doh_get(url: &str) -> Result<String, ResolveError> {
         .map_err(js_error)?;
     text.as_string()
         .ok_or_else(|| ResolveError::Fetch("response body was not a string".to_owned()))
-}
-
-/// Percent-encodes any characters in a DNS name that are not URL-safe.
-fn encode_name(name: &str) -> String {
-    String::from(js_sys::encode_uri_component(name))
 }
 
 /// DoH JSON returns TXT records wrapped in literal double quotes; strip a single
@@ -225,6 +243,9 @@ pub enum ResolveError {
     /// The DoH response could not be parsed.
     #[error("failed to parse DNS-over-HTTPS response: {0}")]
     Parse(String),
+    /// The configured DoH endpoint is not a valid URL.
+    #[error("invalid DNS-over-HTTPS endpoint URL: {0}")]
+    Url(String),
 }
 
 #[cfg(test)]
