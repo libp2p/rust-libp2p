@@ -1,5 +1,8 @@
 ## 0.30.0
 
+- feat: add `Behaviour::send_request_with_protocol()` to select a specific outbound protocol for negotiation.
+  See [PR 6262](https://github.com/libp2p/rust-libp2p/pull/6262).
+
 - refactor: `Codec` no longer requires `#[async_trait]`
   See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
 
