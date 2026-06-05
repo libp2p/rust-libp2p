@@ -2,6 +2,8 @@
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+- Check actual port reuse in instead of original intent.
+  See [PR 6096](https://github.com/libp2p/rust-libp2p/pull/6096).
 
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
