@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use web_time::Instant;
+use web_time::{Instant, SystemTime};
 
 use either::Either;
 use libp2p_core::{
@@ -49,7 +49,7 @@ pub struct Behaviour {
 
     failure_counts: HashMap<PeerId, u32>,
 
-    previous_relays: VecDeque<(PeerId, Multiaddr, Instant)>,
+    previous_relays: VecDeque<(PeerId, Multiaddr, SystemTime)>,
 
     relays_available: bool,
 
@@ -263,7 +263,7 @@ impl Behaviour {
             .map(|(peer, addrs)| (peer, addrs.as_slice()))
     }
 
-    pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &Instant)> {
+    pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &SystemTime)> {
         self.previous_relays
             .iter()
             .map(|(peer, addr, ts)| (peer, addr, ts))
@@ -297,7 +297,7 @@ impl Behaviour {
             self.previous_relays.pop_front();
         }
         self.previous_relays
-            .push_back((peer_id, address, Instant::now()));
+            .push_back((peer_id, address, SystemTime::now()));
     }
 
     fn forget_previous_relay(&mut self, peer_id: &PeerId) {
