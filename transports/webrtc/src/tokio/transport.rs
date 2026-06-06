@@ -26,7 +26,7 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
-use if_watch::{tokio::IfWatcher, IfEvent};
+use if_watch::{IfEvent, tokio::IfWatcher};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
@@ -495,9 +495,11 @@ mod tests {
         let mut transport =
             Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
 
-        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-            .now_or_never()
-            .is_none());
+        assert!(
+            poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none()
+        );
 
         // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
         // is temporarily empty.
@@ -543,9 +545,11 @@ mod tests {
             }
             // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
             // be removed from the list of listeners.
-            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-                .now_or_never()
-                .is_none());
+            assert!(
+                poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                    .now_or_never()
+                    .is_none()
+            );
             assert!(transport.listeners.is_empty());
         }
     }

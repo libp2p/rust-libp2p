@@ -37,8 +37,8 @@ use futures::{io::IoSlice, prelude::*, ready};
 use unsigned_varint as uvi;
 
 use crate::{
-    length_delimited::{LengthDelimited, LengthDelimitedReader},
     Version,
+    length_delimited::{LengthDelimited, LengthDelimitedReader},
 };
 
 /// The maximum number of supported protocols that can be processed.
@@ -204,7 +204,7 @@ impl Message {
         let mut remaining: &[u8] = &msg;
         loop {
             // A well-formed message must be terminated with a newline.
-            if remaining == [b'\n'] {
+            if remaining == *b"\n" {
                 break;
             } else if protocols.len() == MAX_PROTOCOLS {
                 return Err(ProtocolError::TooManyProtocols);

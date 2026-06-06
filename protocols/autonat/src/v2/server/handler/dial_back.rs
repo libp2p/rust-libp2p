@@ -9,15 +9,15 @@ use futures::{AsyncRead, AsyncWrite};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
 };
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 use crate::v2::{
-    protocol::{dial_back, recv_dial_back_response},
     DIAL_BACK_PROTOCOL,
+    protocol::{dial_back, recv_dial_back_response},
 };
 
 pub(crate) type ToBehaviour = io::Result<()>;
@@ -33,7 +33,7 @@ impl Handler {
         Self {
             pending_nonce: Some(cmd),
             requested_substream_nonce: None,
-            outbound: FuturesSet::new(Duration::from_secs(10), 5),
+            outbound: FuturesSet::new(|| futures_bounded::Delay::tokio(Duration::from_secs(10)), 5),
         }
     }
 }

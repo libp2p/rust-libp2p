@@ -21,7 +21,6 @@
 use std::fmt;
 
 use base64::prelude::*;
-use quick_protobuf::Writer;
 use sha2::{Digest, Sha256};
 
 use crate::rpc_proto::proto;
@@ -48,24 +47,20 @@ impl Hasher for Sha256Hash {
     /// Creates a [`TopicHash`] by SHA256 hashing the topic then base64 encoding the
     /// hash.
     fn hash(topic_string: String) -> TopicHash {
-        use quick_protobuf::MessageWrite;
+        use prost::Message;
 
         let topic_descriptor = proto::TopicDescriptor {
             name: Some(topic_string),
             auth: None,
             enc: None,
         };
-        let mut bytes = Vec::with_capacity(topic_descriptor.get_size());
-        let mut writer = Writer::new(&mut bytes);
-        topic_descriptor
-            .write_message(&mut writer)
-            .expect("Encoding to succeed");
+        let bytes = topic_descriptor.encode_to_vec();
         let hash = BASE64_STANDARD.encode(Sha256::digest(&bytes));
         TopicHash { hash }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(
     feature = "metrics",
     derive(prometheus_client::encoding::EncodeLabelSet)

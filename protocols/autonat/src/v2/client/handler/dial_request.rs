@@ -7,28 +7,28 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, AsyncWrite};
+use futures::{AsyncWrite, channel::oneshot};
 use futures_bounded::FuturesMap;
 use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
 };
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
         ProtocolsChange,
     },
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
 };
 
 use crate::v2::{
-    generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
+    DIAL_REQUEST_PROTOCOL, Nonce,
+    generated::structs::{DialStatus, dial_response::ResponseStatus},
     protocol::{
-        Coder, DialDataRequest, DialDataResponse, DialRequest, Response,
-        DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
+        Coder, DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
+        DialDataRequest, DialDataResponse, DialRequest, Response,
     },
-    Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug)]
@@ -91,7 +91,10 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesMap::new(Duration::from_secs(10), 10),
+            outbound: FuturesMap::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                10,
+            ),
             queued_streams: VecDeque::default(),
         }
     }
@@ -137,7 +140,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready((nonce, Ok(outcome))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     ToBehaviour::TestOutcome { nonce, outcome },
-                ))
+                ));
             }
             Poll::Ready((nonce, Err(_))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -188,6 +191,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
+                #[allow(clippy::collapsible_match)]
                 if added.any(|p| p.as_ref() == DIAL_REQUEST_PROTOCOL) {
                     self.queued_events
                         .push_back(ConnectionHandlerEvent::NotifyBehaviour(
@@ -264,18 +268,18 @@ async fn start_stream_handle(
     }
 
     match res.status {
-        ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::other("server rejected request")))
+        ResponseStatus::ERequestRejected => {
+            return Err(Error::Io(io::Error::other("server rejected request")));
         }
-        ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::other("server refused dial")))
+        ResponseStatus::EDialRefused => {
+            return Err(Error::Io(io::Error::other("server refused dial")));
         }
-        ResponseStatus::E_INTERNAL_ERROR => {
+        ResponseStatus::EInternalError => {
             return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
-            )))
+            )));
         }
-        ResponseStatus::OK => {}
+        ResponseStatus::Ok => {}
     }
 
     let tested_address = req
@@ -285,27 +289,27 @@ async fn start_stream_handle(
         .clone();
 
     match res.dial_status {
-        DialStatus::UNUSED => {
+        DialStatus::Unused => {
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "unexpected message",
-            )))
+            )));
         }
-        DialStatus::E_DIAL_ERROR => {
+        DialStatus::EDialError => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::NoConnection,
-            })
+            });
         }
-        DialStatus::E_DIAL_BACK_ERROR => {
+        DialStatus::EDialBackError => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::StreamFailed,
-            })
+            });
         }
-        DialStatus::OK => {}
+        DialStatus::Ok => {}
     }
 
     Ok((tested_address, bytes_sent))

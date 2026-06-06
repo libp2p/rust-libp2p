@@ -27,10 +27,10 @@ use std::{io, mem::size_of};
 
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, Bytes, BytesMut};
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use prost::Message;
 
 use super::handshake::proto;
-use crate::{protocol::PublicKey, Error};
+use crate::{Error, protocol::PublicKey};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -103,12 +103,10 @@ impl Encoder for Codec<snow::HandshakeState> {
     type Item<'a> = &'a proto::NoiseHandshakePayload;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let item_size = item.get_size();
-
-        self.write_buffer.resize(item_size, 0);
-        let mut writer = Writer::new(&mut self.write_buffer[..item_size]);
-        item.write_message(&mut writer)
-            .expect("Protobuf encoding to succeed");
+        let item_size = item.encoded_len();
+        self.write_buffer.reserve(item.encoded_len());
+        self.write_buffer.clear();
+        item.encode(&mut self.write_buffer)?;
 
         encrypt(
             &self.write_buffer[..item_size],
@@ -133,14 +131,12 @@ impl Decoder for Codec<snow::HandshakeState> {
             return Ok(None);
         };
 
-        let mut reader = BytesReader::from_bytes(&cleartext[..]);
-        let pb =
-            proto::NoiseHandshakePayload::from_reader(&mut reader, &cleartext).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Failed decoding handshake payload",
-                )
-            })?;
+        let pb = proto::NoiseHandshakePayload::decode(&cleartext[..]).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Failed decoding handshake payload",
+            )
+        })?;
 
         Ok(Some(pb))
     }

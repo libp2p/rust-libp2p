@@ -7,26 +7,26 @@ use std::{
 
 use either::Either;
 use futures::{
-    channel::{mpsc, oneshot},
     AsyncRead, AsyncWrite, SinkExt, StreamExt,
+    channel::{mpsc, oneshot},
 };
 use futures_bounded::FuturesSet;
 use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
 use rand_core::RngCore;
 
 use crate::v2::{
-    generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
+    DIAL_REQUEST_PROTOCOL, Nonce,
+    generated::structs::{DialStatus, dial_response::ResponseStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::Event,
-    Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug, PartialEq)]
@@ -64,7 +64,10 @@ where
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            inbound: FuturesSet::new(Duration::from_secs(10), 10),
+            inbound: FuturesSet::new(
+                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                10,
+            ),
             rng,
         }
     }
@@ -121,6 +124,7 @@ where
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => {
+                #[allow(clippy::collapsible_match)]
                 if self
                     .inbound
                     .try_push(handle_request(
@@ -159,27 +163,27 @@ impl From<HandleFail> for DialResponse {
     fn from(value: HandleFail) -> Self {
         match value {
             HandleFail::InternalError(addr_idx) => Self {
-                status: ResponseStatus::E_INTERNAL_ERROR,
+                status: ResponseStatus::EInternalError,
                 addr_idx,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::RequestRejected => Self {
-                status: ResponseStatus::E_REQUEST_REJECTED,
+                status: ResponseStatus::ERequestRejected,
                 addr_idx: 0,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::DialRefused => Self {
-                status: ResponseStatus::E_DIAL_REFUSED,
+                status: ResponseStatus::EDialRefused,
                 addr_idx: 0,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::DialBack { idx, result } => Self {
-                status: ResponseStatus::OK,
+                status: ResponseStatus::Ok,
                 addr_idx: idx,
                 dial_status: match result {
-                    Err(DialBackStatus::DialErr) => DialStatus::E_DIAL_ERROR,
-                    Err(DialBackStatus::DialBackErr) => DialStatus::E_DIAL_BACK_ERROR,
-                    Ok(()) => DialStatus::OK,
+                    Err(DialBackStatus::DialErr) => DialStatus::EDialError,
+                    Err(DialBackStatus::DialBackErr) => DialStatus::EDialBackError,
+                    Ok(()) => DialStatus::Ok,
                 },
             },
         }
@@ -318,8 +322,8 @@ where
         });
     }
     Ok(DialResponse {
-        status: ResponseStatus::OK,
+        status: ResponseStatus::Ok,
         addr_idx: idx,
-        dial_status: DialStatus::OK,
+        dial_status: DialStatus::Ok,
     })
 }

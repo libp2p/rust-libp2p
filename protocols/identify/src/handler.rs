@@ -30,25 +30,25 @@ use futures::prelude::*;
 use futures_bounded::Timeout;
 use futures_timer::Delay;
 use libp2p_core::{
-    upgrade::{ReadyUpgrade, SelectUpgrade},
     Multiaddr,
+    upgrade::{ReadyUpgrade, SelectUpgrade},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol, SupportedProtocols,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ProtocolSupport,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol, SupportedProtocols,
 };
 use smallvec::SmallVec;
 use tracing::Level;
 
 use crate::{
+    PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
     behaviour::KeyType,
     protocol::{self, Info, PushInfo, UpgradeError},
-    PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
 };
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -139,7 +139,7 @@ impl Handler {
             remote_peer_id,
             events: SmallVec::new(),
             active_streams: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
+                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             trigger_next_identify: Delay::new(Duration::ZERO),

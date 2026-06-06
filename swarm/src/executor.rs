@@ -44,10 +44,10 @@ impl Executor for TokioExecutor {
     }
 }
 
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(target_arch = "wasm32")]
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct WasmBindgenExecutor;
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(target_arch = "wasm32")]
 impl Executor for WasmBindgenExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         wasm_bindgen_futures::spawn_local(future)

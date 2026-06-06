@@ -723,8 +723,7 @@ mod tests {
                 .clone()
                 .into_iter()
                 .map(|(peer_id, key)| {
-                    peer_ids
-                        .sort_unstable_by(|(_, a), (_, b)| key.distance(a).cmp(&key.distance(b)));
+                    peer_ids.sort_unstable_by_key(|(_, a)| key.distance(a));
 
                     assert_eq!(peer_id, peer_ids[0].0);
 
@@ -794,7 +793,7 @@ mod tests {
     impl Peer {
         fn get_closest_peers(&mut self, target: &KeyBytes) -> Vec<PeerId> {
             self.known_peers
-                .sort_unstable_by(|(_, a), (_, b)| target.distance(a).cmp(&target.distance(b)));
+                .sort_unstable_by_key(|(_, a)| target.distance(a));
 
             self.known_peers
                 .iter()

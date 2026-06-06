@@ -32,14 +32,14 @@ use std::{
 };
 
 use fnv::FnvHashSet;
-use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
-    dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::{self, DialOpts},
 };
 use thiserror::Error;
 use tracing::Level;
@@ -47,6 +47,7 @@ use web_time::Instant;
 
 pub use crate::query::QueryStats;
 use crate::{
+    K_VALUE,
     addresses::Addresses,
     bootstrap,
     handler::{Handler, HandlerEvent, HandlerIn, RequestId},
@@ -56,11 +57,9 @@ use crate::{
     protocol::{ConnectionType, KadPeer, ProtocolConfig},
     query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState},
     record::{
-        self,
+        self, ProviderRecord, Record,
         store::{self, RecordStore},
-        ProviderRecord, Record,
     },
-    K_VALUE,
 };
 
 /// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
@@ -943,10 +942,10 @@ where
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
     pub fn remove_record(&mut self, key: &record::Key) {
-        if let Some(r) = self.store.get(key) {
-            if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                self.store.remove(key)
-            }
+        if let Some(r) = self.store.get(key)
+            && r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage())
+        {
+            self.store.remove(key)
         }
     }
 
@@ -1171,7 +1170,9 @@ where
 
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
-                tracing::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+                tracing::debug!(
+                    "Switching to client-mode because we no longer have any confirmed external addresses"
+                );
 
                 Mode::Client
             }
@@ -1185,7 +1186,9 @@ where
                     let confirmed_external_addresses =
                         to_comma_separated_list(confirmed_external_addresses);
 
-                    tracing::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    tracing::debug!(
+                        "Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable"
+                    );
                 }
 
                 Mode::Server
@@ -1332,22 +1335,21 @@ where
                 if old_status != new_status {
                     entry.update(new_status)
                 }
-                if let Some(address) = address {
-                    if entry.value().insert(address) {
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            Event::RoutingUpdated {
-                                peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
-                    }
+                if let Some(address) = address
+                    && entry.value().insert(address)
+                {
+                    self.queued_events
+                        .push_back(ToSwarm::GenerateEvent(Event::RoutingUpdated {
+                            peer,
+                            is_new_peer: false,
+                            addresses: entry.value().clone(),
+                            old_peer: None,
+                            bucket_range: self
+                                .kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
+                        }))
                 }
             }
 
@@ -2465,8 +2467,8 @@ where
                     let stats = *query.stats();
                     if let QueryInfo::GetRecord {
                         key,
-                        ref mut step,
-                        ref mut found_a_record,
+                        step,
+                        found_a_record,
                         cache_candidates,
                     } = &mut query.info
                     {
@@ -2587,10 +2589,10 @@ where
         }
 
         // Poll bootstrap periodically and automatically.
-        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
-            if let Err(e) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {e}");
-            }
+        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx)
+            && let Err(e) = self.bootstrap()
+        {
+            tracing::warn!("Failed to trigger bootstrap: {e}");
         }
 
         loop {

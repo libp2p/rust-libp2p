@@ -1,4 +1,33 @@
 ## 0.50.0
+- Simplify gossipsub control message validation by scanning protobuf bytes before decoding
+  to validate cumulative control message size, rather than decoding then counting individual IDs
+  to prevent memory amplification from decoding.
+  Introduce `max_control_message_size` (default 16KB) to limit total control bytes in an RPC.
+  Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
+  Rename `max_control_messages` to `max_control_messages_sent`.
+  See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
+
+- Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
+  See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
+- Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
+  See [PR 6356](https://github.com/libp2p/rust-libp2p/pull/6356)
+
+- Rename metric `topic_msg_sent_bytes` to `topic_msg_last_sent_bytes` for accuracy.
+  See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283)
+
+- Add extra metrics for bytes received and sent, filtered and unfiltered for each topic.
+  See [PR 6192](https://github.com/libp2p/rust-libp2p/pull/6192)
+
+- Reduce log size by implementing custom Debug for RawMessage that logs data length instead of full byte arrays.
+  See [PR 6263](https://github.com/libp2p/rust-libp2p/pull/6263)
+
 - Log when sending and receiving messages.
   See [PR 6234](https://github.com/libp2p/rust-libp2p/pull/6234)
 
@@ -7,6 +36,9 @@
 
 - Fix underflow when shuffling peers after prunning.
   See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
+
+- Implement gossipsub 1.3 partial messages extension.
+  See [PR 6275](https://github.com/libp2p/rust-libp2p/pull/6275)
 
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)
@@ -35,8 +67,19 @@
 - Refactor gossipsub with in-place negative-score peer removal.
   See [PR 6209](https://github.com/libp2p/rust-libp2p/pull/6209).
 
+- Remove `wasm-bindgen` feature and make `wasm` support implicit.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
 - Avoid direct casting from u128 to u64.
   See [PR 6211](https://github.com/libp2p/rust-libp2p/pull/6211).
+
+## 0.49.4
+- Harden time arithmetic and bound remote PRUNE backoff.
+  See [CVE](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-xqmp-fxgv-xvq5)
+
+## 0.49.3
+- Ignore invalid backoff values on peer prune.
+  See [CVE GHSA-gc42-3jg7-rxr2](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-gc42-3jg7-rxr2)
 
 ## 0.49.2
 

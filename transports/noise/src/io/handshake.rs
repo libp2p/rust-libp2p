@@ -23,7 +23,7 @@
 pub(super) mod proto {
     #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
-    pub use self::payload::proto::{NoiseExtensions, NoiseHandshakePayload};
+    pub use self::payload_proto::{NoiseExtensions, NoiseHandshakePayload};
 }
 
 use std::{collections::HashSet, io, mem};
@@ -32,13 +32,13 @@ use asynchronous_codec::Framed;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
-use quick_protobuf::MessageWrite;
+use prost::Message;
 
 use super::framed::Codec;
 use crate::{
+    Error,
     io::Output,
     protocol::{KeypairIdentity, PublicKey, STATIC_KEY_DOMAIN},
-    Error,
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ where
     T: AsyncRead + Unpin,
 {
     let payload = recv(state).await?;
-    if payload.get_size() != 0 {
+    if payload.encoded_len() != 0 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
 
@@ -256,14 +256,14 @@ where
     pb.identity_sig.clone_from(&state.identity.signature);
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
-    if state.io.codec().is_responder() {
-        if let Some(ref certhashes) = state.responder_webtransport_certhashes {
-            let ext = pb
-                .extensions
-                .get_or_insert_with(proto::NoiseExtensions::default);
+    if state.io.codec().is_responder()
+        && let Some(ref certhashes) = state.responder_webtransport_certhashes
+    {
+        let ext = pb
+            .extensions
+            .get_or_insert_with(proto::NoiseExtensions::default);
 
-            ext.webtransport_certhashes = certhashes.iter().map(|hash| hash.to_bytes()).collect();
-        }
+        ext.webtransport_certhashes = certhashes.iter().map(|hash| hash.to_bytes()).collect();
     }
 
     state.io.send(&pb).await?;

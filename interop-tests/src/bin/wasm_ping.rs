@@ -2,13 +2,13 @@
 
 use std::{future::IntoFuture, process::Stdio, time::Duration};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{
+    Json, Router,
     extract::State,
-    http::{header, StatusCode, Uri},
+    http::{StatusCode, Uri, header},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
 };
 use interop_tests::{BlpopRequest, Report};
 use redis::{AsyncCommands, Client};
@@ -20,7 +20,7 @@ use tokio::{
     sync::mpsc,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod config;
 

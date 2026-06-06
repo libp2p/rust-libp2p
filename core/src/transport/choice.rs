@@ -120,7 +120,7 @@ where
                 addr
             }
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(Either::Left(err)))
+                return Err(TransportError::Other(Either::Left(err)));
             }
         };
 
@@ -140,7 +140,7 @@ where
                 addr
             }
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(Either::Right(err)))
+                return Err(TransportError::Other(Either::Right(err)));
             }
         };
 
@@ -154,13 +154,13 @@ where
         let this = self.project();
         match this.0.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(Either::Left))
+                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(Either::Left));
             }
             Poll::Pending => {}
         }
         match this.1.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(Either::Right))
+                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(Either::Right));
             }
             Poll::Pending => {}
         }

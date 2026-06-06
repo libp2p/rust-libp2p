@@ -1,4 +1,11 @@
-## 0.6.1
+## 0.7.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Fix panic with "mapping should exist" caused by conflating port-level mapping state
+  with per-request in-flight tracking under a single `listener_id` key.
+  See [PR 6459](https://github.com/libp2p/rust-libp2p/pull/6459)
 
 - Add integration tests. See [PR 6264](https://github.com/libp2p/rust-libp2p/pull/6264)
 

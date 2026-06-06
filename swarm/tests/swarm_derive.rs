@@ -21,12 +21,12 @@
 use std::fmt::Debug;
 
 use futures::StreamExt;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, dummy,
 };
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -132,7 +132,7 @@ fn custom_event() {
         identify: identify::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::large_enum_variant, dead_code)]
     enum MyEvent {
         Ping,
         Identify,
@@ -166,7 +166,7 @@ fn custom_event_mismatching_field_names() {
         b: identify::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::large_enum_variant, dead_code)]
     enum MyEvent {
         Ping,
         Identify,
@@ -462,6 +462,7 @@ fn with_generics_constrained() {
 fn custom_event_with_either() {
     use either::Either;
 
+    #[allow(dead_code)]
     enum BehaviourOutEvent {
         Kad,
         PingOrIdentify,

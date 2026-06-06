@@ -84,16 +84,16 @@ where
 mod tests {
     use futures::StreamExt;
     use libp2p_core::{
-        multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
         Endpoint,
+        multiaddr::multiaddr,
+        transport::{DialOpts, ListenerId, PortUse, Transport, memory::MemoryTransport},
     };
 
     use super::*;
 
     #[tokio::test]
     async fn ping_pong() {
-        let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
+        let mem_addr = multiaddr![Memory(thread_rng().r#gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
         transport.listen_on(ListenerId::next(), mem_addr).unwrap();
 

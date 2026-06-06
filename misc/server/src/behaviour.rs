@@ -1,9 +1,8 @@
 use std::{str::FromStr, time::Duration};
 
 use libp2p::{
-    autonat, identify, identity, kad, ping, relay,
-    swarm::{behaviour::toggle::Toggle, NetworkBehaviour, StreamProtocol},
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, autonat, identify, identity, kad, ping, relay,
+    swarm::{NetworkBehaviour, StreamProtocol, behaviour::toggle::Toggle},
 };
 
 const BOOTNODES: [&str; 4] = [

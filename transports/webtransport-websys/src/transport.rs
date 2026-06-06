@@ -12,7 +12,7 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 use multiaddr::Multiaddr;
 
-use crate::{endpoint::Endpoint, Connection, Error};
+use crate::{Connection, Error, endpoint::Endpoint};
 
 /// Config for the [`Transport`].
 pub struct Config {
