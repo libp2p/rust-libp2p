@@ -2658,15 +2658,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2941,7 +2932,7 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "rand 0.8.6",
  "rand_core 0.6.4",
@@ -2984,7 +2975,7 @@ dependencies = [
  "multistream-select",
  "parking_lot",
  "pin-project",
- "prost 0.14.3",
+ "prost 0.14.4",
  "rand 0.8.6",
  "rw-stream-sink",
  "thiserror 2.0.18",
@@ -3013,7 +3004,7 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "thiserror 2.0.18",
  "tokio",
@@ -3049,7 +3040,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "rand 0.8.6",
  "smallvec",
@@ -3078,7 +3069,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "prometheus-client",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "quickcheck-ext",
  "rand 0.8.6",
@@ -3104,7 +3095,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "smallvec",
  "thiserror 2.0.18",
@@ -3126,7 +3117,7 @@ dependencies = [
  "k256",
  "multihash",
  "p256",
- "prost 0.14.3",
+ "prost 0.14.4",
  "quickcheck-ext",
  "rand 0.8.6",
  "ring",
@@ -3158,7 +3149,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-yamux",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "quickcheck-ext",
  "rand 0.8.6",
@@ -3274,7 +3265,7 @@ dependencies = [
  "libp2p-identity",
  "multiaddr",
  "multihash",
- "prost 0.14.3",
+ "prost 0.14.4",
  "quickcheck-ext",
  "rand 0.8.6",
  "snow",
@@ -3353,7 +3344,7 @@ dependencies = [
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "quickcheck-ext",
  "tracing",
@@ -3424,7 +3415,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-yamux",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "quickcheck-ext",
  "rand 0.8.6",
@@ -3450,7 +3441,7 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "rand 0.8.6",
  "thiserror 2.0.18",
@@ -3670,7 +3661,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-codec",
  "rand 0.8.6",
  "serde",
@@ -4857,12 +4848,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ea70524a2f82d518bce41317d0fae74151505651af45faf1ffbd6fd33f0568"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
 dependencies = [
  "bytes",
- "prost-derive 0.14.3",
+ "prost-derive 0.14.4",
 ]
 
 [[package]]
@@ -4872,12 +4863,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "log",
  "multimap",
  "petgraph",
  "prettyplease",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-types",
  "regex",
  "syn",
@@ -4891,7 +4882,7 @@ dependencies = [
  "asynchronous-codec",
  "bytes",
  "futures",
- "prost 0.14.3",
+ "prost 0.14.4",
  "quickcheck-ext",
  "thiserror 2.0.18",
  "unsigned-varint",
@@ -4904,7 +4895,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn",
@@ -4912,12 +4903,12 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn",
@@ -4931,7 +4922,7 @@ checksum = "590aa145fee8f7a26b5a6055365e7c5e89a5c1caae9869de76ec0ee73181a2f9"
 dependencies = [
  "logos 0.16.1",
  "miette",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-types",
 ]
 
@@ -4941,7 +4932,7 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8991c4cbdb8bc5b11f0b074ffe286c30e523de90fee5ba8132f1399f23cb3dd7"
 dependencies = [
- "prost 0.14.3",
+ "prost 0.14.4",
 ]
 
 [[package]]
@@ -4952,7 +4943,7 @@ checksum = "4f25a07a73c6717f0b9bbbd685918f5df9815f7efba450b83d9c9dea41f0e3a1"
 dependencies = [
  "bytes",
  "miette",
- "prost 0.14.3",
+ "prost 0.14.4",
  "prost-reflect",
  "prost-types",
  "protox-parse",
