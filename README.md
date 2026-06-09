@@ -94,6 +94,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [beetle](https://github.com/n0-computer/beetle) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [Neptune](https://github.com/Neptune-Crypto/neptune-core) - post-quantum, scalable, and private blockchain with zk-STARKs on Layer-1.
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [qaul قول](https://github.com/qaul/qaul.net) - Internet Independent Wireless Mesh Communication App
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
