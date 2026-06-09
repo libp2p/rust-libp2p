@@ -84,7 +84,31 @@ pub trait TopicSubscriptionFilter {
 
 // some useful implementers
 
-/// Allows all subscriptions
+/// A subscription filter that imposes **no policy**: every topic a peer announces is accepted
+/// and recorded in the per-peer subscribed-topics set.
+///
+/// This is the default filter used by [`crate::Behaviour::new`].
+///
+/// # When to use
+///
+/// Suitable for closed networks, integration tests, local development, and deployments where
+/// every connected peer is fully trusted. The filter performs no validation and no accounting,
+/// which keeps it light-weight for those settings.
+///
+/// # Production deployments
+///
+/// In a deployment that accepts connections from untrusted peers, `AllowAllSubscriptionFilter`
+/// places no upper bound on:
+///
+/// * the number of subscription entries decoded per inbound RPC frame, or
+/// * the number of topics a single peer can accumulate in its per-peer subscribed-topics set.
+///
+/// Because each accepted topic costs a heap allocation in the receiver's bookkeeping, a peer
+/// that repeatedly subscribes to unique topics can drive the gossipsub state to grow linearly
+/// for the lifetime of its connection. Prefer [`MaxCountSubscriptionFilter`] (or
+/// [`WhitelistSubscriptionFilter`] if the topic set is known up-front) and wire it through
+/// [`crate::Behaviour::new_with_subscription_filter_and_transform`]. See the
+/// "Production hardening" section in the crate root for a worked example.
 #[derive(Default, Clone)]
 pub struct AllowAllSubscriptionFilter {}
 
@@ -94,7 +118,12 @@ impl TopicSubscriptionFilter for AllowAllSubscriptionFilter {
     }
 }
 
-/// Allows only whitelisted subscriptions
+/// Accepts subscriptions only for a fixed, pre-declared topic set.
+///
+/// Recommended for deployments where the full set of valid topics is known at construction time
+/// (for example, Ethereum 2 consensus clients enumerate `/eth2/<fork-digest>/<topic>/ssz_snappy`
+/// strings before peering). Any inbound subscription for a topic outside the whitelist is
+/// dropped before it is recorded against the peer.
 #[derive(Default, Clone)]
 pub struct WhitelistSubscriptionFilter(pub HashSet<TopicHash>);
 
@@ -104,7 +133,29 @@ impl TopicSubscriptionFilter for WhitelistSubscriptionFilter {
     }
 }
 
-/// Adds a max count to a given subscription filter
+/// Wraps another [`TopicSubscriptionFilter`] with per-RPC and per-peer accumulation caps.
+///
+/// `max_subscriptions_per_request` bounds the number of `Subscribe` / `Unsubscribe` actions
+/// that may be applied per inbound RPC frame; `max_subscribed_topics` bounds the cardinality of
+/// the per-peer subscribed-topics set after the inner filter has run. Subscriptions that would
+/// breach either bound are rejected before the peer's bookkeeping is updated.
+///
+/// This is the recommended default for production deployments that accept connections from
+/// untrusted peers. A common pattern is:
+///
+/// ```rust,ignore
+/// use libp2p::gossipsub::{AllowAllSubscriptionFilter, MaxCountSubscriptionFilter};
+///
+/// let filter = MaxCountSubscriptionFilter {
+///     filter: AllowAllSubscriptionFilter::default(),
+///     max_subscribed_topics: 16_384,
+///     max_subscriptions_per_request: 500,
+/// };
+/// ```
+///
+/// Choose `max_subscribed_topics` to accommodate the legitimate topic fan-out of your
+/// application plus a comfort margin (the value above is a generic upper bound; consensus
+/// clients with a known topic count typically use a much smaller cap).
 pub struct MaxCountSubscriptionFilter<T: TopicSubscriptionFilter> {
     pub filter: T,
     pub max_subscribed_topics: usize,
