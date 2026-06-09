@@ -844,7 +844,7 @@ struct HistBuilder {
     buckets: Vec<f64>,
 }
 
-/// Label for the total size of publish messages sent via RPC.
+/// Label for the total size of publish messages sent via an RPC.
 #[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct RpcSentLabel {
     partial: bool,
@@ -852,7 +852,7 @@ struct RpcSentLabel {
 }
 
 /// Label for the mesh peers.
-/// Label for the total size of publish messages sent via RPC.
+/// Label for the total size of publish messages sent via an RPC.
 #[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct MeshPeerLabel {
     supports_partial: bool,
