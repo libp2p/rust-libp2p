@@ -9,6 +9,11 @@
 - Remove no longer constructed GetRecordError::QuorumFailed.
   See [PR 6106](https://github.com/libp2p/rust-libp2p/pull/6106)
 
+- Add `Behaviour::get_record_from`: a seeded `GET` that contacts only a
+  caller-supplied peer set, mirroring `Behaviour::put_record_to`. This is the
+  primitive required by S/Kademlia §4.2 node-disjoint record lookups.
+  See [PR 6475](https://github.com/libp2p/rust-libp2p/pull/6475).
+
 ## 0.48.1
 
 - Implement `Copy` for `QueryStats` and `ProgressStep`
