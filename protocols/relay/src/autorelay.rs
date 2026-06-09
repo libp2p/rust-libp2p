@@ -5,8 +5,6 @@ use std::{
     time::Duration,
 };
 
-use web_time::{Instant, SystemTime};
-
 use either::Either;
 use libp2p_core::{
     Endpoint,
@@ -24,6 +22,7 @@ use libp2p_swarm::{
     dial_opts::DialOpts,
     dummy,
 };
+use web_time::{Instant, SystemTime};
 
 use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
 
