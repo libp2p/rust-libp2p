@@ -155,6 +155,24 @@ pub enum Event {
     NonRoutableGateway,
 }
 
+struct Config {
+    /// If true, only private IPv4 addresses are eligible for UPnP mapping.
+    /// Set to false in tests that use loopback or other non-private addresses.
+    require_private_address: bool,
+    /// If true, the discovered gateway must have a globally routable external address.
+    /// Set to false in tests that run without real UPnP infrastructure.
+    require_routable_gateway: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            require_private_address: true,
+            require_routable_gateway: true,
+        }
+    }
+}
+
 /// A [`NetworkBehaviour`] for UPnP port mapping. Automatically tries to map the external port
 /// to an internal address on the gateway on a [`FromSwarm::NewListenAddr`].
 pub struct Behaviour {
@@ -175,8 +193,8 @@ pub struct Behaviour {
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<Event>,
 
-    /// Relaxes certain checks to enable testing in environments without real UPnP infrastructure.
-    test_mode: bool,
+    /// Behaviour configuration.
+    config: Config,
 }
 
 impl Default for Behaviour {
@@ -187,20 +205,23 @@ impl Default for Behaviour {
             add_requests: Default::default(),
             remove_requests: Default::default(),
             pending_events: VecDeque::new(),
-            test_mode: false,
+            config: Default::default(),
         }
     }
 }
 
 impl Behaviour {
-    /// Creates a new `Behaviour` with `test_mode` enabled.
-    pub fn new_with_test_mode() -> Self {
+    /// Creates a new `Behaviour` for integration tests.
+    pub fn new_for_integration_tests() -> Self {
         Self {
-            test_mode: true,
             // Shorten the timeout to speed up `GatewayNotFound` tests.
             state: GatewayState::Searching(crate::tokio::search_gateway(Some(
                 Duration::from_secs(1),
             ))),
+            config: Config {
+                require_private_address: false,
+                require_routable_gateway: false,
+            },
             ..Default::default()
         }
     }
@@ -238,9 +259,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let Ok((addr, protocol)) =
-                    multiaddr_to_socketaddr_protocol(multiaddr.clone(), self.test_mode)
-                else {
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(
+                    multiaddr.clone(),
+                    self.config.require_private_address,
+                ) else {
                     tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
                     return;
                 };
@@ -305,9 +327,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let Ok((addr, protocol)) =
-                    multiaddr_to_socketaddr_protocol(multiaddr.clone(), self.test_mode)
-                else {
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(
+                    multiaddr.clone(),
+                    self.config.require_private_address,
+                ) else {
                     tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
                     return;
                 };
@@ -374,7 +397,9 @@ impl NetworkBehaviour for Behaviour {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(Ok(result)) => match result {
                         Ok(mut gateway) => {
-                            if !self.test_mode && !is_addr_global(gateway.external_addr) {
+                            if self.config.require_routable_gateway
+                                && !is_addr_global(gateway.external_addr)
+                            {
                                 self.state =
                                     GatewayState::NonRoutableGateway(gateway.external_addr);
                                 tracing::debug!(
@@ -670,12 +695,12 @@ fn renew_mappings(
 /// non-private addresses like 127.0.0.1.
 fn multiaddr_to_socketaddr_protocol(
     addr: Multiaddr,
-    test_mode: bool,
+    require_private_address: bool,
 ) -> Result<(SocketAddr, PortMappingProtocol), ()> {
     let mut iter = addr.into_iter();
     match iter.next() {
         // Idg only supports Ipv4.
-        Some(multiaddr::Protocol::Ip4(ipv4)) if test_mode || ipv4.is_private() => {
+        Some(multiaddr::Protocol::Ip4(ipv4)) if !require_private_address || ipv4.is_private() => {
             match iter.next() {
                 Some(multiaddr::Protocol::Tcp(port)) => {
                     return Ok((
@@ -724,7 +749,7 @@ mod tests {
             add_requests: Default::default(),
             remove_requests: Default::default(),
             pending_events: VecDeque::new(),
-            test_mode: false,
+            config: Default::default(),
         };
         (behaviour, event_tx, req_rx)
     }

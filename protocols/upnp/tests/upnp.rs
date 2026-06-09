@@ -59,7 +59,8 @@ async fn port_mapping_success() {
         .await;
 
     // Use test_mode to bypass IP address validations for testing.
-    let mut swarm = Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_with_test_mode());
+    let mut swarm =
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
 
     swarm.listen().await;
 
@@ -126,7 +127,8 @@ async fn port_mapping_failure() {
         .await;
 
     // Use test_mode to bypass IP address validations for testing.
-    let mut swarm = Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_with_test_mode());
+    let mut swarm =
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
 
     swarm.listen().await;
 
@@ -214,7 +216,8 @@ async fn non_routable_gateway() {
 #[tokio::test]
 async fn gateway_not_found() {
     // No mock server - SSDP discovery should fail
-    let mut swarm = Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_with_test_mode());
+    let mut swarm =
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
 
     swarm.listen().await;
 
