@@ -1,5 +1,9 @@
 ## 0.5.0-alpha
 
+- Fix memory leak: remove the per-connection `Sender` from `Shared::senders`
+  when a connection closes. Previously every established connection leaked one
+  sender entry forever, growing memory unboundedly under connection churn.
+  See [PR 6283](https://github.com/libp2p/rust-libp2p/pull/6283).
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
