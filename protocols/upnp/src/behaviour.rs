@@ -200,7 +200,7 @@ pub struct Behaviour {
 impl Default for Behaviour {
     fn default() -> Self {
         Self {
-            state: GatewayState::Searching(crate::tokio::search_gateway(None)),
+            state: GatewayState::Searching(crate::tokio::search_gateway(None, None)),
             mappings: Default::default(),
             add_requests: Default::default(),
             remove_requests: Default::default(),
@@ -212,16 +212,33 @@ impl Default for Behaviour {
 
 impl Behaviour {
     /// Creates a new `Behaviour` for integration tests.
-    pub fn new_for_integration_tests() -> Self {
+    ///
+    /// The gateway search is directed at `discovery_addr` instead of the default SSDP address.
+    pub fn new_for_integration_tests(discovery_addr: SocketAddr) -> Self {
         Self {
-            // Shorten the timeout to speed up `GatewayNotFound` tests.
-            state: GatewayState::Searching(crate::tokio::search_gateway(Some(
-                Duration::from_secs(1),
-            ))),
+            state: GatewayState::Searching(crate::tokio::search_gateway(
+                Some(Duration::from_secs(1)),
+                Some(discovery_addr),
+            )),
             config: Config {
                 require_private_address: false,
                 require_routable_gateway: false,
             },
+            ..Default::default()
+        }
+    }
+
+    /// Creates a new `Behaviour` for integration tests, keeping the gateway routability check
+    /// enabled.
+    ///
+    /// Like [`Behaviour::new_for_integration_tests`], but uses the default configuration so that
+    /// a gateway with a non-routable external address triggers [`Event::NonRoutableGateway`].
+    pub fn new_for_integration_tests_with_routability_check(discovery_addr: SocketAddr) -> Self {
+        Self {
+            state: GatewayState::Searching(crate::tokio::search_gateway(
+                Some(Duration::from_secs(1)),
+                Some(discovery_addr),
+            )),
             ..Default::default()
         }
     }

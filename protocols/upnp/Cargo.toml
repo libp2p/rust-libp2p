@@ -22,7 +22,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 libp2p-swarm-test = { path = "../../swarm-test" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-mock-igd = "0.1"
+mock-igd = "0.2"
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]

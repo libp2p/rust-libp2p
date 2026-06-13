@@ -18,7 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, net::IpAddr, time::Duration};
+use std::{
+    error::Error,
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 use futures::{
     SinkExt, StreamExt,
@@ -96,8 +100,11 @@ pub(crate) struct Gateway {
 ///
 /// * `timeout` - Optional timeout duration for the gateway search. If `None`, the default timeout
 ///   from [`igd_next::SearchOptions`] is used.
+/// * `discovery_addr` - Optional address to send SSDP discovery packets to. If `None`, the default
+///   address from [`igd_next::SearchOptions`] is used.
 pub(crate) fn search_gateway(
     timeout: Option<Duration>,
+    discovery_addr: Option<SocketAddr>,
 ) -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>> {
     let (search_result_sender, search_result_receiver) = oneshot::channel();
 
@@ -105,14 +112,13 @@ pub(crate) fn search_gateway(
     let (mut task_sender, events_queue) = mpsc::channel(0);
 
     tokio::spawn(async move {
-        let search_options = if timeout.is_some() {
-            SearchOptions {
-                timeout,
-                ..Default::default()
-            }
-        } else {
-            SearchOptions::default()
-        };
+        let mut search_options = SearchOptions::default();
+        if timeout.is_some() {
+            search_options.timeout = timeout;
+        }
+        if let Some(discovery_addr) = discovery_addr {
+            search_options.broadcast_address = discovery_addr;
+        }
         let gateway = match igd_next::aio::tokio::search_gateway(search_options).await {
             Ok(gateway) => gateway,
             Err(err) => {

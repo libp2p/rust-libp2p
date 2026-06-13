@@ -20,7 +20,10 @@
 
 //! Integration tests for the `UPnP` network behaviour.
 //!
-//! NOTE: If an IGD device exists in the test environment, results may be unintended.
+//! Each test runs its own mock IGD server on a unique (ephemeral) SSDP port and directs
+//! the gateway search at that port. This isolates the tests from each other, allowing
+//! them to run in parallel, and from any real IGD device on the network (which listens
+//! on the default SSDP port 1900).
 
 use std::time::Duration;
 
@@ -36,9 +39,9 @@ const MOCK_EXTERNAL_IP: &str = "203.0.113.42";
 /// Test that port mapping succeeds when the gateway responds successfully.
 #[tokio::test]
 async fn port_mapping_success() {
-    // Start the mock IGD server with SSDP enabled
+    // Start the mock IGD server with SSDP enabled on an ephemeral port
     let igd_server = MockIgdServer::builder()
-        .with_ssdp()
+        .ssdp_port(0)
         .start()
         .await
         .expect("Failed to start mock IGD server");
@@ -59,8 +62,11 @@ async fn port_mapping_success() {
         .await;
 
     // Use test_mode to bypass IP address validations for testing.
+    let addr = igd_server
+        .ssdp_addr()
+        .expect("SSDP server should be running");
     let mut swarm =
-        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests(addr));
 
     swarm.listen().await;
 
@@ -103,9 +109,9 @@ async fn port_mapping_success() {
 /// Test that port mapping failure is handled gracefully.
 #[tokio::test]
 async fn port_mapping_failure() {
-    // Start the mock IGD server with SSDP enabled
+    // Start the mock IGD server with SSDP enabled on an ephemeral port
     let igd_server = MockIgdServer::builder()
-        .with_ssdp()
+        .ssdp_port(0)
         .start()
         .await
         .expect("Failed to start mock IGD server");
@@ -127,8 +133,11 @@ async fn port_mapping_failure() {
         .await;
 
     // Use test_mode to bypass IP address validations for testing.
+    let addr = igd_server
+        .ssdp_addr()
+        .expect("SSDP server should be running");
     let mut swarm =
-        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests(addr));
 
     swarm.listen().await;
 
@@ -161,9 +170,9 @@ async fn port_mapping_failure() {
 /// Test that the behaviour emits NonRoutableGateway when the gateway returns a private IP address.
 #[tokio::test]
 async fn non_routable_gateway() {
-    // Start the mock IGD server with SSDP enabled
+    // Start the mock IGD server with SSDP enabled on an ephemeral port
     let igd_server = MockIgdServer::builder()
-        .with_ssdp()
+        .ssdp_port(0)
         .start()
         .await
         .expect("Failed to start mock IGD server");
@@ -178,8 +187,14 @@ async fn non_routable_gateway() {
         )
         .await;
 
-    // Don't use test_mode so that the private IP address check remains active.
-    let mut swarm = Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::default());
+    // Keep the routability check active so that the private external IP returned by the
+    // mock triggers the NonRoutableGateway event.
+    let addr = igd_server
+        .ssdp_addr()
+        .expect("SSDP server should be running");
+    let mut swarm = Swarm::new_ephemeral_tokio(|_| {
+        upnp::tokio::Behaviour::new_for_integration_tests_with_routability_check(addr)
+    });
 
     swarm.listen().await;
 
@@ -215,9 +230,16 @@ async fn non_routable_gateway() {
 /// Test that the behaviour emits GatewayNotFound when no gateway is available.
 #[tokio::test]
 async fn gateway_not_found() {
-    // No mock server - SSDP discovery should fail
+    // No mock server - SSDP discovery should fail.
+    // Reserve an address by binding a UDP socket and keep it alive for the duration of the test.
+    // The socket never responds to the M-SEARCH, so the gateway search times out.
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind UDP socket");
+    let addr = socket.local_addr().expect("Socket should be bound");
+
     let mut swarm =
-        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests());
+        Swarm::new_ephemeral_tokio(|_| upnp::tokio::Behaviour::new_for_integration_tests(addr));
 
     swarm.listen().await;
 
