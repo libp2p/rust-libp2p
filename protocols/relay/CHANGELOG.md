@@ -12,6 +12,8 @@
   See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
 - Expire external address when a relay listener is closed without a replacement reservation.
   See [PR 6285](https://github.com/libp2p/rust-libp2p/pull/6285).
+- Implements autorelay that would make a reservation as soon as a connection reports supporting HOP protocol.
+  See [PR 6156](https://github.com/libp2p/rust-libp2p/pull/6156)
 
 ## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
