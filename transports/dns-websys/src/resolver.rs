@@ -183,9 +183,8 @@ fn build_query_url(endpoint: &str, name: &str, qtype: u16) -> Result<Url, Resolv
 /// Issues the actual `fetch` for a DoH JSON query and returns the response body.
 async fn doh_get(url: &str, timeout: Duration) -> Result<String, ResolveError> {
     let opts = RequestInit::new();
-    opts.set_signal(Some(&AbortSignal::timeout_with_f64(
-        timeout.as_millis() as f64
-    )));
+    let timeout_ms = timeout.as_millis().clamp(1, u32::MAX as u128) as u32;
+    opts.set_signal(Some(&AbortSignal::timeout_with_u32(timeout_ms)));
 
     let request = Request::new_with_str_and_init(url, &opts).map_err(js_error)?;
     request
