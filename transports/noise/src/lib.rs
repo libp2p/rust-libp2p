@@ -74,11 +74,19 @@ use multiaddr::Protocol;
 use multihash::Multihash;
 use snow::params::NoiseParams;
 
+#[cfg(feature = "mlkem-hfs")]
+use crate::protocol::PARAMS_XX_HFS;
 use crate::{
     handshake::State,
     io::handshake,
     protocol::{AuthenticKeypair, Keypair, PARAMS_XX, noise_params_into_builder},
 };
+
+const NOISE_PROTOCOL: &str = "/noise";
+
+/// `Noise_XXhfs_25519+ML-KEM-768_ChaChaPoly_SHA256`. Provisional, pending a spec.
+#[cfg(feature = "mlkem-hfs")]
+const NOISE_MLKEM_HFS_PROTOCOL: &str = "/noise-mlkem768-hfs/0.1.0";
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
@@ -126,13 +134,22 @@ impl Config {
         self
     }
 
+    #[cfg_attr(not(feature = "mlkem-hfs"), allow(unused_variables))]
+    fn params_for(&self, info: &str) -> NoiseParams {
+        #[cfg(feature = "mlkem-hfs")]
+        if info == NOISE_MLKEM_HFS_PROTOCOL {
+            return PARAMS_XX_HFS.clone();
+        }
+        self.params.clone()
+    }
+
     fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_responder()?;
 
         let state = State::new(
@@ -152,7 +169,7 @@ impl Config {
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_initiator()?;
 
         let state = State::new(
@@ -169,10 +186,18 @@ impl Config {
 
 impl UpgradeInfo for Config {
     type Info = &'static str;
-    type InfoIter = std::iter::Once<Self::Info>;
+    type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once("/noise")
+        // Hybrid PQ first, classical fallback.
+        #[cfg(feature = "mlkem-hfs")]
+        {
+            vec![NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL].into_iter()
+        }
+        #[cfg(not(feature = "mlkem-hfs"))]
+        {
+            vec![NOISE_PROTOCOL].into_iter()
+        }
     }
 }
 
@@ -184,8 +209,9 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(mut self, socket: T, info: Self::Info) -> Self::Future {
         async move {
+            self.params = self.params_for(info);
             let mut state = self.into_responder(socket)?;
 
             handshake::recv_empty(&mut state).await?;
@@ -208,8 +234,9 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, socket: T, info: Self::Info) -> Self::Future {
         async move {
+            self.params = self.params_for(info);
             let mut state = self.into_initiator(socket)?;
 
             handshake::send_empty(&mut state).await?;
