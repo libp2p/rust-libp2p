@@ -216,10 +216,46 @@ async fn doh_get(url: &str, timeout: Duration) -> Result<String, ResolveError> {
 /// DoH JSON returns TXT records wrapped in literal double quotes; strip a single
 /// surrounding pair if present.
 fn unquote_txt(s: &str) -> String {
-    s.strip_prefix('"')
-        .and_then(|s| s.strip_suffix('"'))
-        .unwrap_or(s)
-        .to_owned()
+    // Some endpoints return short values unquoted; pass those through verbatim.
+    if !s.contains('"') {
+        return s.to_owned();
+    }
+
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        // Skip whitespace between quoted segments; only quoted content contributes.
+        if c != '"' {
+            continue;
+        }
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => break,
+                '\\' => match chars.next() {
+                    // `\DDD` decimal byte escape (RFC 1035 s5.1).
+                    Some(d) if d.is_ascii_digit() => {
+                        let mut code = d.to_digit(10).unwrap();
+                        for _ in 0..2 {
+                            match chars.peek() {
+                                Some(p) if p.is_ascii_digit() => {
+                                    code = code * 10 + chars.next().unwrap().to_digit(10).unwrap();
+                                }
+                                _ => break,
+                            }
+                        }
+                        if let Some(ch) = char::from_u32(code) {
+                            out.push(ch);
+                        }
+                    }
+                    // `\"`, `\\`, or any other escaped char: keep the char as-is.
+                    Some(other) => out.push(other),
+                    None => {}
+                },
+                _ => out.push(c),
+            }
+        }
+    }
+    out
 }
 
 fn js_error(value: JsValue) -> ResolveError {
