@@ -1,11 +1,9 @@
 use std::{
     collections::VecDeque,
+    convert::Infallible,
     task::{Context, Poll},
-    time::Duration,
 };
 
-use futures::FutureExt;
-use futures_timer::Delay;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol, SupportedProtocols,
@@ -27,24 +25,16 @@ pub struct Handler {
     supported: bool,
 
     supported_protocol: SupportedProtocols,
-
-    blacklist_timer: Option<Delay>,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum In {
-    Blacklist { duration: Duration },
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum Out {
     Supported,
     Unsupported,
-    BlacklistExpired,
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = In;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Out;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -60,11 +50,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        match event {
-            In::Blacklist { duration } => {
-                self.blacklist_timer = Some(Delay::new(duration));
-            }
-        }
+        match event {}
     }
 
     fn on_connection_event(
@@ -92,7 +78,6 @@ impl ConnectionHandler for Handler {
                     }
                     (false, true) => {
                         self.supported = false;
-                        self.blacklist_timer = None;
                         self.events
                             .push_back(ConnectionHandlerEvent::NotifyBehaviour(Out::Unsupported));
                     }
@@ -105,23 +90,12 @@ impl ConnectionHandler for Handler {
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
-        }
-
-        if let Some(timer) = self.blacklist_timer.as_mut()
-            && timer.poll_unpin(cx).is_ready()
-        {
-            self.blacklist_timer = None;
-            if self.supported {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Out::BlacklistExpired,
-                ));
-            }
         }
 
         Poll::Pending

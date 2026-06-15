@@ -6,6 +6,8 @@ use std::{
 };
 
 use either::Either;
+use futures::FutureExt;
+use futures_timer::Delay;
 use libp2p_core::{
     Endpoint,
     multiaddr::Protocol,
@@ -13,7 +15,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
+    ExternalAddresses, ListenOpts, NewListenAddr,
     derive_prelude::{
         AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
         DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
@@ -48,9 +50,13 @@ pub struct Behaviour {
 
     failure_counts: HashMap<PeerId, u32>,
 
+    reservation_cooldowns: HashMap<PeerId, Instant>,
+
     previous_relays: VecDeque<(PeerId, Multiaddr, SystemTime)>,
 
     relays_available: bool,
+
+    cooldown_wakeup: Option<(Instant, Delay)>,
 
     waker: Option<Waker>,
 }
@@ -69,8 +75,10 @@ impl Default for Behaviour {
             static_relays: HashMap::new(),
             static_dial_cooldowns: HashMap::new(),
             failure_counts: HashMap::new(),
+            reservation_cooldowns: HashMap::new(),
             previous_relays: VecDeque::new(),
             relays_available: false,
+            cooldown_wakeup: None,
             waker: None,
         }
     }
@@ -110,7 +118,6 @@ enum ReservationStatus {
     Idle,
     Pending { id: ListenerId },
     Active { id: ListenerId },
-    Blacklisted,
 }
 
 #[derive(Debug)]
@@ -316,6 +323,47 @@ impl Behaviour {
 
     fn clear_failure(&mut self, peer_id: &PeerId) {
         self.failure_counts.remove(peer_id);
+        self.reservation_cooldowns.remove(peer_id);
+    }
+
+    fn reservation_in_cooldown(&self, peer_id: &PeerId) -> bool {
+        self.reservation_cooldowns
+            .get(peer_id)
+            .is_some_and(|deadline| *deadline > Instant::now())
+    }
+
+    fn poll_reservation_cooldowns(&mut self, cx: &mut Context<'_>) -> bool {
+        let now = Instant::now();
+
+        if self
+            .reservation_cooldowns
+            .values()
+            .any(|deadline| *deadline <= now)
+        {
+            self.reservation_cooldowns
+                .retain(|_, deadline| *deadline > now);
+            self.cooldown_wakeup = None;
+            self.meet_reservation_target();
+            return true;
+        }
+
+        match self.reservation_cooldowns.values().copied().min() {
+            Some(deadline) => {
+                if self.cooldown_wakeup.as_ref().map(|(at, _)| *at) != Some(deadline) {
+                    let delay = Delay::new(deadline.saturating_duration_since(now));
+                    self.cooldown_wakeup = Some((deadline, delay));
+                }
+            }
+            None => {
+                self.cooldown_wakeup = None;
+                return false;
+            }
+        }
+
+        match self.cooldown_wakeup.as_mut() {
+            Some((_, timer)) => timer.poll_unpin(cx).is_ready(),
+            None => false,
+        }
     }
 
     fn determine_status_from_external_addresses(&mut self) {
@@ -470,28 +518,19 @@ impl Behaviour {
             return;
         };
 
-        let blacklist_duration = failed.then(|| self.record_failure(peer_id));
+        let cooldown_duration = failed.then(|| self.record_failure(peer_id));
 
         let connection = self
             .connections
             .get_mut(&(peer_id, connection_id))
             .expect("connection is tracked");
-        match blacklist_duration {
-            Some(duration) => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Blacklisted,
-                };
-                self.events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(connection_id),
-                    event: Either::Left(handler::In::Blacklist { duration }),
-                });
-            }
-            None => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                };
-            }
+        connection.relay_status = RelayStatus::Supported {
+            status: ReservationStatus::Idle,
+        };
+
+        if let Some(duration) = cooldown_duration {
+            self.reservation_cooldowns
+                .insert(peer_id, Instant::now() + duration);
         }
 
         self.record_previous_relay(peer_id, address);
@@ -523,6 +562,9 @@ impl Behaviour {
         let mut candidates: BTreeMap<_, ConnectionId> = BTreeMap::new();
         for ((peer_id, connection_id), info) in self.connections.iter() {
             if covered.contains(peer_id) {
+                continue;
+            }
+            if self.reservation_in_cooldown(peer_id) {
                 continue;
             }
             if info.relay_status
@@ -659,7 +701,6 @@ impl NetworkBehaviour for Behaviour {
                     RelayStatus::Supported {
                         status: ReservationStatus::Active { .. }
                             | ReservationStatus::Pending { .. }
-                            | ReservationStatus::Blacklisted
                     }
                 );
 
@@ -800,19 +841,6 @@ impl NetworkBehaviour for Behaviour {
                 }
                 self.update_relay_availability();
             }
-            Out::BlacklistExpired => {
-                if matches!(
-                    connection.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Blacklisted
-                    }
-                ) {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
-                    self.meet_reservation_target();
-                }
-            }
         }
     }
 
@@ -820,12 +848,18 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
+        loop {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
+
+            if self.poll_reservation_cooldowns(cx) {
+                continue;
+            }
+
+            self.waker = Some(cx.waker().clone());
+
+            return Poll::Pending;
         }
-
-        self.waker = Some(cx.waker().clone());
-
-        Poll::Pending
     }
 }
