@@ -137,7 +137,7 @@ if-watch = "3.2.2"
 multiaddr = "0.18.1"
 multihash = "0.19.5"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
-prometheus-client = "0.24"
+prometheus-client = "0.25"
 prost-codec = { version = "0.4.0", path = "misc/prost-codec" }
 prost = "0.14"
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
