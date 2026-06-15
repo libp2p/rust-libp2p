@@ -43,7 +43,6 @@ pub enum Out {
     BlacklistExpired,
 }
 
-#[allow(deprecated)]
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Out;
