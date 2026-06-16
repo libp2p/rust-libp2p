@@ -470,6 +470,36 @@ where
         request_id
     }
 
+    /// Like [`Behaviour::send_request`], but using a specific protocol for negotiation.
+    ///
+    /// This allows explicitly selecting which protocol to use instead of offering all
+    /// configured outbound protocols.
+    pub fn send_request_with_protocol(
+        &mut self,
+        peer: &PeerId,
+        request: TCodec::Request,
+        protocol: TCodec::Protocol,
+    ) -> OutboundRequestId {
+        let request_id = self.next_outbound_request_id();
+        let request = OutboundMessage {
+            request_id,
+            request,
+            protocols: SmallVec::from_iter([protocol]),
+        };
+
+        if let Some(request) = self.try_send_request(peer, request) {
+            self.pending_events.push_back(ToSwarm::Dial {
+                opts: DialOpts::peer_id(*peer).build(),
+            });
+            self.pending_outbound_requests
+                .entry(*peer)
+                .or_default()
+                .push(request);
+        }
+
+        request_id
+    }
+
     /// Initiates sending a response to an inbound request.
     ///
     /// If the [`ResponseChannel`] is already closed due to a timeout or the
