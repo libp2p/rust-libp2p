@@ -1,5 +1,8 @@
 ## 0.5.0-alpha
 
+- Add `Control::open_stream_on_connection` to open an outbound stream on a
+  specific connection instead of a randomly chosen one.
+  See [PR 6487](https://github.com/libp2p/rust-libp2p/pull/6487).
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

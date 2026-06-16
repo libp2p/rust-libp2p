@@ -11,7 +11,7 @@ use futures::{
     channel::{mpsc, oneshot},
 };
 use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
+use libp2p_swarm::{ConnectionId, Stream, StreamProtocol};
 
 use crate::{AlreadyRegistered, handler::NewStream, shared::Shared};
 
@@ -49,6 +49,37 @@ impl Control {
         tracing::debug!(%peer, "Requesting new stream");
 
         let mut new_stream_sender = Shared::lock(&self.shared).sender(peer);
+
+        let (sender, receiver) = oneshot::channel();
+
+        new_stream_sender
+            .send(NewStream { protocol, sender })
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
+
+        let stream = receiver
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
+
+        Ok(stream)
+    }
+
+    /// Like [`Control::open_stream`] but opens on a specific `connection`
+    /// instead of picking one of the peer's connections. Errors if that
+    /// connection is not, or no longer, established.
+    pub async fn open_stream_on_connection(
+        &mut self,
+        peer: PeerId,
+        connection: ConnectionId,
+        protocol: StreamProtocol,
+    ) -> Result<Stream, OpenStreamError> {
+        tracing::debug!(%peer, %connection, "Requesting new stream on connection");
+
+        let mut new_stream_sender = Shared::lock(&self.shared)
+            .sender_on(connection)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotConnected, "connection not established")
+            })?;
 
         let (sender, receiver) = oneshot::channel();
 

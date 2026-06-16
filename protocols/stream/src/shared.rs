@@ -122,6 +122,11 @@ impl Shared {
         }
     }
 
+    /// Sender for a specific connection, if it is established.
+    pub(crate) fn sender_on(&self, connection: ConnectionId) -> Option<mpsc::Sender<NewStream>> {
+        self.senders.get(&connection).cloned()
+    }
+
     pub(crate) fn sender(&mut self, peer: PeerId) -> mpsc::Sender<NewStream> {
         let maybe_sender = self
             .connections
