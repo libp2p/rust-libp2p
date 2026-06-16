@@ -1,5 +1,9 @@
 ## 0.4.0
 
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - Add ConnectionError to FromSwarm::ConnectionClosed.
