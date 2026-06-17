@@ -1,9 +1,7 @@
-## 0.45.0
+## 0.44.0
 
 - Add unreliable datagram support to `StreamMuxer`: `send_datagram`, `max_datagram_size`, and `StreamMuxerEvent::Datagram`. Unsupported muxers return `SendDatagramError::Unsupported`.
   See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
-
-## 0.44.0
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
