@@ -1,7 +1,7 @@
 ## 0.45.0
 
 - Add unreliable datagram support to `StreamMuxer`: `send_datagram`, `max_datagram_size`, and `StreamMuxerEvent::Datagram`. Unsupported muxers return `SendDatagramError::Unsupported`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
 
 ## 0.44.0
 

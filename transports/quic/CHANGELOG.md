@@ -1,7 +1,7 @@
 ## 0.15.0
 
 - Support unreliable QUIC datagrams, enabled by default. Tune via `Config::datagram_receive_buffer_size` and `datagram_send_buffer_size`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
 
 ## 0.14.0
 
