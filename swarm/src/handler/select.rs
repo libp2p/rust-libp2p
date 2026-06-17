@@ -29,7 +29,7 @@ use libp2p_core::upgrade::SelectUpgrade;
 
 use crate::{
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
         ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
     },
@@ -241,6 +241,9 @@ where
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
                 return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support));
             }
+            Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
+                return Poll::Ready(ConnectionHandlerEvent::SendDatagram(data));
+            }
             Poll::Pending => (),
         };
 
@@ -259,6 +262,9 @@ where
             }
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
                 return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support));
+            }
+            Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
+                return Poll::Ready(ConnectionHandlerEvent::SendDatagram(data));
             }
             Poll::Pending => (),
         };
@@ -317,6 +323,16 @@ where
                 self.proto2
                     .on_connection_event(ConnectionEvent::AddressChange(AddressChange {
                         new_address: address.new_address,
+                    }));
+            }
+            ConnectionEvent::Datagram(datagram) => {
+                self.proto1
+                    .on_connection_event(ConnectionEvent::Datagram(Datagram {
+                        data: datagram.data,
+                    }));
+                self.proto2
+                    .on_connection_event(ConnectionEvent::Datagram(Datagram {
+                        data: datagram.data,
                     }));
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {

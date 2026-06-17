@@ -26,9 +26,10 @@ use std::{
     task::{Context, Poll},
 };
 
+use bytes::Bytes;
 pub use connecting::Connecting;
 use futures::{FutureExt, future::BoxFuture};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_core::muxing::{SendDatagramError, StreamMuxer, StreamMuxerEvent};
 pub use stream::Stream;
 
 use crate::{ConnectionError, Error};
@@ -47,6 +48,8 @@ pub struct Connection {
     >,
     /// Future to wait for the connection to be closed.
     closing: Option<BoxFuture<'static, quinn::ConnectionError>>,
+    /// Future for the next inbound datagram.
+    datagrams: Option<BoxFuture<'static, Result<Bytes, quinn::ConnectionError>>>,
 }
 
 impl Connection {
@@ -60,6 +63,7 @@ impl Connection {
             incoming: None,
             outgoing: None,
             closing: None,
+            datagrams: None,
         }
     }
 }
@@ -104,11 +108,35 @@ impl StreamMuxer for Connection {
 
     fn poll(
         self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        // TODO: If connection migration is enabled (currently disabled) address
-        // change on the connection needs to be handled.
-        Poll::Pending
+        let this = self.get_mut();
+        let datagrams = this.datagrams.get_or_insert_with(|| {
+            let connection = this.connection.clone();
+            async move { connection.read_datagram().await }.boxed()
+        });
+        let bytes = futures::ready!(datagrams.poll_unpin(cx)).map_err(ConnectionError)?;
+        this.datagrams.take();
+        Poll::Ready(Ok(StreamMuxerEvent::Datagram(bytes)))
+    }
+
+    fn send_datagram(self: Pin<&mut Self>, data: Bytes) -> Result<(), SendDatagramError> {
+        let connection = &self.get_mut().connection;
+        let size = data.len();
+        connection.send_datagram(data).map_err(|e| match e {
+            quinn::SendDatagramError::UnsupportedByPeer | quinn::SendDatagramError::Disabled => {
+                SendDatagramError::Unsupported
+            }
+            quinn::SendDatagramError::TooLarge => SendDatagramError::TooLarge {
+                size,
+                max: connection.max_datagram_size().unwrap_or(0),
+            },
+            quinn::SendDatagramError::ConnectionLost(_) => SendDatagramError::ConnectionClosed,
+        })
+    }
+
+    fn max_datagram_size(&self) -> Option<usize> {
+        self.connection.max_datagram_size()
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {

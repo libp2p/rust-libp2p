@@ -21,7 +21,7 @@ use futures_timer::Delay;
 use libp2p_core::{
     Endpoint, Multiaddr, Transport,
     multiaddr::Protocol,
-    muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
+    muxing::{StreamMuxer, StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
     transport::{
         Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
     },
@@ -40,6 +40,39 @@ use tracing_subscriber::EnvFilter;
 #[tokio::test]
 async fn tokio_smoke() {
     smoke::<quic::tokio::Provider>().await
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn tokio_datagram_roundtrip() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let ((_, _, mut a_conn), (_, mut b_conn)) =
+        connect(&mut a_transport, &mut b_transport, a_addr).await;
+
+    assert!(b_conn.max_datagram_size().is_some(), "datagrams enabled");
+
+    let payload = bytes::Bytes::from_static(b"ztcs unreliable datagram");
+    Pin::new(&mut b_conn)
+        .send_datagram(payload.clone())
+        .unwrap();
+
+    let received = poll_fn(|cx| {
+        let _ = b_conn.poll_unpin(cx);
+        match a_conn.poll_unpin(cx) {
+            Poll::Ready(Ok(StreamMuxerEvent::Datagram(bytes))) => Poll::Ready(bytes),
+            Poll::Ready(Err(e)) => panic!("muxer error: {e}"),
+            _ => Poll::Pending,
+        }
+    })
+    .await;
+
+    assert_eq!(received, payload);
 }
 
 #[cfg(feature = "tokio")]

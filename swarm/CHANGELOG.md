@@ -1,3 +1,8 @@
+## 0.49.0
+
+- Add unreliable datagram support: `ConnectionEvent::Datagram` (inbound) and `ConnectionHandlerEvent::SendDatagram` (outbound).
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.48.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.

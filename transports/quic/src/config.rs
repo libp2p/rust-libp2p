@@ -51,6 +51,13 @@ pub struct Config {
     /// of a connection.
     pub max_connection_data: u32,
 
+    /// Bytes to buffer for received unreliable datagrams. `None` disables
+    /// datagram support.
+    pub datagram_receive_buffer_size: Option<usize>,
+
+    /// Bytes to buffer for outgoing unreliable datagrams.
+    pub datagram_send_buffer_size: usize,
+
     /// Support QUIC version draft-29 for dialing and listening.
     ///
     /// Per default only QUIC Version 1 / [`libp2p_core::multiaddr::Protocol::QuicV1`]
@@ -96,6 +103,8 @@ impl Config {
 
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
+            datagram_receive_buffer_size: Some(256 * 1024),
+            datagram_send_buffer_size: 256 * 1024,
             keypair: keypair.clone(),
             mtu_discovery_config: Some(Default::default()),
         }
@@ -135,6 +144,8 @@ impl From<Config> for QuinnConfig {
             keep_alive_interval,
             max_connection_data,
             max_stream_data,
+            datagram_receive_buffer_size,
+            datagram_send_buffer_size,
             support_draft_29,
             handshake_timeout: _,
             keypair,
@@ -144,8 +155,8 @@ impl From<Config> for QuinnConfig {
         // Disable uni-directional streams.
         transport.max_concurrent_uni_streams(0u32.into());
         transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
-        // Disable datagrams.
-        transport.datagram_receive_buffer_size(None);
+        transport.datagram_receive_buffer_size(datagram_receive_buffer_size);
+        transport.datagram_send_buffer_size(datagram_send_buffer_size);
         transport.keep_alive_interval(Some(keep_alive_interval));
         transport.max_idle_timeout(Some(VarInt::from_u32(max_idle_timeout).into()));
         transport.allow_spin(false);

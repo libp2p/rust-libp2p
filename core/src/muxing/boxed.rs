@@ -6,10 +6,11 @@ use std::{
     task::{Context, Poll},
 };
 
+use bytes::Bytes;
 use futures::{AsyncRead, AsyncWrite};
 use pin_project::pin_project;
 
-use crate::muxing::{StreamMuxer, StreamMuxerEvent};
+use crate::muxing::{SendDatagramError, StreamMuxer, StreamMuxerEvent};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
@@ -79,6 +80,14 @@ where
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         self.project().inner.poll(cx).map_err(into_io_error)
     }
+
+    fn send_datagram(self: Pin<&mut Self>, data: Bytes) -> Result<(), SendDatagramError> {
+        self.project().inner.send_datagram(data)
+    }
+
+    fn max_datagram_size(&self) -> Option<usize> {
+        self.inner.max_datagram_size()
+    }
 }
 
 fn into_io_error<E>(err: E) -> io::Error
@@ -138,6 +147,14 @@ impl StreamMuxer for StreamMuxerBox {
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         self.project().poll(cx)
+    }
+
+    fn send_datagram(self: Pin<&mut Self>, data: Bytes) -> Result<(), SendDatagramError> {
+        self.project().send_datagram(data)
+    }
+
+    fn max_datagram_size(&self) -> Option<usize> {
+        self.inner.as_ref().get_ref().max_datagram_size()
     }
 }
 
