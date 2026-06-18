@@ -5,7 +5,7 @@ use futures::StreamExt as _;
 use libp2p_core::{Transport as _, muxing::StreamMuxerBox};
 use libp2p_datagram as datagram;
 use libp2p_identity::Keypair;
-use libp2p_swarm::{Config, Swarm, SwarmEvent};
+use libp2p_swarm::{Config, StreamProtocol, Swarm, SwarmEvent};
 
 fn quic_swarm() -> Swarm<datagram::Behaviour> {
     let keypair = Keypair::generate_ed25519();
@@ -15,7 +15,7 @@ fn quic_swarm() -> Swarm<datagram::Behaviour> {
         .boxed();
     Swarm::new(
         transport,
-        datagram::Behaviour::new(),
+        datagram::Behaviour::new(StreamProtocol::new("/example/datagram/1.0.0")),
         peer_id,
         Config::with_tokio_executor().with_idle_connection_timeout(Duration::from_secs(10)),
     )
@@ -45,7 +45,7 @@ async fn datagram_roundtrip_over_quic() {
 
     dialer.dial(addr).unwrap();
 
-    let payload = Bytes::from_static(b"ztcs unreliable datagram");
+    let payload = Bytes::from_static(b"unreliable datagram");
     // Lossy: resend until one lands.
     let mut resend = tokio::time::interval(Duration::from_millis(20));
     let mut connected = false;

@@ -6,51 +6,98 @@ use std::{
 
 use bytes::Bytes;
 use futures::channel::mpsc;
-use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol, handler::ConnectionEvent,
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 
+use crate::{framing, protocol::Upgrade};
+
+/// Drives one datagram flow: the dialer opens the `/dg/1` control stream, both
+/// ends learn its stream id, and datagrams are framed and filtered by it.
 pub struct Handler {
     remote: PeerId,
+    role: Endpoint,
+    protocol: StreamProtocol,
     inbound: mpsc::Sender<(PeerId, Bytes)>,
+    requested_control_stream: bool,
+    control_stream_id: Option<u64>,
+    // Held open for the life of the flow, per spec; never read or written again.
+    control_stream: Option<Stream>,
     outbound: VecDeque<Bytes>,
 }
 
 impl Handler {
-    pub(crate) fn new(remote: PeerId, inbound: mpsc::Sender<(PeerId, Bytes)>) -> Self {
+    pub(crate) fn new(
+        remote: PeerId,
+        role: Endpoint,
+        protocol: StreamProtocol,
+        inbound: mpsc::Sender<(PeerId, Bytes)>,
+    ) -> Self {
         Self {
             remote,
+            role,
+            protocol,
             inbound,
+            requested_control_stream: false,
+            control_stream_id: None,
+            control_stream: None,
             outbound: VecDeque::new(),
         }
+    }
+
+    fn upgrade(&self) -> SubstreamProtocol<Upgrade, ()> {
+        SubstreamProtocol::new(
+            Upgrade {
+                application_protocol: self.protocol.clone(),
+            },
+            (),
+        )
+    }
+
+    fn establish(&mut self, stream: Stream) {
+        self.control_stream_id = stream.transport_stream_id();
+        self.control_stream = Some(stream);
     }
 }
 
 impl ConnectionHandler for Handler {
     type FromBehaviour = Bytes;
     type ToBehaviour = Infallible;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
+    type InboundProtocol = Upgrade;
+    type OutboundProtocol = Upgrade;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
+    fn listen_protocol(&self) -> SubstreamProtocol<Upgrade> {
+        self.upgrade()
     }
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
-        match self.outbound.pop_front() {
-            Some(data) => Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)),
-            None => Poll::Pending,
+        _: &mut Context<'_>,
+    ) -> Poll<ConnectionHandlerEvent<Upgrade, (), Infallible>> {
+        if self.role == Endpoint::Dialer && !self.requested_control_stream {
+            self.requested_control_stream = true;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: self.upgrade(),
+            });
         }
+
+        if let Some(id) = self.control_stream_id
+            && let Some(payload) = self.outbound.pop_front()
+        {
+            return Poll::Ready(ConnectionHandlerEvent::SendDatagram(framing::frame(
+                id, &payload,
+            )));
+        }
+
+        Poll::Pending
     }
 
-    fn on_behaviour_event(&mut self, data: Self::FromBehaviour) {
+    fn on_behaviour_event(&mut self, data: Bytes) {
         self.outbound.push_back(data);
     }
 
@@ -58,8 +105,23 @@ impl ConnectionHandler for Handler {
         &mut self,
         event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
-        if let ConnectionEvent::Datagram(datagram) = event {
-            let _ = self.inbound.try_send((self.remote, datagram.data.clone()));
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: stream,
+                ..
+            })
+            | ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: stream,
+                ..
+            }) => self.establish(stream),
+            ConnectionEvent::Datagram(datagram) => {
+                if let Some((id, payload)) = framing::parse(datagram.data)
+                    && Some(id) == self.control_stream_id
+                {
+                    let _ = self.inbound.try_send((self.remote, payload));
+                }
+            }
+            _ => {}
         }
     }
 }

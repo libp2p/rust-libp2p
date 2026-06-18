@@ -16,6 +16,7 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 libp2p-swarm = { workspace = true }
 thiserror = { workspace = true }
+unsigned-varint = { workspace = true, features = ["futures"] }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }

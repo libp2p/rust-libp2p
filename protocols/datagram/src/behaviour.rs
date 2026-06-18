@@ -8,16 +8,17 @@ use futures::{Stream, StreamExt, channel::mpsc};
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, StreamProtocol,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::{Control, handler::Handler};
 
 const CHANNEL_BUFFER: usize = 256;
 
-/// Sends and receives unreliable datagrams.
+/// Sends and receives unreliable datagrams for a single application protocol.
 pub struct Behaviour {
+    protocol: StreamProtocol,
     outbound_tx: mpsc::Sender<OutboundDatagram>,
     outbound_rx: mpsc::Receiver<OutboundDatagram>,
     inbound_tx: mpsc::Sender<(PeerId, Bytes)>,
@@ -30,17 +31,13 @@ pub(crate) struct OutboundDatagram {
     pub(crate) data: Bytes,
 }
 
-impl Default for Behaviour {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Behaviour {
-    pub fn new() -> Self {
+    /// Datagrams negotiated under `protocol` on the `/dg/1` control stream.
+    pub fn new(protocol: StreamProtocol) -> Self {
         let (outbound_tx, outbound_rx) = mpsc::channel(CHANNEL_BUFFER);
         let (inbound_tx, incoming) = mpsc::channel(CHANNEL_BUFFER);
         Self {
+            protocol,
             outbound_tx,
             outbound_rx,
             inbound_tx,
@@ -81,7 +78,12 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(peer, self.inbound_tx.clone()))
+        Ok(Handler::new(
+            peer,
+            Endpoint::Listener,
+            self.protocol.clone(),
+            self.inbound_tx.clone(),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -92,7 +94,12 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(peer, self.inbound_tx.clone()))
+        Ok(Handler::new(
+            peer,
+            Endpoint::Dialer,
+            self.protocol.clone(),
+            self.inbound_tx.clone(),
+        ))
     }
 
     fn on_swarm_event(&mut self, _event: FromSwarm) {}
