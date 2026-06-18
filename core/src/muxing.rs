@@ -123,6 +123,19 @@ pub trait StreamMuxer {
     fn max_datagram_size(&self) -> Option<usize> {
         None
     }
+
+    /// Transport-assigned stream id, where one exists (QUIC, WebTransport).
+    ///
+    /// Keys a datagram flow to its control stream, see [libp2p/specs#680].
+    ///
+    /// [libp2p/specs#680]: https://github.com/libp2p/specs/pull/680
+    fn substream_id(substream: &Self::Substream) -> Option<u64>
+    where
+        Self: Sized,
+    {
+        let _ = substream;
+        None
+    }
 }
 
 /// An event produced by a [`StreamMuxer`].

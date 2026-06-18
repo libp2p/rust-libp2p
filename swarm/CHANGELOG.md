@@ -3,6 +3,9 @@
 - Add unreliable datagram support: `ConnectionEvent::Datagram` (inbound) and `ConnectionHandlerEvent::SendDatagram` (outbound).
   See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
 
+- Add `Stream::transport_stream_id`, exposing the transport stream id (QUIC) for datagram flows.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 

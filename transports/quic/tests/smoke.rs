@@ -57,7 +57,7 @@ async fn tokio_datagram_roundtrip() {
 
     assert!(b_conn.max_datagram_size().is_some(), "datagrams enabled");
 
-    let payload = bytes::Bytes::from_static(b"ztcs unreliable datagram");
+    let payload = bytes::Bytes::from_static(b"unreliable datagram");
     Pin::new(&mut b_conn)
         .send_datagram(payload.clone())
         .unwrap();
@@ -73,6 +73,21 @@ async fn tokio_datagram_roundtrip() {
     .await;
 
     assert_eq!(received, payload);
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn tokio_substream_id_surfaced() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let (stream_a, stream_b) = build_streams::<quic::tokio::Provider>().await;
+
+    // Both ends of one bidi stream report the same QUIC stream id (libp2p/specs#680).
+    let id = stream_a.transport_stream_id();
+    assert!(id.is_some(), "QUIC surfaces a stream id");
+    assert_eq!(id, stream_b.transport_stream_id());
 }
 
 #[cfg(feature = "tokio")]
