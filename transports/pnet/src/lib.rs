@@ -83,7 +83,7 @@ impl PreSharedKey {
         Fingerprint(out)
     }
 
-    /// Export the unredacted key in go-libp2p key file format.
+    /// Export the unredacted private key.
     pub fn to_key_file(&self) -> String {
         self.to_string()
     }
