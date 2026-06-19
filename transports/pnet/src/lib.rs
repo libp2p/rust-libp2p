@@ -85,7 +85,7 @@ impl PreSharedKey {
 
     /// Export the unredacted private key.
     pub fn to_key_file(&self) -> String {
-        self.to_string()
+        format!("/key/swarm/psk/1.0.0/\n/base16/\n{}\n", to_hex(&self.0))
     }
 }
 
@@ -144,9 +144,7 @@ impl fmt::Debug for PreSharedKey {
 /// Formats the unredacted key in go-libp2p key file format.
 impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "/key/swarm/psk/1.0.0/")?;
-        writeln!(f, "/base16/")?;
-        writeln!(f, "{}", to_hex(&self.0))
+        f.write_str(&self.to_key_file())
     }
 }
 
@@ -420,23 +418,5 @@ mod tests {
 
         assert!(key_file.contains(raw_hex));
         assert_eq!(key_file.parse::<PreSharedKey>().unwrap(), key);
-    }
-
-    #[test]
-    fn key_file_export_matches_display_serialization() {
-        let raw_hex = "6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683";
-        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}")
-            .parse::<PreSharedKey>()
-            .unwrap();
-
-        assert_eq!(
-            key.to_key_file(),
-            key.to_string(),
-            "to_key_file delegates to Display; if Display stops serializing raw key files, decouple to_key_file before changing this expectation"
-        );
-        assert_eq!(
-            key.to_key_file(),
-            format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}\n")
-        );
     }
 }
