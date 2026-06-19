@@ -84,7 +84,7 @@ impl PreSharedKey {
     }
 
     /// Export the unredacted private key.
-    pub fn to_key_file(&self) -> String {
+    pub fn to_key_file(self) -> String {
         format!("/key/swarm/psk/1.0.0/\n/base16/\n{}\n", to_hex(&self.0))
     }
 }
