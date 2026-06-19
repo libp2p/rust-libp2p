@@ -497,18 +497,16 @@ async fn deny_circuit_to_connected_peer_without_reservation() {
     while !(relay_saw_dst && dst_connected) {
         tokio::select! {
             event = relay.select_next_some() => {
-                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
-                    if peer_id == dst_peer_id {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event
+                    && peer_id == dst_peer_id {
                         relay_saw_dst = true;
                     }
-                }
             }
             event = dst.select_next_some() => {
-                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
-                    if peer_id == relay_peer_id {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event
+                    &&  peer_id == relay_peer_id {
                         dst_connected = true;
                     }
-                }
             }
         }
     }
@@ -534,12 +532,10 @@ async fn deny_circuit_to_connected_peer_without_reservation() {
                     error: DialError::Transport(mut errors),
                     ..
                 } = event
-                {
-                    if connection_id == circuit_connection_id {
+                    && connection_id == circuit_connection_id {
                         assert_eq!(errors.len(), 1);
                         break errors.remove(0);
                     }
-                }
             }
         }
     };
