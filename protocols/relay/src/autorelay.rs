@@ -26,8 +26,10 @@ use libp2p_swarm::{
 };
 use web_time::{Instant, SystemTime};
 
-use crate::multiaddr_ext::relay_peer_id;
-use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
+use crate::{
+    autorelay::handler::Out,
+    multiaddr_ext::{MultiaddrExt, relay_peer_id},
+};
 
 mod handler;
 
