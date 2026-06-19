@@ -769,7 +769,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                if let Some(relay_peer_id) = relay_peer_id(&addr) {
+                if let Some(relay_peer_id) = relay_peer_id(addr) {
                     self.external_reservations
                         .insert(listener_id, relay_peer_id);
                 }
