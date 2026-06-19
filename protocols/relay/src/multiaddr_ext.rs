@@ -3,23 +3,22 @@ use libp2p_identity::PeerId;
 
 pub(crate) trait MultiaddrExt {
     fn is_relayed(&self) -> bool;
-    fn relay_peer_id(&self) -> Option<PeerId>;
 }
 
 impl MultiaddrExt for Multiaddr {
     fn is_relayed(&self) -> bool {
         self.iter().any(|p| p == Protocol::P2pCircuit)
     }
+}
 
-    fn relay_peer_id(&self) -> Option<PeerId> {
-        let mut last_p2p = None;
-        for proto in self.iter() {
-            match proto {
-                Protocol::P2p(peer) => last_p2p = Some(peer),
-                Protocol::P2pCircuit => return last_p2p,
-                _ => {}
-            }
+pub(crate) fn relay_peer_id(addr: &Multiaddr) -> Option<PeerId> {
+    let mut last_p2p = None;
+    for proto in addr.iter() {
+        match proto {
+            Protocol::P2p(peer) => last_p2p = Some(peer),
+            Protocol::P2pCircuit => return last_p2p,
+            _ => {}
         }
-        None
     }
+    None
 }

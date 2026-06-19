@@ -27,6 +27,7 @@ use libp2p_swarm::{
 use web_time::{Instant, SystemTime};
 
 use crate::{autorelay::handler::Out, multiaddr_ext::MultiaddrExt};
+use crate::multiaddr_ext::relay_peer_id;
 
 mod handler;
 
@@ -766,7 +767,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                if let Some(relay_peer_id) = addr.relay_peer_id() {
+                if let Some(relay_peer_id) = relay_peer_id(&addr) {
                     self.external_reservations
                         .insert(listener_id, relay_peer_id);
                 }
