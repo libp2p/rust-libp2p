@@ -408,19 +408,22 @@ impl Behaviour {
     fn evict_for_static_peer(&mut self, new_static: PeerId) {
         let covered = self.covered_peers();
         if covered.contains(&new_static) {
+            tracing::debug!(%new_static, "peer is already covered by a reservation");
             return;
         }
         let max = self.config.max_reservations.get() as usize;
         if covered.len() < max {
+            tracing::debug!(%new_static, "free reservation slot available. no eviction needed");
             return;
         }
 
-        if let Some(listener_id) = self
+        if let Some((peer_id, listener_id)) = self
             .reservations
             .iter()
             .find(|(_, (peer_id, _))| !self.static_relays.contains_key(peer_id))
-            .map(|(listener_id, _)| *listener_id)
+            .map(|(listener_id, (peer_id, _))| (peer_id, *listener_id))
         {
+            tracing::debug!(%peer_id, %listener_id, "evicting peer to for static relay");
             self.events
                 .push_back(ToSwarm::RemoveListener { id: listener_id });
         }
