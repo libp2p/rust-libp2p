@@ -178,50 +178,21 @@ pub trait NetworkBehaviour: 'static {
     /// [`WithPeerIdWithAddresses::extend_addresses_through_behaviour`](crate::dial_opts::WithPeerIdWithAddresses::extend_addresses_through_behaviour)
     /// is set.
     ///
-    /// Any error returned from this function will immediately abort the dial attempt.
+    /// The addresses can be provided either synchronously ([`OutboundAddresses::Ready`], the
+    /// default) or asynchronously ([`OutboundAddresses::Pending`]). A [`OutboundAddresses::Pending`]
+    /// future is driven by the [`Swarm`](crate::Swarm) poll loop and is never polled on the dialing
+    /// thread, so a behaviour can source addresses from a store that is not held in memory (for
+    /// example an on-disk database) without blocking the `Swarm`.
+    ///
+    /// Returning an `Err` (synchronously or from the future) immediately aborts the dial attempt.
     fn handle_pending_outbound_connection(
         &mut self,
         _connection_id: ConnectionId,
         _maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        Ok(vec![])
-    }
-
-    /// Like [`NetworkBehaviour::handle_pending_outbound_connection`], but allows the addresses to be
-    /// resolved **asynchronously**, off the main [`Swarm`](crate::Swarm) poll loop.
-    ///
-    /// The behaviour decides synchronously whether it can answer now ([`OutboundAddresses::Ready`])
-    /// or needs to go async ([`OutboundAddresses::Pending`]):
-    ///
-    /// - [`OutboundAddresses::Ready`], the `Swarm` takes the same synchronous path as
-    ///   [`NetworkBehaviour::handle_pending_outbound_connection`], so `DialError::Denied` /
-    ///   `DialError::NoAddresses` are still returned synchronously from [`Swarm::dial`](crate::Swarm).
-    /// - [`OutboundAddresses::Pending`], the `Swarm` drives the future to completion in its own poll
-    ///   loop (it is **never** polled on the dialing thread). This lets a behaviour source addresses
-    ///   from a store that is *not* held in memory (e.g. an on-disk or remote database) without
-    ///   blocking the `Swarm`. The eventual errors surface as
-    ///   [`SwarmEvent::OutgoingConnectionError`](crate::SwarmEvent).
-    ///
-    /// Returning an `Err` (either inline or from the future) denies the dial, exactly like
-    /// [`NetworkBehaviour::handle_pending_outbound_connection`].
-    ///
-    /// The default implementation delegates synchronously to
-    /// [`NetworkBehaviour::handle_pending_outbound_connection`].
-    fn resolve_pending_outbound_addresses(
-        &mut self,
-        connection_id: ConnectionId,
-        maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: Endpoint,
     ) -> OutboundAddresses {
-        OutboundAddresses::Ready(self.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        ))
+        OutboundAddresses::Ready(Ok(vec![]))
     }
 
     /// Callback that is invoked for every established outbound connection.
@@ -266,7 +237,7 @@ pub trait NetworkBehaviour: 'static {
     -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
 }
 
-/// The outcome of [`NetworkBehaviour::resolve_pending_outbound_addresses`].
+/// The outcome of [`NetworkBehaviour::handle_pending_outbound_connection`].
 ///
 /// A behaviour returns [`OutboundAddresses::Ready`] when it can supply (or deny) the dial addresses
 /// synchronously, or [`OutboundAddresses::Pending`] when it needs to resolve them asynchronously
@@ -276,7 +247,7 @@ pub enum OutboundAddresses {
     /// [`Swarm::dial`](crate::Swarm), preserving its synchronous `DialError` return.
     Ready(Result<Vec<Multiaddr>, ConnectionDenied>),
     /// Addresses must be resolved asynchronously. The future is driven to completion by the `Swarm`
-    /// poll loop and is **never** polled on the dialing thread. Returning `Err` denies the dial.
+    /// poll loop and is never polled on the dialing thread. Returning `Err` denies the dial.
     Pending(BoxFuture<'static, Result<Vec<Multiaddr>, ConnectionDenied>>),
 }
 

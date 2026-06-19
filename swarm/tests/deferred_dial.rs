@@ -51,7 +51,7 @@ impl NetworkBehaviour for AsyncAddrBehaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn resolve_pending_outbound_addresses(
+    fn handle_pending_outbound_connection(
         &mut self,
         _: ConnectionId,
         _: Option<PeerId>,

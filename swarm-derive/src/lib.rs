@@ -312,34 +312,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     };
 
     // The content of `handle_pending_outbound_connection`.
+    //
+    // Note tha each child is queried in field order, short-circuiting on the first denial.
+    // Ready children If every child is `Ready` the composite stays synchronous, otherwise it folds
+    // the children together in field order so each child's address ordering is preserved.
     let handle_pending_outbound_connection = {
-        let extend_stmts =
-            data_struct
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(field_n, field)| {
-                    match field.ident {
-                        Some(ref i) => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#i, connection_id, maybe_peer, addresses, effective_role)?);
-                        },
-                        None => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#field_n, connection_id, maybe_peer, addresses, effective_role)?);
-                        }
-                    }
-                });
-
-        quote! {
-            let mut combined_addresses = vec![];
-
-            #(#extend_stmts)*
-
-            Ok(combined_addresses)
-        }
-    };
-
-    // The content of `resolve_pending_outbound_addresses`.
-    let resolve_pending_outbound_addresses = {
         let resolve_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
             let access = match field.ident {
                 Some(ref i) => quote! { self.#i },
@@ -347,7 +324,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             };
 
             quote! {
-                match #trait_to_impl::resolve_pending_outbound_addresses(&mut #access, connection_id, maybe_peer, addresses, effective_role) {
+                match #trait_to_impl::handle_pending_outbound_connection(&mut #access, connection_id, maybe_peer, addresses, effective_role) {
                     #outbound_addresses::Ready(::std::result::Result::Ok(addrs)) => {
                         slots.push(#either_ident::Left(addrs));
                     }
@@ -500,25 +477,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 Ok(#handle_established_inbound_connection)
             }
 
-            #[allow(clippy::needless_question_mark)]
             fn handle_pending_outbound_connection(
                 &mut self,
                 connection_id: #connection_id,
                 maybe_peer: Option<#peer_id>,
                 addresses: &[#multiaddr],
                 effective_role: #endpoint,
-            ) -> std::result::Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
-                #handle_pending_outbound_connection
-            }
-
-            fn resolve_pending_outbound_addresses(
-                &mut self,
-                connection_id: #connection_id,
-                maybe_peer: Option<#peer_id>,
-                addresses: &[#multiaddr],
-                effective_role: #endpoint,
             ) -> #outbound_addresses {
-                #resolve_pending_outbound_addresses
+                #handle_pending_outbound_connection
             }
 
             #[allow(clippy::needless_question_mark)]

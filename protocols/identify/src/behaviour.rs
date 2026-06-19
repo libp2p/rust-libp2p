@@ -34,8 +34,8 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
     _address_translation, ConnectionDenied, ConnectionId, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, OutboundAddresses, PeerAddresses,
+    StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
 };
 
@@ -530,12 +530,12 @@ impl NetworkBehaviour for Behaviour {
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let Some(peer) = maybe_peer else {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         };
 
-        Ok(self.discovered_peers.get(&peer))
+        OutboundAddresses::Ready(Ok(self.discovered_peers.get(&peer)))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {

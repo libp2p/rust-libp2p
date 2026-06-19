@@ -33,8 +33,8 @@ use libp2p_core::{Endpoint, Multiaddr, PeerRecord, transport::PortUse};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour,
+    OutboundAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::codec::{
@@ -333,11 +333,11 @@ impl NetworkBehaviour for Behaviour {
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let addrs = maybe_peer
             .map(|peer| self.discovered_peer_addrs(&peer).cloned().collect())
             .unwrap_or_default();
-        Ok(addrs)
+        OutboundAddresses::Ready(Ok(addrs))
     }
 }
 

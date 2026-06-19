@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_noise as noise;
-use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, OutboundAddresses, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, SeedableRng, random, rngs::StdRng, thread_rng};
@@ -44,6 +44,13 @@ use crate::{
 };
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
+
+fn ready_addresses(outcome: OutboundAddresses) -> Vec<Multiaddr> {
+    match outcome {
+        OutboundAddresses::Ready(result) => result.expect("addresses, not a denial"),
+        OutboundAddresses::Pending(_) => panic!("expected synchronously-ready addresses"),
+    }
+}
 
 fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
@@ -1414,15 +1421,13 @@ fn network_behaviour_on_address_change() {
     // configured protocol name, so the peer is not yet in the
     // local routing table and hence no addresses are known.
     assert!(
-        kademlia
-            .handle_pending_outbound_connection(
-                connection_id,
-                Some(remote_peer_id),
-                &[],
-                Endpoint::Dialer
-            )
-            .unwrap()
-            .is_empty()
+        ready_addresses(kademlia.handle_pending_outbound_connection(
+            connection_id,
+            Some(remote_peer_id),
+            &[],
+            Endpoint::Dialer
+        ))
+        .is_empty()
     );
 
     // Mimic the connection handler confirming the protocol for
@@ -1435,14 +1440,12 @@ fn network_behaviour_on_address_change() {
 
     assert_eq!(
         vec![old_address.clone()],
-        kademlia
-            .handle_pending_outbound_connection(
-                connection_id,
-                Some(remote_peer_id),
-                &[],
-                Endpoint::Dialer
-            )
-            .unwrap(),
+        ready_addresses(kademlia.handle_pending_outbound_connection(
+            connection_id,
+            Some(remote_peer_id),
+            &[],
+            Endpoint::Dialer
+        )),
     );
 
     kademlia.on_swarm_event(FromSwarm::AddressChange(AddressChange {
@@ -1462,14 +1465,12 @@ fn network_behaviour_on_address_change() {
 
     assert_eq!(
         vec![new_address],
-        kademlia
-            .handle_pending_outbound_connection(
-                connection_id,
-                Some(remote_peer_id),
-                &[],
-                Endpoint::Dialer
-            )
-            .unwrap(),
+        ready_addresses(kademlia.handle_pending_outbound_connection(
+            connection_id,
+            Some(remote_peer_id),
+            &[],
+            Endpoint::Dialer
+        )),
     );
 }
 

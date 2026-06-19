@@ -493,11 +493,11 @@ where
         let mut addresses_from_opts = dial_opts.get_addresses();
 
         // Ask the behaviour for the dial addresses. A `Ready` answer (the default, and every
-        // in-memory behaviour) is handled synchronously here, preserving `Swarm::dial`'s synchronous
-        // `DialError` return. A `Pending` answer defers the dial: the future is driven by
-        // `Swarm::poll_next_event` (never on this thread) and its eventual errors surface as
+        // in-memory behaviour) is handled synchronously here and preserves the synchronous
+        // `DialError` return. A `Pending` answer defers the dial. The future is driven by
+        // `Swarm::poll_next_event`, never on this thread, and its eventual errors surface as
         // `SwarmEvent::OutgoingConnectionError`.
-        match self.behaviour.resolve_pending_outbound_addresses(
+        match self.behaviour.handle_pending_outbound_connection(
             connection_id,
             peer_id,
             &addresses_from_opts,
@@ -1725,7 +1725,7 @@ impl Config {
     }
 
     /// Configures how long a [`NetworkBehaviour`]'s asynchronous outbound address resolution
-    /// (see [`NetworkBehaviour::resolve_pending_outbound_addresses`]) may run before the dial is
+    /// (see [`NetworkBehaviour::handle_pending_outbound_connection`]) may run before the dial is
     /// failed with [`DialError::Denied`].
     ///
     /// This only applies to behaviours that return [`OutboundAddresses::Pending`]. Resolutions that

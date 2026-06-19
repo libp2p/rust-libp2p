@@ -118,30 +118,9 @@ where
         maybe_peer: Option<PeerId>,
         addresses: &[Multiaddr],
         effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(vec![]);
-        };
-
-        let addresses = inner.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        )?;
-
-        Ok(addresses)
-    }
-
-    fn resolve_pending_outbound_addresses(
-        &mut self,
-        connection_id: ConnectionId,
-        maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: Endpoint,
     ) -> OutboundAddresses {
         match self.inner.as_mut() {
-            Some(inner) => inner.resolve_pending_outbound_addresses(
+            Some(inner) => inner.handle_pending_outbound_connection(
                 connection_id,
                 maybe_peer,
                 addresses,
