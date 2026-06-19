@@ -27,6 +27,7 @@ pub mod toggle;
 use std::task::{Context, Poll};
 
 pub use external_addresses::ExternalAddresses;
+use futures::future::BoxFuture;
 use libp2p_core::{
     ConnectedPoint, Endpoint, Multiaddr,
     transport::{ListenerId, PortUse},
@@ -188,6 +189,41 @@ pub trait NetworkBehaviour: 'static {
         Ok(vec![])
     }
 
+    /// Like [`NetworkBehaviour::handle_pending_outbound_connection`], but allows the addresses to be
+    /// resolved **asynchronously**, off the main [`Swarm`](crate::Swarm) poll loop.
+    ///
+    /// The behaviour decides synchronously whether it can answer now ([`OutboundAddresses::Ready`])
+    /// or needs to go async ([`OutboundAddresses::Pending`]):
+    ///
+    /// - [`OutboundAddresses::Ready`], the `Swarm` takes the same synchronous path as
+    ///   [`NetworkBehaviour::handle_pending_outbound_connection`], so `DialError::Denied` /
+    ///   `DialError::NoAddresses` are still returned synchronously from [`Swarm::dial`](crate::Swarm).
+    /// - [`OutboundAddresses::Pending`], the `Swarm` drives the future to completion in its own poll
+    ///   loop (it is **never** polled on the dialing thread). This lets a behaviour source addresses
+    ///   from a store that is *not* held in memory (e.g. an on-disk or remote database) without
+    ///   blocking the `Swarm`. The eventual errors surface as
+    ///   [`SwarmEvent::OutgoingConnectionError`](crate::SwarmEvent).
+    ///
+    /// Returning an `Err` (either inline or from the future) denies the dial, exactly like
+    /// [`NetworkBehaviour::handle_pending_outbound_connection`].
+    ///
+    /// The default implementation delegates synchronously to
+    /// [`NetworkBehaviour::handle_pending_outbound_connection`].
+    fn resolve_pending_outbound_addresses(
+        &mut self,
+        connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+    ) -> OutboundAddresses {
+        OutboundAddresses::Ready(self.handle_pending_outbound_connection(
+            connection_id,
+            maybe_peer,
+            addresses,
+            effective_role,
+        ))
+    }
+
     /// Callback that is invoked for every established outbound connection.
     ///
     /// This is invoked once we have successfully dialed a peer.
@@ -228,6 +264,20 @@ pub trait NetworkBehaviour: 'static {
     /// order to wake it up at a later point in time.
     fn poll(&mut self, cx: &mut Context<'_>)
     -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
+}
+
+/// The outcome of [`NetworkBehaviour::resolve_pending_outbound_addresses`].
+///
+/// A behaviour returns [`OutboundAddresses::Ready`] when it can supply (or deny) the dial addresses
+/// synchronously, or [`OutboundAddresses::Pending`] when it needs to resolve them asynchronously
+/// without blocking the [`Swarm`](crate::Swarm).
+pub enum OutboundAddresses {
+    /// Addresses are available now, or the dial is denied. Handled synchronously by
+    /// [`Swarm::dial`](crate::Swarm), preserving its synchronous `DialError` return.
+    Ready(Result<Vec<Multiaddr>, ConnectionDenied>),
+    /// Addresses must be resolved asynchronously. The future is driven to completion by the `Swarm`
+    /// poll loop and is **never** polled on the dialing thread. Returning `Err` denies the dial.
+    Pending(BoxFuture<'static, Result<Vec<Multiaddr>, ConnectionDenied>>),
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].

@@ -72,7 +72,7 @@ mod translation;
 #[doc(hidden)]
 pub mod derive_prelude {
     pub use either::Either;
-    pub use futures::prelude as futures;
+    pub use futures::{future::BoxFuture, prelude as futures};
     pub use libp2p_core::{
         ConnectedPoint, Endpoint, Multiaddr,
         transport::{ListenerId, PortUse},
@@ -86,7 +86,7 @@ pub mod derive_prelude {
             AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
             ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm, ListenFailure, ListenerClosed,
             ListenerError, NewExternalAddrCandidate, NewExternalAddrOfPeer, NewListenAddr,
-            NewListener,
+            NewListener, OutboundAddresses,
         },
         connection::ConnectionId,
     };
@@ -105,7 +105,7 @@ pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
-    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
+    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, OutboundAddresses, PeerAddresses, ToSwarm,
 };
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols, pool::ConnectionCounters};
 use connection::{
@@ -114,16 +114,21 @@ use connection::{
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
-use futures::{prelude::*, stream::FusedStream};
+use futures::{
+    future::{BoxFuture, Either},
+    prelude::*,
+    stream::{FusedStream, FuturesUnordered},
+};
+use futures_timer::Delay;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_core::{
-    Multiaddr, Transport,
+    Endpoint, Multiaddr, Transport,
     connection::ConnectedPoint,
     muxing::StreamMuxerBox,
-    transport::{self, ListenerId, TransportError, TransportEvent},
+    transport::{self, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use libp2p_identity::PeerId;
 #[cfg(feature = "macros")]
@@ -337,7 +342,44 @@ where
     pending_handler_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
 
     pending_swarm_events: VecDeque<SwarmEvent<TBehaviour::ToSwarm>>,
+
+    /// In-flight asynchronous outbound address resolutions. Each future is tagged with the
+    /// [`ConnectionId`] of its dial, polled in [`Swarm::poll_next_event`], and joined back up with
+    /// its [`PendingDial`] via that id.
+    resolving_outbound: FuturesUnordered<
+        BoxFuture<'static, (ConnectionId, Result<Vec<Multiaddr>, ConnectionDenied>)>,
+    >,
+
+    /// Dial parameters stashed while the behaviour resolves the addresses, keyed by the
+    /// [`ConnectionId`] reserved for the dial. Consumed (or dropped on abort) when the matching
+    /// entry in [`Self::resolving_outbound`] completes.
+    pending_outbound_dials: HashMap<ConnectionId, PendingDial>,
+
+    /// How long a behaviour's asynchronous outbound address resolution may run before the dial is
+    /// failed. Configured via [`Config::with_outbound_address_resolution_timeout`].
+    outbound_address_resolution_timeout: Duration,
 }
+
+/// State stashed by [`Swarm::dial`] while a [`NetworkBehaviour`] resolves the addresses of a pending
+/// outgoing connection asynchronously. Used to build the transport dials once resolution completes.
+struct PendingDial {
+    /// The peer being dialed, if known.
+    peer_id: Option<PeerId>,
+    /// The [`PeerCondition`] re-checked when resolution completes (the peer may have connected or
+    /// started dialing in the meantime).
+    condition: PeerCondition,
+    /// Addresses supplied directly via [`DialOpts`].
+    addresses_from_opts: Vec<Multiaddr>,
+    extend_addresses_through_behaviour: bool,
+    role_override: Endpoint,
+    port_use: PortUse,
+    dial_concurrency_override: Option<NonZeroU8>,
+}
+
+/// Default for [`Config::with_outbound_address_resolution_timeout`]: how long a behaviour's
+/// asynchronous outbound address resolution may run before the dial is failed with
+/// [`DialError::Denied`]. A safety net against a behaviour future that never resolves.
+const DEFAULT_OUTBOUND_ADDRESS_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
 
@@ -365,6 +407,9 @@ where
             listened_addrs: HashMap::new(),
             pending_handler_event: None,
             pending_swarm_events: VecDeque::default(),
+            resolving_outbound: FuturesUnordered::new(),
+            pending_outbound_dials: HashMap::new(),
+            outbound_address_resolution_timeout: config.outbound_address_resolution_timeout,
         }
     }
 
@@ -432,17 +477,7 @@ where
         let condition = dial_opts.peer_condition();
         let connection_id = dial_opts.connection_id();
 
-        let should_dial = match (condition, peer_id) {
-            (_, None) => true,
-            (PeerCondition::Always, _) => true,
-            (PeerCondition::Disconnected, Some(peer_id)) => !self.pool.is_connected(peer_id),
-            (PeerCondition::NotDialing, Some(peer_id)) => !self.pool.is_dialing(peer_id),
-            (PeerCondition::DisconnectedAndNotDialing, Some(peer_id)) => {
-                !self.pool.is_dialing(peer_id) && !self.pool.is_connected(peer_id)
-            }
-        };
-
-        if !should_dial {
+        if !self.should_dial(condition, peer_id) {
             let e = DialError::DialPeerConditionFalse(condition);
 
             self.behaviour
@@ -455,63 +490,225 @@ where
             return Err(e);
         }
 
-        let addresses = {
-            let mut addresses_from_opts = dial_opts.get_addresses();
+        let mut addresses_from_opts = dial_opts.get_addresses();
 
-            match self.behaviour.handle_pending_outbound_connection(
-                connection_id,
-                peer_id,
-                addresses_from_opts.as_slice(),
-                dial_opts.role_override(),
-            ) {
-                Ok(addresses) => {
-                    if dial_opts.extend_addresses_through_behaviour() {
-                        addresses_from_opts.extend(addresses)
-                    } else {
-                        let num_addresses = addresses.len();
-
-                        if num_addresses > 0 {
-                            tracing::debug!(
-                                connection=%connection_id,
-                                discarded_addresses_count=%num_addresses,
-                                "discarding addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection"
-                            )
-                        }
-                    }
+        // Ask the behaviour for the dial addresses. A `Ready` answer (the default, and every
+        // in-memory behaviour) is handled synchronously here, preserving `Swarm::dial`'s synchronous
+        // `DialError` return. A `Pending` answer defers the dial: the future is driven by
+        // `Swarm::poll_next_event` (never on this thread) and its eventual errors surface as
+        // `SwarmEvent::OutgoingConnectionError`.
+        match self.behaviour.resolve_pending_outbound_addresses(
+            connection_id,
+            peer_id,
+            &addresses_from_opts,
+            dial_opts.role_override(),
+        ) {
+            OutboundAddresses::Ready(Ok(behaviour_addresses)) => {
+                if dial_opts.extend_addresses_through_behaviour() {
+                    addresses_from_opts.extend(behaviour_addresses);
+                } else if !behaviour_addresses.is_empty() {
+                    tracing::debug!(
+                        connection=%connection_id,
+                        discarded_addresses_count=%behaviour_addresses.len(),
+                        "discarding addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour` is `false` for connection"
+                    );
                 }
-                Err(cause) => {
-                    let error = DialError::Denied { cause };
 
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                            peer_id,
-                            error: &error,
-                            connection_id,
-                        }));
-
-                    return Err(error);
-                }
+                self.add_outgoing_dials(
+                    peer_id,
+                    connection_id,
+                    addresses_from_opts,
+                    dial_opts.role_override(),
+                    dial_opts.port_use(),
+                    dial_opts.dial_concurrency_override(),
+                )
             }
+            OutboundAddresses::Ready(Err(cause)) => {
+                let error = DialError::Denied { cause };
 
-            let mut unique_addresses = HashSet::new();
-            addresses_from_opts.retain(|addr| {
-                !self.listened_addrs.values().flatten().any(|a| a == addr)
-                    && unique_addresses.insert(addr.clone())
-            });
-
-            if addresses_from_opts.is_empty() {
-                let error = DialError::NoAddresses;
                 self.behaviour
                     .on_swarm_event(FromSwarm::DialFailure(DialFailure {
                         peer_id,
                         error: &error,
                         connection_id,
                     }));
-                return Err(error);
-            };
 
-            addresses_from_opts
+                Err(error)
+            }
+            OutboundAddresses::Pending(future) => {
+                // Tag the resolution with its `ConnectionId` and bound it with a timeout, then drive
+                // it in `Swarm::poll_next_event`.
+                let timeout = self.outbound_address_resolution_timeout;
+                self.resolving_outbound.push(
+                    async move {
+                        let result =
+                            match futures::future::select(future, Delay::new(timeout)).await {
+                                Either::Left((result, _)) => result,
+                                Either::Right(((), _)) => Err(ConnectionDenied::new(
+                                    "outbound address resolution timed out",
+                                )),
+                            };
+
+                        (connection_id, result)
+                    }
+                    .boxed(),
+                );
+
+                self.pending_outbound_dials.insert(
+                    connection_id,
+                    PendingDial {
+                        peer_id,
+                        condition,
+                        addresses_from_opts,
+                        extend_addresses_through_behaviour: dial_opts
+                            .extend_addresses_through_behaviour(),
+                        role_override: dial_opts.role_override(),
+                        port_use: dial_opts.port_use(),
+                        dial_concurrency_override: dial_opts.dial_concurrency_override(),
+                    },
+                );
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Whether a dial to `peer_id` should proceed under `condition`, accounting for established
+    /// connections, in-flight dials, *and* dials whose addresses are still being resolved.
+    fn should_dial(&self, condition: PeerCondition, peer_id: Option<PeerId>) -> bool {
+        match (condition, peer_id) {
+            (_, None) => true,
+            (PeerCondition::Always, _) => true,
+            (PeerCondition::Disconnected, Some(peer_id)) => !self.pool.is_connected(peer_id),
+            (PeerCondition::NotDialing, Some(peer_id)) => {
+                !self.pool.is_dialing(peer_id) && !self.has_pending_outbound_resolution(peer_id)
+            }
+            (PeerCondition::DisconnectedAndNotDialing, Some(peer_id)) => {
+                !self.pool.is_dialing(peer_id)
+                    && !self.pool.is_connected(peer_id)
+                    && !self.has_pending_outbound_resolution(peer_id)
+            }
+        }
+    }
+
+    /// Whether there is an outbound dial to `peer` whose addresses are still being resolved.
+    fn has_pending_outbound_resolution(&self, peer: PeerId) -> bool {
+        self.pending_outbound_dials
+            .values()
+            .any(|dial| dial.peer_id == Some(peer))
+    }
+
+    /// Handles completion of an asynchronous outbound address resolution started in [`Self::dial`].
+    fn on_outbound_addresses_resolved(
+        &mut self,
+        connection_id: ConnectionId,
+        result: Result<Vec<Multiaddr>, ConnectionDenied>,
+    ) {
+        let Some(pending) = self.pending_outbound_dials.remove(&connection_id) else {
+            // The dial was aborted (e.g. via `disconnect`) while resolution was in flight.
+            return;
         };
+        let peer_id = pending.peer_id;
+
+        let behaviour_addresses = match result {
+            Ok(addresses) => addresses,
+            Err(cause) => {
+                self.fail_deferred_dial(connection_id, peer_id, DialError::Denied { cause });
+                return;
+            }
+        };
+
+        // Re-check the condition: the peer may have connected / started dialing during resolution.
+        if !self.should_dial(pending.condition, peer_id) {
+            self.fail_deferred_dial(
+                connection_id,
+                peer_id,
+                DialError::DialPeerConditionFalse(pending.condition),
+            );
+            return;
+        }
+
+        let mut addresses = pending.addresses_from_opts;
+        if pending.extend_addresses_through_behaviour {
+            addresses.extend(behaviour_addresses);
+        } else if !behaviour_addresses.is_empty() {
+            tracing::debug!(
+                connection=%connection_id,
+                discarded_addresses_count=%behaviour_addresses.len(),
+                "discarding addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour` is `false` for connection"
+            );
+        }
+
+        // `add_outgoing_dials` emits `DialFailure` itself on `NoAddresses`; surface it to the
+        // application too, since there is no synchronous `Swarm::dial` caller to return it to.
+        if let Err(error) = self.add_outgoing_dials(
+            peer_id,
+            connection_id,
+            addresses,
+            pending.role_override,
+            pending.port_use,
+            pending.dial_concurrency_override,
+        ) {
+            self.pending_swarm_events
+                .push_back(SwarmEvent::OutgoingConnectionError {
+                    peer_id,
+                    connection_id,
+                    error,
+                });
+        }
+    }
+
+    /// Reports a deferred dial failure both to the behaviour ([`FromSwarm::DialFailure`]) and the
+    /// application ([`SwarmEvent::OutgoingConnectionError`]). Used when the failure is detected
+    /// *after* the synchronous [`Swarm::dial`] call has already returned `Ok`.
+    fn fail_deferred_dial(
+        &mut self,
+        connection_id: ConnectionId,
+        peer_id: Option<PeerId>,
+        error: DialError,
+    ) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                error: &error,
+                connection_id,
+            }));
+        self.pending_swarm_events
+            .push_back(SwarmEvent::OutgoingConnectionError {
+                peer_id,
+                connection_id,
+                error,
+            });
+    }
+
+    /// Builds the transport dials for `addresses` and hands them to the [`Pool`]. Shared by the
+    /// synchronous and deferred [`Swarm::dial`] paths. Emits [`FromSwarm::DialFailure`] and returns
+    /// [`DialError::NoAddresses`] when nothing is left to dial after filtering.
+    fn add_outgoing_dials(
+        &mut self,
+        peer_id: Option<PeerId>,
+        connection_id: ConnectionId,
+        mut addresses: Vec<Multiaddr>,
+        role_override: Endpoint,
+        port_use: PortUse,
+        dial_concurrency_override: Option<NonZeroU8>,
+    ) -> Result<(), DialError> {
+        let mut unique_addresses = HashSet::new();
+        addresses.retain(|addr| {
+            !self.listened_addrs.values().flatten().any(|a| a == addr)
+                && unique_addresses.insert(addr.clone())
+        });
+
+        if addresses.is_empty() {
+            let error = DialError::NoAddresses;
+            self.behaviour
+                .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                    peer_id,
+                    error: &error,
+                    connection_id,
+                }));
+            return Err(error);
+        }
 
         let dials = addresses
             .into_iter()
@@ -520,8 +717,8 @@ where
                     let dial = self.transport.dial(
                         address.clone(),
                         transport::DialOpts {
-                            role: dial_opts.role_override(),
-                            port_use: dial_opts.port_use(),
+                            role: role_override,
+                            port_use,
                         },
                     );
                     let span = tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address);
@@ -545,9 +742,9 @@ where
         self.pool.add_outgoing(
             dials,
             peer_id,
-            dial_opts.role_override(),
-            dial_opts.port_use(),
-            dial_opts.dial_concurrency_override(),
+            role_override,
+            port_use,
+            dial_concurrency_override,
             connection_id,
         );
 
@@ -637,6 +834,12 @@ where
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
         let was_connected = self.pool.is_connected(peer_id);
         self.pool.disconnect(peer_id);
+
+        // Abandon any in-flight outbound dials to this peer whose addresses are still being
+        // resolved. The resolution futures keep running but their results are discarded once they
+        // land (their `pending_outbound_dials` entry is gone).
+        self.pending_outbound_dials
+            .retain(|_, dial| dial.peer_id != Some(peer_id));
 
         if was_connected { Ok(()) } else { Err(()) }
     }
@@ -1235,6 +1438,18 @@ where
                 },
             }
 
+            // Drive any in-flight asynchronous outbound address resolutions. Completed ones either
+            // start the actual dial (talking to the transport) or fail it (notifying the behaviour),
+            // all with `&mut self` directly in hand.
+            match this.resolving_outbound.poll_next_unpin(cx) {
+                Poll::Ready(Some((connection_id, result))) => {
+                    this.on_outbound_addresses_resolved(connection_id, result);
+                    continue;
+                }
+                // `None` => the set is currently empty; `Pending` => nothing ready yet.
+                Poll::Ready(None) | Poll::Pending => {}
+            }
+
             // Poll the known peers.
             match this.pool.poll(cx) {
                 Poll::Pending => {}
@@ -1374,6 +1589,7 @@ where
 
 pub struct Config {
     pool_config: PoolConfig,
+    outbound_address_resolution_timeout: Duration,
 }
 
 impl Config {
@@ -1382,6 +1598,7 @@ impl Config {
     pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
             pool_config: PoolConfig::new(Some(Box::new(executor))),
+            outbound_address_resolution_timeout: DEFAULT_OUTBOUND_ADDRESS_RESOLUTION_TIMEOUT,
         }
     }
 
@@ -1390,6 +1607,7 @@ impl Config {
     pub fn without_executor() -> Self {
         Self {
             pool_config: PoolConfig::new(None),
+            outbound_address_resolution_timeout: DEFAULT_OUTBOUND_ADDRESS_RESOLUTION_TIMEOUT,
         }
     }
 
@@ -1503,6 +1721,20 @@ impl Config {
     /// Once all these conditions are true, the idle connection timeout starts ticking.
     pub fn with_idle_connection_timeout(mut self, timeout: Duration) -> Self {
         self.pool_config.idle_connection_timeout = timeout;
+        self
+    }
+
+    /// Configures how long a [`NetworkBehaviour`]'s asynchronous outbound address resolution
+    /// (see [`NetworkBehaviour::resolve_pending_outbound_addresses`]) may run before the dial is
+    /// failed with [`DialError::Denied`].
+    ///
+    /// This only applies to behaviours that return [`OutboundAddresses::Pending`]. Resolutions that
+    /// complete synchronously ([`OutboundAddresses::Ready`], the default) are never timed out. It is
+    /// a safety net against a behaviour future that never resolves.
+    ///
+    /// Defaults to 60 seconds.
+    pub fn with_outbound_address_resolution_timeout(mut self, timeout: Duration) -> Self {
+        self.outbound_address_resolution_timeout = timeout;
         self
     }
 }

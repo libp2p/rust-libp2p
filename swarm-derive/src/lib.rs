@@ -77,6 +77,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let endpoint = quote! { #prelude_path::Endpoint };
     let connection_denied = quote! { #prelude_path::ConnectionDenied };
     let port_use = quote! { #prelude_path::PortUse };
+    let outbound_addresses = quote! { #prelude_path::OutboundAddresses };
+    let box_future = quote! { #prelude_path::BoxFuture };
 
     // Build the generics.
     let impl_generics = {
@@ -336,6 +338,61 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         }
     };
 
+    // The content of `resolve_pending_outbound_addresses`.
+    let resolve_pending_outbound_addresses = {
+        let resolve_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
+            let access = match field.ident {
+                Some(ref i) => quote! { self.#i },
+                None => quote! { self.#field_n },
+            };
+
+            quote! {
+                match #trait_to_impl::resolve_pending_outbound_addresses(&mut #access, connection_id, maybe_peer, addresses, effective_role) {
+                    #outbound_addresses::Ready(::std::result::Result::Ok(addrs)) => {
+                        slots.push(#either_ident::Left(addrs));
+                    }
+                    #outbound_addresses::Ready(::std::result::Result::Err(denied)) => {
+                        return #outbound_addresses::Ready(::std::result::Result::Err(denied));
+                    }
+                    #outbound_addresses::Pending(fut) => {
+                        slots.push(#either_ident::Right(fut));
+                    }
+                }
+            }
+        });
+
+        quote! {
+            type __Slot = #either_ident<
+                ::std::vec::Vec<#multiaddr>,
+                #box_future<'static, ::std::result::Result<::std::vec::Vec<#multiaddr>, #connection_denied>>,
+            >;
+            let mut slots: ::std::vec::Vec<__Slot> = ::std::vec::Vec::new();
+
+            #(#resolve_stmts)*
+
+            if slots.iter().all(|slot| ::std::matches!(slot, #either_ident::Left(_))) {
+                let mut combined: ::std::vec::Vec<#multiaddr> = ::std::vec::Vec::new();
+                for slot in slots {
+                    if let #either_ident::Left(addrs) = slot {
+                        combined.extend(addrs);
+                    }
+                }
+                #outbound_addresses::Ready(::std::result::Result::Ok(combined))
+            } else {
+                #outbound_addresses::Pending(::std::boxed::Box::pin(async move {
+                    let mut combined: ::std::vec::Vec<#multiaddr> = ::std::vec::Vec::new();
+                    for slot in slots {
+                        match slot {
+                            #either_ident::Left(addrs) => combined.extend(addrs),
+                            #either_ident::Right(fut) => combined.extend(fut.await?),
+                        }
+                    }
+                    ::std::result::Result::Ok(combined)
+                }))
+            }
+        }
+    };
+
     // The content of `handle_established_outbound_connection`.
     let handle_established_outbound_connection = {
         let mut out_handler = None;
@@ -452,6 +509,16 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 effective_role: #endpoint,
             ) -> std::result::Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
                 #handle_pending_outbound_connection
+            }
+
+            fn resolve_pending_outbound_addresses(
+                &mut self,
+                connection_id: #connection_id,
+                maybe_peer: Option<#peer_id>,
+                addresses: &[#multiaddr],
+                effective_role: #endpoint,
+            ) -> #outbound_addresses {
+                #resolve_pending_outbound_addresses
             }
 
             #[allow(clippy::needless_question_mark)]
