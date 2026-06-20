@@ -1,3 +1,12 @@
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::Infallible,
+    error::Error,
+    sync::atomic::AtomicUsize,
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
+
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
 use libp2p::{
     Multiaddr, PeerId,
@@ -10,14 +19,6 @@ use libp2p::{
     tcp, yamux,
 };
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
-use std::{
-    collections::{HashMap, VecDeque},
-    convert::Infallible,
-    error::Error,
-    sync::atomic::AtomicUsize,
-    task::{Context, Poll, Waker},
-    time::Duration,
-};
 use tracing_subscriber::EnvFilter;
 
 /// A [`NetworkBehaviour`] that resolves dial addresses from an SQLite database.

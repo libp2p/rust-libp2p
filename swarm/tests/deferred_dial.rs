@@ -5,7 +5,8 @@ use std::{
 
 use futures::{FutureExt, channel::oneshot};
 use libp2p_core::{
-    Endpoint, Multiaddr, Transport, transport::PortUse, transport::dummy::DummyTransport,
+    Endpoint, Multiaddr, Transport,
+    transport::{PortUse, dummy::DummyTransport},
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{

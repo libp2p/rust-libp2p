@@ -360,8 +360,9 @@ where
     outbound_address_resolution_timeout: Duration,
 }
 
-/// State stashed by [`Swarm::dial`] while a [`NetworkBehaviour`] resolves the addresses of a pending
-/// outgoing connection asynchronously. Used to build the transport dials once resolution completes.
+/// State stashed by [`Swarm::dial`] while a [`NetworkBehaviour`] resolves the addresses of a
+/// pending outgoing connection asynchronously. Used to build the transport dials once resolution
+/// completes.
 struct PendingDial {
     /// The peer being dialed, if known.
     peer_id: Option<PeerId>,
@@ -536,8 +537,8 @@ where
                 Err(error)
             }
             OutboundAddresses::Pending(future) => {
-                // Tag the resolution with its `ConnectionId` and bound it with a timeout, then drive
-                // it in `Swarm::poll_next_event`.
+                // Tag the resolution with its `ConnectionId` and bound it with a timeout, then
+                // drive it in `Swarm::poll_next_event`.
                 let timeout = self.outbound_address_resolution_timeout;
                 self.resolving_outbound.push(
                     async move {
@@ -1727,8 +1728,8 @@ impl Config {
     /// failed with [`DialError::Denied`].
     ///
     /// This only applies to behaviours that return [`OutboundAddresses::Pending`]. Resolutions that
-    /// complete synchronously ([`OutboundAddresses::Ready`], the default) are never timed out. It is
-    /// a safety net against a behaviour future that never resolves.
+    /// complete synchronously ([`OutboundAddresses::Ready`], the default) are never timed out. It
+    /// is a safety net against a behaviour future that never resolves.
     ///
     /// Defaults to 60 seconds.
     pub fn with_outbound_address_resolution_timeout(mut self, timeout: Duration) -> Self {

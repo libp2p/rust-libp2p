@@ -179,10 +179,11 @@ pub trait NetworkBehaviour: 'static {
     /// is set.
     ///
     /// The addresses can be provided either synchronously ([`OutboundAddresses::Ready`], the
-    /// default) or asynchronously ([`OutboundAddresses::Pending`]). A [`OutboundAddresses::Pending`]
-    /// future is driven by the [`Swarm`](crate::Swarm) poll loop and is never polled on the dialing
-    /// thread, so a behaviour can source addresses from a store that is not held in memory (for
-    /// example an on-disk database) without blocking the `Swarm`.
+    /// default) or asynchronously ([`OutboundAddresses::Pending`]). A
+    /// [`OutboundAddresses::Pending`] future is driven by the [`Swarm`](crate::Swarm) poll loop
+    /// and is never polled on the dialing thread, so a behaviour can source addresses from a
+    /// store that is not held in memory (for example an on-disk database) without blocking the
+    /// `Swarm`.
     ///
     /// Returning an `Err` (synchronously or from the future) immediately aborts the dial attempt.
     fn handle_pending_outbound_connection(
