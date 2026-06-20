@@ -92,7 +92,7 @@ impl Handler {
         Self {
             queued_events: VecDeque::new(),
             outbound: FuturesMap::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 10,
             ),
             queued_streams: VecDeque::default(),
