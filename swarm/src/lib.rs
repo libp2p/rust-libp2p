@@ -1438,9 +1438,7 @@ where
                 },
             }
 
-            // Drive any in-flight asynchronous outbound address resolutions. Completed ones either
-            // start the actual dial (talking to the transport) or fail it (notifying the behaviour),
-            // all with `&mut self` directly in hand.
+            // Drive any in-flight asynchronous outbound address resolutions.
             match this.resolving_outbound.poll_next_unpin(cx) {
                 Poll::Ready(Some((connection_id, result))) => {
                     this.on_outbound_addresses_resolved(connection_id, result);
