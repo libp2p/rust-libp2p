@@ -15,6 +15,9 @@ use libp2p_swarm::{
 
 use crate::{framing, protocol::Upgrade};
 
+/// Pre-establish backlog cap; head-drop oldest past it (delivery is unreliable).
+const MAX_OUTBOUND_BACKLOG: usize = 256;
+
 /// Drives one datagram flow: the dialer opens the `/dg/1` control stream, both
 /// ends learn its stream id, and datagrams are framed and filtered by it.
 pub struct Handler {
@@ -98,6 +101,9 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, data: Bytes) {
+        if self.outbound.len() >= MAX_OUTBOUND_BACKLOG {
+            self.outbound.pop_front();
+        }
         self.outbound.push_back(data);
     }
 
