@@ -273,6 +273,9 @@ pub struct Error(ConnectionError);
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> Self {
-        io::Error::other(err)
+        match err.0 {
+            yamux::ConnectionError::Io(e) => e,
+            e => io::Error::other(e),
+        }
     }
 }
