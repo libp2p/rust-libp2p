@@ -3755,15 +3755,13 @@ dependencies = [
 name = "libp2p-yamux"
 version = "0.48.0"
 dependencies = [
- "either",
  "futures",
  "libp2p-core",
  "libp2p-muxer-test-harness",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "yamux 0.12.1",
- "yamux 0.13.4",
+ "yamux",
 ]
 
 [[package]]
@@ -8185,31 +8183,15 @@ dependencies = [
 
 [[package]]
 name = "yamux"
-version = "0.12.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ed0164ae619f2dc144909a9f082187ebb5893693d8c0196e8085283ccd4b776"
+checksum = "767113d8f66a81e461362462aa71d8d0108cbf3430d4442fb88a04e31be81165"
 dependencies = [
  "futures",
  "log",
  "nohash-hasher",
  "parking_lot",
  "pin-project",
- "rand 0.8.6",
- "static_assertions",
-]
-
-[[package]]
-name = "yamux"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17610762a1207ee816c6fadc29220904753648aba0a9ed61c7b8336e80a559c4"
-dependencies = [
- "futures",
- "log",
- "nohash-hasher",
- "parking_lot",
- "pin-project",
- "rand 0.8.6",
  "static_assertions",
  "web-time",
 ]
