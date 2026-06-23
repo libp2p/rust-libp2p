@@ -145,6 +145,16 @@ pub struct Config {
     /// Disabled by default.
     push_listen_addr_updates: bool,
 
+    /// Whether new or changes in external addresses of the local node should
+    /// trigger an active push of an identify message to all connected peers.
+    ///
+    /// Disabling this option means connected peers are only informed
+    /// about new or expired external addresses of the local node with
+    /// the next periodic identify request with each peer.
+    ///
+    /// Enabled by default.
+    pub push_external_addr_updates: bool,
+
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
@@ -182,6 +192,7 @@ impl Config {
             local_key: Arc::new(key.into()),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
+            push_external_addr_updates: true,
             cache_size: 100,
             hide_listen_addrs: false,
         }
@@ -205,6 +216,14 @@ impl Config {
     /// connected peers.
     pub fn with_push_listen_addr_updates(mut self, b: bool) -> Self {
         self.push_listen_addr_updates = b;
+        self
+    }
+
+    /// Configures whether new or expired external addresses of the local
+    /// node should trigger an active push of an identify message to all
+    /// connected peers.
+    pub fn with_push_external_addr_updates(mut self, b: bool) -> Self {
+        self.push_external_addr_updates = b;
         self
     }
 
@@ -558,7 +577,9 @@ impl NetworkBehaviour for Behaviour {
             self.events.extend(change_events)
         }
 
-        if listen_addr_changed && self.config.push_listen_addr_updates {
+        if (listen_addr_changed && self.config.push_listen_addr_updates)
+            || (external_addr_changed && self.config.push_external_addr_updates)
+        {
             // trigger an identify push for all connected peers
             let push_events = self.connected.keys().map(|peer| ToSwarm::NotifyHandler {
                 peer_id: *peer,
