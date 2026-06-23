@@ -3619,6 +3619,8 @@ dependencies = [
  "igd-next",
  "libp2p-core",
  "libp2p-swarm",
+ "libp2p-swarm-test",
+ "mock-igd",
  "tokio",
  "tracing",
 ]
@@ -4043,6 +4045,19 @@ dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mock-igd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "932fa98a91d0d39bd22c334324689774a267ed3e8b390a5ad478d2cfe8fdbf97"
+dependencies = [
+ "axum",
+ "socket2 0.5.9",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
