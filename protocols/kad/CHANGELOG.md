@@ -1,3 +1,6 @@
+  Add new `new_anonymous` function to enable putting Records without a publisher.
+  See [PR 6176](https://github.com/libp2p/rust-libp2p/pull/6176)
+
 ## 0.49.0
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
