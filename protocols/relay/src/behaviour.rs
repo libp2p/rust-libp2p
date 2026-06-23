@@ -31,7 +31,9 @@ use std::{
 };
 
 use either::Either;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
+use libp2p_core::{
+    ConnectedPoint, Endpoint, Multiaddr, MultiaddrExt, multiaddr::Protocol, transport::PortUse,
+};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionClosed, ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm,
@@ -42,7 +44,6 @@ use web_time::Instant;
 
 use crate::{
     behaviour::handler::Handler,
-    multiaddr_ext::MultiaddrExt,
     proto,
     protocol::{inbound_hop, outbound_stop},
 };

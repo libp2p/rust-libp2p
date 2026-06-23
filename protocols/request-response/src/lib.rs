@@ -63,6 +63,31 @@
 //! family can be configured in this way. Such protocols will not be
 //! advertised during inbound respectively outbound protocol negotiation
 //! on the substreams.
+//!
+//! ## Relayed connections
+//!
+//! By default, outbound requests are sent over any available connection to the peer,
+//! including relayed ([`p2p-circuit`](libp2p_core::multiaddr::Protocol::P2pCircuit))
+//! connections. Set [`Config::with_relay_for_requests`] to `false` to restrict requests to
+//! direct connections and conserve relay bandwidth.
+//!
+//! When relayed connections are disabled and the only connection to a peer is relayed, the request
+//! is *not* sent over the relay. Instead it stays queued so that a direct connection established
+//! shortly after — most notably via DCUtR hole-punching, which this option is meant to be combined
+//! with — can carry it. If the peer fully disconnects before a direct connection becomes available,
+//! the request fails with [`OutboundFailure::NoDirectConnection`]. This bounds how long a request
+//! can stay queued: a relayed connection that nothing keeps alive is closed by the swarm after its
+//! `idle_connection_timeout`, and DCUtR keeps it alive only while it is still attempting to
+//! upgrade.
+//!
+//! Two limitations apply:
+//!
+//! - The relay status of *inbound* connections is not tracked: their address is not retained by the
+//!   [`Behaviour`], so they are always treated as direct. The policy therefore only governs
+//!   connections this node dialed.
+//! - The queued-request bound is the connection's `idle_connection_timeout`, not the relay
+//!   reservation. If a relayed connection is kept alive indefinitely by other means while no direct
+//!   connection is established, requests to that peer remain queued until it closes.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -85,7 +110,7 @@ pub use codec::Codec;
 use futures::channel::oneshot;
 use handler::Handler;
 pub use handler::ProtocolSupport;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, MultiaddrExt, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, NetworkBehaviour, NotifyHandler,
@@ -192,6 +217,9 @@ pub enum OutboundFailure {
     UnsupportedProtocols,
     /// An IO failure happened on an outbound stream.
     Io(io::Error),
+    /// The request could not be sent because the only connection(s) to the peer are
+    /// relayed and [`Config::with_relay_for_requests`] is disabled.
+    NoDirectConnection,
 }
 
 impl fmt::Display for OutboundFailure {
@@ -206,6 +234,12 @@ impl fmt::Display for OutboundFailure {
                 write!(f, "The remote supports none of the requested protocols")
             }
             OutboundFailure::Io(e) => write!(f, "IO error on outbound stream: {e}"),
+            OutboundFailure::NoDirectConnection => {
+                write!(
+                    f,
+                    "No direct connection available and relayed connections are disabled"
+                )
+            }
         }
     }
 }
@@ -310,6 +344,10 @@ impl fmt::Display for OutboundRequestId {
 pub struct Config {
     request_timeout: Duration,
     max_concurrent_streams: usize,
+    /// When true (default), outbound requests can be sent over relay connections.
+    /// When false, only direct connections are used for requests, which conserves
+    /// relay bandwidth but may fail if no direct connection exists.
+    allow_relay_for_requests: bool,
 }
 
 impl Default for Config {
@@ -317,6 +355,7 @@ impl Default for Config {
         Self {
             request_timeout: Duration::from_secs(10),
             max_concurrent_streams: 100,
+            allow_relay_for_requests: true,
         }
     }
 }
@@ -338,6 +377,21 @@ impl Config {
     /// Sets the upper bound for the number of concurrent inbound + outbound streams.
     pub fn with_max_concurrent_streams(mut self, num_streams: usize) -> Self {
         self.max_concurrent_streams = num_streams;
+        self
+    }
+
+    /// Configures whether outbound requests may be sent over relayed connections.
+    ///
+    /// Enabled by default, in which case requests use any connection to the peer. Set to `false` to
+    /// restrict requests to direct connections, which conserves relay bandwidth. When disabled and
+    /// only a relayed connection to the peer is available, the request is kept queued (so a direct
+    /// connection established shortly after, e.g. via DCUtR, can carry it) and only fails with
+    /// [`OutboundFailure::NoDirectConnection`] once the peer fully disconnects.
+    ///
+    /// See the [crate-level documentation](crate#relayed-connections) for the queuing bound and the
+    /// inbound-connection caveat.
+    pub fn with_relay_for_requests(mut self, enabled: bool) -> Self {
+        self.allow_relay_for_requests = enabled;
         self
     }
 }
@@ -569,11 +623,25 @@ where
         request: OutboundMessage<TCodec>,
     ) -> Option<OutboundMessage<TCodec>> {
         if let Some(connections) = self.connected.get_mut(peer) {
-            if connections.is_empty() {
+            // Only relayed connections are excluded when `allow_relay_for_requests` is disabled.
+            let eligible_indices: Vec<usize> = connections
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| self.config.allow_relay_for_requests || !c.is_relayed())
+                .map(|(idx, _)| idx)
+                .collect();
+
+            if eligible_indices.is_empty() {
+                // The peer is connected only over relayed connection(s) while relay use for
+                // requests is disabled. Keep the request queued so a later direct connection
+                // (e.g. established via DCUtR) can carry it; it is failed in
+                // `on_connection_closed` if the peer fully disconnects beforehand.
                 return Some(request);
             }
-            let ix = (request.request_id.0 as usize) % connections.len();
-            let conn = &mut connections[ix];
+
+            // Distribute requests round-robin across the eligible connections.
+            let pick = eligible_indices[request.request_id.0 as usize % eligible_indices.len()];
+            let conn = &mut connections[pick];
             conn.pending_outbound_responses.insert(request.request_id);
             self.pending_events.push_back(ToSwarm::NotifyHandler {
                 peer_id: *peer,
@@ -678,6 +746,23 @@ where
         debug_assert_eq!(connections.is_empty(), remaining_established == 0);
         if connections.is_empty() {
             self.connected.remove(&peer_id);
+
+            // The peer is now fully disconnected. Any requests still queued can no longer be
+            // delivered. In normal operation the queue is drained when a connection is
+            // established (see `preload_new_handler`); requests only remain here when relay use
+            // for requests is disabled and the peer was reachable solely over relayed
+            // connection(s) that have now closed without a direct connection becoming available.
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer_id) {
+                for request in pending {
+                    self.pending_events
+                        .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
+                            peer: peer_id,
+                            connection_id,
+                            request_id: request.request_id,
+                            error: OutboundFailure::NoDirectConnection,
+                        }));
+                }
+            }
         }
 
         for request_id in connection.pending_inbound_responses {
@@ -745,7 +830,13 @@ where
     ) {
         let mut connection = Connection::new(connection_id, remote_address);
 
-        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+        // Only drain queued requests onto connections that are eligible to carry them. A relayed
+        // connection is skipped when relay use for requests is disabled, leaving the requests
+        // queued so a later direct connection (e.g. established via DCUtR) can carry them. If the
+        // peer disconnects first, they are failed in `on_connection_closed`.
+        if (self.config.allow_relay_for_requests || !connection.is_relayed())
+            && let Some(pending_requests) = self.pending_outbound_requests.remove(&peer)
+        {
             for request in pending_requests {
                 connection
                     .pending_outbound_responses
@@ -1059,5 +1150,65 @@ impl Connection {
             pending_outbound_responses: Default::default(),
             pending_inbound_responses: Default::default(),
         }
+    }
+
+    /// Whether this connection is established over a relayed (`p2p-circuit`) address.
+    ///
+    /// Inbound connections do not carry a remote address and are therefore treated as
+    /// direct (see the crate-level documentation on relayed connections).
+    fn is_relayed(&self) -> bool {
+        self.remote_address
+            .as_ref()
+            .is_some_and(|addr| addr.is_relayed())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RELAYED_ADDR: &str = "/ip4/127.0.0.1/tcp/1234/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWGzBRs8WVcMaEXGWwsvFSfJKYphwM6ojrPanuJfup1xFz";
+
+    #[test]
+    fn connection_over_direct_address_is_not_relayed() {
+        let conn = Connection::new(
+            ConnectionId::new_unchecked(0),
+            Some("/ip4/127.0.0.1/tcp/1234".parse().unwrap()),
+        );
+        assert!(!conn.is_relayed());
+    }
+
+    #[test]
+    fn connection_over_circuit_address_is_relayed() {
+        let conn = Connection::new(
+            ConnectionId::new_unchecked(0),
+            Some(RELAYED_ADDR.parse().unwrap()),
+        );
+        assert!(conn.is_relayed());
+    }
+
+    #[test]
+    fn connection_without_address_is_treated_as_direct() {
+        let conn = Connection::new(ConnectionId::new_unchecked(0), None);
+        assert!(!conn.is_relayed());
+    }
+
+    #[test]
+    fn relay_for_requests_is_enabled_by_default() {
+        assert!(Config::default().allow_relay_for_requests);
+    }
+
+    #[test]
+    fn with_relay_for_requests_toggles_the_flag() {
+        assert!(
+            !Config::default()
+                .with_relay_for_requests(false)
+                .allow_relay_for_requests
+        );
+        assert!(
+            Config::default()
+                .with_relay_for_requests(true)
+                .allow_relay_for_requests
+        );
     }
 }

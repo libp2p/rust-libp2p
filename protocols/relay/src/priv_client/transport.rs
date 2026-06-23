@@ -32,6 +32,7 @@ use futures::{
     stream::{SelectAll, Stream, StreamExt},
 };
 use libp2p_core::{
+    MultiaddrExt,
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
@@ -40,7 +41,6 @@ use thiserror::Error;
 
 use crate::{
     RequestId,
-    multiaddr_ext::MultiaddrExt,
     priv_client::Connection,
     protocol::{
         outbound_hop,
