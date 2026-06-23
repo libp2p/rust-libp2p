@@ -75,7 +75,6 @@ impl Queue {
                 self.control.try_push(message)
             }
             RpcOut::Publish { .. }
-            | RpcOut::Forward { .. }
             | RpcOut::IHave(_)
             | RpcOut::TestExtension
             | RpcOut::IWant(_) => self.non_priority.try_push(message),
@@ -93,9 +92,7 @@ impl Queue {
 
         let mut count = 0;
         self.non_priority.retain(|message| match message {
-            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. }
-                if message_ids.contains(message_id) =>
-            {
+            RpcOut::Publish { message_id, .. } if message_ids.contains(message_id) => {
                 count += 1;
                 false
             }

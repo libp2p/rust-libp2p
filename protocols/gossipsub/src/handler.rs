@@ -263,28 +263,17 @@ impl EnabledHandler {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
                         tracing::debug!(peer=%self.peer_id, ?message, "Sending gossipsub message");
-                        match message {
-                            RpcOut::Publish {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            }
-                            | RpcOut::Forward {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            } => {
-                                #[allow(clippy::collapsible_match)]
-                                if Pin::new(timeout).poll(cx).is_ready() {
-                                    // Inform the behaviour and end the poll.
-                                    self.outbound_substream =
-                                        Some(OutboundSubstreamState::WaitingOutput(substream));
-                                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                        HandlerEvent::MessageDropped(message),
-                                    ));
-                                }
-                            }
-                            _ => {} // All other messages are not time-bound.
+                        if let RpcOut::Publish {
+                            ref mut timeout, ..
+                        } = message
+                            && Pin::new(timeout).poll(cx).is_ready()
+                        {
+                            // Inform the behaviour and end the poll.
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::WaitingOutput(substream));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                HandlerEvent::MessageDropped(message),
+                            ));
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
