@@ -82,6 +82,11 @@ impl PreSharedKey {
             .expect("shake128 failed");
         Fingerprint(out)
     }
+
+    /// Export the unredacted private key.
+    pub fn to_key_file(self) -> String {
+        format!("/key/swarm/psk/1.0.0/\n/base16/\n{}\n", to_hex(&self.0))
+    }
 }
 
 fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
@@ -130,18 +135,16 @@ impl FromStr for PreSharedKey {
 
 impl fmt::Debug for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PreSharedKey")
-            .field(&to_hex(&self.0))
+        f.debug_struct("PreSharedKey")
+            .field("fingerprint", &self.fingerprint().to_string())
             .finish()
     }
 }
 
-/// Dumps a PreSharedKey in key file format compatible with go-libp2p
+/// Formats the unredacted key in go-libp2p key file format.
 impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "/key/swarm/psk/1.0.0/")?;
-        writeln!(f, "/base16/")?;
-        writeln!(f, "{}", to_hex(&self.0))
+        f.write_str(&self.to_key_file())
     }
 }
 
@@ -344,6 +347,19 @@ mod tests {
     }
 
     #[test]
+    fn psk_to_key_file_parse() {
+        fn prop(key: PreSharedKey) -> bool {
+            let text = key.to_key_file();
+            text.parse::<PreSharedKey>()
+                .map(|res| res == key)
+                .unwrap_or(false)
+        }
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(PreSharedKey) -> _);
+    }
+
+    #[test]
     fn psk_parse_failure() {
         use KeyParseError::*;
         assert_eq!("".parse::<PreSharedKey>().unwrap_err(), InvalidKeyFile);
@@ -372,5 +388,35 @@ mod tests {
         let expected = "45fc986bbc9388a11d939df26f730f0c";
         let actual = key.fingerprint().to_string();
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn debug_formatting_does_not_leak_raw_psk() {
+        let raw_hex = "6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683";
+        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}")
+            .parse::<PreSharedKey>()
+            .unwrap();
+        let fingerprint = key.fingerprint().to_string();
+
+        let debug_output = format!("{key:?}");
+        let config_debug_output = format!("{:?}", PnetConfig::new(key));
+
+        assert!(!debug_output.contains(raw_hex));
+        assert!(!config_debug_output.contains(raw_hex));
+        assert!(debug_output.contains(&fingerprint));
+        assert!(config_debug_output.contains(&fingerprint));
+    }
+
+    #[test]
+    fn key_file_export_contains_raw_psk() {
+        let raw_hex = "6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683";
+        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}")
+            .parse::<PreSharedKey>()
+            .unwrap();
+
+        let key_file = key.to_key_file();
+
+        assert!(key_file.contains(raw_hex));
+        assert_eq!(key_file.parse::<PreSharedKey>().unwrap(), key);
     }
 }
