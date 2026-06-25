@@ -1501,7 +1501,7 @@ where
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
-                        RpcOut::Forward {
+                        RpcOut::Publish {
                             message_id: id.clone(),
                             message: msg,
                             timeout: Delay::new(self.config.forward_queue_duration()),
@@ -3025,7 +3025,7 @@ where
 
                 self.send_message(
                     *peer_id,
-                    RpcOut::Forward {
+                    RpcOut::Publish {
                         message_id: msg_id.clone(),
                         message: message.clone(),
                         timeout: Delay::new(self.config.forward_queue_duration()),
