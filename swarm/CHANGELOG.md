@@ -6,6 +6,11 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+- Fix `panic!("cannot extract twice")` in `Connection::poll` by selecting
+  a `Waiting` `SubstreamRequested` explicitly instead of the first entry,
+  which could be a stale `Done` left behind by a prior extraction.
+  See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.
