@@ -1,4 +1,7 @@
 ## 0.50.0
+- Account for forwarded messages in `topic_mesg_sent_*` metrics.
+  See [PR 6502](https://github.com/libp2p/rust-libp2p/pull/6502)
+
 - Simplify gossipsub control message validation by scanning protobuf bytes before decoding
   to validate cumulative control message size, rather than decoding then counting individual IDs
   to prevent memory amplification from decoding.
