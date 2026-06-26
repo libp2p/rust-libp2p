@@ -130,7 +130,7 @@ futures-rustls = { version = "0.26.0", default-features = false }
 futures-timer = "3.0"
 hex-literal = "0.4"
 getrandom = { version = "0.2", features = ["js"] }
-hashlink = "0.11.0"
+hashlink = "0.12.0"
 hickory-proto = { version = "0.26.1", default-features = false }
 hickory-resolver = { version = "0.26.1", default-features = false }
 if-watch = "3.2.2"
