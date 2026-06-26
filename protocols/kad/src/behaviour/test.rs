@@ -881,6 +881,150 @@ fn get_record() {
     }))
 }
 
+/// `get_record_from` retrieves the record from a seeded peer that holds it.
+///
+/// node 0 knows both node 1 and node 2, but the query is seeded with node 2
+/// only. Because `FixedPeersIter` never expands the peer set, the record is
+/// returned from node 2.
+#[test]
+fn get_record_from_seeded_peer() {
+    let mut swarms = build_nodes(3);
+
+    // node 0 learns the addresses of node 1 and node 2.
+    let node1_id = *swarms[1].1.local_peer_id();
+    let node2_id = *swarms[2].1.local_peer_id();
+    let node1_addr = swarms[1].0.clone();
+    let node2_addr = swarms[2].0.clone();
+    swarms[0]
+        .1
+        .behaviour_mut()
+        .add_address(&node1_id, node1_addr);
+    swarms[0]
+        .1
+        .behaviour_mut()
+        .add_address(&node2_id, node2_addr);
+
+    // Drop the swarm addresses.
+    let mut swarms = swarms
+        .into_iter()
+        .map(|(_addr, swarm)| swarm)
+        .collect::<Vec<_>>();
+
+    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
+
+    // Seed the GET to node 2 only.
+    let qid = swarms[0]
+        .behaviour_mut()
+        .get_record_from(record.key.clone(), [node2_id]);
+
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(r))),
+                        ..
+                    }))) => {
+                        assert_eq!(id, qid);
+                        assert_eq!(r.record, record);
+                        return Poll::Ready(());
+                    }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+
+        Poll::Pending
+    }))
+}
+
+/// `get_record_from` never expands beyond the seeded peer set.
+///
+/// node 0 knows both node 1 and node 2 and the record lives on node 2, but the
+/// query is seeded with node 1 only. An iterative `get_record` would reach
+/// node 2 (node 0 knows it directly) and find the record; `get_record_from`
+/// seeded with node 1 must instead finish with `NotFound`, never contacting
+/// node 2 — the property S/Kademlia node-disjoint lookups rely on.
+#[test]
+fn get_record_from_does_not_expand_beyond_seeded_peers() {
+    let mut swarms = build_nodes(3);
+
+    let node1_id = *swarms[1].1.local_peer_id();
+    let node2_id = *swarms[2].1.local_peer_id();
+    let node1_addr = swarms[1].0.clone();
+    let node2_addr = swarms[2].0.clone();
+    swarms[0]
+        .1
+        .behaviour_mut()
+        .add_address(&node1_id, node1_addr);
+    swarms[0]
+        .1
+        .behaviour_mut()
+        .add_address(&node2_id, node2_addr);
+
+    // Drop the swarm addresses.
+    let mut swarms = swarms
+        .into_iter()
+        .map(|(_addr, swarm)| swarm)
+        .collect::<Vec<_>>();
+
+    // The record lives on node 2, which is NOT in the seeded set.
+    let record = Record::new(random_multihash(), vec![7, 8, 9]);
+    let key = record.key.clone();
+    swarms[2].behaviour_mut().store.put(record).unwrap();
+
+    // Seed the GET to node 1 only — node 1 does not hold the record.
+    let qid = swarms[0]
+        .behaviour_mut()
+        .get_record_from(key.clone(), [node1_id]);
+
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result:
+                            QueryResult::GetRecord(Err(GetRecordError::NotFound {
+                                key: k,
+                                closest_peers,
+                            })),
+                        ..
+                    }))) => {
+                        assert_eq!(id, qid);
+                        assert_eq!(k, key);
+                        // The query must never have expanded to node 2.
+                        assert!(
+                            !closest_peers.contains(&node2_id),
+                            "fixed-peer GET must not contact peers outside the seeded set"
+                        );
+                        return Poll::Ready(());
+                    }
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(_))),
+                        ..
+                    }))) => {
+                        panic!("record lives only on the un-seeded node 2 and must not be found")
+                    }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+
+        Poll::Pending
+    }))
+}
+
 #[test]
 fn get_record_many() {
     // TODO: Randomise
