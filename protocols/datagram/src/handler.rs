@@ -121,6 +121,9 @@ impl ConnectionHandler for Handler {
                 ..
             }) => self.establish(stream),
             ConnectionEvent::Datagram(datagram) => {
+                // A truncated frame or a non-control-stream id is dropped, not a
+                // PROTOCOL_VIOLATION: this layer cannot close the connection, and a
+                // stray datagram is best ignored.
                 if let Some((id, payload)) = framing::parse(datagram.data)
                     && Some(id) == self.control_stream_id
                 {
