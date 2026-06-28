@@ -307,10 +307,6 @@ jobs:
         with:
           shared-key: semver
       - uses: obi1kenobi/cargo-semver-checks-action@v2
-        with:
-          # `libp2p-datagram` is new and unpublished, so it has no crates.io
-          # baseline to diff against. Remove this once it is first released.
-          exclude: libp2p-datagram
 
   rustfmt:
     runs-on: ubuntu-latest
