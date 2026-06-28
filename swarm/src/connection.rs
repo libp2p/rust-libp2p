@@ -301,7 +301,7 @@ where
                 }
                 Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
                     if let Err(e) = muxing.send_datagram_unpin(data) {
-                        tracing::debug!("failed to send datagram: {e}");
+                        tracing::error!("failed to send datagram: {e}");
                     }
                     continue;
                 }
