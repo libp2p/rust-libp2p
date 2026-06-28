@@ -3,6 +3,11 @@
 - Contain panics in the per-connection task and report the connection as closed.
   See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
 
+- Fix a `cannot extract twice` panic in `Connection::poll`: pairing a new outbound
+  stream now skips substream requests that were already extracted but not yet
+  removed from `requested_substreams`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.48.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
