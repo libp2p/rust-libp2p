@@ -41,6 +41,9 @@ impl Control {
     /// time which is enforced by requiring `&mut self`.
     ///
     /// This backpressure mechanism breaks if you clone [`Control`]s excessively.
+    ///
+    /// > Alternatively, [`Control::open_stream_on_connection`] opens on a
+    /// > specific connection instead of a randomly chosen one.
     pub async fn open_stream(
         &mut self,
         peer: PeerId,
