@@ -66,7 +66,9 @@ impl Control {
         tracing::debug!(%peer, %connection, "Requesting new stream on connection");
 
         let new_stream_sender = Shared::lock(&self.shared)
-            .sender_on(connection)
+            .senders
+            .get(&connection)
+            .cloned()
             .ok_or_else(|| {
                 io::Error::new(io::ErrorKind::NotConnected, "connection not established")
             })?;
