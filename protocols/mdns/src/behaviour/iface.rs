@@ -32,8 +32,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{SinkExt, StreamExt, channel::mpsc};
-use libp2p_core::Multiaddr;
+use futures::{channel::mpsc, SinkExt, StreamExt};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
@@ -276,13 +276,25 @@ where
                         "received query from remote address on address"
                     );
 
+                    // Only send addresses that belong to this interface.
+                    // This prevents advertising loopback or other interface addresses
+                    // to peers that can't reach them.
+                    // Note: We collect into a Vec because build_query_response requires
+                    // an ExactSizeIterator, which Filter doesn't implement.
+                    let iface_ip = this.addr;
+                    let relevant_addrs: Vec<_> = this
+                        .listen_addresses
+                        .read()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .iter()
+                        .filter(|multiaddr| addr_matches_interface(multiaddr, iface_ip))
+                        .cloned()
+                        .collect();
+
                     this.send_buffer.extend(build_query_response(
                         query.query_id(),
                         this.local_peer_id,
-                        this.listen_addresses
-                            .read()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .iter(),
+                        relevant_addrs.iter(),
                         this.ttl,
                     ));
                     continue;
@@ -333,5 +345,68 @@ where
 
             return Poll::Pending;
         }
+    }
+}
+
+/// Returns `true` if the first protocol component of `addr` is an IP address equal to
+/// `iface_ip`.
+///
+/// Used when answering mDNS queries to advertise only the listening addresses that are
+/// reachable on the interface the query arrived on, instead of every listening address.
+fn addr_matches_interface(addr: &Multiaddr, iface_ip: IpAddr) -> bool {
+    let addr_ip = match addr.iter().next() {
+        Some(Protocol::Ip4(v4)) => Some(IpAddr::V4(v4)),
+        Some(Protocol::Ip6(v6)) => Some(IpAddr::V6(v6)),
+        _ => None,
+    };
+    addr_ip == Some(iface_ip)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filter_addresses_by_interface_ip() {
+        let iface_ipv4: IpAddr = "192.168.1.100".parse().unwrap();
+        let iface_ipv6: IpAddr = "fe80::1".parse().unwrap();
+
+        let addr_matching_v4: Multiaddr = "/ip4/192.168.1.100/tcp/1234".parse().unwrap();
+        let addr_different_v4: Multiaddr = "/ip4/10.0.0.1/tcp/1234".parse().unwrap();
+        let addr_loopback_v4: Multiaddr = "/ip4/127.0.0.1/tcp/1234".parse().unwrap();
+        let addr_matching_v6: Multiaddr = "/ip6/fe80::1/tcp/1234".parse().unwrap();
+        let addr_different_v6: Multiaddr = "/ip6/::1/tcp/1234".parse().unwrap();
+
+        // IPv4 interface
+        assert!(
+            addr_matches_interface(&addr_matching_v4, iface_ipv4),
+            "Should match same IPv4"
+        );
+        assert!(
+            !addr_matches_interface(&addr_different_v4, iface_ipv4),
+            "Should not match different IPv4"
+        );
+        assert!(
+            !addr_matches_interface(&addr_loopback_v4, iface_ipv4),
+            "Should not match loopback when interface is not loopback"
+        );
+        assert!(
+            !addr_matches_interface(&addr_matching_v6, iface_ipv4),
+            "Should not match IPv6 on IPv4 interface"
+        );
+
+        // IPv6 interface
+        assert!(
+            addr_matches_interface(&addr_matching_v6, iface_ipv6),
+            "Should match same IPv6"
+        );
+        assert!(
+            !addr_matches_interface(&addr_different_v6, iface_ipv6),
+            "Should not match different IPv6"
+        );
+        assert!(
+            !addr_matches_interface(&addr_matching_v4, iface_ipv6),
+            "Should not match IPv4 on IPv6 interface"
+        );
     }
 }
