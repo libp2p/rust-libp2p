@@ -28,8 +28,8 @@ use std::{
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm, dummy,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, OutboundAddresses, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
 };
 use sysinfo::MemoryRefreshKind;
 
@@ -172,9 +172,8 @@ impl NetworkBehaviour for Behaviour {
         _: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        self.check_limit()?;
-        Ok(vec![])
+    ) -> OutboundAddresses {
+        OutboundAddresses::Ready(self.check_limit().map(|()| vec![]))
     }
 
     fn handle_established_outbound_connection(

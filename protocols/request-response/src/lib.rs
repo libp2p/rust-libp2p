@@ -89,7 +89,7 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, NetworkBehaviour, NotifyHandler,
-    PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    OutboundAddresses, PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
 };
@@ -791,9 +791,9 @@ where
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let Some(peer) = maybe_peer else {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         };
 
         let mut addresses = Vec::new();
@@ -804,7 +804,7 @@ where
         let cached_addrs = self.addresses.get(&peer);
         addresses.extend(cached_addrs);
 
-        Ok(addresses)
+        OutboundAddresses::Ready(Ok(addresses))
     }
 
     fn handle_established_outbound_connection(

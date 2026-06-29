@@ -79,16 +79,16 @@ where
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: libp2p_core::Endpoint,
-    ) -> Result<Vec<Multiaddr>, libp2p_swarm::ConnectionDenied> {
+    ) -> libp2p_swarm::OutboundAddresses {
         if maybe_peer.is_none() {
-            return Ok(Vec::new());
+            return libp2p_swarm::OutboundAddresses::Ready(Ok(Vec::new()));
         }
         let peer = maybe_peer.expect("already handled");
-        Ok(self
+        libp2p_swarm::OutboundAddresses::Ready(Ok(self
             .store
             .addresses_of_peer(&peer)
             .map(|i| i.cloned().collect())
-            .unwrap_or_default())
+            .unwrap_or_default()))
     }
 
     fn handle_established_outbound_connection(
