@@ -11,7 +11,7 @@ use futures::{
     channel::{mpsc, oneshot},
 };
 use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
+use libp2p_swarm::{ConnectionId, Stream, StreamProtocol};
 
 use crate::{AlreadyRegistered, handler::NewStream, shared::Shared};
 
@@ -41,6 +41,9 @@ impl Control {
     /// time which is enforced by requiring `&mut self`.
     ///
     /// This backpressure mechanism breaks if you clone [`Control`]s excessively.
+    ///
+    /// > Alternatively, [`Control::open_stream_on_connection`] opens on a
+    /// > specific connection instead of a randomly chosen one.
     pub async fn open_stream(
         &mut self,
         peer: PeerId,
@@ -48,20 +51,31 @@ impl Control {
     ) -> Result<Stream, OpenStreamError> {
         tracing::debug!(%peer, "Requesting new stream");
 
-        let mut new_stream_sender = Shared::lock(&self.shared).sender(peer);
+        let new_stream_sender = Shared::lock(&self.shared).sender(peer);
+        request_stream(new_stream_sender, protocol).await
+    }
 
-        let (sender, receiver) = oneshot::channel();
+    /// Like [`Control::open_stream`] but opens on a specific `connection`
+    /// instead of picking one of the peer's connections. The `connection` is
+    /// the [`ConnectionId`] from a [`libp2p_swarm::SwarmEvent::ConnectionEstablished`].
+    /// Errors with [`io::ErrorKind::NotConnected`] if that connection is not, or
+    /// no longer, established.
+    pub async fn open_stream_on_connection(
+        &mut self,
+        peer: PeerId,
+        connection: ConnectionId,
+        protocol: StreamProtocol,
+    ) -> Result<Stream, OpenStreamError> {
+        tracing::debug!(%peer, %connection, "Requesting new stream on connection");
 
-        new_stream_sender
-            .send(NewStream { protocol, sender })
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
-
-        let stream = receiver
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
-
-        Ok(stream)
+        let new_stream_sender = Shared::lock(&self.shared)
+            .senders
+            .get(&connection)
+            .cloned()
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotConnected, "connection not established")
+            })?;
+        request_stream(new_stream_sender, protocol).await
     }
 
     /// Accept inbound streams for the provided protocol.
@@ -73,6 +87,23 @@ impl Control {
     ) -> Result<IncomingStreams, AlreadyRegistered> {
         Shared::lock(&self.shared).accept(protocol)
     }
+}
+
+/// Send a [`NewStream`] request on `new_stream_sender` and await the opened stream.
+async fn request_stream(
+    mut new_stream_sender: mpsc::Sender<NewStream>,
+    protocol: StreamProtocol,
+) -> Result<Stream, OpenStreamError> {
+    let (sender, receiver) = oneshot::channel();
+
+    new_stream_sender
+        .send(NewStream { protocol, sender })
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
+
+    receiver
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?
 }
 
 /// Errors while opening a new stream.
