@@ -1,5 +1,9 @@
 ## 0.47.0
 
+- Add an additive, off-by-default `mlkem-hfs` feature: a hybrid post-quantum
+  handshake (`Noise_XXhfs_25519+ML-KEM-768_ChaChaPoly_SHA256`) negotiated
+  alongside `/noise`, falling back to classical X25519 for older peers.
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
