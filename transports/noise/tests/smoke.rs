@@ -111,6 +111,33 @@ fn xx() {
         .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
+#[test]
+fn read_into_empty_buffer_returns_immediately() {
+    let server_id = identity::Keypair::generate_ed25519();
+    let client_id = identity::Keypair::generate_ed25519();
+
+    let (client, server) = futures_ringbuf::Endpoint::pair(100, 100);
+
+    futures::executor::block_on(async move {
+        let ((_reported_client_id, mut server_session), (_reported_server_id, _client_session)) =
+            futures::future::try_join(
+                noise::Config::new(&server_id)
+                    .unwrap()
+                    .upgrade_inbound(server, ""),
+                noise::Config::new(&client_id)
+                    .unwrap()
+                    .upgrade_outbound(client, ""),
+            )
+            .await
+            .unwrap();
+
+        let mut buf = [];
+        let read = server_session.read(&mut buf).now_or_never();
+
+        assert!(matches!(read, Some(Ok(0))));
+    });
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Message(Vec<u8>);
 
