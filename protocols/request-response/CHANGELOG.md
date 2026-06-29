@@ -1,5 +1,12 @@
 ## 0.30.0
 
+- Add `Config::with_relay_for_requests` to control whether outbound requests may be sent over
+  relayed connections (enabled by default). When disabled and only a relayed connection to the peer
+  is available, the request is kept queued so a direct connection established shortly after (e.g. via
+  DCUtR) can carry it, and fails with the new `OutboundFailure::NoDirectConnection` variant if the
+  peer fully disconnects first.
+  See [PR 6501](https://github.com/libp2p/rust-libp2p/pull/6501).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
