@@ -12,13 +12,13 @@ release = false
 futures = { workspace = true }
 axum = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
-opentelemetry = { version = "0.27.0", features = ["metrics"] }
-opentelemetry-otlp = { version = "0.27.0", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.27.0", features = ["rt-tokio", "metrics"] }
+opentelemetry = { version = "0.32.0", features = ["metrics"] }
+opentelemetry-otlp = { version = "0.32.0", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.32.1", features = ["rt-tokio", "metrics"] }
 prometheus-client = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
-tracing-opentelemetry = "0.28.0"
+tracing-opentelemetry = "0.33.0"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
