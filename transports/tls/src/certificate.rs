@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
+use rcgen::PublicKeyData;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -247,7 +248,7 @@ fn make_libp2p_extension(
     let signature = {
         let mut msg = vec![];
         msg.extend(P2P_SIGNING_PREFIX);
-        msg.extend(certificate_keypair.public_key_der());
+        msg.extend(certificate_keypair.subject_public_key_info());
 
         identity_keypair
             .sign(&msg)
