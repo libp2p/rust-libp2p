@@ -76,6 +76,15 @@ impl Config {
         Ok(builder.finish())
     }
 
+    /// Create a new TLS configuration that resolves the server certificate dynamically.
+    pub fn new_with_server_cert_resolver(
+        resolver: Arc<dyn rustls::server::ResolvesServerCert>,
+    ) -> Self {
+        let mut builder = Config::builder();
+        builder.server_with_resolver(resolver);
+        builder.finish()
+    }
+
     /// Create a client-only configuration.
     pub fn client() -> Self {
         let provider = rustls::crypto::ring::default_provider();
@@ -128,6 +137,24 @@ impl Builder {
             .map_err(|e| Error::Tls(Box::new(e)))?;
         self.server = Some(server);
         Ok(self)
+    }
+
+    /// Set a dynamic server certificate resolver.
+    ///
+    /// The resolver is queried for every inbound connection, so the served certificate can change
+    /// at runtime without rebuilding the transport.
+    pub fn server_with_resolver(
+        &mut self,
+        resolver: Arc<dyn rustls::server::ResolvesServerCert>,
+    ) -> &mut Self {
+        let provider = rustls::crypto::ring::default_provider();
+        let server = rustls::ServerConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_cert_resolver(resolver);
+        self.server = Some(server);
+        self
     }
 
     /// Add an additional trust anchor.
