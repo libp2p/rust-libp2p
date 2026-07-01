@@ -43,7 +43,7 @@ use libp2p_core::{
     Endpoint,
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
+    muxing::{StreamMuxer, StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
     transport::PortUse,
     upgrade,
     upgrade::{NegotiationError, ProtocolError},
@@ -55,7 +55,7 @@ use web_time::Instant;
 use crate::{
     ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError,
+        AddressChange, ConnectionEvent, ConnectionHandler, Datagram, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport,
         ProtocolsChange, UpgradeInfoSend,
     },
@@ -299,6 +299,15 @@ where
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
+                Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
+                    if let Err(e) = muxing.send_datagram_unpin(data) {
+                        tracing::error!("failed to send datagram: {e}");
+                    }
+                    if let Some(max) = muxing.max_datagram_size() {
+                        handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+                    }
+                    continue;
+                }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
@@ -408,6 +417,11 @@ where
                         new_address: &address,
                     }));
                     return Poll::Ready(Ok(Event::AddressChange(address)));
+                }
+                Poll::Ready(StreamMuxerEvent::Datagram(data)) => {
+                    handler
+                        .on_connection_event(ConnectionEvent::Datagram(Datagram { data: &data }));
+                    continue;
                 }
             }
 
@@ -1215,7 +1229,9 @@ mod tests {
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
-                | ConnectionEvent::RemoteProtocolsChange(_) => {}
+                | ConnectionEvent::RemoteProtocolsChange(_)
+                | ConnectionEvent::Datagram(_)
+                | ConnectionEvent::DatagramMaxSize(_) => {}
             }
         }
 

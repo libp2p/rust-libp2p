@@ -38,7 +38,7 @@ use rand::Rng;
 use crate::{
     Stream,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
@@ -190,6 +190,16 @@ where
                     h.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
                         new_address,
                     }));
+                }
+            }
+            ConnectionEvent::Datagram(Datagram { data }) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::Datagram(Datagram { data }));
+                }
+            }
+            ConnectionEvent::DatagramMaxSize(max) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
                 }
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {

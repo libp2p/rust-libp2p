@@ -213,6 +213,22 @@ where
                     handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
                 }
             },
+            ConnectionEvent::Datagram(datagram) => match self {
+                Either::Left(handler) => {
+                    handler.on_connection_event(ConnectionEvent::Datagram(datagram))
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(ConnectionEvent::Datagram(datagram))
+                }
+            },
+            ConnectionEvent::DatagramMaxSize(max) => match self {
+                Either::Left(handler) => {
+                    handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max))
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max))
+                }
+            },
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => match self {
                 Either::Left(handler) => handler.on_connection_event(
                     ConnectionEvent::LocalProtocolsChange(supported_protocols),

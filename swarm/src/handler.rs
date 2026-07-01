@@ -54,6 +54,7 @@ use std::{
     time::Duration,
 };
 
+use bytes::Bytes;
 use libp2p_core::Multiaddr;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
@@ -239,6 +240,11 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     LocalProtocolsChange(ProtocolsChange<'a>),
     /// The remote [`ConnectionHandler`] now supports a different set of protocols.
     RemoteProtocolsChange(ProtocolsChange<'a>),
+    /// An unreliable datagram was received on the connection.
+    Datagram(Datagram<'a>),
+    /// The connection's current maximum outbound datagram size, reported after a
+    /// send so the sender can size fragments to the real path budget.
+    DatagramMaxSize(usize),
 }
 
 impl<IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'_, IP, OP, IOI, OOI>
@@ -273,6 +279,10 @@ where
             ConnectionEvent::RemoteProtocolsChange(v) => {
                 f.debug_tuple("RemoteProtocolsChange").field(v).finish()
             }
+            ConnectionEvent::Datagram(v) => f.debug_tuple("Datagram").field(v).finish(),
+            ConnectionEvent::DatagramMaxSize(v) => {
+                f.debug_tuple("DatagramMaxSize").field(v).finish()
+            }
         }
     }
 }
@@ -283,13 +293,14 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {
         match self {
-            ConnectionEvent::DialUpgradeError(_) | ConnectionEvent::FullyNegotiatedOutbound(_) => {
-                true
-            }
+            ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::DatagramMaxSize(_) => true,
             ConnectionEvent::FullyNegotiatedInbound(_)
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::Datagram(_)
             | ConnectionEvent::ListenUpgradeError(_) => false,
         }
     }
@@ -297,13 +308,14 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
     /// Whether the event concerns an inbound stream.
     pub fn is_inbound(&self) -> bool {
         match self {
-            ConnectionEvent::FullyNegotiatedInbound(_) | ConnectionEvent::ListenUpgradeError(_) => {
-                true
-            }
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::Datagram(_)
+            | ConnectionEvent::ListenUpgradeError(_) => true,
             ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::DatagramMaxSize(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
     }
@@ -339,6 +351,13 @@ pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI = ()> {
 #[derive(Debug)]
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
+}
+
+/// [`ConnectionEvent`] variant carrying an unreliable datagram received on the
+/// connection.
+#[derive(Debug)]
+pub struct Datagram<'a> {
+    pub data: &'a Bytes,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported
@@ -608,6 +627,9 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> 
 
     /// Event that is sent to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour).
     NotifyBehaviour(TCustom),
+
+    /// Send an unreliable datagram over the connection.
+    SendDatagram(Bytes),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -643,6 +665,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
+            ConnectionHandlerEvent::SendDatagram(data) => {
+                ConnectionHandlerEvent::SendDatagram(data)
+            }
         }
     }
 
@@ -664,6 +689,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
+            ConnectionHandlerEvent::SendDatagram(data) => {
+                ConnectionHandlerEvent::SendDatagram(data)
+            }
         }
     }
 
@@ -684,6 +712,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             }
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
+            ConnectionHandlerEvent::SendDatagram(data) => {
+                ConnectionHandlerEvent::SendDatagram(data)
             }
         }
     }

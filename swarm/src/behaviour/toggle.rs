@@ -30,7 +30,7 @@ use crate::{
     behaviour::FromSwarm,
     connection::ConnectionId,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
@@ -338,6 +338,18 @@ where
                     inner.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
                         new_address: address_change.new_address,
                     }));
+                }
+            }
+            ConnectionEvent::Datagram(datagram) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::Datagram(Datagram {
+                        data: datagram.data,
+                    }));
+                }
+            }
+            ConnectionEvent::DatagramMaxSize(max) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
                 }
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) => self

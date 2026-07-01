@@ -85,6 +85,9 @@ where
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
+            ConnectionHandlerEvent::SendDatagram(data) => {
+                ConnectionHandlerEvent::SendDatagram(data)
+            }
         })
     }
 
