@@ -49,12 +49,14 @@ async fn datagram_roundtrip_over_quic() {
     // Lossy: resend until one lands.
     let mut resend = tokio::time::interval(Duration::from_millis(20));
     let mut connected = false;
+    let mut conn_id = None;
 
     let (from, data) = loop {
         tokio::select! {
             _ = listener.select_next_some() => {}
             event = dialer.select_next_some() => {
-                if matches!(event, SwarmEvent::ConnectionEstablished { .. }) {
+                if let SwarmEvent::ConnectionEstablished { connection_id, .. } = event {
+                    conn_id = Some(connection_id);
                     connected = true;
                 }
             }
@@ -67,4 +69,20 @@ async fn datagram_roundtrip_over_quic() {
 
     assert_eq!(from, dialer_peer);
     assert_eq!(data, payload);
+
+    // The connection's max datagram size is learned from the send path.
+    let conn_id = conn_id.unwrap();
+    let max = loop {
+        if let Some(max) = control.max_datagram_size(listener_peer, conn_id) {
+            break max;
+        }
+        tokio::select! {
+            _ = listener.select_next_some() => {}
+            _ = dialer.select_next_some() => {}
+            _ = resend.tick() => {
+                let _ = control.send_datagram(listener_peer, payload.clone());
+            }
+        }
+    };
+    assert!(max > 0);
 }

@@ -6,4 +6,8 @@
   takes the application protocol the datagrams belong to.
   See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
 
+- Add `Control::max_datagram_size`, the per-connection max outbound datagram size
+  learned from the send path, so senders can size fragments to the path budget.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 [libp2p/specs#680]: https://github.com/libp2p/specs/pull/680

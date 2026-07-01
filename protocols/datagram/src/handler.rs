@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    convert::Infallible,
     task::{Context, Poll},
 };
 
@@ -30,6 +29,8 @@ pub struct Handler {
     // Held open for the life of the flow, per spec; never read or written again.
     control_stream: Option<Stream>,
     outbound: VecDeque<Bytes>,
+    reported_max: Option<usize>,
+    pending_max: Option<usize>,
 }
 
 impl Handler {
@@ -48,6 +49,8 @@ impl Handler {
             control_stream_id: None,
             control_stream: None,
             outbound: VecDeque::new(),
+            reported_max: None,
+            pending_max: None,
         }
     }
 
@@ -68,7 +71,7 @@ impl Handler {
 
 impl ConnectionHandler for Handler {
     type FromBehaviour = Bytes;
-    type ToBehaviour = Infallible;
+    type ToBehaviour = usize;
     type InboundProtocol = Upgrade;
     type OutboundProtocol = Upgrade;
     type InboundOpenInfo = ();
@@ -78,10 +81,11 @@ impl ConnectionHandler for Handler {
         self.upgrade()
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Upgrade, (), Infallible>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ConnectionHandlerEvent<Upgrade, (), usize>> {
+        if let Some(max) = self.pending_max.take() {
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(max));
+        }
+
         if self.role == Endpoint::Dialer && !self.requested_control_stream {
             self.requested_control_stream = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -129,6 +133,10 @@ impl ConnectionHandler for Handler {
                 {
                     let _ = self.inbound.try_send((self.remote, payload));
                 }
+            }
+            ConnectionEvent::DatagramMaxSize(max) if self.reported_max != Some(max) => {
+                self.reported_max = Some(max);
+                self.pending_max = Some(max);
             }
             _ => {}
         }

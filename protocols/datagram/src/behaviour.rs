@@ -1,5 +1,7 @@
 use std::{
+    collections::HashMap,
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -8,13 +10,16 @@ use futures::{Stream, StreamExt, channel::mpsc};
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, StreamProtocol,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
+    StreamProtocol, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::{Control, handler::Handler};
 
 const CHANNEL_BUFFER: usize = 256;
+
+/// Per-connection max outbound datagram size, shared with every [`Control`].
+pub(crate) type DatagramSizes = Arc<Mutex<HashMap<(PeerId, ConnectionId), usize>>>;
 
 /// Sends and receives unreliable datagrams for a single application protocol.
 pub struct Behaviour {
@@ -23,6 +28,7 @@ pub struct Behaviour {
     outbound_rx: mpsc::Receiver<OutboundDatagram>,
     inbound_tx: mpsc::Sender<(PeerId, Bytes)>,
     incoming: Option<mpsc::Receiver<(PeerId, Bytes)>>,
+    sizes: DatagramSizes,
 }
 
 pub(crate) struct OutboundDatagram {
@@ -42,12 +48,13 @@ impl Behaviour {
             outbound_rx,
             inbound_tx,
             incoming: Some(incoming),
+            sizes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     /// A new [`Control`] for sending datagrams.
     pub fn new_control(&self) -> Control {
-        Control::new(self.outbound_tx.clone())
+        Control::new(self.outbound_tx.clone(), self.sizes.clone())
     }
 
     /// Stream of inbound `(sender, payload)`. `None` after the first call.
@@ -102,15 +109,24 @@ impl NetworkBehaviour for Behaviour {
         ))
     }
 
-    fn on_swarm_event(&mut self, _event: FromSwarm) {}
+    fn on_swarm_event(&mut self, event: FromSwarm) {
+        if let FromSwarm::ConnectionClosed(ConnectionClosed {
+            peer_id,
+            connection_id,
+            ..
+        }) = event
+        {
+            self.sizes.lock().unwrap().remove(&(peer_id, connection_id));
+        }
+    }
 
     fn on_connection_handler_event(
         &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        event: THandlerOutEvent<Self>,
+        peer: PeerId,
+        connection: ConnectionId,
+        max: THandlerOutEvent<Self>,
     ) {
-        libp2p_core::util::unreachable(event);
+        self.sizes.lock().unwrap().insert((peer, connection), max);
     }
 
     fn poll(

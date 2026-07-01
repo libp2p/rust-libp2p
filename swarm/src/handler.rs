@@ -242,6 +242,9 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     RemoteProtocolsChange(ProtocolsChange<'a>),
     /// An unreliable datagram was received on the connection.
     Datagram(Datagram<'a>),
+    /// The connection's current maximum outbound datagram size, reported after a
+    /// send so the sender can size fragments to the real path budget.
+    DatagramMaxSize(usize),
 }
 
 impl<IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'_, IP, OP, IOI, OOI>
@@ -277,6 +280,9 @@ where
                 f.debug_tuple("RemoteProtocolsChange").field(v).finish()
             }
             ConnectionEvent::Datagram(v) => f.debug_tuple("Datagram").field(v).finish(),
+            ConnectionEvent::DatagramMaxSize(v) => {
+                f.debug_tuple("DatagramMaxSize").field(v).finish()
+            }
         }
     }
 }
@@ -287,9 +293,9 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {
         match self {
-            ConnectionEvent::DialUpgradeError(_) | ConnectionEvent::FullyNegotiatedOutbound(_) => {
-                true
-            }
+            ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::DatagramMaxSize(_) => true,
             ConnectionEvent::FullyNegotiatedInbound(_)
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
@@ -309,6 +315,7 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::DatagramMaxSize(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
     }

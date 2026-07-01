@@ -197,6 +197,11 @@ where
                     h.on_connection_event(ConnectionEvent::Datagram(Datagram { data }));
                 }
             }
+            ConnectionEvent::DatagramMaxSize(max) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+                }
+            }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 info: (key, arg),
                 error,

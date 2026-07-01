@@ -89,7 +89,8 @@ impl ConnectionHandler for PendingConnectionHandler {
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_)
-            | ConnectionEvent::Datagram(_) => {}
+            | ConnectionEvent::Datagram(_)
+            | ConnectionEvent::DatagramMaxSize(_) => {}
         }
     }
 }

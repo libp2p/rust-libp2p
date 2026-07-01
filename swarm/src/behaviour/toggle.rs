@@ -347,6 +347,11 @@ where
                     }));
                 }
             }
+            ConnectionEvent::DatagramMaxSize(max) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+                }
+            }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) => self
                 .inner
                 .as_mut()

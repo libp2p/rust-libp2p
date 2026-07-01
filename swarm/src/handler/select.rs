@@ -335,6 +335,12 @@ where
                         data: datagram.data,
                     }));
             }
+            ConnectionEvent::DatagramMaxSize(max) => {
+                self.proto1
+                    .on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+                self.proto2
+                    .on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+            }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 match dial_upgrade_error.transpose() {
                     Either::Left(err) => self

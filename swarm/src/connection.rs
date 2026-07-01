@@ -43,7 +43,7 @@ use libp2p_core::{
     Endpoint,
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
+    muxing::{StreamMuxer, StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
     transport::PortUse,
     upgrade,
     upgrade::{NegotiationError, ProtocolError},
@@ -302,6 +302,9 @@ where
                 Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
                     if let Err(e) = muxing.send_datagram_unpin(data) {
                         tracing::error!("failed to send datagram: {e}");
+                    }
+                    if let Some(max) = muxing.max_datagram_size() {
+                        handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
                     }
                     continue;
                 }
@@ -1227,7 +1230,8 @@ mod tests {
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
                 | ConnectionEvent::RemoteProtocolsChange(_)
-                | ConnectionEvent::Datagram(_) => {}
+                | ConnectionEvent::Datagram(_)
+                | ConnectionEvent::DatagramMaxSize(_) => {}
             }
         }
 

@@ -3,17 +3,24 @@ use futures::channel::mpsc;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 
-use crate::behaviour::OutboundDatagram;
+use crate::behaviour::{DatagramSizes, OutboundDatagram};
 
 /// Cloneable handle for sending datagrams.
 #[derive(Clone)]
 pub struct Control {
     sender: mpsc::Sender<OutboundDatagram>,
+    sizes: DatagramSizes,
 }
 
 impl Control {
-    pub(crate) fn new(sender: mpsc::Sender<OutboundDatagram>) -> Self {
-        Self { sender }
+    pub(crate) fn new(sender: mpsc::Sender<OutboundDatagram>, sizes: DatagramSizes) -> Self {
+        Self { sender, sizes }
+    }
+
+    /// The connection's current max outbound datagram size, learned from sends
+    /// on it. `None` until the first datagram has been sent.
+    pub fn max_datagram_size(&self, peer: PeerId, connection: ConnectionId) -> Option<usize> {
+        self.sizes.lock().unwrap().get(&(peer, connection)).copied()
     }
 
     /// Send to `peer` over whichever connection the swarm picks.
