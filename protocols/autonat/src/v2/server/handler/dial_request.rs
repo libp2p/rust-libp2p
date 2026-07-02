@@ -65,7 +65,7 @@ where
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
             inbound: FuturesSet::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 10,
             ),
             rng,
