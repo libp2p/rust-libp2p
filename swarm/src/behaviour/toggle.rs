@@ -30,7 +30,7 @@ use crate::{
     behaviour::FromSwarm,
     connection::ConnectionId,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
@@ -201,6 +201,7 @@ where
         FullyNegotiatedInbound {
             protocol: out,
             info,
+            stream_id,
         }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
             <Self as ConnectionHandler>::InboundOpenInfo,
@@ -219,6 +220,7 @@ where
                     FullyNegotiatedInbound {
                         protocol: out,
                         info,
+                        stream_id,
                     },
                 ));
         } else {
@@ -294,6 +296,12 @@ where
             .unwrap_or(false)
     }
 
+    fn supports_datagrams(&self, protocol: &crate::StreamProtocol) -> bool {
+        self.inner
+            .as_ref()
+            .is_some_and(|h| h.supports_datagrams(protocol))
+    }
+
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -323,6 +331,7 @@ where
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 info,
+                stream_id,
             }) => self
                 .inner
                 .as_mut()
@@ -331,6 +340,7 @@ where
                     FullyNegotiatedOutbound {
                         protocol: out,
                         info,
+                        stream_id,
                     },
                 )),
             ConnectionEvent::AddressChange(address_change) => {
@@ -342,9 +352,7 @@ where
             }
             ConnectionEvent::Datagram(datagram) => {
                 if let Some(inner) = self.inner.as_mut() {
-                    inner.on_connection_event(ConnectionEvent::Datagram(Datagram {
-                        data: datagram.data,
-                    }));
+                    inner.on_connection_event(ConnectionEvent::Datagram(datagram));
                 }
             }
             ConnectionEvent::DatagramMaxSize(max) => {

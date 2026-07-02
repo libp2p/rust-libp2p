@@ -86,6 +86,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol,
                 info: _,
+                ..
             }) => {
                 #[allow(clippy::collapsible_match)]
                 if self

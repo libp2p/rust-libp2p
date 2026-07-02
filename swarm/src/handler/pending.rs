@@ -77,6 +77,7 @@ impl ConnectionHandler for PendingConnectionHandler {
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
+                ..
             }) => {
                 libp2p_core::util::unreachable(protocol);
                 #[allow(unreachable_code, clippy::used_underscore_binding)]

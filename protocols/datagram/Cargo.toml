@@ -21,7 +21,7 @@ unsigned-varint = { workspace = true, features = ["futures"] }
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 libp2p-quic = { workspace = true, features = ["tokio"] }
-libp2p-swarm = { workspace = true, features = ["tokio"] }
+libp2p-swarm = { workspace = true, features = ["tokio", "macros"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

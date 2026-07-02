@@ -9,6 +9,9 @@
 - Add `Stream::transport_stream_id`, exposing the transport stream id (QUIC) for datagram flows.
   See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
 
+- Route inbound datagrams centrally: add `ConnectionHandler::supports_datagrams` and a `stream_id` field on `FullyNegotiatedInbound`/`FullyNegotiatedOutbound`. The connection parses the control-stream id once and routes each datagram to the owning handler instead of broadcasting.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 

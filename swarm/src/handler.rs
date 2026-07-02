@@ -155,6 +155,12 @@ pub trait ConnectionHandler: Send + 'static {
         false
     }
 
+    /// Whether `protocol` is a datagram control protocol this handler owns.
+    /// Combinators return the disjunction of their children.
+    fn supports_datagrams(&self, _protocol: &StreamProtocol) -> bool {
+        false
+    }
+
     /// Should behave like `Stream::poll()`.
     fn poll(
         &mut self,
@@ -333,6 +339,8 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI = ()> {
     pub protocol: IP::Output,
     pub info: IOI,
+    /// Transport stream id; set only for datagram control streams.
+    pub stream_id: Option<u64>,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound
@@ -344,6 +352,8 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI = ()> {
 pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI = ()> {
     pub protocol: OP::Output,
     pub info: OOI,
+    /// Transport stream id; set only for datagram control streams.
+    pub stream_id: Option<u64>,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the address of the
@@ -353,10 +363,11 @@ pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
-/// [`ConnectionEvent`] variant carrying an unreliable datagram received on the
-/// connection.
+/// [`ConnectionEvent`] variant carrying an unreliable datagram, already routed
+/// to the owning handler with its control-stream id parsed off.
 #[derive(Debug)]
 pub struct Datagram<'a> {
+    pub stream_id: u64,
     pub data: &'a Bytes,
 }
 

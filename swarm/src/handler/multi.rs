@@ -38,7 +38,7 @@ use rand::Rng;
 use crate::{
     Stream,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
@@ -49,6 +49,8 @@ use crate::{
 #[derive(Clone)]
 pub struct MultiHandler<K, H> {
     handlers: HashMap<K, H>,
+    /// Control-stream id -> owning handler key, for routing inbound datagrams.
+    datagram_routes: HashMap<u64, K>,
 }
 
 impl<K, H> fmt::Debug for MultiHandler<K, H>
@@ -77,6 +79,7 @@ where
     {
         let m = MultiHandler {
             handlers: HashMap::from_iter(iter),
+            datagram_routes: HashMap::new(),
         };
         uniq_proto_names(
             m.handlers
@@ -156,12 +159,17 @@ where
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (key, arg),
+                stream_id,
             }) => {
                 if let Some(h) = self.handlers.get_mut(&key) {
+                    if let Some(id) = stream_id {
+                        self.datagram_routes.insert(id, key.clone());
+                    }
                     h.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
                         FullyNegotiatedOutbound {
                             protocol,
                             info: arg,
+                            stream_id,
                         },
                     ));
                 } else {
@@ -171,13 +179,18 @@ where
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol: (key, arg),
                 mut info,
+                stream_id,
             }) => {
                 if let Some(h) = self.handlers.get_mut(&key) {
                     if let Some(i) = info.take(&key) {
+                        if let Some(id) = stream_id {
+                            self.datagram_routes.insert(id, key.clone());
+                        }
                         h.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
                             FullyNegotiatedInbound {
                                 protocol: arg,
                                 info: i,
+                                stream_id,
                             },
                         ));
                     }
@@ -192,9 +205,11 @@ where
                     }));
                 }
             }
-            ConnectionEvent::Datagram(Datagram { data }) => {
-                for h in self.handlers.values_mut() {
-                    h.on_connection_event(ConnectionEvent::Datagram(Datagram { data }));
+            ConnectionEvent::Datagram(datagram) => {
+                if let Some(key) = self.datagram_routes.get(&datagram.stream_id)
+                    && let Some(h) = self.handlers.get_mut(key)
+                {
+                    h.on_connection_event(ConnectionEvent::Datagram(datagram));
                 }
             }
             ConnectionEvent::DatagramMaxSize(max) => {
@@ -249,6 +264,12 @@ where
             .map(|h| h.connection_keep_alive())
             .max()
             .unwrap_or(false)
+    }
+
+    fn supports_datagrams(&self, protocol: &crate::StreamProtocol) -> bool {
+        self.handlers
+            .values()
+            .any(|h| h.supports_datagrams(protocol))
     }
 
     fn poll(

@@ -13,8 +13,9 @@ pub(crate) fn frame(control_stream_id: u64, payload: &[u8]) -> Bytes {
     buf.freeze()
 }
 
-/// Split a datagram into its control-stream id and payload, or `None` if the
-/// leading varint is truncated.
+/// Split a datagram into its control-stream id and payload. Test-only; inbound
+/// decoding lives in the connection layer, this just validates `frame`.
+#[cfg(test)]
 pub(crate) fn parse(datagram: &[u8]) -> Option<(u64, Bytes)> {
     let (id, len) = get_varint(datagram)?;
     Some((id, Bytes::copy_from_slice(&datagram[len..])))
@@ -35,6 +36,7 @@ fn put_varint(value: u64, out: &mut BytesMut) {
 }
 
 /// Returns the decoded value and the number of bytes it consumed.
+#[cfg(test)]
 fn get_varint(buf: &[u8]) -> Option<(u64, usize)> {
     let first = *buf.first()?;
     let len = 1usize << (first >> 6);

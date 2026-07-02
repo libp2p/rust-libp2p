@@ -20,6 +20,7 @@
 
 use std::{
     cmp,
+    collections::HashMap,
     task::{Context, Poll},
 };
 
@@ -29,12 +30,19 @@ use libp2p_core::upgrade::SelectUpgrade;
 
 use crate::{
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, Datagram,
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
         ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
     },
     upgrade::SendWrapper,
 };
+
+/// Which child of a [`ConnectionHandlerSelect`] owns a datagram control stream.
+#[derive(Debug, Clone, Copy)]
+enum Side {
+    First,
+    Second,
+}
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
 #[derive(Debug, Clone)]
@@ -43,12 +51,18 @@ pub struct ConnectionHandlerSelect<TProto1, TProto2> {
     proto1: TProto1,
     /// The second protocol.
     proto2: TProto2,
+    /// Control-stream id -> owning child, for routing inbound datagrams.
+    datagram_routes: HashMap<u64, Side>,
 }
 
 impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     /// Builds a [`ConnectionHandlerSelect`].
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
-        ConnectionHandlerSelect { proto1, proto2 }
+        ConnectionHandlerSelect {
+            proto1,
+            proto2,
+            datagram_routes: HashMap::new(),
+        }
     }
 
     pub fn into_inner(self) -> (TProto1, TProto2) {
@@ -71,11 +85,21 @@ where
             FullyNegotiatedOutbound {
                 protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
-            } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
+                stream_id,
+            } => Either::Left(FullyNegotiatedOutbound {
+                protocol,
+                info,
+                stream_id,
+            }),
             FullyNegotiatedOutbound {
                 protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
-            } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
+                stream_id,
+            } => Either::Right(FullyNegotiatedOutbound {
+                protocol,
+                info,
+                stream_id,
+            }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
         }
     }
@@ -94,11 +118,21 @@ where
             FullyNegotiatedInbound {
                 protocol: future::Either::Left(protocol),
                 info: (i1, _i2),
-            } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
+                stream_id,
+            } => Either::Left(FullyNegotiatedInbound {
+                protocol,
+                info: i1,
+                stream_id,
+            }),
             FullyNegotiatedInbound {
                 protocol: future::Either::Right(protocol),
                 info: (_i1, i2),
-            } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
+                stream_id,
+            } => Either::Right(FullyNegotiatedInbound {
+                protocol,
+                info: i2,
+                stream_id,
+            }),
         }
     }
 }
@@ -221,6 +255,10 @@ where
         )
     }
 
+    fn supports_datagrams(&self, protocol: &crate::StreamProtocol) -> bool {
+        self.proto1.supports_datagrams(protocol) || self.proto2.supports_datagrams(protocol)
+    }
+
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -296,22 +334,38 @@ where
         match event {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 match fully_negotiated_outbound.transpose() {
-                    Either::Left(f) => self
-                        .proto1
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
-                    Either::Right(f) => self
-                        .proto2
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
+                    Either::Left(f) => {
+                        if let Some(id) = f.stream_id {
+                            self.datagram_routes.insert(id, Side::First);
+                        }
+                        self.proto1
+                            .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f));
+                    }
+                    Either::Right(f) => {
+                        if let Some(id) = f.stream_id {
+                            self.datagram_routes.insert(id, Side::Second);
+                        }
+                        self.proto2
+                            .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f));
+                    }
                 }
             }
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 match fully_negotiated_inbound.transpose() {
-                    Either::Left(f) => self
-                        .proto1
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
-                    Either::Right(f) => self
-                        .proto2
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
+                    Either::Left(f) => {
+                        if let Some(id) = f.stream_id {
+                            self.datagram_routes.insert(id, Side::First);
+                        }
+                        self.proto1
+                            .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f));
+                    }
+                    Either::Right(f) => {
+                        if let Some(id) = f.stream_id {
+                            self.datagram_routes.insert(id, Side::Second);
+                        }
+                        self.proto2
+                            .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f));
+                    }
                 }
             }
             ConnectionEvent::AddressChange(address) => {
@@ -326,14 +380,18 @@ where
                     }));
             }
             ConnectionEvent::Datagram(datagram) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::Datagram(Datagram {
-                        data: datagram.data,
-                    }));
-                self.proto2
-                    .on_connection_event(ConnectionEvent::Datagram(Datagram {
-                        data: datagram.data,
-                    }));
+                match self.datagram_routes.get(&datagram.stream_id) {
+                    Some(Side::First) => {
+                        self.proto1
+                            .on_connection_event(ConnectionEvent::Datagram(datagram));
+                    }
+                    Some(Side::Second) => {
+                        self.proto2
+                            .on_connection_event(ConnectionEvent::Datagram(datagram));
+                    }
+                    // Unknown control stream; drop.
+                    None => {}
+                }
             }
             ConnectionEvent::DatagramMaxSize(max) => {
                 self.proto1

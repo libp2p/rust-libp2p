@@ -12,7 +12,10 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 
-use crate::{framing, protocol::Upgrade};
+use crate::{
+    framing,
+    protocol::{CONTROL_PROTOCOL, Upgrade},
+};
 
 /// Pre-establish backlog cap; head-drop oldest past it (delivery is unreliable).
 const MAX_OUTBOUND_BACKLOG: usize = 256;
@@ -81,6 +84,10 @@ impl ConnectionHandler for Handler {
         self.upgrade()
     }
 
+    fn supports_datagrams(&self, protocol: &StreamProtocol) -> bool {
+        *protocol == CONTROL_PROTOCOL
+    }
+
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ConnectionHandlerEvent<Upgrade, (), usize>> {
         if let Some(max) = self.pending_max.take() {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(max));
@@ -125,14 +132,8 @@ impl ConnectionHandler for Handler {
                 ..
             }) => self.establish(stream),
             ConnectionEvent::Datagram(datagram) => {
-                // A truncated frame or a non-control-stream id is dropped, not a
-                // PROTOCOL_VIOLATION: this layer cannot close the connection, and a
-                // stray datagram is best ignored.
-                if let Some((id, payload)) = framing::parse(datagram.data)
-                    && Some(id) == self.control_stream_id
-                {
-                    let _ = self.inbound.try_send((self.remote, payload));
-                }
+                // Already parsed and routed to us by the connection, id stripped.
+                let _ = self.inbound.try_send((self.remote, datagram.data.clone()));
             }
             ConnectionEvent::DatagramMaxSize(max) if self.reported_max != Some(max) => {
                 self.reported_max = Some(max);
