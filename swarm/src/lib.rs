@@ -97,7 +97,6 @@ use std::{
     error, fmt, io,
     num::{NonZeroU8, NonZeroU32, NonZeroUsize},
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -111,10 +110,7 @@ pub use behaviour::{
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols, pool::ConnectionCounters};
 use connection::{
     IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
-    pool::{
-        EstablishedConnection, Pool, PoolConfig, PoolEvent,
-        dial_ranker::{DialRanker, smart_dial_ranker},
-    },
+    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent, concurrent_dial::Dial},
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -519,9 +515,10 @@ where
 
         let dials = addresses
             .into_iter()
-            .map(|a| (a.clone(), match peer_id.map_or(Ok(a.clone()), |p| a.with_p2p(p)) {
+            .map(|a| {
+                let fut = match peer_id.map_or(Ok(a.clone()), |p| a.clone().with_p2p(p)) {
                 Ok(address) => {
-                    let dial = self.transport.dial(
+                    let transport_dial = self.transport.dial(
                         address.clone(),
                         transport::DialOpts {
                             role: dial_opts.role_override(),
@@ -530,7 +527,7 @@ where
                     );
                     let span = tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address);
                     span.follows_from(tracing::Span::current());
-                    match dial {
+                    match transport_dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))
                             .instrument(span)
@@ -543,7 +540,8 @@ where
                     Err(TransportError::MultiaddrNotSupported(address)),
                 ))
                 .boxed(),
-            },))
+            };
+                Dial{ addr: a, delay: None, fut }})
             .collect();
 
         self.pool.add_outgoing(
@@ -1451,6 +1449,10 @@ impl Config {
     }
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    ///
+    /// This is only used when [`with_smart_dial`](Self::with_smart_dial) is **not** enabled.
+    /// When smart dialing is active, all addresses are dialed concurrently and pacing is
+    /// handled by staggered delays instead.
     pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.pool_config = self.pool_config.with_dial_concurrency_factor(factor);
         self
@@ -1510,15 +1512,18 @@ impl Config {
         self
     }
 
-    /// Sets a dial ranker that determines the ranking of outgoing connection attempts.
-    pub fn with_dial_ranker(mut self, dial_ranker: Arc<DialRanker>) -> Self {
-        self.pool_config.dial_ranker = Some(dial_ranker);
-        self
-    }
-
     /// Enables smart dialing.
-    pub fn with_smart_dial_ranker(self) -> Self {
-        self.with_dial_ranker(Arc::new(smart_dial_ranker))
+    ///
+    /// When enabled, the swarm ranks dial addresses by transport priority
+    /// (QUIC > TCP, IPv6 > IPv4) and applies Happy Eyeballs (RFC 8305)
+    /// staggered delays. All addresses are dialed concurrently — the delays
+    /// provide pacing so faster transports get a head start while slower
+    /// paths wait, overlapping in flight. The
+    /// [`dial concurrency factor`](Self::with_dial_concurrency_factor) is
+    /// ignored when this is enabled.
+    pub fn with_smart_dial(mut self) -> Self {
+        self.pool_config.smart_dial = true;
+        self
     }
 }
 
@@ -2160,7 +2165,7 @@ mod tests {
             tokio::runtime::Runtime::new().unwrap().block_on(async {
                 let mut swarm = new_test_swarm(
                     Config::with_tokio_executor()
-                        .with_smart_dial_ranker()
+                        .with_smart_dial()
                         .with_dial_concurrency_factor(concurrency_factor.0),
                 );
 

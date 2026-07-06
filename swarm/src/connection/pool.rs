@@ -25,12 +25,10 @@ use std::{
     fmt,
     num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll, Waker},
 };
 
-use concurrent_dial::{ConcurrentDial, Dial};
-use dial_ranker::DialRanker;
+use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
     channel::{mpsc, oneshot},
@@ -52,11 +50,12 @@ use crate::{
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
+        pool::concurrent_dial::Dial,
     },
     transport::TransportError,
 };
 
-mod concurrent_dial;
+pub(crate) mod concurrent_dial;
 pub(crate) mod dial_ranker;
 mod task;
 
@@ -147,8 +146,8 @@ where
     /// How long a connection should be kept alive once it starts idling.
     idle_connection_timeout: Duration,
 
-    /// Ranker that determines the ranking of outgoing connection attempts.
-    dial_ranker: Option<Arc<DialRanker>>,
+    /// Enables smart dialing.
+    smart_dial: bool,
 }
 
 #[derive(Debug)]
@@ -340,7 +339,7 @@ where
             no_established_connections_waker: None,
             established_connection_events: Default::default(),
             new_connection_dropped_listeners: Default::default(),
-            dial_ranker: config.dial_ranker,
+            smart_dial: config.smart_dial,
         }
     }
 
@@ -421,7 +420,7 @@ where
     /// that establishes and negotiates the connection.
     pub(crate) fn add_outgoing(
         &mut self,
-        dials: Vec<(Multiaddr, Dial)>,
+        dials: Vec<Dial>,
         peer: Option<PeerId>,
         role_override: Endpoint,
         port_use: PortUse,
@@ -438,7 +437,7 @@ where
         self.executor.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
-                ConcurrentDial::new(dials, concurrency_factor, self.dial_ranker.clone()),
+                ConcurrentDial::new(dials, concurrency_factor, self.smart_dial),
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
@@ -985,7 +984,7 @@ pub(crate) struct PoolConfig {
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub(crate) dial_concurrency_factor: NonZeroU8,
     /// Ranker that determines the ranking of outgoing connection attempts.
-    pub(crate) dial_ranker: Option<Arc<DialRanker>>,
+    pub(crate) smart_dial: bool,
     /// How long a connection should be kept alive once it is idling.
     pub(crate) idle_connection_timeout: Duration,
     /// The configured override for substream protocol upgrades, if any.
@@ -1007,7 +1006,7 @@ impl PoolConfig {
             idle_connection_timeout: Duration::from_secs(10),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
-            dial_ranker: None,
+            smart_dial: false,
         }
     }
 

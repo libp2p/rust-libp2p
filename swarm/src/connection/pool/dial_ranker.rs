@@ -1,4 +1,4 @@
-// Copyright 2021 Protocol Labs.
+// Copyright 2026 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -17,11 +17,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
-#[cfg(test)]
-mod tests;
-
-use std::{borrow::Cow, cmp::Ordering};
 
 use libp2p_core::multiaddr::Protocol;
 
@@ -43,285 +38,499 @@ const RELAY_DELAY: Duration = Duration::from_millis(250);
 const PUBLIC_OTHER_DELAY: Duration = Duration::from_millis(1000);
 const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 
-pub(crate) type DialRanker =
-    dyn Fn(Vec<Multiaddr>) -> Vec<(Multiaddr, Option<Duration>)> + Send + Sync;
-
-// Ported from <https://github.com/libp2p/go-libp2p/blob/v0.45.0/p2p/net/swarm/dial_ranker.go#L81>
-pub(crate) fn smart_dial_ranker(
-    mut addresses: Vec<Multiaddr>,
-) -> Vec<(Multiaddr, Option<Duration>)> {
+/// Sort dial addresses by priority and assign staggered dial delays in-place.
+///
+/// Dials are grouped into four categories dialed in this order:
+/// 1. **Private** — addresses on private/link-local IPs or localhost (fastest dials)
+/// 2. **Public** — addresses with public IPv4/IPv6
+/// 3. **Relay** — addresses containing `/p2p-circuit`
+/// 4. **Other** — addresses without any IP component (no `Ip4`/`Ip6`), e.g. DNS-only multiaddrs
+///    like `/dns/example.com/tcp/443`
+///
+/// Within each category, [`group_delays`] sorts by transport priority
+/// (QUICv1 < QUIC < WebTransport < TCP < WebRTC < other), IPv6 before IPv4,
+/// and lower port first. Happy Eyeballs (RFC 8305) interleaves an IPv4 address
+/// early so both address families race each other. Each dial gets a staggered
+/// [`Dial::delay`] so higher-priority addresses start dialing first.
+pub(crate) fn rank_dials(dials: &mut Vec<Dial>) {
     let mut relay = vec![];
-    addresses.retain(|a| {
-        if a.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
-            relay.push(a.clone());
-            false
-        } else {
-            true
-        }
-    });
-    let mut private = vec![];
-    addresses.retain(|a| {
-        if let Some(Protocol::Ip4(ip4)) = a.iter().find(|p| matches!(p, Protocol::Ip4(_))) {
-            if ip4.is_private() {
-                private.push(a.clone());
-                false
-            } else {
-                true
-            }
-        } else if a.iter().any(|p| matches!(p, Protocol::Ip6zone(_))) {
-            private.push(a.clone());
-            false
-        } else if let Some(dns) = get_dns(a) {
-            if is_dns_private(dns.as_ref()) {
-                private.push(a.clone());
-                false
-            } else {
-                true
-            }
-        } else {
-            true
-        }
-    });
     let mut public = vec![];
-    addresses.retain(|a| {
-        if a.iter()
+    let mut private = vec![];
+    let mut other = vec![];
+
+    for dial in dials.drain(..) {
+        if dial.addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
+            relay.push(dial);
+        } else if is_private_addr(&dial.addr) {
+            private.push(dial);
+        } else if dial
+            .addr
+            .iter()
             .any(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
         {
-            public.push(a.clone());
-            false
+            public.push(dial);
         } else {
-            true
+            other.push(dial);
         }
-    });
+    }
+
+    let mut result = vec![];
+    group_delays(
+        &mut private,
+        PRIVATE_TCP_DELAY,
+        PRIVATE_QUIC_DELAY,
+        PRIVATE_OTHER_DELAY,
+        Duration::ZERO,
+    );
+    result.extend(private);
     let relay_offset = if public.is_empty() {
         Duration::ZERO
     } else {
         RELAY_DELAY
     };
-    let mut result = Vec::with_capacity(addresses.len());
-    result.extend(get_addresses_delay(
-        private,
-        PRIVATE_TCP_DELAY,
-        PRIVATE_QUIC_DELAY,
-        PRIVATE_OTHER_DELAY,
-        Duration::ZERO,
-    ));
-    result.extend(get_addresses_delay(
-        public,
+    group_delays(
+        &mut public,
         PUBLIC_TCP_DELAY,
         PUBLIC_QUIC_DELAY,
         PUBLIC_OTHER_DELAY,
         Duration::ZERO,
-    ));
-    result.extend(get_addresses_delay(
-        relay,
+    );
+    result.extend(public);
+
+    group_delays(
+        &mut relay,
         PUBLIC_TCP_DELAY,
         PUBLIC_QUIC_DELAY,
         PUBLIC_OTHER_DELAY,
         relay_offset,
-    ));
-    let max_delay = if let Some((_, Some(delay))) = result.last() {
-        *delay
+    );
+    result.extend(relay);
+
+    let max_delay = if let Some(Some(delay)) = result.last().map(|d| d.delay) {
+        delay
     } else {
         Duration::ZERO
     };
-    result.extend(
-        addresses
-            .into_iter()
-            .map(|a| (a, Some(max_delay + PUBLIC_OTHER_DELAY))),
-    );
-    result
+
+    other.iter_mut().for_each(|d| {
+        d.delay = Some(max_delay + PUBLIC_OTHER_DELAY);
+    });
+    result.extend(other);
+
+    dials.append(&mut result);
 }
 
-// Ported from <https://github.com/libp2p/go-libp2p/blob/v0.45.0/p2p/net/swarm/dial_ranker.go#L112>
-fn get_addresses_delay(
-    mut addresses: Vec<Multiaddr>,
+/// Sort addresses by priority and assign staggered dial delays.
+///
+/// Addresses are sorted so faster transports (QUIC > TCP) and IPv6 are dialed first.
+/// Happy Eyeballs (RFC 8305) then interleaves IPv4 addresses early in each transport group.
+/// Each address gets a delay so higher-priority addresses start dialing first,
+/// reducing wasted attempts on slower paths.
+fn group_delays(
+    dials: &mut Vec<Dial>,
     tcp_delay: Duration,
     quic_delay: Duration,
     other_delay: Duration,
     offset: Duration,
-) -> Vec<(Multiaddr, Option<Duration>)> {
-    if addresses.is_empty() {
-        return vec![];
+) {
+    if dials.is_empty() {
+        return;
     }
 
-    addresses.sort_by_key(score);
+    // Step 1: Sort by transport priority, then IPv6 before IPv4, then lower port first
+    dials.sort_by_key(score);
 
-    // addrs is now sorted by (Transport, IPVersion). Reorder addrs for happy eyeballs dialing.
-    // For QUIC and TCP, if we have both IPv6 and IPv4 addresses, move the
-    // highest priority IPv4 address to the second position.
-    let mut happy_eyeballs_quic = false;
-    let mut happy_eyeballs_tcp = false;
-    let mut tcp_start_index = 0;
-    {
-        // If the first QUIC address is IPv6 move the first QUIC IPv4 address to second position
-        if is_quic_address(&addresses[0])
-            && addresses[0].iter().any(|p| matches!(p, Protocol::Ip6(_)))
-        {
-            for j in 1..addresses.len() {
-                let addr = &addresses[j];
-                if is_quic_address(addr) && addr.iter().any(|p| matches!(p, Protocol::Ip4(_))) {
-                    // The first IPv4 address is at position j
-                    // Move the jth element at position 1 shifting the affected elements
-                    if j > 1 {
-                        let tmp = addresses.remove(j);
-                        addresses.insert(1, tmp);
-                    }
-                    happy_eyeballs_quic = true;
-                    tcp_start_index = j + 1;
-                    break;
+    let is_quic = |a: &Multiaddr| {
+        a.iter()
+            .any(|p| matches!(p, Protocol::Quic | Protocol::QuicV1))
+    };
+    let is_tcp = |a: &Multiaddr| a.iter().any(|p| matches!(p, Protocol::Tcp(_)));
+    let is_ipv6 = |a: &Multiaddr| a.iter().any(|p| matches!(p, Protocol::Ip6(_)));
+    let is_ipv4 = |a: &Multiaddr| a.iter().any(|p| matches!(p, Protocol::Ip4(_)));
+
+    // Phase 2: Single-pass Happy Eyeballs reorder.
+    // After sorting, IPv6 addresses precede IPv4 addresses within each transport group.
+    // If the first QUIC (or TCP) address is IPv6, we interleave the first IPv4
+    // of the same transport at position 1, so both address families race each other
+    // per RFC 8305.
+    let mut reordered = Vec::with_capacity(dials.len());
+    let mut quic_need_ipv4 = false;
+    let mut quic_he_applied = false;
+    let mut tcp_need_ipv4 = false;
+    let mut tcp_he_applied = false;
+    let mut first_tcp_idx = None;
+
+    for dial in dials.drain(..) {
+        if is_quic(&dial.addr) {
+            if !reordered.is_empty() && quic_need_ipv4 && is_ipv4(&dial.addr) {
+                reordered.insert(1, dial);
+                quic_need_ipv4 = false;
+                quic_he_applied = true;
+            } else {
+                if is_ipv6(&dial.addr) {
+                    quic_need_ipv4 = true;
                 }
+                reordered.push(dial);
             }
-        }
-
-        while tcp_start_index < addresses.len() {
-            if addresses[tcp_start_index]
-                .iter()
-                .any(|p| matches!(p, Protocol::Tcp(_)))
+        } else if is_tcp(&dial.addr) {
+            if let Some(idx) = first_tcp_idx
+                && tcp_need_ipv4
+                && is_ipv4(&dial.addr)
             {
-                break;
+                reordered.insert(idx + 1, dial);
+                tcp_need_ipv4 = false;
+                tcp_he_applied = true;
+            } else {
+                first_tcp_idx.get_or_insert(reordered.len());
+                if is_ipv6(&dial.addr) {
+                    tcp_need_ipv4 = true;
+                }
+                reordered.push(dial);
             }
-            tcp_start_index += 1;
-        }
-
-        // If the first TCP address is IPv6 move the first TCP IPv4 address to second position
-        if tcp_start_index < addresses.len()
-            && addresses[tcp_start_index]
-                .iter()
-                .any(|p| matches!(p, Protocol::Ip6(_)))
-        {
-            for j in (tcp_start_index + 1)..addresses.len() {
-                let addr = &addresses[j];
-                if addr.iter().any(|p| matches!(p, Protocol::Tcp(_)))
-                    && addr.iter().any(|p| matches!(p, Protocol::Ip4(_)))
-                {
-                    // First TCP IPv4 address is at position j, move it to position tcpStartIdx+1
-                    // which is the second priority TCP address
-                    if j > tcp_start_index + 1 {
-                        let tmp = addresses.remove(j);
-                        addresses.insert(tcp_start_index + 1, tmp);
-                    }
-                    happy_eyeballs_tcp = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    let mut result = Vec::with_capacity(addresses.len());
-    let mut tcp_first_dial_delay = Duration::ZERO;
-    let mut last_quic_or_tcp_delay = Duration::ZERO;
-    for (i, addr) in addresses.into_iter().enumerate() {
-        let mut delay = Duration::ZERO;
-        if is_quic_address(&addr) {
-            // We dial an IPv6 address, then after quicDelay an IPv4
-            // address, then after a further quicDelay we dial the rest of the addresses.
-            match i.cmp(&1) {
-                Ordering::Equal => {
-                    delay = quic_delay;
-                }
-                Ordering::Greater => {
-                    // If we have happy eyeballs for QUIC, dials after the second position
-                    // will be delayed by 2*quicDelay
-                    if happy_eyeballs_quic {
-                        delay = 2 * quic_delay;
-                    } else {
-                        delay = quic_delay;
-                    }
-                }
-                _ => {}
-            }
-            last_quic_or_tcp_delay = delay;
-            tcp_first_dial_delay = delay + tcp_delay;
-        } else if addr.iter().any(|p| matches!(p, Protocol::Tcp(_))) {
-            // We dial an IPv6 address, then after tcpDelay an IPv4
-            // address, then after a further tcpDelay we dial the rest of the addresses.
-            match i.cmp(&(tcp_start_index + 1)) {
-                Ordering::Equal => {
-                    delay = tcp_delay;
-                }
-                Ordering::Greater => {
-                    // If we have happy eyeballs for TCP, dials after the second position
-                    // will be delayed by 2*tcpDelay
-                    if happy_eyeballs_tcp {
-                        delay = 2 * tcp_delay;
-                    } else {
-                        delay = tcp_delay;
-                    }
-                }
-                _ => {}
-            }
-            delay += tcp_first_dial_delay;
-            last_quic_or_tcp_delay = delay;
         } else {
-            // if it's neither quic, webtransport, tcp, or websocket address
-            delay = last_quic_or_tcp_delay + other_delay;
-        }
-        match offset + delay {
-            Duration::ZERO => {
-                result.push((addr, None));
-            }
-            d => {
-                result.push((addr, Some(d)));
-            }
+            reordered.push(dial);
         }
     }
-    result
+
+    // Step 3: Assign delays — how long to wait before starting each dial.
+    //
+    // QUIC addresses get dialed first. Position 0 starts immediately (0ms),
+    // position 1 waits `quic_delay` (default 250ms), and the rest wait
+    // `quic_delay` each — or `2 * quic_delay` if Happy Eyeballs reordered
+    // an IPv4 address into position 1 (to keep remaining IPv6 probes staggered).
+    //
+    // TCP addresses start after all QUIC probes, gated by `tcp_start_delay`
+    // (= last QUIC delay + `tcp_delay`). Within TCP, the same pattern applies:
+    // first at 0 (relative to `tcp_start_delay`), next at `tcp_delay`, rest
+    // at `tcp_delay` or `2 * tcp_delay` with Happy Eyeballs.
+    //
+    // Other transports (WebTransport, WebRTC, etc.) fire after QUIC and TCP,
+    // at `base_delay + other_delay`.
+    //
+    // `base_delay` tracks the most recent QUIC/TCP delay for this purpose.
+    let mut result = Vec::with_capacity(reordered.len());
+    let mut quic_count = 0;
+    let mut tcp_count = 0;
+    let mut tcp_start_delay = Duration::ZERO;
+    let mut base_delay = Duration::ZERO;
+    for mut dial in reordered {
+        let delay = if is_quic(&dial.addr) {
+            let d = match quic_count {
+                0 => Duration::ZERO,
+                1 => quic_delay,
+                _ => {
+                    if quic_he_applied {
+                        2 * quic_delay
+                    } else {
+                        quic_delay
+                    }
+                }
+            };
+            quic_count += 1;
+            tcp_start_delay = d + tcp_delay;
+            base_delay = d;
+            d
+        } else if is_tcp(&dial.addr) {
+            let d = match tcp_count {
+                0 => Duration::ZERO,
+                1 => tcp_delay,
+                _ => {
+                    if tcp_he_applied {
+                        2 * tcp_delay
+                    } else {
+                        tcp_delay
+                    }
+                }
+            };
+            tcp_count += 1;
+            let d = d + tcp_start_delay;
+            base_delay = d;
+            d
+        } else {
+            base_delay + other_delay
+        };
+        let total = offset + delay;
+
+        dial.delay = if total.is_zero() { None } else { Some(total) };
+        result.push(dial);
+    }
+
+    *dials = result;
 }
 
-// Ported from <https://github.com/libp2p/go-libp2p/blob/v0.45.0/p2p/net/swarm/dial_ranker.go#L226>
-fn score(a: &Multiaddr) -> i32 {
-    let mut ip4_weight = 0;
-    if a.iter().any(|p| matches!(p, Protocol::Ip4(_))) {
-        ip4_weight = 1 << 18;
-    }
-
-    if a.iter().any(|p| matches!(p, Protocol::WebTransport))
-        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
+/// Score a multiaddress for dialing priority. Lower score = dialed first.
+///
+/// Ordering: QUICv1 < QUICv0 < WebTransport < TCP < WebRTC < other.
+/// Within same transport: IPv6 before IPv4,
+/// lower port first as they are more likely to be the peer's listen port.
+fn score(dial: &Dial) -> (u8, bool, u16) {
+    let transport_rank: u8 = if dial.addr.iter().any(|p| matches!(p, Protocol::QuicV1)) {
+        0
+    } else if dial.addr.iter().any(|p| matches!(p, Protocol::Quic)) {
+        1
+    } else if dial
+        .addr
+        .iter()
+        .any(|p| matches!(p, Protocol::WebTransport))
     {
-        return ip4_weight + (1 << 19) + p as i32;
-    }
-
-    if a.iter().any(|p| matches!(p, Protocol::Quic))
-        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
+        2
+    } else if dial.addr.iter().any(|p| matches!(p, Protocol::Tcp(_))) {
+        3
+    } else if dial
+        .addr
+        .iter()
+        .any(|p| matches!(p, Protocol::WebRTCDirect))
     {
-        return ip4_weight + (1 << 17) + p as i32;
-    }
-
-    if a.iter().any(|p| matches!(p, Protocol::QuicV1))
-        && let Some(Protocol::Udp(p)) = a.iter().find(|p| matches!(p, Protocol::Udp(_)))
-    {
-        return ip4_weight + p as i32;
-    }
-
-    if let Some(Protocol::Tcp(p)) = a.iter().find(|p| matches!(p, Protocol::Tcp(_))) {
-        return ip4_weight + (1 << 20) + p as i32;
-    }
-
-    if a.iter().any(|p| matches!(p, Protocol::WebRTCDirect)) {
-        return 1 << 21;
-    }
-
-    1 << 30
-}
-
-fn is_quic_address(a: &Multiaddr) -> bool {
-    a.iter()
-        .any(|p| matches!(p, Protocol::Quic | Protocol::QuicV1))
-}
-
-fn get_dns(a: &Multiaddr) -> Option<Cow<'_, str>> {
-    if let Some(Protocol::Dns(dns)) = a.iter().find(|p| matches!(p, Protocol::Dns(_))) {
-        Some(dns)
-    } else if let Some(Protocol::Dns4(dns)) = a.iter().find(|p| matches!(p, Protocol::Dns4(_))) {
-        Some(dns)
-    } else if let Some(Protocol::Dns6(dns)) = a.iter().find(|p| matches!(p, Protocol::Dns6(_))) {
-        Some(dns)
+        4
     } else {
-        None
-    }
+        5
+    };
+    let ipv4_penalty = dial.addr.iter().any(|p| matches!(p, Protocol::Ip4(_)));
+    let port = match dial
+        .addr
+        .iter()
+        .find(|p| matches!(p, Protocol::Udp(_) | Protocol::Tcp(_)))
+    {
+        Some(Protocol::Udp(p)) => p,
+        Some(Protocol::Tcp(p)) => p,
+        _ => 0u16,
+    };
+    (transport_rank, ipv4_penalty, port)
 }
 
-fn is_dns_private(dns: &str) -> bool {
-    dns == "localhost" || dns.ends_with(".localhost")
+fn is_private_addr(a: &Multiaddr) -> bool {
+    if let Some(Protocol::Ip4(ip4)) = a.iter().find(|p| matches!(p, Protocol::Ip4(_))) {
+        return ip4.is_private();
+    }
+    if a.iter().any(|p| matches!(p, Protocol::Ip6zone(_))) {
+        return true;
+    }
+    if let Some(dns) = a.iter().find_map(|p| match p {
+        Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => Some(dns),
+        _ => None,
+    }) {
+        return dns == "localhost" || dns.ends_with(".localhost");
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::FutureExt;
+
+    use super::*;
+
+    fn make_dials(addrs: Vec<Multiaddr>) -> Vec<Dial> {
+        addrs
+            .into_iter()
+            .map(|addr| Dial {
+                addr,
+                delay: None,
+                fut: futures::future::pending().boxed(),
+            })
+            .collect()
+    }
+
+    // Verifies that three QUIC-v1 IPv4 addresses are ranked with the first immediate
+    // and the rest delayed by PUBLIC_QUIC_DELAY.
+    #[test]
+    fn test_quic_delay_ipv4() {
+        let q1v1: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+        let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
+        let q3v1: Multiaddr = "/ip4/1.2.3.4/udp/3/quic-v1".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v1.clone(), q2v1.clone(), q3v1.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v1, None),
+                (q2v1, Some(PUBLIC_QUIC_DELAY)),
+                (q3v1, Some(PUBLIC_QUIC_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that three QUIC-v1 IPv6 addresses follow the same delay pattern as IPv4.
+    #[test]
+    fn test_quic_delay_ipv6() {
+        let q1v16: Multiaddr = "/ip6/1::2/udp/1/quic-v1".parse().unwrap();
+        let q2v16: Multiaddr = "/ip6/1::2/udp/2/quic-v1".parse().unwrap();
+        let q3v16: Multiaddr = "/ip6/1::2/udp/3/quic-v1".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v16.clone(), q2v16.clone(), q3v16.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v16, None),
+                (q2v16, Some(PUBLIC_QUIC_DELAY)),
+                (q3v16, Some(PUBLIC_QUIC_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that mixed QUIC and TCP addresses with both IPv6 and IPv4 are sorted
+    // correctly: QUIC before TCP, IPv6 before IPv4 within each transport, and Happy
+    // Eyeballs interleaves an IPv4 QUIC address early.
+    #[test]
+    fn test_quic_delay_ipv4_ipv6() {
+        let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
+        let q1v16: Multiaddr = "/ip6/1::2/udp/1/quic-v1".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v16.clone(), q2v1.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![(q1v16, None), (q2v1, Some(PUBLIC_QUIC_DELAY)),]
+        )
+    }
+
+    // Verifies that one QUIC + three TCP addresses sort TCP with IPv6 before IPv4,
+    // and TCP starts after all QUIC probes.
+    #[test]
+    fn test_quic_with_tcp_ipv6_ipv4() {
+        let q1v1: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+        let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
+
+        let q1v16: Multiaddr = "/ip6/1::2/udp/1/quic-v1".parse().unwrap();
+        let q2v16: Multiaddr = "/ip6/1::2/udp/2/quic-v1".parse().unwrap();
+        let q3v16: Multiaddr = "/ip6/1::2/udp/3/quic-v1".parse().unwrap();
+
+        let t1: Multiaddr = "/ip4/1.2.3.5/tcp/1".parse().unwrap();
+        let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
+        let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
+        let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
+
+        let mut dials = make_dials(vec![
+            q1v1.clone(),
+            q1v16.clone(),
+            q2v16.clone(),
+            q3v16.clone(),
+            q2v1.clone(),
+            t1.clone(),
+            t1v6.clone(),
+            t2.clone(),
+            t3.clone(),
+        ]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v16, None),
+                (q1v1, Some(PUBLIC_QUIC_DELAY)),
+                (q2v16, Some(2 * PUBLIC_QUIC_DELAY)),
+                (q3v16, Some(2 * PUBLIC_QUIC_DELAY)),
+                (q2v1, Some(2 * PUBLIC_QUIC_DELAY)),
+                (t1v6, Some(3 * PUBLIC_QUIC_DELAY)),
+                (t1, Some(4 * PUBLIC_QUIC_DELAY)),
+                (t2, Some(5 * PUBLIC_QUIC_DELAY)),
+                (t3, Some(5 * PUBLIC_QUIC_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that one QUIC + three TCP addresses sort TCP with IPv6 before IPv4,
+    // and TCP starts after all QUIC probes.
+    #[test]
+    fn test_quic_ip4_with_tcp() {
+        let q1v1: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+
+        let t1: Multiaddr = "/ip4/1.2.3.5/tcp/1".parse().unwrap();
+        let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
+        let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v1.clone(), t2.clone(), t1v6.clone(), t1.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v1, None),
+                (t1v6, Some(PUBLIC_QUIC_DELAY)),
+                (t1, Some(2 * PUBLIC_QUIC_DELAY)),
+                (t2, Some(3 * PUBLIC_QUIC_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that one QUIC + three all-IPv4 TCP addresses start TCP after QUIC,
+    // with the first TCP at PUBLIC_TCP_DELAY.
+    #[test]
+    fn test_quic_ip4_with_tcp_ipv4() {
+        let q1v1: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+
+        let t1: Multiaddr = "/ip4/1.2.3.5/tcp/1".parse().unwrap();
+        let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
+        let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v1.clone(), t2.clone(), t3.clone(), t1.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v1, None),
+                (t1, Some(PUBLIC_TCP_DELAY)),
+                (t2, Some(2 * PUBLIC_QUIC_DELAY)),
+                (t3, Some(2 * PUBLIC_TCP_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that one QUIC + one TCP IPv6 + one TCP IPv4 rank IPv6 TCP before IPv4 TCP.
+    #[test]
+    fn test_quic_ip4_with_two_tcp() {
+        let q1v1: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+
+        let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
+        let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
+
+        let mut dials = make_dials(vec![q1v1.clone(), t1v6.clone(), t2.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (q1v1, None),
+                (t1v6, Some(PUBLIC_TCP_DELAY)),
+                (t2, Some(2 * PUBLIC_TCP_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that TCP-only addresses rank IPv6 before IPv4 with Happy Eyeballs
+    // interleaving of the first IPv4 address.
+    #[test]
+    fn test_tcp_ip4_ip6() {
+        let t1: Multiaddr = "/ip4/1.2.3.5/tcp/1".parse().unwrap();
+        let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
+        let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
+        let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
+
+        let mut dials = make_dials(vec![t1.clone(), t2.clone(), t1v6.clone(), t3.clone()]);
+        rank_dials(&mut dials);
+        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        assert_eq!(
+            output,
+            vec![
+                (t1v6, None),
+                (t1, Some(PUBLIC_TCP_DELAY)),
+                (t2, Some(2 * PUBLIC_TCP_DELAY)),
+                (t3, Some(2 * PUBLIC_TCP_DELAY)),
+            ]
+        )
+    }
+
+    // Verifies that an empty input produces an empty output.
+    #[test]
+    fn test_empty() {
+        let mut dials = make_dials(vec![]);
+        rank_dials(&mut dials);
+        assert!(dials.is_empty())
+    }
 }

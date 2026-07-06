@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::HashMap,
     num::NonZeroU8,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
+    vec::IntoIter,
 };
 
 use futures::{
@@ -37,10 +36,19 @@ use futures_timer::Delay;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_identity::PeerId;
 
-use super::DialRanker;
-use crate::{Multiaddr, transport::TransportError};
+use crate::{Multiaddr, connection::pool::dial_ranker::rank_dials, transport::TransportError};
 
-pub(crate) type Dial = BoxFuture<
+/// A single outbound dial attempt to a specific address.
+pub(crate) struct Dial {
+    pub(crate) addr: Multiaddr,
+    pub(crate) delay: Option<Duration>,
+    pub(crate) fut: DialFuture,
+}
+
+/// The async dial operation. Owns the actual transport dial and returns the
+/// dialed address along with the result so the pool can match failures
+/// back to specific addresses.
+pub(crate) type DialFuture = BoxFuture<
     'static,
     (
         Multiaddr,
@@ -48,10 +56,17 @@ pub(crate) type Dial = BoxFuture<
     ),
 >;
 
+/// Drives dial attempts to a single peer.
+///
+/// If `smart_dial` is enabled, all dials start immediately with staggered delays from
+/// [`rank_dials`], the delays alone provide pacing.
+/// The concurrency factor is ignored when smart dial is enabled.
+///
+/// If `smart_dial` is disabled, up to `concurrency_factor` dials are in flight at once.
+/// As each completes, the next pending dial starts.
 pub(crate) struct ConcurrentDial {
-    concurrency_factor: NonZeroU8,
-    dials: FuturesUnordered<Dial>,
-    pending_dials: Box<dyn Iterator<Item = (Multiaddr, Option<Duration>, Dial)> + Send>,
+    dials: FuturesUnordered<DialFuture>,
+    pending_dials: IntoIter<Dial>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
 }
 
@@ -59,46 +74,39 @@ impl Unpin for ConcurrentDial {}
 
 impl ConcurrentDial {
     pub(crate) fn new(
-        pending_dials: Vec<(Multiaddr, Dial)>,
+        mut pending_dials: Vec<Dial>,
         concurrency_factor: NonZeroU8,
-        dial_ranker: Option<Arc<DialRanker>>,
+        smart_dial: bool,
     ) -> Self {
-        let dials = FuturesUnordered::new();
-        let pending_dials: Vec<_> = if let Some(dial_ranker) = dial_ranker {
-            let addresses = pending_dials.iter().map(|(k, _)| k.clone()).collect();
-            let mut dials: HashMap<Multiaddr, Dial> = HashMap::from_iter(pending_dials);
-            dial_ranker(addresses)
-                .into_iter()
-                .filter_map(|(addr, delay)| dials.remove(&addr).map(|dial| (addr, delay, dial)))
-                .collect()
-        } else {
-            pending_dials
-                .into_iter()
-                .map(|(addr, dial)| (addr, None, dial))
-                .collect()
-        };
-        Self {
-            concurrency_factor,
-            dials,
-            errors: Default::default(),
-            pending_dials: Box::new(pending_dials.into_iter()),
+        if smart_dial {
+            rank_dials(&mut pending_dials);
         }
-    }
 
-    fn dial_pending(&mut self) -> bool {
-        if let Some((_, delay, dial)) = self.pending_dials.next() {
-            self.dials.push(
+        let mut pending_dials = pending_dials.into_iter();
+
+        // Fill the concurrency window: start up to `concurrency_factor` dials.
+        // As each dial completes (success or failure), `dial_pending()` is called
+        // to refill the window from remaining pending dials.
+        let dials = FuturesUnordered::new();
+        for dial in pending_dials.by_ref() {
+            dials.push(
                 async move {
-                    if let Some(delay) = delay {
+                    if let Some(delay) = dial.delay {
                         Delay::new(delay).await;
                     }
-                    dial.await
+                    dial.fut.await
                 }
                 .boxed(),
             );
-            true
-        } else {
-            false
+            if !smart_dial && dials.len() == concurrency_factor.get() as usize {
+                break;
+            }
+        }
+
+        Self {
+            dials,
+            errors: Default::default(),
+            pending_dials,
         }
     }
 }
@@ -125,16 +133,20 @@ impl Future for ConcurrentDial {
                 }
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, e));
-                    self.dial_pending();
+                    if let Some(dial) = self.pending_dials.next() {
+                        self.dials.push(
+                            async move {
+                                if let Some(delay) = dial.delay {
+                                    Delay::new(delay).await;
+                                }
+                                dial.fut.await
+                            }
+                            .boxed(),
+                        );
+                    }
                 }
                 None => {
-                    while self.dials.len() < self.concurrency_factor.get() as usize
-                        && self.dial_pending()
-                    {}
-
-                    if self.dials.is_empty() {
-                        return Poll::Ready(Err(std::mem::take(&mut self.errors)));
-                    }
+                    return Poll::Ready(Err(std::mem::take(&mut self.errors)));
                 }
             }
         }
