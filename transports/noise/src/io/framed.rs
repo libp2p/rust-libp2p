@@ -35,7 +35,11 @@ use crate::{Error, protocol::PublicKey};
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
 /// Space given to the encryption buffer to hold key material.
+#[cfg(not(feature = "mlkem-hfs"))]
 const EXTRA_ENCRYPT_SPACE: usize = 1024;
+/// Hybrid adds an ML-KEM-768 key (1184 B) or ciphertext (1088 B) per message.
+#[cfg(feature = "mlkem-hfs")]
+const EXTRA_ENCRYPT_SPACE: usize = 1024 + 1184;
 /// Max. length for Noise protocol message payloads.
 pub(crate) const MAX_FRAME_LEN: usize = MAX_NOISE_MSG_LEN - EXTRA_ENCRYPT_SPACE;
 static_assertions::const_assert! {

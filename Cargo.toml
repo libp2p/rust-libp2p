@@ -159,6 +159,9 @@ web-time = "1.1.0"
 
 [patch.crates-io]
 
+# snow fork carrying ML-KEM-768 (mcginty/snow#210), until it lands upstream.
+snow = { git = "https://github.com/royzah/snow", branch = "feat/ml-kem-hfs" }
+
 # Patch away `libp2p-identity` in our dependency tree with the workspace version.
 # `libp2p-identity` is a leaf dependency and used within `rust-multiaddr` which is **not** part of the workspace.
 # As a result, we cannot just reference the workspace version in our crates because the types would mismatch with what
