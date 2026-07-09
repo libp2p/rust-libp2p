@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::net::{Ipv4Addr, Ipv6Addr};
+
 use libp2p_core::multiaddr::Protocol;
 
 use super::*;
@@ -300,11 +302,17 @@ fn score(dial: &Dial) -> (u8, bool, u16) {
 
 fn is_private_addr(a: &Multiaddr) -> bool {
     if let Some(Protocol::Ip4(ip4)) = a.iter().find(|p| matches!(p, Protocol::Ip4(_))) {
-        return ip4.is_private();
+        return !is_global_ipv4(&ip4);
     }
+
     if a.iter().any(|p| matches!(p, Protocol::Ip6zone(_))) {
         return true;
     }
+
+    if let Some(Protocol::Ip6(ip6)) = a.iter().find(|p| matches!(p, Protocol::Ip6(_))) {
+        return !is_global_ipv6(&ip6);
+    }
+
     if let Some(dns) = a.iter().find_map(|p| match p {
         Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => Some(dns),
         _ => None,
@@ -312,6 +320,72 @@ fn is_private_addr(a: &Multiaddr) -> bool {
         return dns == "localhost" || dns.ends_with(".localhost");
     }
     false
+}
+
+/// Returns `true` if the address is globally routable.
+///
+/// Mirrors the unstable `Ipv4Addr::is_global()` from nightly std.
+#[allow(clippy::nonminimal_bool)]
+fn is_global_ipv4(addr: &Ipv4Addr) -> bool {
+    // check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
+    // globally routable addresses in the 192.0.0.0/24 range.
+    if u32::from_be_bytes(addr.octets()) == 0xc0000009
+        || u32::from_be_bytes(addr.octets()) == 0xc000000a
+    {
+        return true;
+    }
+    !addr.is_private()
+            && !addr.is_loopback()
+            && !addr.is_link_local()
+            && !addr.is_broadcast()
+            && !addr.is_documentation()
+            // shared
+            && !(addr.octets()[0] == 100 && (addr.octets()[1] & 0b1100_0000 == 0b0100_0000)) &&!(addr.octets()[0] & 240 == 240 && !addr.is_broadcast())
+            // addresses reserved for future protocols (`192.0.0.0/24`)
+            // reserved
+            && !(addr.octets()[0] == 192 && addr.octets()[1] == 0 && addr.octets()[2] == 0)
+            // Make sure the address is not in 0.0.0.0/8
+            && addr.octets()[0] != 0
+}
+
+/// Returns `true` if the address is globally routable.
+///
+/// Mirrors the unstable `Ipv6Addr::is_global()` from nightly std.
+const fn is_global_ipv6(addr: &Ipv6Addr) -> bool {
+    const fn is_documentation(addr: &Ipv6Addr) -> bool {
+        (addr.segments()[0] == 0x2001) && (addr.segments()[1] == 0xdb8)
+    }
+    const fn is_unique_local(addr: &Ipv6Addr) -> bool {
+        (addr.segments()[0] & 0xfe00) == 0xfc00
+    }
+    const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
+        (addr.segments()[0] & 0xffc0) == 0xfe80
+    }
+    !(addr.is_unspecified()
+            || addr.is_loopback()
+            // IPv4-mapped Address (`::ffff:0:0/96`)
+            || matches!(addr.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
+            // IPv4-IPv6 Translat. (`64:ff9b:1::/48`)
+            || matches!(addr.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
+            // Discard-Only Address Block (`100::/64`)
+            || matches!(addr.segments(), [0x100, 0, 0, 0, _, _, _, _])
+            // IETF Protocol Assignments (`2001::/23`)
+            || (matches!(addr.segments(), [0x2001, b, _, _, _, _, _, _] if b < 0x200)
+                && !(
+                    // Port Control Protocol Anycast (`2001:1::1`)
+                    u128::from_be_bytes(addr.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
+                    // Traversal Using Relays around NAT Anycast (`2001:1::2`)
+                    || u128::from_be_bytes(addr.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
+                    // AMT (`2001:3::/32`)
+                    || matches!(addr.segments(), [0x2001, 3, _, _, _, _, _, _])
+                    // AS112-v6 (`2001:4:112::/48`)
+                    || matches!(addr.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
+                    // ORCHIDv2 (`2001:20::/28`)
+                    || matches!(addr.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x2F)
+                ))
+            || is_documentation(addr)
+            || is_unique_local(addr)
+            || is_unicast_link_local(addr))
 }
 
 #[cfg(test)]
