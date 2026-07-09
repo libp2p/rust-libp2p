@@ -235,7 +235,7 @@ fn do_forward_messages_to_explicit_peers() {
     assert_eq!(
         queues.into_iter().fold(0, |mut fwds, (peer_id, mut queue)| {
             while !queue.is_empty() {
-                if matches!(queue.try_pop(), Some(RpcOut::Forward{message: m, ..}) if peer_id == peers[0] && m.data == message.data) {
+                if matches!(queue.try_pop(), Some(RpcOut::Publish{message: m, ..}) if peer_id == peers[0] && m.data == message.data) {
                     fwds +=1;
                 }
             }
