@@ -23,7 +23,7 @@
 pub(super) mod proto {
     #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
-    pub use self::payload::proto::{NoiseExtensions, NoiseHandshakePayload};
+    pub use self::payload_proto::{NoiseExtensions, NoiseHandshakePayload};
 }
 
 use std::{collections::HashSet, io, mem};
@@ -32,7 +32,7 @@ use asynchronous_codec::Framed;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
-use quick_protobuf::MessageWrite;
+use prost::Message;
 
 use super::framed::Codec;
 use crate::{
@@ -205,7 +205,7 @@ where
     T: AsyncRead + Unpin,
 {
     let payload = recv(state).await?;
-    if payload.get_size() != 0 {
+    if payload.encoded_len() != 0 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
 

@@ -30,7 +30,7 @@ mod protocol;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub(crate) use self::holepunch::pb::{HolePunch, mod_HolePunch::*};
+    pub(crate) use self::holepunch_pb::{HolePunch, hole_punch::*};
 }
 
 pub use behaviour::{Behaviour, Error, Event};

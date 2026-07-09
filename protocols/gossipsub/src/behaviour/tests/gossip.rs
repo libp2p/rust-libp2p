@@ -530,7 +530,7 @@ fn test_ignore_too_many_ihaves() {
 fn test_ignore_too_many_messages_in_ihave() {
     let config = ConfigBuilder::default()
         .max_ihave_messages_heartbeat(10)
-        .max_control_messages(10)
+        .max_control_messages_sent(10)
         .build()
         .unwrap();
     // build gossipsub with full mesh
@@ -611,7 +611,7 @@ fn test_ignore_too_many_messages_in_ihave() {
 fn test_limit_number_of_message_ids_inside_ihave() {
     let config = ConfigBuilder::default()
         .max_ihave_messages_heartbeat(10)
-        .max_control_messages(100)
+        .max_control_messages_sent(100)
         .build()
         .unwrap();
     // build gossipsub with full mesh

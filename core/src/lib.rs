@@ -36,7 +36,7 @@ mod proto {
     include!("generated/mod.rs");
     pub use self::{
         envelope_proto::*,
-        peer_record_proto::{PeerRecord, mod_PeerRecord::*},
+        peer_record_proto::{PeerRecord, peer_record::*},
     };
 }
 
@@ -64,7 +64,7 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(prost::DecodeError);
 
 pub mod util {
     use std::convert::Infallible;

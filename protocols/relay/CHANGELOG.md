@@ -1,7 +1,15 @@
 ## 0.22.0
 
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
 - Automatically configure HOP protocol advertisement based on external addresses, with the ability to override this
   functionality using `Behaviour::set_status` to explicitly set `Status::{Enable,Disable}` to enable or disable
   protocol advertisement.
@@ -42,7 +50,7 @@
 - Fix manual closure of relayed listener.
   See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
 - Add resource limits to `CircuitReq` to be set
-  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)
 
 
 ## 0.17.2

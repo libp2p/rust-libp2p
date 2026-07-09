@@ -671,10 +671,9 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         max_transmit_size_map,
         5000,
         5000,
-        5000,
     );
     let mut buf = BytesMut::new();
-    let rpc = proto::RPC {
+    let rpc = proto::Rpc {
         publish: vec![proto::Message {
             from: Some(peers[0].to_bytes()),
             data: Some(vec![0u8; max_size + 1]),
@@ -781,10 +780,9 @@ fn test_validation_message_size_within_topic_specific() {
         max_transmit_size_map,
         5000,
         5000,
-        5000,
     );
     let mut buf = BytesMut::new();
-    let rpc = proto::RPC {
+    let rpc = proto::Rpc {
         publish: vec![proto::Message {
             from: Some(peers[0].to_bytes()),
             data: Some(vec![0u8; max_size - 100]),

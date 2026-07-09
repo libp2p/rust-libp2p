@@ -20,7 +20,7 @@
 
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
     fmt::{self, Debug},
 };
 
@@ -493,13 +493,42 @@ impl State {
             ));
         };
 
+        // Check whether this partial holds more parts than the previously cached one.
+        let group_id = partial_message.group_id();
+        let metadata = partial_message.metadata();
+        let cached = topic_partials.partial_messages.entry(group_id.clone());
+        if let Entry::Occupied(cached) = &cached {
+            let mut old_metadata = cached.get().content.metadata();
+            if !old_metadata
+                .update(metadata.as_slice())
+                .map_err(PublishError::Partial)?
+            {
+                tracing::debug!(
+                    ?metadata,
+                    ?old_metadata,
+                    ?group_id,
+                    ?topic_hash,
+                    "Partial was not updated due to stale data; skipping publish"
+                );
+                // Metadata was not updated, so we do not need to send anything and keep the
+                // previously sent message in cache.
+                return Ok(vec![]);
+            }
+        }
+
+        // Cache the sent partial before publishing, so the local node retains what it
+        // published even when there are currently no recipients to send it to.
+        let partial_message = &cached.insert_entry(LocalPartial {
+            content: Box::new(partial_message),
+            ttl: DEFAULT_PARTIAL_TTL,
+        });
+
         if recipients.is_empty() {
             tracing::debug!(topic = %topic_hash, "Recipient list for publishing partial message is empty");
             return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         let mut actions = vec![];
-        let group_id = partial_message.group_id();
         let Some(topic_peers) = self.peer_subscriptions.get_mut(&topic_hash) else {
             tracing::error!(topic = %topic_hash, "No peers subscribed to topic");
             return Err(PublishError::NoPeersSubscribedToTopic);
@@ -516,7 +545,7 @@ impl State {
                 peer_id,
                 &topic_hash,
                 &group_id,
-                &partial_message,
+                partial_message.get().content.as_ref(),
                 remote_subscription,
             ) {
                 Some(message @ PublishAction::SendMessage { .. }) => {
@@ -529,15 +558,6 @@ impl State {
                 None => {}
             }
         }
-
-        // Cache the sent partial
-        topic_partials.partial_messages.insert(
-            partial_message.group_id(),
-            LocalPartial {
-                content: Box::new(partial_message),
-                ttl: DEFAULT_PARTIAL_TTL,
-            },
-        );
 
         Ok(actions)
     }

@@ -20,7 +20,7 @@ asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
 bytes.workspace = true
-either = "1.11"
+either = "1.16"
 fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = { workspace = true }
@@ -30,8 +30,8 @@ web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm = { workspace = true }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+prost = { workspace = true }
+prost-codec = { workspace = true }
 rand = { workspace = true }
 regex = "1.12.3"
 serde = { version = "1", optional = true, features = ["derive"] }

@@ -32,10 +32,10 @@ mod protocol;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;
-    pub(crate) use self::message_v2::pb::{
+    pub use self::message_v2_pb::stop_message::Type as StopMessageType;
+    pub(crate) use self::message_v2_pb::{
         HopMessage, Limit, Peer, Reservation, Status, StopMessage,
-        mod_HopMessage::Type as HopMessageType,
+        hop_message::Type as HopMessageType,
     };
 }
 

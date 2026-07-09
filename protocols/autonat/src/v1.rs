@@ -42,5 +42,5 @@ pub use self::{
 pub(crate) mod proto {
     #![allow(unreachable_pub)]
     include!("v1/generated/mod.rs");
-    pub(crate) use self::structs::{Message, mod_Message::*};
+    pub(crate) use self::structs::{Message, message::*};
 }

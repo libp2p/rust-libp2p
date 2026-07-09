@@ -156,7 +156,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::Rpc>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.

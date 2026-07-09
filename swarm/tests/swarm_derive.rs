@@ -132,7 +132,7 @@ fn custom_event() {
         identify: identify::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::large_enum_variant, dead_code)]
     enum MyEvent {
         Ping,
         Identify,
@@ -166,7 +166,7 @@ fn custom_event_mismatching_field_names() {
         b: identify::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::large_enum_variant, dead_code)]
     enum MyEvent {
         Ping,
         Identify,
@@ -462,6 +462,7 @@ fn with_generics_constrained() {
 fn custom_event_with_either() {
     use either::Either;
 
+    #[allow(dead_code)]
     enum BehaviourOutEvent {
         Kad,
         PingOrIdentify,
