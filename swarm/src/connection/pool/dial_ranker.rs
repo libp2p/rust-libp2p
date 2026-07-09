@@ -324,7 +324,8 @@ fn is_private_addr(a: &Multiaddr) -> bool {
 
 /// Returns `true` if the address is globally routable.
 ///
-/// Mirrors the unstable `Ipv4Addr::is_global()` from nightly std.
+/// Mirrors the unstable `ipv4addr::is_global()` from nightly std.
+/// TODO: Remove when `ipv4addr::is_global()` stabilizes
 #[allow(clippy::nonminimal_bool)]
 fn is_global_ipv4(addr: &Ipv4Addr) -> bool {
     // check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
@@ -351,6 +352,7 @@ fn is_global_ipv4(addr: &Ipv4Addr) -> bool {
 /// Returns `true` if the address is globally routable.
 ///
 /// Mirrors the unstable `Ipv6Addr::is_global()` from nightly std.
+/// TODO: Remove when `ipv4addr::is_global()` stabilizes
 const fn is_global_ipv6(addr: &Ipv6Addr) -> bool {
     const fn is_documentation(addr: &Ipv6Addr) -> bool {
         (addr.segments()[0] == 0x2001) && (addr.segments()[1] == 0xdb8)
