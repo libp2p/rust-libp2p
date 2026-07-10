@@ -2,7 +2,7 @@
 
 - Fix AutoNAT v2 server dialing the last address in a multi-address `DialRequest` while reporting
   `addr_idx = 0`.
-  See [issue 6482](https://github.com/libp2p/rust-libp2p/issues/6482).
+  See [PR 6514](https://github.com/libp2p/rust-libp2p/pull/6514).
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
