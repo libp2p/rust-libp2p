@@ -38,8 +38,14 @@ use libp2p_identity::PeerId;
 
 use crate::{Multiaddr, connection::pool::dial_ranker::rank_dials, transport::TransportError};
 
-/// A single outbound dial attempt to a specific address.
-pub(crate) struct Dial {
+/// A pending outbound dial that hasn't started yet.
+///
+/// The `fut` is created upfront by `Transport::dial()` but won't be polled
+/// until `delay` elapses. If `smart_dial` is enabled, `rank_dials` sets the
+/// `delay` and reorders the vec so preferred addresses start first. Without
+/// smart dial, delays are `None` and the concurrency factor limits how many
+/// are polled at once.
+pub(crate) struct PendingDial {
     pub(crate) addr: Multiaddr,
     pub(crate) delay: Option<Duration>,
     pub(crate) fut: DialFuture,
@@ -66,7 +72,7 @@ pub(crate) type DialFuture = BoxFuture<
 /// As each completes, the next pending dial starts.
 pub(crate) struct ConcurrentDial {
     dials: FuturesUnordered<DialFuture>,
-    pending_dials: IntoIter<Dial>,
+    pending_dials: IntoIter<PendingDial>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
 }
 
@@ -74,7 +80,7 @@ impl Unpin for ConcurrentDial {}
 
 impl ConcurrentDial {
     pub(crate) fn new(
-        mut pending_dials: Vec<Dial>,
+        mut pending_dials: Vec<PendingDial>,
         concurrency_factor: NonZeroU8,
         smart_dial: bool,
     ) -> Self {

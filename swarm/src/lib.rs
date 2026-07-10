@@ -110,7 +110,7 @@ pub use behaviour::{
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols, pool::ConnectionCounters};
 use connection::{
     IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
-    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent, concurrent_dial::Dial},
+    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent, concurrent_dial::PendingDial},
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -541,7 +541,7 @@ where
                 ))
                 .boxed(),
             };
-                Dial{ addr: a, delay: None, fut }})
+                PendingDial{ addr: a, delay: None, fut }})
             .collect();
 
         self.pool.add_outgoing(

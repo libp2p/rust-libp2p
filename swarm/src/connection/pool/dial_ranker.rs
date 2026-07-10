@@ -18,11 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr},
+    time::Duration,
+};
 
-use libp2p_core::multiaddr::Protocol;
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 
-use super::*;
+use crate::connection::pool::concurrent_dial::PendingDial;
 
 // The 250ms value is from happy eyeballs RFC 8305. This is a rough estimate of 1 RTT
 // Duration by which TCP dials are delayed relative to the last QUIC dial
@@ -54,7 +57,7 @@ const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 /// and lower port first. Happy Eyeballs (RFC 8305) interleaves an IPv4 address
 /// early so both address families race each other. Each dial gets a staggered
 /// [`Dial::delay`] so higher-priority addresses start dialing first.
-pub(crate) fn rank_dials(dials: &mut Vec<Dial>) {
+pub(crate) fn rank_dials(dials: &mut Vec<PendingDial>) {
     let mut relay = vec![];
     let mut public = vec![];
     let mut private = vec![];
@@ -129,7 +132,7 @@ pub(crate) fn rank_dials(dials: &mut Vec<Dial>) {
 /// Each address gets a delay so higher-priority addresses start dialing first,
 /// reducing wasted attempts on slower paths.
 fn group_delays(
-    dials: &mut Vec<Dial>,
+    dials: &mut Vec<PendingDial>,
     tcp_delay: Duration,
     quic_delay: Duration,
     other_delay: Duration,
@@ -265,7 +268,7 @@ fn group_delays(
 /// Ordering: QUICv1 < QUICv0 < WebTransport < TCP < WebRTC < other.
 /// Within same transport: IPv6 before IPv4,
 /// lower port first as they are more likely to be the peer's listen port.
-fn score(dial: &Dial) -> (u8, bool, u16) {
+fn score(dial: &PendingDial) -> (u8, bool, u16) {
     let transport_rank: u8 = if dial.addr.iter().any(|p| matches!(p, Protocol::QuicV1)) {
         0
     } else if dial.addr.iter().any(|p| matches!(p, Protocol::Quic)) {
@@ -396,10 +399,10 @@ mod tests {
 
     use super::*;
 
-    fn make_dials(addrs: Vec<Multiaddr>) -> Vec<Dial> {
+    fn make_dials(addrs: Vec<Multiaddr>) -> Vec<PendingDial> {
         addrs
             .into_iter()
-            .map(|addr| Dial {
+            .map(|addr| PendingDial {
                 addr,
                 delay: None,
                 fut: futures::future::pending().boxed(),

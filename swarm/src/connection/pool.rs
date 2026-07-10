@@ -50,7 +50,7 @@ use crate::{
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
-        pool::concurrent_dial::Dial,
+        pool::concurrent_dial::PendingDial,
     },
     transport::TransportError,
 };
@@ -420,7 +420,7 @@ where
     /// that establishes and negotiates the connection.
     pub(crate) fn add_outgoing(
         &mut self,
-        dials: Vec<Dial>,
+        dials: Vec<PendingDial>,
         peer: Option<PeerId>,
         role_override: Endpoint,
         port_use: PortUse,
