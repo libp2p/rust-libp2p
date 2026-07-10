@@ -517,31 +517,31 @@ where
             .into_iter()
             .map(|a| {
                 let fut = match peer_id.map_or(Ok(a.clone()), |p| a.clone().with_p2p(p)) {
-                Ok(address) => {
-                    let transport_dial = self.transport.dial(
-                        address.clone(),
-                        transport::DialOpts {
-                            role: dial_opts.role_override(),
-                            port_use: dial_opts.port_use(),
-                        },
-                    );
-                    let span = tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address);
-                    span.follows_from(tracing::Span::current());
-                    match transport_dial {
-                        Ok(fut) => fut
-                            .map(|r| (address, r.map_err(TransportError::Other)))
-                            .instrument(span)
-                            .boxed(),
-                        Err(err) => futures::future::ready((address, Err(err))).boxed(),
+                    Ok(address) => {
+                        let transport_dial = self.transport.dial(
+                            address.clone(),
+                            transport::DialOpts {
+                                role: dial_opts.role_override(),
+                                port_use: dial_opts.port_use(),
+                            },
+                        );
+                        let span = tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address);
+                        span.follows_from(tracing::Span::current());
+                        match transport_dial {
+                            Ok(fut) => fut
+                                .map(|r| (address, r.map_err(TransportError::Other)))
+                                .instrument(span)
+                                .boxed(),
+                            Err(err) => futures::future::ready((address, Err(err))).boxed(),
+                        }
                     }
-                }
-                Err(address) => futures::future::ready((
-                    address.clone(),
-                    Err(TransportError::MultiaddrNotSupported(address)),
-                ))
-                .boxed(),
-            };
-                PendingDial{ addr: a, delay: None, fut }})
+                    Err(address) => futures::future::ready((
+                        address.clone(),
+                        Err(TransportError::MultiaddrNotSupported(address)),
+                    ))
+                    .boxed(),
+                };
+                PendingDial {         addr: a, fut }})
             .collect();
 
         self.pool.add_outgoing(

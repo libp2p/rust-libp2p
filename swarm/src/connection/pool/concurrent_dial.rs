@@ -22,7 +22,6 @@ use std::{
     num::NonZeroU8,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
     vec::IntoIter,
 };
 
@@ -47,7 +46,6 @@ use crate::{Multiaddr, connection::pool::dial_ranker::rank_dials, transport::Tra
 /// are polled at once.
 pub(crate) struct PendingDial {
     pub(crate) addr: Multiaddr,
-    pub(crate) delay: Option<Duration>,
     pub(crate) fut: DialFuture,
 }
 
@@ -62,13 +60,21 @@ pub(crate) type DialFuture = BoxFuture<
     ),
 >;
 
+pub(crate) type DialResult = Result<
+    // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
+    // muxer and the addresses and errors of the dials that failed before.
+    (
+        Multiaddr,
+        (PeerId, StreamMuxerBox),
+        Vec<(Multiaddr, TransportError<std::io::Error>)>,
+    ),
+    // Or all dials failed, thus returning the address and error for each dial.
+    Vec<(Multiaddr, TransportError<std::io::Error>)>,
+>;
+
 /// Drives dial attempts to a single peer.
 ///
-/// If `smart_dial` is enabled, all dials start immediately with staggered delays from
-/// [`rank_dials`], the delays alone provide pacing.
-/// The concurrency factor is ignored when smart dial is enabled.
-///
-/// If `smart_dial` is disabled, up to `concurrency_factor` dials are in flight at once.
+/// Up to `concurrency_factor` dials are in flight at once.
 /// As each completes, the next pending dial starts.
 pub(crate) struct ConcurrentDial {
     dials: FuturesUnordered<DialFuture>,
@@ -79,34 +85,18 @@ pub(crate) struct ConcurrentDial {
 impl Unpin for ConcurrentDial {}
 
 impl ConcurrentDial {
-    pub(crate) fn new(
-        mut pending_dials: Vec<PendingDial>,
-        concurrency_factor: NonZeroU8,
-        smart_dial: bool,
-    ) -> Self {
-        if smart_dial {
-            rank_dials(&mut pending_dials);
-        }
-
+    pub(crate) fn new(pending_dials: Vec<PendingDial>, concurrency_factor: NonZeroU8) -> Self {
         let mut pending_dials = pending_dials.into_iter();
 
         // Fill the concurrency window: start up to `concurrency_factor` dials.
         // As each dial completes (success or failure), `dial_pending()` is called
         // to refill the window from remaining pending dials.
         let dials = FuturesUnordered::new();
-        for dial in pending_dials.by_ref() {
-            dials.push(
-                async move {
-                    if let Some(delay) = dial.delay {
-                        Delay::new(delay).await;
-                    }
-                    dial.fut.await
-                }
-                .boxed(),
-            );
-            if !smart_dial && dials.len() == concurrency_factor.get() as usize {
-                break;
-            }
+        for dial in pending_dials
+            .by_ref()
+            .take(concurrency_factor.get() as usize)
+        {
+            dials.push(dial.fut);
         }
 
         Self {
@@ -118,17 +108,7 @@ impl ConcurrentDial {
 }
 
 impl Future for ConcurrentDial {
-    type Output = Result<
-        // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
-        // muxer and the addresses and errors of the dials that failed before.
-        (
-            Multiaddr,
-            (PeerId, StreamMuxerBox),
-            Vec<(Multiaddr, TransportError<std::io::Error>)>,
-        ),
-        // Or all dials failed, thus returning the address and error for each dial.
-        Vec<(Multiaddr, TransportError<std::io::Error>)>,
-    >;
+    type Output = DialResult;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
@@ -140,16 +120,64 @@ impl Future for ConcurrentDial {
                 Some((addr, Err(e))) => {
                     self.errors.push((addr, e));
                     if let Some(dial) = self.pending_dials.next() {
-                        self.dials.push(
-                            async move {
-                                if let Some(delay) = dial.delay {
-                                    Delay::new(delay).await;
-                                }
-                                dial.fut.await
-                            }
-                            .boxed(),
-                        );
+                        self.dials.push(dial.fut);
                     }
+                }
+                None => {
+                    return Poll::Ready(Err(std::mem::take(&mut self.errors)));
+                }
+            }
+        }
+    }
+}
+
+/// Drives dial attempts to a single peer.
+///
+/// All dials start immediately with staggered delays from
+/// [`rank_dials`], the delays alone provide pacing.
+pub(crate) struct SmartDial {
+    dials: FuturesUnordered<DialFuture>,
+    errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
+}
+
+impl Unpin for SmartDial {}
+
+impl SmartDial {
+    pub(crate) fn new(pending_dials: Vec<PendingDial>) -> Self {
+        let pending_dials = rank_dials(pending_dials);
+
+        let dials = FuturesUnordered::new();
+        for (delay, dial) in pending_dials {
+            dials.push(
+                async move {
+                    if !delay.is_zero() {
+                        Delay::new(delay).await;
+                    }
+                    dial.fut.await
+                }
+                .boxed(),
+            );
+        }
+
+        Self {
+            dials,
+            errors: Default::default(),
+        }
+    }
+}
+
+impl Future for SmartDial {
+    type Output = DialResult;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        loop {
+            match ready!(self.dials.poll_next_unpin(cx)) {
+                Some((addr, Ok(output))) => {
+                    let errors = std::mem::take(&mut self.errors);
+                    return Poll::Ready(Ok((addr, output, errors)));
+                }
+                Some((addr, Err(e))) => {
+                    self.errors.push((addr, e));
                 }
                 None => {
                     return Poll::Ready(Err(std::mem::take(&mut self.errors)));

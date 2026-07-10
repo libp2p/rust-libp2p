@@ -57,13 +57,14 @@ const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 /// and lower port first. Happy Eyeballs (RFC 8305) interleaves an IPv4 address
 /// early so both address families race each other. Each dial gets a staggered
 /// [`Dial::delay`] so higher-priority addresses start dialing first.
-pub(crate) fn rank_dials(dials: &mut Vec<PendingDial>) {
+pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)> {
+    let len = dials.len();
     let mut relay = vec![];
     let mut public = vec![];
     let mut private = vec![];
     let mut other = vec![];
 
-    for dial in dials.drain(..) {
+    for dial in dials {
         if dial.addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
             relay.push(dial);
         } else if is_private_addr(&dial.addr) {
@@ -79,50 +80,46 @@ pub(crate) fn rank_dials(dials: &mut Vec<PendingDial>) {
         }
     }
 
-    let mut result = vec![];
-    group_delays(
-        &mut private,
+    let mut result = Vec::with_capacity(len);
+    result.extend(group_delays(
+        private,
         PRIVATE_TCP_DELAY,
         PRIVATE_QUIC_DELAY,
         PRIVATE_OTHER_DELAY,
         Duration::ZERO,
-    );
-    result.extend(private);
+    ));
     let relay_offset = if public.is_empty() {
         Duration::ZERO
     } else {
         RELAY_DELAY
     };
-    group_delays(
-        &mut public,
+    result.extend(group_delays(
+        public,
         PUBLIC_TCP_DELAY,
         PUBLIC_QUIC_DELAY,
         PUBLIC_OTHER_DELAY,
         Duration::ZERO,
-    );
-    result.extend(public);
+    ));
 
-    group_delays(
-        &mut relay,
+    result.extend(group_delays(
+        relay,
         PUBLIC_TCP_DELAY,
         PUBLIC_QUIC_DELAY,
         PUBLIC_OTHER_DELAY,
         relay_offset,
-    );
-    result.extend(relay);
+    ));
 
-    let max_delay = if let Some(Some(delay)) = result.last().map(|d| d.delay) {
-        delay
-    } else {
-        Duration::ZERO
-    };
+    let max_delay = result.iter().map(|d| d.0).max();
 
-    other.iter_mut().for_each(|d| {
-        d.delay = Some(max_delay + PUBLIC_OTHER_DELAY);
-    });
-    result.extend(other);
+    result.extend(other.into_iter().map(|d| {
+        if let Some(max_delay) = max_delay {
+            (max_delay + PUBLIC_OTHER_DELAY, d)
+        } else {
+            (Duration::ZERO, d)
+        }
+    }));
 
-    dials.append(&mut result);
+    result
 }
 
 /// Sort addresses by priority and assign staggered dial delays.
@@ -132,14 +129,14 @@ pub(crate) fn rank_dials(dials: &mut Vec<PendingDial>) {
 /// Each address gets a delay so higher-priority addresses start dialing first,
 /// reducing wasted attempts on slower paths.
 fn group_delays(
-    dials: &mut Vec<PendingDial>,
+    mut dials: Vec<PendingDial>,
     tcp_delay: Duration,
     quic_delay: Duration,
     other_delay: Duration,
     offset: Duration,
-) {
+) -> Vec<(Duration, PendingDial)> {
     if dials.is_empty() {
-        return;
+        return vec![];
     }
 
     // Step 1: Sort by transport priority, then IPv6 before IPv4, then lower port first
@@ -218,7 +215,7 @@ fn group_delays(
     let mut tcp_count = 0;
     let mut tcp_start_delay = Duration::ZERO;
     let mut base_delay = Duration::ZERO;
-    for mut dial in reordered {
+    for dial in reordered {
         let delay = if is_quic(&dial.addr) {
             let d = match quic_count {
                 0 => Duration::ZERO,
@@ -255,12 +252,10 @@ fn group_delays(
             base_delay + other_delay
         };
         let total = offset + delay;
-
-        dial.delay = if total.is_zero() { None } else { Some(total) };
-        result.push(dial);
+        result.push((total, dial));
     }
 
-    *dials = result;
+    result
 }
 
 /// Score a multiaddress for dialing priority. Lower score = dialed first.

@@ -50,7 +50,7 @@ use crate::{
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
-        pool::concurrent_dial::PendingDial,
+        pool::concurrent_dial::{PendingDial, SmartDial},
     },
     transport::TransportError,
 };
@@ -434,15 +434,27 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor.spawn(
-            task::new_for_pending_outgoing_connection(
-                connection_id,
-                ConcurrentDial::new(dials, concurrency_factor, self.smart_dial),
-                abort_receiver,
-                self.pending_connection_events_tx.clone(),
-            )
-            .instrument(span),
-        );
+        if self.smart_dial {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    SmartDial::new(dials),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        } else {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    ConcurrentDial::new(dials, concurrency_factor),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        }
 
         let endpoint = PendingPoint::Dialer {
             role_override,
