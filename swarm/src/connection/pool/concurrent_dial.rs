@@ -60,22 +60,25 @@ pub(crate) type DialFuture = BoxFuture<
     ),
 >;
 
+/// The result of a concurrent or smart dial to a single peer.
+///
+/// Returns the first successful address and its negotiated connection, along
+/// with any errors from earlier failed dials. Returns all errors if every
+/// dial failed.
 pub(crate) type DialResult = Result<
-    // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
-    // muxer and the addresses and errors of the dials that failed before.
     (
         Multiaddr,
         (PeerId, StreamMuxerBox),
         Vec<(Multiaddr, TransportError<std::io::Error>)>,
     ),
-    // Or all dials failed, thus returning the address and error for each dial.
     Vec<(Multiaddr, TransportError<std::io::Error>)>,
 >;
 
-/// Drives dial attempts to a single peer.
+/// Drives concurrent dial attempts to a single peer, limited by a concurrency factor.
 ///
-/// Up to `concurrency_factor` dials are in flight at once.
-/// As each completes, the next pending dial starts.
+/// Starts up to `concurrency_factor` dials simultaneously. On failure, the next
+/// pending dial starts immediately, keeping the concurrency window filled until
+/// either a dial succeeds or all pending dials are exhausted.
 pub(crate) struct ConcurrentDial {
     dials: FuturesUnordered<DialFuture>,
     pending_dials: IntoIter<PendingDial>,
@@ -131,10 +134,12 @@ impl Future for ConcurrentDial {
     }
 }
 
-/// Drives dial attempts to a single peer.
+/// Drives ranked dial attempts to a single peer with staggered delays.
 ///
-/// All dials start immediately with staggered delays from
-/// [`rank_dials`], the delays alone provide pacing.
+/// All dials start immediately via [`rank_dials`], which assigns delays based on
+/// transport priority (QUIC > TCP, IPv6 > IPv4) and Happy Eyeballs (RFC 8305).
+/// The delays pace the dials, giving faster transports a head start while slower
+/// paths wait, with all dials overlapping in flight.
 pub(crate) struct SmartDial {
     dials: FuturesUnordered<DialFuture>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,

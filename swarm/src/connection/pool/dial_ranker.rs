@@ -43,9 +43,11 @@ const RELAY_DELAY: Duration = Duration::from_millis(250);
 const PUBLIC_OTHER_DELAY: Duration = Duration::from_millis(1000);
 const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 
-/// Sort dial addresses by priority and assign staggered dial delays in-place.
+/// Rank dial addresses by transport priority and assign staggered delays.
 ///
-/// Dials are grouped into four categories dialed in this order:
+/// Returns the dials sorted by dial priority with each paired with its delay.
+///
+/// Dials are grouped into four categories, dialed in this order:
 /// 1. **Private** — addresses on private/link-local IPs or localhost (fastest dials)
 /// 2. **Public** — addresses with public IPv4/IPv6
 /// 3. **Relay** — addresses containing `/p2p-circuit`
@@ -55,14 +57,14 @@ const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 /// Within each category, [`group_delays`] sorts by transport priority
 /// (QUICv1 < QUIC < WebTransport < TCP < WebRTC < other), IPv6 before IPv4,
 /// and lower port first. Happy Eyeballs (RFC 8305) interleaves an IPv4 address
-/// early so both address families race each other. Each dial gets a staggered
-/// [`Dial::delay`] so higher-priority addresses start dialing first.
+/// early so both address families race each other. Higher-priority addresses
+/// get a shorter delay and are dialed first.
 pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)> {
-    let len = dials.len();
     let mut relay = vec![];
     let mut public = vec![];
     let mut private = vec![];
     let mut other = vec![];
+    let mut result = Vec::with_capacity(dials.len());
 
     for dial in dials {
         if dial.addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
@@ -80,7 +82,6 @@ pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)
         }
     }
 
-    let mut result = Vec::with_capacity(len);
     result.extend(group_delays(
         private,
         PRIVATE_TCP_DELAY,
@@ -399,7 +400,6 @@ mod tests {
             .into_iter()
             .map(|addr| PendingDial {
                 addr,
-                delay: None,
                 fut: futures::future::pending().boxed(),
             })
             .collect()
@@ -413,15 +413,17 @@ mod tests {
         let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
         let q3v1: Multiaddr = "/ip4/1.2.3.4/udp/3/quic-v1".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v1.clone(), q2v1.clone(), q3v1.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v1.clone(), q2v1.clone(), q3v1.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v1, None),
-                (q2v1, Some(PUBLIC_QUIC_DELAY)),
-                (q3v1, Some(PUBLIC_QUIC_DELAY)),
+                (q1v1, Duration::ZERO),
+                (q2v1, PUBLIC_QUIC_DELAY),
+                (q3v1, PUBLIC_QUIC_DELAY),
             ]
         )
     }
@@ -433,15 +435,17 @@ mod tests {
         let q2v16: Multiaddr = "/ip6/1::2/udp/2/quic-v1".parse().unwrap();
         let q3v16: Multiaddr = "/ip6/1::2/udp/3/quic-v1".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v16.clone(), q2v16.clone(), q3v16.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v16.clone(), q2v16.clone(), q3v16.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v16, None),
-                (q2v16, Some(PUBLIC_QUIC_DELAY)),
-                (q3v16, Some(PUBLIC_QUIC_DELAY)),
+                (q1v16, Duration::ZERO),
+                (q2v16, PUBLIC_QUIC_DELAY),
+                (q3v16, PUBLIC_QUIC_DELAY),
             ]
         )
     }
@@ -454,12 +458,14 @@ mod tests {
         let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
         let q1v16: Multiaddr = "/ip6/1::2/udp/1/quic-v1".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v16.clone(), q2v1.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v16.clone(), q2v1.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
-            vec![(q1v16, None), (q2v1, Some(PUBLIC_QUIC_DELAY)),]
+            vec![(q1v16, Duration::ZERO), (q2v1, PUBLIC_QUIC_DELAY),]
         )
     }
 
@@ -479,7 +485,7 @@ mod tests {
         let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
         let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
 
-        let mut dials = make_dials(vec![
+        let dials = make_dials(vec![
             q1v1.clone(),
             q1v16.clone(),
             q2v16.clone(),
@@ -490,20 +496,22 @@ mod tests {
             t2.clone(),
             t3.clone(),
         ]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v16, None),
-                (q1v1, Some(PUBLIC_QUIC_DELAY)),
-                (q2v16, Some(2 * PUBLIC_QUIC_DELAY)),
-                (q3v16, Some(2 * PUBLIC_QUIC_DELAY)),
-                (q2v1, Some(2 * PUBLIC_QUIC_DELAY)),
-                (t1v6, Some(3 * PUBLIC_QUIC_DELAY)),
-                (t1, Some(4 * PUBLIC_QUIC_DELAY)),
-                (t2, Some(5 * PUBLIC_QUIC_DELAY)),
-                (t3, Some(5 * PUBLIC_QUIC_DELAY)),
+                (q1v16, Duration::ZERO),
+                (q1v1, PUBLIC_QUIC_DELAY),
+                (q2v16, 2 * PUBLIC_QUIC_DELAY),
+                (q3v16, 2 * PUBLIC_QUIC_DELAY),
+                (q2v1, 2 * PUBLIC_QUIC_DELAY),
+                (t1v6, 3 * PUBLIC_QUIC_DELAY),
+                (t1, 4 * PUBLIC_QUIC_DELAY),
+                (t2, 5 * PUBLIC_QUIC_DELAY),
+                (t3, 5 * PUBLIC_QUIC_DELAY),
             ]
         )
     }
@@ -518,16 +526,18 @@ mod tests {
         let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
         let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v1.clone(), t2.clone(), t1v6.clone(), t1.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v1.clone(), t2.clone(), t1v6.clone(), t1.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v1, None),
-                (t1v6, Some(PUBLIC_QUIC_DELAY)),
-                (t1, Some(2 * PUBLIC_QUIC_DELAY)),
-                (t2, Some(3 * PUBLIC_QUIC_DELAY)),
+                (q1v1, Duration::ZERO),
+                (t1v6, PUBLIC_QUIC_DELAY),
+                (t1, 2 * PUBLIC_QUIC_DELAY),
+                (t2, 3 * PUBLIC_QUIC_DELAY),
             ]
         )
     }
@@ -542,16 +552,18 @@ mod tests {
         let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
         let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v1.clone(), t2.clone(), t3.clone(), t1.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v1.clone(), t2.clone(), t3.clone(), t1.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v1, None),
-                (t1, Some(PUBLIC_TCP_DELAY)),
-                (t2, Some(2 * PUBLIC_QUIC_DELAY)),
-                (t3, Some(2 * PUBLIC_TCP_DELAY)),
+                (q1v1, Duration::ZERO),
+                (t1, PUBLIC_TCP_DELAY),
+                (t2, 2 * PUBLIC_QUIC_DELAY),
+                (t3, 2 * PUBLIC_TCP_DELAY),
             ]
         )
     }
@@ -564,15 +576,17 @@ mod tests {
         let t1v6: Multiaddr = "/ip6/1::2/tcp/1".parse().unwrap();
         let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
 
-        let mut dials = make_dials(vec![q1v1.clone(), t1v6.clone(), t2.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![q1v1.clone(), t1v6.clone(), t2.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (q1v1, None),
-                (t1v6, Some(PUBLIC_TCP_DELAY)),
-                (t2, Some(2 * PUBLIC_TCP_DELAY)),
+                (q1v1, Duration::ZERO),
+                (t1v6, PUBLIC_TCP_DELAY),
+                (t2, 2 * PUBLIC_TCP_DELAY),
             ]
         )
     }
@@ -586,16 +600,18 @@ mod tests {
         let t2: Multiaddr = "/ip4/1.2.3.4/tcp/2".parse().unwrap();
         let t3: Multiaddr = "/ip4/1.2.3.4/tcp/3".parse().unwrap();
 
-        let mut dials = make_dials(vec![t1.clone(), t2.clone(), t1v6.clone(), t3.clone()]);
-        rank_dials(&mut dials);
-        let output: Vec<_> = dials.into_iter().map(|d| (d.addr, d.delay)).collect();
+        let dials = make_dials(vec![t1.clone(), t2.clone(), t1v6.clone(), t3.clone()]);
+        let output: Vec<_> = rank_dials(dials)
+            .into_iter()
+            .map(|(d, a)| (a.addr, d))
+            .collect();
         assert_eq!(
             output,
             vec![
-                (t1v6, None),
-                (t1, Some(PUBLIC_TCP_DELAY)),
-                (t2, Some(2 * PUBLIC_TCP_DELAY)),
-                (t3, Some(2 * PUBLIC_TCP_DELAY)),
+                (t1v6, Duration::ZERO),
+                (t1, PUBLIC_TCP_DELAY),
+                (t2, 2 * PUBLIC_TCP_DELAY),
+                (t3, 2 * PUBLIC_TCP_DELAY),
             ]
         )
     }
@@ -603,8 +619,8 @@ mod tests {
     // Verifies that an empty input produces an empty output.
     #[test]
     fn test_empty() {
-        let mut dials = make_dials(vec![]);
-        rank_dials(&mut dials);
-        assert!(dials.is_empty())
+        let dials = make_dials(vec![]);
+        let output = rank_dials(dials);
+        assert!(output.is_empty())
     }
 }
