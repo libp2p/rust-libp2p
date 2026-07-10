@@ -110,8 +110,7 @@ pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)
         relay_offset,
     ));
 
-    let max_delay = result.iter().map(|d| d.0).max();
-
+    let max_delay = result.last().map(|d| d.0);
     result.extend(other.into_iter().map(|d| {
         if let Some(max_delay) = max_delay {
             (max_delay + PUBLIC_OTHER_DELAY, d)

@@ -536,12 +536,12 @@ where
                         }
                     }
                     Err(address) => futures::future::ready((
-                        address.clone(),
-                        Err(TransportError::MultiaddrNotSupported(address)),
+                            address.clone(),
+                            Err(TransportError::MultiaddrNotSupported(address)),
                     ))
-                    .boxed(),
+                        .boxed(),
                 };
-                PendingDial {         addr: a, fut }})
+                PendingDial { addr: a, fut }})
             .collect();
 
         self.pool.add_outgoing(
