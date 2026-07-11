@@ -1,7 +1,6 @@
 ## 0.16.0
 
-- Fix AutoNAT v2 server dialing the last address in a multi-address `DialRequest` while reporting
-  `addr_idx = 0`.
+- Fix AutoNAT v2 server preserving the selected address index for multi-address `DialRequest`s.
   See [PR 6514](https://github.com/libp2p/rust-libp2p/pull/6514).
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
