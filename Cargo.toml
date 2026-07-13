@@ -15,6 +15,7 @@ members = [
     "examples/ping",
     "examples/relay-server",
     "examples/rendezvous",
+    "examples/sqlite-address-book",
     "examples/stream",
     "examples/upnp",
     "hole-punching-tests",

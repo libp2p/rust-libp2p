@@ -71,8 +71,8 @@ use std::{
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
+    CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
+    OutboundAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
 };
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
@@ -244,12 +244,10 @@ where
         peer: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        if let Some(peer) = peer {
-            self.state.enforce(&peer)?;
-        }
-
-        Ok(vec![])
+    ) -> OutboundAddresses {
+        OutboundAddresses::Ready(peer.map_or(Ok(vec![]), |peer| {
+            self.state.enforce(&peer).map(|()| vec![])
+        }))
     }
 
     fn handle_established_outbound_connection(

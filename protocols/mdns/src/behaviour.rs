@@ -44,8 +44,8 @@ use if_watch::IfEvent;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm, behaviour::FromSwarm, dummy,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, OutboundAddresses, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, behaviour::FromSwarm, dummy,
 };
 use smallvec::SmallVec;
 
@@ -228,17 +228,17 @@ where
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let Some(peer_id) = maybe_peer else {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         };
 
-        Ok(self
+        OutboundAddresses::Ready(Ok(self
             .discovered_nodes
             .iter()
             .filter(|(peer, _, _)| peer == &peer_id)
             .map(|(_, addr, _)| addr.clone())
-            .collect())
+            .collect()))
     }
 
     fn handle_established_outbound_connection(

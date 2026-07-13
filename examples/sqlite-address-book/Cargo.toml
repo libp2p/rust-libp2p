@@ -1,0 +1,19 @@
+[package]
+name = "sqlite-address-book-example"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+license = "MIT"
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+futures = { workspace = true }
+libp2p = { path = "../../libp2p", features = ["macros", "noise", "ping", "tcp", "tokio", "yamux"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
+tokio = { workspace = true, features = ["full"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

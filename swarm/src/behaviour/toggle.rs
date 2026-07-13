@@ -27,7 +27,7 @@ use libp2p_identity::PeerId;
 
 use crate::{
     ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-    behaviour::FromSwarm,
+    behaviour::{FromSwarm, OutboundAddresses},
     connection::ConnectionId,
     handler::{
         AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
@@ -118,19 +118,16 @@ where
         maybe_peer: Option<PeerId>,
         addresses: &[Multiaddr],
         effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(vec![]);
-        };
-
-        let addresses = inner.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        )?;
-
-        Ok(addresses)
+    ) -> OutboundAddresses {
+        match self.inner.as_mut() {
+            Some(inner) => inner.handle_pending_outbound_connection(
+                connection_id,
+                maybe_peer,
+                addresses,
+                effective_role,
+            ),
+            None => OutboundAddresses::Ready(Ok(Vec::new())),
+        }
     }
 
     fn handle_established_outbound_connection(

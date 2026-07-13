@@ -39,8 +39,8 @@ use libp2p_request_response::{
     self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
 };
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, OutboundAddresses, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
 };
 use web_time::Instant;
@@ -505,7 +505,7 @@ impl NetworkBehaviour for Behaviour {
         maybe_peer: Option<PeerId>,
         addresses: &[Multiaddr],
         effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         self.inner.handle_pending_outbound_connection(
             connection_id,
             maybe_peer,

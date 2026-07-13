@@ -31,8 +31,8 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 
 use crate::{
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, OutboundAddresses,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{
         ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
         ExternalAddrExpired, FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate,
@@ -112,12 +112,12 @@ where
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let Some(p) = maybe_peer else {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         };
 
-        Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))
+        OutboundAddresses::Ready(Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone())))
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
@@ -416,7 +416,7 @@ where
         maybe_peer: Option<PeerId>,
         addresses: &[Multiaddr],
         effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         self.handle_pending_outbound_connection.push((
             maybe_peer,
             addresses.to_vec(),

@@ -28,8 +28,8 @@ use std::{
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
+    OutboundAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
     dummy,
 };
@@ -290,19 +290,21 @@ impl NetworkBehaviour for Behaviour {
         maybe_peer: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         if maybe_peer.is_some_and(|peer| self.is_bypassed(&peer)) {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         }
-        check_limit(
+        if let Err(cause) = check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
             Kind::PendingOutgoing,
-        )?;
+        ) {
+            return OutboundAddresses::Ready(Err(cause));
+        }
 
         self.pending_outbound_connections.insert(connection_id);
 
-        Ok(vec![])
+        OutboundAddresses::Ready(Ok(vec![]))
     }
 
     fn handle_established_outbound_connection(

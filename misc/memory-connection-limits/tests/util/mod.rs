@@ -26,8 +26,8 @@ use std::{
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm, dummy,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, OutboundAddresses, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
 };
 
 #[derive(libp2p_swarm_derive::NetworkBehaviour)]
@@ -82,9 +82,9 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         _: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         self.handle_pending();
-        Ok(vec![])
+        OutboundAddresses::Ready(Ok(vec![]))
     }
 
     fn handle_established_inbound_connection(

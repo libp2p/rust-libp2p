@@ -36,8 +36,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, OutboundAddresses, StreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::{self, DialOpts},
 };
@@ -2252,9 +2252,9 @@ where
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+    ) -> OutboundAddresses {
         let Some(peer_id) = maybe_peer else {
-            return Ok(vec![]);
+            return OutboundAddresses::Ready(Ok(vec![]));
         };
 
         // We should order addresses from decreasing likelihood of connectivity, so start with
@@ -2276,7 +2276,7 @@ where
             }
         }
 
-        Ok(peer_addrs)
+        OutboundAddresses::Ready(Ok(peer_addrs))
     }
 
     fn on_connection_handler_event(
