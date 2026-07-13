@@ -11,6 +11,12 @@
   which could be a stale `Done` left behind by a prior extraction.
   See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
 
+- Add smart dialing support (`with_smart_dial`).
+  Ranks dial addresses by transport priority (QUIC > TCP, IPv6 > IPv4)
+  with Happy Eyeballs (RFC 8305) staggered delays. All addresses are
+  dialed concurrently.
+  See [PR 6229](https://github.com/libp2p/rust-libp2p/pull/6229).
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.
