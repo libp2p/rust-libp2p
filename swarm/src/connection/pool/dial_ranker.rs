@@ -39,7 +39,7 @@ const PRIVATE_QUIC_DELAY: Duration = Duration::from_millis(30);
 // RelayDelay is the duration by which relay dials are delayed relative to direct addresses
 const RELAY_DELAY: Duration = Duration::from_millis(250);
 
-// delay for other transport addresses. This will apply to /webrtc-direct.
+// delay for other transport addresses.
 const PUBLIC_OTHER_DELAY: Duration = Duration::from_millis(1000);
 const PRIVATE_OTHER_DELAY: Duration = Duration::from_millis(100);
 
@@ -69,7 +69,7 @@ pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)
     for dial in dials {
         if dial.addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
             relay.push(dial);
-        } else if is_private_addr(&dial.addr) {
+        } else if !is_global_addr(&dial.addr) {
             private.push(dial);
         } else if dial
             .addr
@@ -298,19 +298,21 @@ fn score(dial: &PendingDial) -> (u8, bool, u16) {
     (transport_rank, ipv4_penalty, port)
 }
 
-fn is_private_addr(a: &Multiaddr) -> bool {
+/// Returns `true` if the address is globally routable.
+///
+/// Mirrors the nightly `is_global()` on `Ipv4Addr`/`Ipv6Addr`.
+/// IPv6 addresses with zone IDs (link-local) and localhost DNS
+/// names are not globally routable.
+fn is_global_addr(a: &Multiaddr) -> bool {
     if let Some(Protocol::Ip4(ip4)) = a.iter().find(|p| matches!(p, Protocol::Ip4(_))) {
-        return !is_global_ipv4(&ip4);
+        return is_global_ipv4(&ip4); // no negation
     }
-
-    if a.iter().any(|p| matches!(p, Protocol::Ip6zone(_))) {
-        return true;
-    }
-
     if let Some(Protocol::Ip6(ip6)) = a.iter().find(|p| matches!(p, Protocol::Ip6(_))) {
-        return !is_global_ipv6(&ip6);
+        return is_global_ipv6(&ip6); // no negation
     }
-
+    if a.iter().any(|p| matches!(p, Protocol::Ip6zone(_))) {
+        return false; // link-local, not globally routable
+    }
     if let Some(dns) = a.iter().find_map(|p| match p {
         Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => Some(dns),
         _ => None,
@@ -449,22 +451,34 @@ mod tests {
         )
     }
 
-    // Verifies that mixed QUIC and TCP addresses with both IPv6 and IPv4 are sorted
-    // correctly: QUIC before TCP, IPv6 before IPv4 within each transport, and Happy
-    // Eyeballs interleaves an IPv4 QUIC address early.
+    // Verifies that Happy Eyeballs interleaves IPv4 at position 1 (250ms),
+    // then delays remaining probes at 2x (500ms flat) to let the first two
+    // probes race before starting the rest.
     #[test]
     fn test_quic_delay_ipv4_ipv6() {
         let q2v1: Multiaddr = "/ip4/1.2.3.4/udp/2/quic-v1".parse().unwrap();
+        let q3v1: Multiaddr = "/ip4/1.2.4.5/udp/2/quic-v1".parse().unwrap();
         let q1v16: Multiaddr = "/ip6/1::2/udp/1/quic-v1".parse().unwrap();
+        let q4v16: Multiaddr = "/ip6/1::3/udp/1/quic-v1".parse().unwrap();
 
-        let dials = make_dials(vec![q1v16.clone(), q2v1.clone()]);
+        let dials = make_dials(vec![
+            q1v16.clone(),
+            q2v1.clone(),
+            q3v1.clone(),
+            q4v16.clone(),
+        ]);
         let output: Vec<_> = rank_dials(dials)
             .into_iter()
             .map(|(d, a)| (a.addr, d))
             .collect();
         assert_eq!(
             output,
-            vec![(q1v16, Duration::ZERO), (q2v1, PUBLIC_QUIC_DELAY),]
+            vec![
+                (q1v16, Duration::ZERO),
+                (q2v1, PUBLIC_QUIC_DELAY),
+                (q4v16, PUBLIC_QUIC_DELAY * 2),
+                (q3v1, PUBLIC_QUIC_DELAY * 2)
+            ]
         )
     }
 
