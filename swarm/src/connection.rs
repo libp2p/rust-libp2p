@@ -426,11 +426,11 @@ where
                             *substream_upgrade_protocol_override,
                             stream_counter.clone(),
                         ));
-                    }
 
-                    // Go back to the top,
-                    // handler can potentially make progress again.
-                    continue;
+                        // Go back to the top,
+                        // handler can potentially make progress again.
+                        continue;
+                    }
                 }
             }
 
