@@ -1541,133 +1541,129 @@ where
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             tracing::warn!(peer=%peer_id, "GRAFT: ignoring request from direct peer");
-            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
-            to_prune_topics = topics.into_iter().collect();
-            // but don't PX
-            do_px = false
-        } else {
-            let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
-            let now = Instant::now();
-            for topic_hash in topics {
-                if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                    // if the peer is already in the mesh ignore the graft
-                    if peers.contains(peer_id) {
-                        tracing::debug!(
-                            peer=%peer_id,
-                            topic=%&topic_hash,
-                            "GRAFT: Received graft for peer that is already in topic"
-                        );
-                        continue;
-                    }
+            return;
+        }
 
-                    // make sure we are not backing off that peer
-                    if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
-                        && backoff_time > now
+        let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
+        let now = Instant::now();
+        for topic_hash in topics {
+            let Some(peers) = self.mesh.get_mut(&topic_hash) else {
+                // don't do PX when there is an unknown topic to avoid leaking our peers
+                do_px = false;
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "GRAFT: Received graft for unknown topic from peer"
+                );
+                // spam hardening: ignore GRAFTs for unknown topics
+                continue;
+            };
+
+            // if the peer is already in the mesh ignore the graft
+            if peers.contains(peer_id) {
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%&topic_hash,
+                    "GRAFT: Received graft for peer that is already in topic"
+                );
+                continue;
+            }
+
+            // make sure we are not backing off that peer
+            if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
+                && backoff_time > now
+            {
+                tracing::warn!(
+                    peer=%peer_id,
+                    "[Penalty] Peer attempted graft within backoff time, penalizing"
+                );
+                // add behavioural penalty
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    #[cfg(feature = "metrics")]
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.register_score_penalty(Penalty::GraftBackoff);
+                    }
+                    peer_score.add_penalty(peer_id, 1);
+
+                    // Apply an extra graft-backoff penalty only when the peer is still
+                    // far enough from backoff expiry.
+                    // This compares durations only,
+                    // avoiding Instant arithmetic and handling config edge cases
+                    // safely: any active backoff
+                    // qualifies for the extra penalty.
+                    let apply_extra_penalty = match self
+                        .config
+                        .prune_backoff()
+                        .checked_sub(self.config.graft_flood_threshold())
                     {
-                        tracing::warn!(
-                            peer=%peer_id,
-                            "[Penalty] Peer attempted graft within backoff time, penalizing"
-                        );
-                        // add behavioural penalty
-                        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                            #[cfg(feature = "metrics")]
-                            if let Some(metrics) = self.metrics.as_mut() {
-                                metrics.register_score_penalty(Penalty::GraftBackoff);
-                            }
-                            peer_score.add_penalty(peer_id, 1);
-
-                            // Apply an extra graft-backoff penalty only when the peer is still
-                            // far enough from backoff expiry.
-                            // This compares durations only,
-                            // avoiding Instant arithmetic and handling config edge cases
-                            // safely: any active backoff
-                            // qualifies for the extra penalty.
-                            let apply_extra_penalty = match self
-                                .config
-                                .prune_backoff()
-                                .checked_sub(self.config.graft_flood_threshold())
-                            {
-                                Some(required_remaining) => {
-                                    let remaining_backoff =
-                                        backoff_time.saturating_duration_since(now);
-                                    remaining_backoff > required_remaining
-                                }
-                                // graft_flood_threshold >= prune_backoff
-                                None => true,
-                            };
-                            if apply_extra_penalty {
-                                peer_score.add_penalty(peer_id, 1);
-                            }
+                        Some(required_remaining) => {
+                            let remaining_backoff = backoff_time.saturating_duration_since(now);
+                            remaining_backoff > required_remaining
                         }
-                        // no PX
-                        do_px = false;
-
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
+                        // graft_flood_threshold >= prune_backoff
+                        None => true,
+                    };
+                    if apply_extra_penalty {
+                        peer_score.add_penalty(peer_id, 1);
                     }
-
-                    // check the score
-                    if below_zero {
-                        // we don't GRAFT peers with negative score
-                        tracing::debug!(
-                            peer=%peer_id,
-                            %score,
-                            topic=%topic_hash,
-                            "GRAFT: ignoring peer with negative score"
-                        );
-                        // we do send them PRUNE however, because it's a matter of protocol
-                        // correctness
-                        to_prune_topics.insert(topic_hash.clone());
-                        // but we won't PX to them
-                        do_px = false;
-                        continue;
-                    }
-
-                    // check mesh upper bound and only allow graft if the upper bound is not reached
-                    let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
-
-                    if peers.len() >= mesh_n_high {
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
-                    }
-
-                    // add peer to the mesh
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Mesh link added for peer in topic"
-                    );
-
-                    if peers.insert(*peer_id) {
-                        #[cfg(feature = "metrics")]
-                        if let Some(m) = self.metrics.as_mut() {
-                            m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
-                        }
-                    }
-
-                    // If the peer did not previously exist in any mesh, inform the handler
-                    peer_added_to_mesh(
-                        *peer_id,
-                        vec![&topic_hash],
-                        &self.mesh,
-                        &mut self.events,
-                        &self.connected_peers,
-                    );
-
-                    if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                        peer_score.graft(peer_id, topic_hash);
-                    }
-                } else {
-                    // don't do PX when there is an unknown topic to avoid leaking our peers
-                    do_px = false;
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Received graft for unknown topic from peer"
-                    );
-                    // spam hardening: ignore GRAFTs for unknown topics
-                    continue;
                 }
+                // no PX
+                do_px = false;
+
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // check the score
+            if below_zero {
+                // we don't GRAFT peers with negative score
+                tracing::debug!(
+                    peer=%peer_id,
+                    %score,
+                    topic=%topic_hash,
+                    "GRAFT: ignoring peer with negative score"
+                );
+                // we do send them PRUNE however, because it's a matter of protocol
+                // correctness
+                to_prune_topics.insert(topic_hash.clone());
+                // but we won't PX to them
+                do_px = false;
+                continue;
+            }
+
+            // check mesh upper bound and only allow graft if the upper bound is not reached
+            let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+
+            if peers.len() >= mesh_n_high {
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // add peer to the mesh
+            tracing::debug!(
+                peer=%peer_id,
+                topic=%topic_hash,
+                "GRAFT: Mesh link added for peer in topic"
+            );
+
+            if peers.insert(*peer_id) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
+                }
+            }
+
+            // If the peer did not previously exist in any mesh, inform the handler
+            peer_added_to_mesh(
+                *peer_id,
+                vec![&topic_hash],
+                &self.mesh,
+                &mut self.events,
+                &self.connected_peers,
+            );
+
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                peer_score.graft(peer_id, topic_hash);
             }
         }
 
