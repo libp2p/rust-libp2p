@@ -12,10 +12,10 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-cuckoofilter = "0.5.0"
-fnv = "1.0"
 bytes.workspace = true
+fnv = "1.0"
 futures = { workspace = true }
+hashlink = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }

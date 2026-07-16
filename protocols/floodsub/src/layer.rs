@@ -23,13 +23,14 @@ use std::{
         VecDeque,
         hash_map::{DefaultHasher, HashMap},
     },
+    hash::{Hash, Hasher},
     iter,
     task::{Context, Poll},
 };
 
 use bytes::Bytes;
-use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
+use hashlink::LinkedHashSet;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -48,6 +49,42 @@ use crate::{
     },
     topic::Topic,
 };
+
+// Match the approximate maximum entry count of the previous cuckoo filter.
+const RECEIVED_CACHE_CAPACITY: usize = 1 << 20;
+
+struct ReceivedCache {
+    message_hashes: LinkedHashSet<u64>,
+    capacity: usize,
+}
+
+impl ReceivedCache {
+    fn new() -> Self {
+        Self::with_capacity(RECEIVED_CACHE_CAPACITY)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        debug_assert!(capacity > 0);
+
+        Self {
+            message_hashes: LinkedHashSet::new(),
+            capacity,
+        }
+    }
+
+    /// Returns `true` if the value was not present in the cache.
+    fn insert<T: Hash>(&mut self, value: &T) -> bool {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+
+        let is_new = self.message_hashes.insert(hasher.finish());
+        if self.message_hashes.len() > self.capacity {
+            self.message_hashes.pop_front();
+        }
+
+        is_new
+    }
+}
 
 #[deprecated = "Use `Behaviour` instead."]
 pub type Floodsub = Behaviour;
@@ -73,7 +110,7 @@ pub struct Behaviour {
 
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
-    received: CuckooFilter<DefaultHasher>,
+    received: ReceivedCache,
 }
 
 impl Behaviour {
@@ -90,7 +127,7 @@ impl Behaviour {
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
-            received: CuckooFilter::new(),
+            received: ReceivedCache::new(),
         }
     }
 
@@ -235,13 +272,7 @@ impl Behaviour {
             .iter()
             .any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
-            if let Err(e @ CuckooError::NotEnoughSpace) = self.received.add(&message) {
-                tracing::warn!(
-                    "Message was added to 'received' Cuckoofilter but some \
-                     other message was removed as a consequence: {}",
-                    e,
-                );
-            }
+            self.received.insert(&message);
             if self.config.subscribe_local_messages {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Message(message.clone())));
@@ -420,18 +451,8 @@ impl NetworkBehaviour for Behaviour {
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
-            // Note that this can result in false positives.
-            match self.received.test_and_add(&message) {
-                Ok(true) => {}         // Message  was added.
-                Ok(false) => continue, // Message already existed.
-                Err(e @ CuckooError::NotEnoughSpace) => {
-                    // Message added, but some other removed.
-                    tracing::warn!(
-                        "Message was added to 'received' Cuckoofilter but some \
-                         other message was removed as a consequence: {}",
-                        e,
-                    );
-                }
+            if !self.received.insert(&message) {
+                continue;
             }
 
             // Add the message to be dispatched to the user.
@@ -555,4 +576,23 @@ pub enum Event {
         /// The topic it has subscribed from.
         topic: Topic,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReceivedCache;
+
+    #[test]
+    fn received_cache_evicts_least_recently_seen_hash() {
+        let mut cache = ReceivedCache::with_capacity(2);
+
+        assert!(cache.insert(&1));
+        assert!(cache.insert(&2));
+        assert!(!cache.insert(&1));
+
+        assert!(cache.insert(&3));
+        assert_eq!(cache.message_hashes.len(), 2);
+        assert!(!cache.insert(&1));
+        assert!(cache.insert(&2));
+    }
 }
