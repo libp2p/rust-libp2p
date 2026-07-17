@@ -8,8 +8,8 @@ use either::Either;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm, NetworkBehaviour,
-    ToSwarm,
+    CloseConnection, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
+    NetworkBehaviour, ToSwarm,
     dial_opts::{DialOpts, PeerCondition},
     dummy,
 };
@@ -102,13 +102,20 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         event: <Handler<R> as ConnectionHandler>::ToBehaviour,
     ) {
         match event {
-            Either::Left(Either::Left(Ok(_))) => {}
-            Either::Left(Either::Left(Err(e))) => {
-                tracing::debug!("dial back error: {e:?}");
+            Either::Left(Either::Left(result)) => {
+                if let Err(e) = result {
+                    tracing::debug!("dial back error: {e:?}");
+                }
+                // The dial-back has completed and its outcome reaches the client over
+                // the client's own connection. Close the dial-back connection.
+                self.pending_events.push_back(ToSwarm::CloseConnection {
+                    peer_id,
+                    connection: CloseConnection::One(connection_id),
+                });
             }
             Either::Left(Either::Right(v)) => libp2p_core::util::unreachable(v),
             Either::Right(Either::Left(cmd)) => {
