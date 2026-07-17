@@ -37,6 +37,52 @@
 //! metadata.  Peers use control messages to broadcast and request known messages and
 //! subscribe/unsubscribe from topics in the mesh network.
 //!
+//! # Production hardening
+//!
+//! [`Behaviour::new`] uses the default [`subscription_filter::AllowAllSubscriptionFilter`],
+//! which imposes no upper bound on the number of subscription entries decoded per inbound
+//! RPC frame or on the number of topics a single peer can accumulate in its per-peer set.
+//! This is appropriate for development, integration tests, and closed networks where every
+//! connected peer is trusted, but it should not be used for deployments that accept
+//! connections from untrusted peers: a single attacker peer can repeatedly subscribe to
+//! unique topics and drive the receiver's gossipsub state to grow linearly for the
+//! lifetime of its connection.
+//!
+//! Production deployments should construct [`Behaviour`] with an explicit
+//! [`subscription_filter::TopicSubscriptionFilter`] via
+//! [`Behaviour::new_with_subscription_filter_and_transform`] (or the
+//! `_with_subscription_filter` variant). Two implementations are provided:
+//!
+//! - [`subscription_filter::WhitelistSubscriptionFilter`] — accepts only a fixed, pre-declared
+//!   topic set. Recommended when the full topic set is known at construction time (for example,
+//!   Ethereum 2 consensus clients enumerate the `/eth2/<fork-digest>/<topic>/ssz_snappy` strings
+//!   before peering).
+//! - [`subscription_filter::MaxCountSubscriptionFilter`] — wraps an inner filter with per-RPC and
+//!   per-peer accumulation caps. Recommended when the topic set is open-ended; choose the cap based
+//!   on the legitimate topic fan-out of the application plus a comfort margin.
+//!
+//! A minimal hardened constructor:
+//!
+//! ```rust,ignore
+//! use libp2p::gossipsub::{
+//!     AllowAllSubscriptionFilter, Behaviour, ConfigBuilder, IdentityTransform,
+//!     MaxCountSubscriptionFilter, MessageAuthenticity,
+//! };
+//!
+//! let filter = MaxCountSubscriptionFilter {
+//!     filter: AllowAllSubscriptionFilter::default(),
+//!     max_subscribed_topics: 16_384,
+//!     max_subscriptions_per_request: 500,
+//! };
+//! let behaviour: Behaviour<IdentityTransform, MaxCountSubscriptionFilter<_>> =
+//!     Behaviour::new_with_subscription_filter_and_transform(
+//!         MessageAuthenticity::Signed(local_key),
+//!         ConfigBuilder::default().build()?,
+//!         filter,
+//!         IdentityTransform,
+//!     )?;
+//! ```
+//!
 //! # Important Discrepancies
 //!
 //! This section outlines the current implementation's potential discrepancies from that of other
