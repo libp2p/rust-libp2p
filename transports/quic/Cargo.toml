@@ -16,6 +16,7 @@ libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
 quinn = { version = "0.11.9", default-features = false, features = ["rustls", "futures-io"] }
+quinn-proto = { version = "0.11" }
 rand = { workspace = true }
 rustls = { version = "0.23.40", default-features = false }
 thiserror = { workspace = true }
