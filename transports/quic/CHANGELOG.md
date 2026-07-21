@@ -3,6 +3,10 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+## 0.13.1
+- Handle certificate validation failures in post-handshake upgrade path instead of panicking.
+  See [GHSA-5hq8-qhww-jm7q](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-5hq8-qhww-jm7q)
+
 ## 0.13.0
 
 - Remove `async-std` support.
