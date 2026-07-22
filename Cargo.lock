@@ -184,7 +184,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "time",
 ]
 
@@ -2034,7 +2034,7 @@ dependencies = [
  "ipnet",
  "jni 0.22.4",
  "rand 0.10.0",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tinyvec",
  "tokio",
  "tracing",
@@ -2055,7 +2055,7 @@ dependencies = [
  "prefix-trie",
  "rand 0.10.0",
  "ring",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tinyvec",
  "tracing",
  "url",
@@ -2082,7 +2082,7 @@ dependencies = [
  "resolv-conf",
  "smallvec",
  "system-configuration 0.7.0",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
 ]
@@ -2719,7 +2719,7 @@ dependencies = [
  "jni-sys 0.4.1",
  "log",
  "simd_cesu8",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "walkdir",
  "windows-link 0.2.1",
 ]
@@ -2904,7 +2904,7 @@ dependencies = [
  "multiaddr",
  "pin-project",
  "rw-stream-sink",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing-subscriber",
 ]
@@ -2940,7 +2940,7 @@ dependencies = [
  "prost-codec",
  "rand 0.8.6",
  "rand_core 0.6.4",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2982,7 +2982,7 @@ dependencies = [
  "prost 0.14.4",
  "rand 0.8.6",
  "rw-stream-sink",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "unsigned-varint",
@@ -3010,7 +3010,7 @@ dependencies = [
  "libp2p-yamux",
  "prost 0.14.4",
  "prost-codec",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3049,7 +3049,7 @@ dependencies = [
  "prost-codec",
  "rand 0.8.6",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
 ]
 
@@ -3103,7 +3103,7 @@ dependencies = [
  "prost 0.14.4",
  "prost-codec",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3131,7 +3131,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
  "zeroize",
 ]
@@ -3161,7 +3161,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3275,7 +3275,7 @@ dependencies = [
  "rand 0.8.6",
  "snow",
  "static_assertions",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
  "tracing-subscriber",
  "x25519-dalek",
@@ -3315,7 +3315,7 @@ dependencies = [
  "libp2p-yamux",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3398,7 +3398,7 @@ dependencies = [
  "ring",
  "rustls",
  "socket2 0.6.5",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3426,7 +3426,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.6",
  "static_assertions",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3450,7 +3450,7 @@ dependencies = [
  "prost 0.14.4",
  "prost-codec",
  "rand 0.8.6",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3599,7 +3599,7 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-webpki",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "x509-parser 0.18.1",
  "yasna 0.6.0",
@@ -3647,7 +3647,7 @@ dependencies = [
  "rand 0.8.6",
  "rcgen",
  "stun",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3689,7 +3689,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-webrtc-utils",
  "send_wrapper 0.6.0",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3712,7 +3712,7 @@ dependencies = [
  "rcgen",
  "rw-stream-sink",
  "soketto",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "url",
@@ -3731,7 +3731,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-yamux",
  "send_wrapper 0.6.0",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
  "wasm-bindgen",
  "web-sys",
@@ -3750,7 +3750,7 @@ dependencies = [
  "multibase",
  "multihash",
  "send_wrapper 0.6.0",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3764,7 +3764,7 @@ dependencies = [
  "futures",
  "libp2p-core",
  "libp2p-muxer-test-harness",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "yamux",
@@ -4214,7 +4214,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-sys",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -4863,7 +4863,7 @@ dependencies = [
  "futures",
  "prost 0.14.4",
  "quickcheck-ext",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "unsigned-varint",
 ]
 
@@ -4926,7 +4926,7 @@ dependencies = [
  "prost-reflect",
  "prost-types",
  "protox-parse",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -4938,7 +4938,7 @@ dependencies = [
  "logos 0.15.1",
  "miette",
  "prost-types",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -4995,7 +4995,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2 0.6.5",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "web-time",
@@ -5018,7 +5018,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tinyvec",
  "tracing",
  "web-time",
@@ -5266,7 +5266,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.15",
  "libredox",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -6360,7 +6360,7 @@ dependencies = [
  "stringmatch",
  "tar",
  "thirtyfour-macros",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "tokio",
  "tracing",
  "url",
@@ -6389,11 +6389,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.18"
+version = "2.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
+checksum = "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
 dependencies = [
- "thiserror-impl 2.0.18",
+ "thiserror-impl 2.0.19",
 ]
 
 [[package]]
@@ -6409,13 +6409,13 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.18"
+version = "2.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
+checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -8165,7 +8165,7 @@ dependencies = [
  "nom",
  "oid-registry 0.8.1",
  "rusticata-macros",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "time",
 ]
 
