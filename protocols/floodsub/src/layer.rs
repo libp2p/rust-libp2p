@@ -50,8 +50,8 @@ use crate::{
     topic::Topic,
 };
 
-// Match the approximate maximum entry count of the previous cuckoo filter.
-const RECEIVED_CACHE_CAPACITY: usize = 1 << 20;
+// Keep the memory footprint close to the previous 1 MiB cuckoo filter.
+const RECEIVED_CACHE_CAPACITY: usize = 1 << 16;
 
 struct ReceivedCache {
     message_hashes: LinkedHashSet<u64>,
