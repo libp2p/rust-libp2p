@@ -65,7 +65,7 @@ where
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
             inbound: FuturesSet::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 10,
             ),
             rng,
@@ -273,8 +273,9 @@ where
         }
     };
     all_addrs.clone_from(&addrs);
-    let idx = 0;
-    let addr = addrs.pop().ok_or(HandleFail::DialRefused)?;
+    let idx = addrs.len().checked_sub(1).ok_or(HandleFail::DialRefused)?;
+    let addr = addrs.remove(idx);
+
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {
