@@ -19,11 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{
-        VecDeque,
-        hash_map::{DefaultHasher, HashMap},
-    },
-    hash::{Hash, Hasher},
+    collections::{HashMap, VecDeque},
     iter,
     task::{Context, Poll},
 };
@@ -50,34 +46,8 @@ use crate::{
     topic::Topic,
 };
 
-// Keep the memory footprint close to the previous 1 MiB cuckoo filter.
+// Limit the number of received messages retained for deduplication.
 const RECEIVED_CACHE_CAPACITY: usize = 1 << 16;
-
-struct ReceivedCache {
-    message_hashes: LruCache<u64, ()>,
-}
-
-impl ReceivedCache {
-    fn new() -> Self {
-        Self::with_capacity(RECEIVED_CACHE_CAPACITY)
-    }
-
-    fn with_capacity(capacity: usize) -> Self {
-        debug_assert!(capacity > 0);
-
-        Self {
-            message_hashes: LruCache::new(capacity),
-        }
-    }
-
-    /// Returns `true` if the value was not present in the cache.
-    fn insert<T: Hash>(&mut self, value: &T) -> bool {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-
-        self.message_hashes.insert(hasher.finish(), ()).is_none()
-    }
-}
 
 #[deprecated = "Use `Behaviour` instead."]
 pub type Floodsub = Behaviour;
@@ -101,9 +71,9 @@ pub struct Behaviour {
     // erroneously.
     subscribed_topics: SmallVec<[Topic; 16]>,
 
-    // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
-    // we don't dispatch the same message twice if we receive it twice on the network.
-    received: ReceivedCache,
+    // We keep track of the messages we received so that we don't dispatch the same message twice
+    // if we receive it twice on the network.
+    received: LruCache<FloodsubMessage, ()>,
 }
 
 impl Behaviour {
@@ -120,7 +90,7 @@ impl Behaviour {
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
-            received: ReceivedCache::new(),
+            received: LruCache::new(RECEIVED_CACHE_CAPACITY),
         }
     }
 
@@ -265,7 +235,7 @@ impl Behaviour {
             .iter()
             .any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
-            self.received.insert(&message);
+            self.received.insert(message.clone(), ());
             if self.config.subscribe_local_messages {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Message(message.clone())));
@@ -444,7 +414,7 @@ impl NetworkBehaviour for Behaviour {
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
-            if !self.received.insert(&message) {
+            if self.received.insert(message.clone(), ()).is_some() {
                 continue;
             }
 
@@ -569,23 +539,4 @@ pub enum Event {
         /// The topic it has subscribed from.
         topic: Topic,
     },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ReceivedCache;
-
-    #[test]
-    fn received_cache_evicts_least_recently_seen_hash() {
-        let mut cache = ReceivedCache::with_capacity(2);
-
-        assert!(cache.insert(&1));
-        assert!(cache.insert(&2));
-        assert!(!cache.insert(&1));
-
-        assert!(cache.insert(&3));
-        assert_eq!(cache.message_hashes.len(), 2);
-        assert!(!cache.insert(&1));
-        assert!(cache.insert(&2));
-    }
 }
