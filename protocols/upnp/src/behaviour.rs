@@ -155,6 +155,24 @@ pub enum Event {
     NonRoutableGateway,
 }
 
+struct Config {
+    /// If true, only private IPv4 addresses are eligible for UPnP mapping.
+    /// Set to false in tests that use loopback or other non-private addresses.
+    require_private_address: bool,
+    /// If true, the discovered gateway must have a globally routable external address.
+    /// Set to false in tests that run without real UPnP infrastructure.
+    require_routable_gateway: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            require_private_address: true,
+            require_routable_gateway: true,
+        }
+    }
+}
+
 /// A [`NetworkBehaviour`] for UPnP port mapping. Automatically tries to map the external port
 /// to an internal address on the gateway on a [`FromSwarm::NewListenAddr`].
 pub struct Behaviour {
@@ -174,16 +192,54 @@ pub struct Behaviour {
 
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<Event>,
+
+    /// Behaviour configuration.
+    config: Config,
 }
 
 impl Default for Behaviour {
     fn default() -> Self {
         Self {
-            state: GatewayState::Searching(crate::tokio::search_gateway()),
+            state: GatewayState::Searching(crate::tokio::search_gateway(None, None)),
             mappings: Default::default(),
             add_requests: Default::default(),
             remove_requests: Default::default(),
             pending_events: VecDeque::new(),
+            config: Default::default(),
+        }
+    }
+}
+
+impl Behaviour {
+    /// Creates a new `Behaviour` for integration tests.
+    ///
+    /// The gateway search is directed at `discovery_addr` instead of the default SSDP address.
+    pub fn new_for_integration_tests(discovery_addr: SocketAddr) -> Self {
+        Self {
+            state: GatewayState::Searching(crate::tokio::search_gateway(
+                Some(Duration::from_secs(1)),
+                Some(discovery_addr),
+            )),
+            config: Config {
+                require_private_address: false,
+                require_routable_gateway: false,
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Creates a new `Behaviour` for integration tests, keeping the gateway routability check
+    /// enabled.
+    ///
+    /// Like [`Behaviour::new_for_integration_tests`], but uses the default configuration so that
+    /// a gateway with a non-routable external address triggers [`Event::NonRoutableGateway`].
+    pub fn new_for_integration_tests_with_routability_check(discovery_addr: SocketAddr) -> Self {
+        Self {
+            state: GatewayState::Searching(crate::tokio::search_gateway(
+                Some(Duration::from_secs(1)),
+                Some(discovery_addr),
+            )),
+            ..Default::default()
         }
     }
 }
@@ -220,8 +276,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(multiaddr.clone())
-                else {
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(
+                    multiaddr.clone(),
+                    self.config.require_private_address,
+                ) else {
                     tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
                     return;
                 };
@@ -286,8 +344,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(multiaddr.clone())
-                else {
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(
+                    multiaddr.clone(),
+                    self.config.require_private_address,
+                ) else {
                     tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
                     return;
                 };
@@ -354,7 +414,9 @@ impl NetworkBehaviour for Behaviour {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(Ok(result)) => match result {
                         Ok(mut gateway) => {
-                            if !is_addr_global(gateway.external_addr) {
+                            if self.config.require_routable_gateway
+                                && !is_addr_global(gateway.external_addr)
+                            {
                                 self.state =
                                     GatewayState::NonRoutableGateway(gateway.external_addr);
                                 tracing::debug!(
@@ -645,27 +707,33 @@ fn renew_mappings(
 ///
 /// Fails if the given [`Multiaddr`] does not begin with an IP
 /// protocol encapsulating a TCP or UDP port.
+///
+/// When `test_mode` is true, the private IP check is skipped to allow testing with
+/// non-private addresses like 127.0.0.1.
 fn multiaddr_to_socketaddr_protocol(
     addr: Multiaddr,
+    require_private_address: bool,
 ) -> Result<(SocketAddr, PortMappingProtocol), ()> {
     let mut iter = addr.into_iter();
     match iter.next() {
         // Idg only supports Ipv4.
-        Some(multiaddr::Protocol::Ip4(ipv4)) if ipv4.is_private() => match iter.next() {
-            Some(multiaddr::Protocol::Tcp(port)) => {
-                return Ok((
-                    SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
-                    PortMappingProtocol::TCP,
-                ));
+        Some(multiaddr::Protocol::Ip4(ipv4)) if !require_private_address || ipv4.is_private() => {
+            match iter.next() {
+                Some(multiaddr::Protocol::Tcp(port)) => {
+                    return Ok((
+                        SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
+                        PortMappingProtocol::TCP,
+                    ));
+                }
+                Some(multiaddr::Protocol::Udp(port)) => {
+                    return Ok((
+                        SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
+                        PortMappingProtocol::UDP,
+                    ));
+                }
+                _ => {}
             }
-            Some(multiaddr::Protocol::Udp(port)) => {
-                return Ok((
-                    SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
-                    PortMappingProtocol::UDP,
-                ));
-            }
-            _ => {}
-        },
+        }
         _ => {}
     }
     Err(())
@@ -698,6 +766,7 @@ mod tests {
             add_requests: Default::default(),
             remove_requests: Default::default(),
             pending_events: VecDeque::new(),
+            config: Default::default(),
         };
         (behaviour, event_tx, req_rx)
     }
