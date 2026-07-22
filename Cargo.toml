@@ -3,6 +3,7 @@ members = [
     "core",
     "examples/autonat",
     "examples/autonatv2",
+    "examples/autotls",
     "examples/browser-webrtc",
     "examples/chat",
     "examples/dcutr",
@@ -37,6 +38,7 @@ members = [
     "muxers/test-harness",
     "muxers/yamux",
     "protocols/autonat",
+    "protocols/autotls",
     "protocols/dcutr",
     "protocols/floodsub",
     "protocols/gossipsub",
@@ -78,6 +80,7 @@ edition = "2024"
 libp2p = { version = "0.57.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.7.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.16.0", path = "protocols/autonat" }
+libp2p-autotls = { version = "0.1.0", path = "protocols/autotls" }
 libp2p-connection-limits = { version = "0.7.0", path = "misc/connection-limits" }
 libp2p-core = { version = "0.44.0", path = "core" }
 libp2p-dcutr = { version = "0.15.0", path = "protocols/dcutr" }
