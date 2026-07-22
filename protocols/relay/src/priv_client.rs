@@ -41,7 +41,7 @@ use futures::{
     stream::StreamExt,
 };
 use libp2p_core::{
-    Endpoint, Multiaddr,
+    Endpoint, Multiaddr, MultiaddrExt,
     multiaddr::Protocol,
     transport::{ListenerId, PortUse},
 };
@@ -56,7 +56,6 @@ use libp2p_swarm::{
 use transport::Transport;
 
 use crate::{
-    multiaddr_ext::MultiaddrExt,
     priv_client::handler::Handler,
     protocol::{self, inbound_stop},
 };

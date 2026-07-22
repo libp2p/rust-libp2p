@@ -31,7 +31,13 @@ cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 anyhow = "1.0.102"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 rand = { workspace = true }
+libp2p-identify = { workspace = true }
+libp2p-plaintext = { workspace = true }
+libp2p-relay = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
+libp2p-yamux = { workspace = true }
 futures_ringbuf = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

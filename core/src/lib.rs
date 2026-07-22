@@ -46,6 +46,7 @@ pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 pub mod connection;
 pub mod either;
+pub mod multiaddr_ext;
 pub mod muxing;
 pub mod peer_record;
 pub mod signed_envelope;
@@ -55,6 +56,7 @@ pub mod upgrade;
 pub use connection::{ConnectedPoint, Endpoint};
 pub use libp2p_identity::PeerId;
 pub use multiaddr::Multiaddr;
+pub use multiaddr_ext::MultiaddrExt;
 pub use multihash;
 pub use muxing::StreamMuxer;
 pub use peer_record::PeerRecord;

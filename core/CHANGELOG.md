@@ -1,5 +1,9 @@
 ## 0.44.0
 
+- Add `MultiaddrExt::is_relayed()` for checking whether a `Multiaddr` is relayed
+  (contains a `p2p-circuit`).
+  See [PR 6501](https://github.com/libp2p/rust-libp2p/pull/6501).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

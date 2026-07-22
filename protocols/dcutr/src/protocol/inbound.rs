@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::Framed;
 use futures::prelude::*;
-use libp2p_core::{Multiaddr, multiaddr::Protocol};
+use libp2p_core::{Multiaddr, MultiaddrExt};
 use libp2p_swarm::Stream;
 use thiserror::Error;
 
@@ -57,7 +57,7 @@ pub(crate) async fn handshake(
         })
         // Filter out relayed addresses.
         .filter(|a| {
-            if a.iter().any(|p| p == Protocol::P2pCircuit) {
+            if a.is_relayed() {
                 tracing::debug!(address=%a, "Dropping relayed address");
                 false
             } else {

@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::PortUse,
-};
+use crate::{multiaddr::Multiaddr, multiaddr_ext::MultiaddrExt, transport::PortUse};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -135,8 +132,7 @@ impl ConnectedPoint {
             ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
         }
-        .iter()
-        .any(|p| p == Protocol::P2pCircuit)
+        .is_relayed()
     }
 
     /// Returns the address of the remote stored in this struct.

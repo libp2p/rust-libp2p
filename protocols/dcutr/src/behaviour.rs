@@ -29,7 +29,8 @@ use std::{
 use either::Either;
 use hashlink::LruCache;
 use libp2p_core::{
-    Endpoint, Multiaddr, connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse,
+    Endpoint, Multiaddr, MultiaddrExt, connection::ConnectedPoint, multiaddr::Protocol,
+    transport::PortUse,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -177,7 +178,7 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        if is_relayed(local_addr) {
+        if local_addr.is_relayed() {
             let connected_point = ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
                 send_back_addr: remote_addr.clone(),
@@ -212,7 +213,7 @@ impl NetworkBehaviour for Behaviour {
         role_override: Endpoint,
         port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        if is_relayed(addr) {
+        if addr.is_relayed() {
             return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Dialer {
                     address: addr.clone(),
@@ -367,7 +368,7 @@ impl Candidates {
     }
 
     fn add(&mut self, mut address: Multiaddr) {
-        if is_relayed(&address) {
+        if address.is_relayed() {
             return;
         }
 
@@ -381,8 +382,4 @@ impl Candidates {
     fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
         self.inner.iter().map(|(a, _)| a)
     }
-}
-
-fn is_relayed(addr: &Multiaddr) -> bool {
-    addr.iter().any(|p| p == Protocol::P2pCircuit)
 }
