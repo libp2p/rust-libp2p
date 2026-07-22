@@ -27,7 +27,7 @@ libp2p-noise = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 mime_guess = "2.0"
-redis = { version = "0.24.0", default-features = false, features = [
+redis = { version = "0.24", default-features = false, features = [
     "tokio-comp",
 ] }
 rust-embed = "8.11"
@@ -44,10 +44,10 @@ libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-webrtc-websys = { workspace = true }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { workspace = true}
-wasm-logger = { version = "0.2.0" }
+wasm-logger = { version = "0.2" }
 web-time = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }
-console_error_panic_hook = { version = "0.1.7" }
+console_error_panic_hook = { version = "0.1" }
 futures-timer = { workspace = true }
 
 [lints]
