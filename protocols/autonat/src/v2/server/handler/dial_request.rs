@@ -149,7 +149,6 @@ where
     }
 }
 
-#[derive(Debug)]
 enum HandleFail {
     InternalError(usize),
     RequestRejected,
@@ -263,7 +262,7 @@ async fn handle_request_internal<I>(
 where
     I: AsyncRead + AsyncWrite + Unpin,
 {
-    let DialRequest { addrs, nonce } = match coder
+    let DialRequest { mut addrs, nonce } = match coder
         .next()
         .await
         .map_err(|_| HandleFail::InternalError(0))?
@@ -274,7 +273,9 @@ where
         }
     };
     all_addrs.clone_from(&addrs);
-    let (idx, addr) = select_dial_target(addrs, |_| true)?;
+    let idx = addrs.len().checked_sub(1).ok_or(HandleFail::DialRefused)?;
+    let addr = addrs.remove(idx);
+
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {
@@ -326,76 +327,4 @@ where
         addr_idx: idx,
         dial_status: DialStatus::Ok,
     })
-}
-
-fn select_dial_target(
-    addrs: Vec<Multiaddr>,
-    mut is_dialable: impl FnMut(&Multiaddr) -> bool,
-) -> Result<(usize, Multiaddr), HandleFail> {
-    addrs
-        .into_iter()
-        .enumerate()
-        .find(|(_, addr)| is_dialable(addr))
-        .ok_or(HandleFail::DialRefused)
-}
-
-#[cfg(test)]
-mod tests {
-    use libp2p_core::multiaddr::Protocol;
-
-    use super::*;
-
-    fn tcp_addr(port: u16) -> Multiaddr {
-        Multiaddr::empty().with(Protocol::Tcp(port))
-    }
-
-    #[test]
-    fn selects_first_of_multiple_addresses() {
-        let first = tcp_addr(1000);
-        let second = tcp_addr(2000);
-
-        let (idx, addr) = select_dial_target(vec![first.clone(), second], |_| true).unwrap();
-
-        assert_eq!(idx, 0);
-        assert_eq!(addr, first);
-    }
-
-    #[test]
-    fn preserves_selected_nonzero_index() {
-        let first = tcp_addr(1000);
-        let second = tcp_addr(2000);
-        let third = tcp_addr(3000);
-
-        let (idx, addr) =
-            select_dial_target(vec![first, second, third.clone()], |addr| addr == &third).unwrap();
-
-        assert_eq!(idx, 2);
-        assert_eq!(addr, third);
-    }
-
-    #[test]
-    fn single_address_gets_index_zero() {
-        let addr = tcp_addr(3000);
-
-        let (idx, selected) = select_dial_target(vec![addr.clone()], |_| true).unwrap();
-
-        assert_eq!(idx, 0);
-        assert_eq!(selected, addr);
-    }
-
-    #[test]
-    fn no_dialable_address_returns_dial_refused() {
-        assert!(matches!(
-            select_dial_target(vec![tcp_addr(1000), tcp_addr(2000)], |_| false),
-            Err(HandleFail::DialRefused)
-        ));
-    }
-
-    #[test]
-    fn empty_list_returns_dial_refused() {
-        assert!(matches!(
-            select_dial_target(vec![], |_| true),
-            Err(HandleFail::DialRefused)
-        ));
-    }
 }
