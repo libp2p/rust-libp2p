@@ -30,7 +30,7 @@ use std::{
 
 use bytes::Bytes;
 use fnv::FnvHashSet;
-use hashlink::LinkedHashSet;
+use hashlink::LruCache;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -54,8 +54,7 @@ use crate::{
 const RECEIVED_CACHE_CAPACITY: usize = 1 << 16;
 
 struct ReceivedCache {
-    message_hashes: LinkedHashSet<u64>,
-    capacity: usize,
+    message_hashes: LruCache<u64, ()>,
 }
 
 impl ReceivedCache {
@@ -67,8 +66,7 @@ impl ReceivedCache {
         debug_assert!(capacity > 0);
 
         Self {
-            message_hashes: LinkedHashSet::new(),
-            capacity,
+            message_hashes: LruCache::new(capacity),
         }
     }
 
@@ -77,12 +75,7 @@ impl ReceivedCache {
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
 
-        let is_new = self.message_hashes.insert(hasher.finish());
-        if self.message_hashes.len() > self.capacity {
-            self.message_hashes.pop_front();
-        }
-
-        is_new
+        self.message_hashes.insert(hasher.finish(), ()).is_none()
     }
 }
 
