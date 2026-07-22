@@ -59,7 +59,7 @@ use crate::{
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =
-    BehaviourTestBuilder<IdentityTransform, AllowAllSubscriptionFilter>;
+    BehaviourTestBuilder<IdentityTransform, MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>>;
 
 /// A builder for creating test gossipsub networks with configurable peers and topics.
 ///

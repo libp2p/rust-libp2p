@@ -94,6 +94,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [beetle](https://github.com/n0-computer/beetle) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [Neptune](https://github.com/Neptune-Crypto/neptune-core) - post-quantum, scalable, and private blockchain with zk-STARKs on Layer-1.
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [qaul قول](https://github.com/qaul/qaul.net) - Internet Independent Wireless Mesh Communication App
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
@@ -107,3 +108,4 @@ used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
 - [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.
 - [Fungi](https://github.com/enbop/fungi) - A platform built for seamless multi-device integration.
+- [Kinetic](https://github.com/saifmukhtar/kinetic) - Stateless, Sybil-resistant naming system with permanent identities using VDFs and drand.
