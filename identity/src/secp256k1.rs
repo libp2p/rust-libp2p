@@ -24,9 +24,9 @@ use core::{cmp, fmt, hash};
 
 use asn1_der::typed::{DerDecodable, Sequence};
 use k256::{
+    ProjectivePoint,
     ecdsa::Signature,
     sha2::{Digest as ShaDigestTrait, Sha256},
-    ProjectivePoint,
 };
 use zeroize::Zeroize;
 
