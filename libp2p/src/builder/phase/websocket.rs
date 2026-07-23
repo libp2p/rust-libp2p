@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+use libp2p_core::Transport;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_core::Transport;
 #[cfg(any(
     all(not(target_arch = "wasm32"), feature = "websocket"),
     feature = "relay"
@@ -173,7 +173,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider> SwarmBuilder<Provider, Webs
         MuxError: std::error::Error + Send + Sync + 'static,
     <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
+{
         self.without_websocket()
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }

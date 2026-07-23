@@ -1,20 +1,19 @@
 use std::{str::FromStr, time::Duration};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use futures::{FutureExt, StreamExt};
 use libp2p::{
-    identify,
+    Multiaddr, identify,
     identity::Keypair,
     ping,
     swarm::{NetworkBehaviour, SwarmEvent},
-    Multiaddr,
 };
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 mod arch;
 
-use arch::{build_swarm, init_logger, Instant, RedisClient};
+use arch::{Instant, RedisClient, build_swarm, init_logger};
 
 pub async fn run_test(
     transport: &str,

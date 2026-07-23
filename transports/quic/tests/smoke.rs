@@ -11,20 +11,21 @@ use std::{
 };
 
 use futures::{
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
     channel::{mpsc, oneshot},
     future,
-    future::{poll_fn, BoxFuture, Either},
+    future::{BoxFuture, Either, poll_fn},
     stream::StreamExt,
-    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
 };
 use futures_timer::Delay;
 use libp2p_core::{
+    Endpoint, Multiaddr, Transport,
     multiaddr::Protocol,
     muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
     transport::{
         Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
     },
-    upgrade, Endpoint, Multiaddr, Transport,
+    upgrade,
 };
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
@@ -201,7 +202,7 @@ async fn wrapped_with_delay() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 #[ignore] // Transport currently does not validate PeerId.
-          // Enable once we make use of PeerId validation in rustls.
+// Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 
@@ -444,10 +445,10 @@ async fn test_local_listener_reuse() {
         let ev = a_transport.next().await.unwrap();
         let listen_addr = ev.into_new_address().unwrap();
         for proto in listen_addr.iter() {
-            if let Protocol::Ip4(ip4) = proto {
-                if ip4.is_loopback() {
-                    break 'outer listen_addr;
-                }
+            if let Protocol::Ip4(ip4) = proto
+                && ip4.is_loopback()
+            {
+                break 'outer listen_addr;
             }
         }
     };
@@ -499,17 +500,17 @@ async fn build_streams<P: Provider + Spawn>() -> (SubstreamBox, SubstreamBox) {
             let _ = conn_a.poll_unpin(cx);
             let _ = b_transport.poll_next_unpin(cx);
             let _ = conn_b.poll_unpin(cx);
-            if stream_a_tx.is_some() {
-                if let Poll::Ready(stream) = conn_a.poll_outbound_unpin(cx) {
-                    let tx = stream_a_tx.take().unwrap();
-                    tx.send(stream.unwrap()).unwrap();
-                }
+            if stream_a_tx.is_some()
+                && let Poll::Ready(stream) = conn_a.poll_outbound_unpin(cx)
+            {
+                let tx = stream_a_tx.take().unwrap();
+                tx.send(stream.unwrap()).unwrap();
             }
-            if stream_b_tx.is_some() {
-                if let Poll::Ready(stream) = conn_b.poll_inbound_unpin(cx) {
-                    let tx = stream_b_tx.take().unwrap();
-                    tx.send(stream.unwrap()).unwrap();
-                }
+            if stream_b_tx.is_some()
+                && let Poll::Ready(stream) = conn_b.poll_inbound_unpin(cx)
+            {
+                let tx = stream_b_tx.take().unwrap();
+                tx.send(stream.unwrap()).unwrap();
             }
             Poll::Pending
         })

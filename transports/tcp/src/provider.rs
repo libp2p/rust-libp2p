@@ -30,9 +30,9 @@ use std::{
 };
 
 use futures::{
+    Stream,
     future::BoxFuture,
     io::{AsyncRead, AsyncWrite},
-    Stream,
 };
 use if_watch::{IfEvent, IpNet};
 

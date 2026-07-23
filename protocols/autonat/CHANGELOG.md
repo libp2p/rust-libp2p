@@ -1,3 +1,21 @@
+## 0.16.0
+
+- Fix AutoNAT v2 server preserving the selected address index for multi-address `DialRequest`s.
+  See [PR 6514](https://github.com/libp2p/rust-libp2p/pull/6514).
+
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
+
+- refactor: `Codec` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
 ## 0.15.0
 
 - Fix infinity loop on wrong `nonce` when performing `dial_back`.

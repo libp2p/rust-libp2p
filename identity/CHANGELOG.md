@@ -1,3 +1,8 @@
+## 0.2.14
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
 ## 0.2.13
 
 - Turn the `quick-protobuf` dependency optional to only the features which require it.

@@ -20,8 +20,8 @@
 
 use std::time::Duration;
 
-use futures::{stream::FuturesUnordered, StreamExt};
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use futures::{StreamExt, stream::FuturesUnordered};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
@@ -45,11 +45,13 @@ async fn given_successful_registration_then_successful_discovery() {
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            [rendezvous::client::Event::Registered {
-                rendezvous_node,
-                ttl,
-                namespace: register_node_namespace,
-            }],
+            [
+                rendezvous::client::Event::Registered {
+                    rendezvous_node,
+                    ttl,
+                    namespace: register_node_namespace,
+                },
+            ],
             [rendezvous::server::Event::PeerRegistered { peer, registration }],
         ) => {
             assert_eq!(&peer, alice.local_peer_id());
@@ -69,11 +71,13 @@ async fn given_successful_registration_then_successful_discovery() {
             [rendezvous::client::Event::Discovered { registrations, .. }],
             [rendezvous::server::Event::DiscoverServed { .. }],
         ) => match registrations.as_slice() {
-            [rendezvous::Registration {
-                namespace: registered_namespace,
-                record,
-                ttl,
-            }] => {
+            [
+                rendezvous::Registration {
+                    namespace: registered_namespace,
+                    record,
+                    ttl,
+                },
+            ] => {
                 assert_eq!(*ttl, rendezvous::DEFAULT_TTL);
                 assert_eq!(record.peer_id(), *alice.local_peer_id());
                 assert_eq!(*registered_namespace, namespace);
@@ -324,9 +328,11 @@ async fn eve_cannot_register() {
 
     match libp2p_swarm_test::drive(&mut eve, &mut robert).await {
         (
-            [rendezvous::client::Event::RegisterFailed {
-                error: err_code, ..
-            }],
+            [
+                rendezvous::client::Event::RegisterFailed {
+                    error: err_code, ..
+                },
+            ],
             [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(err_code, rendezvous::ErrorCode::NotAuthorized);

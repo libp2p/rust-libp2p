@@ -25,7 +25,7 @@ use std::time::Duration;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
-use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
+use libp2p_swarm::{DialError, Swarm, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
 use util::*;
 

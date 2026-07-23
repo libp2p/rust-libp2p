@@ -20,7 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 use std::net::{IpAddr, SocketAddr};
 
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use rand::{Rng, distributions::Alphanumeric, thread_rng};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 

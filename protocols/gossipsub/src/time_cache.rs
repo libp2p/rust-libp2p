@@ -22,11 +22,11 @@
 
 use std::{
     collections::{
+        VecDeque,
         hash_map::{
             self,
             Entry::{Occupied, Vacant},
         },
-        VecDeque,
     },
     time::Duration,
 };
@@ -127,10 +127,10 @@ where
                 self.list.push_front(element);
                 break;
             }
-            if let Occupied(entry) = self.map.entry(element.element.clone()) {
-                if entry.get().expires <= now {
-                    entry.remove();
-                }
+            if let Occupied(entry) = self.map.entry(element.element.clone())
+                && entry.get().expires <= now
+            {
+                entry.remove();
             }
         }
     }
@@ -140,11 +140,17 @@ where
         self.remove_expired_keys(now);
         match self.map.entry(key) {
             Occupied(entry) => Entry::Occupied(OccupiedEntry { entry }),
-            Vacant(entry) => Entry::Vacant(VacantEntry {
-                expiration: now + self.ttl,
-                entry,
-                list: &mut self.list,
-            }),
+            Vacant(entry) => {
+                let expiration = now.checked_add(self.ttl).unwrap_or_else(|| {
+                    tracing::error!("invalid time cache ttl");
+                    now
+                });
+                Entry::Vacant(VacantEntry {
+                    expiration,
+                    entry,
+                    list: &mut self.list,
+                })
+            }
         }
     }
 

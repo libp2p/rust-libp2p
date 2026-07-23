@@ -33,9 +33,9 @@ use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
+    Transport,
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-    Transport,
 };
 use parking_lot::Mutex;
 use soketto::{
@@ -261,7 +261,7 @@ where
         let mut addr = match parse_ws_dial_addr(addr) {
             Ok(addr) => addr,
             Err(Error::InvalidMultiaddr(a)) => {
-                return Err(TransportError::MultiaddrNotSupported(a))
+                return Err(TransportError::MultiaddrNotSupported(a));
             }
             Err(e) => return Err(TransportError::Other(e)),
         };
@@ -521,7 +521,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) => {
-                break (format!("{h}:{port}"), tls::dns_name_ref(&h)?)
+                break (format!("{h}:{port}"), tls::dns_name_ref(&h)?);
             }
             (Some(_), Some(p)) => {
                 ip = Some(p);

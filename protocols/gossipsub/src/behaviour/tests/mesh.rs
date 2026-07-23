@@ -28,11 +28,11 @@ use libp2p_swarm::ConnectionId;
 
 use super::DefaultBehaviourTestBuilder;
 use crate::{
-    behaviour::{get_random_peers, Behaviour, MessageAuthenticity},
+    IdentTopic as Topic,
+    behaviour::{Behaviour, MessageAuthenticity, get_random_peers},
     config::{Config, ConfigBuilder, ValidationMode},
     queue::Queue,
     types::{PeerDetails, PeerKind},
-    IdentTopic as Topic,
 };
 
 /// Tests the mesh maintenance addition
@@ -148,6 +148,7 @@ fn test_get_random_peers() {
             peer_id,
             PeerDetails {
                 kind: PeerKind::Gossipsubv1_1,
+                extensions: None,
                 connections: vec![ConnectionId::new_unchecked(0)],
                 outbound: false,
                 topics: topics.clone(),

@@ -20,16 +20,16 @@
 
 use std::{net::SocketAddr, str::FromStr};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    core::{multiaddr::Protocol, upgrade, Multiaddr},
+    SwarmBuilder,
+    core::{Multiaddr, multiaddr::Protocol, upgrade},
     identity::PeerId,
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    SwarmBuilder,
 };
-use libp2p_perf::{client, server, Final, Intermediate, Run, RunParams, RunUpdate};
+use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate, client, server};
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 use web_time::{Duration, Instant};

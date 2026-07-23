@@ -1,3 +1,8 @@
+## 0.45.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.44.1
 - Expose `socket2`'s `set_linger` config option.
   See [PR 6225](https://github.com/libp2p/rust-libp2p/pull/5955)

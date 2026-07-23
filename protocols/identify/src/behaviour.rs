@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque, hash_map::Entry},
     num::NonZeroUsize,
     sync::Arc,
     task::{Context, Poll},
@@ -27,17 +27,16 @@ use std::{
 };
 
 use libp2p_core::{
+    ConnectedPoint, Endpoint, Multiaddr,
     multiaddr::{self, Protocol},
     transport::PortUse,
-    ConnectedPoint, Endpoint, Multiaddr,
 };
 use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
-    _address_translation,
+    _address_translation, ConnectionDenied, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
-    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
 };
 
 use crate::{

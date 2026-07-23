@@ -34,12 +34,12 @@ use futures::{
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 
-use crate::{protocol, PROTOCOL_NAME};
+use crate::{PROTOCOL_NAME, protocol};
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]

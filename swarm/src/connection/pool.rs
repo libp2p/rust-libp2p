@@ -18,6 +18,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+
 use std::{
     collections::HashMap,
     convert::Infallible,
@@ -31,7 +32,7 @@ use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
+    future::{Either, poll_fn},
     prelude::*,
     ready,
     stream::{FuturesUnordered, SelectAll},
@@ -45,15 +46,17 @@ use tracing::Instrument;
 use web_time::{Duration, Instant};
 
 use crate::{
+    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
+        pool::concurrent_dial::{PendingDial, SmartDial},
     },
     transport::TransportError,
-    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 
-mod concurrent_dial;
+pub(crate) mod concurrent_dial;
+pub(crate) mod dial_ranker;
 mod task;
 
 enum ExecSwitch {
@@ -142,6 +145,9 @@ where
 
     /// How long a connection should be kept alive once it starts idling.
     idle_connection_timeout: Duration,
+
+    /// Enables smart dialing.
+    smart_dial: bool,
 }
 
 #[derive(Debug)]
@@ -333,6 +339,7 @@ where
             no_established_connections_waker: None,
             established_connection_events: Default::default(),
             new_connection_dropped_listeners: Default::default(),
+            smart_dial: config.smart_dial,
         }
     }
 
@@ -371,7 +378,7 @@ where
     /// by the pool effective immediately.
     pub(crate) fn disconnect(&mut self, peer: PeerId) {
         if let Some(conns) = self.established.get_mut(&peer) {
-            for (_, conn) in conns.iter_mut() {
+            for conn in conns.values_mut() {
                 conn.start_close();
             }
         }
@@ -413,15 +420,7 @@ where
     /// that establishes and negotiates the connection.
     pub(crate) fn add_outgoing(
         &mut self,
-        dials: Vec<
-            BoxFuture<
-                'static,
-                (
-                    Multiaddr,
-                    Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
-                ),
-            >,
-        >,
+        dials: Vec<PendingDial>,
         peer: Option<PeerId>,
         role_override: Endpoint,
         port_use: PortUse,
@@ -435,15 +434,27 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor.spawn(
-            task::new_for_pending_outgoing_connection(
-                connection_id,
-                ConcurrentDial::new(dials, concurrency_factor),
-                abort_receiver,
-                self.pending_connection_events_tx.clone(),
-            )
-            .instrument(span),
-        );
+        if self.smart_dial {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    SmartDial::new(dials),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        } else {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    ConcurrentDial::new(dials, concurrency_factor),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        }
 
         let endpoint = PendingPoint::Dialer {
             role_override,
@@ -693,22 +704,24 @@ where
                     // never propagated across stack frames.
                     #[allow(clippy::result_large_err)]
                     let check_peer_id = || {
-                        if let Some(peer) = expected_peer_id {
-                            if peer != obtained_peer_id {
-                                return match &endpoint {
-                                    ConnectedPoint::Dialer { address, .. } => {
-                                        Err(PoolEvent::PendingOutboundConnectionError {
-                                            id,
-                                            error: PendingOutboundConnectionError::WrongPeerId {
-                                                obtained: obtained_peer_id,
-                                                address: address.clone(),
-                                            },
-                                            peer: Some(peer),
-                                        })
-                                    }
-                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
-                                };
-                            }
+                        if let Some(peer) = expected_peer_id
+                            && peer != obtained_peer_id
+                        {
+                            return match &endpoint {
+                                ConnectedPoint::Dialer { address, .. } => {
+                                    Err(PoolEvent::PendingOutboundConnectionError {
+                                        id,
+                                        error: PendingOutboundConnectionError::WrongPeerId {
+                                            obtained: obtained_peer_id,
+                                            address: address.clone(),
+                                        },
+                                        peer: Some(peer),
+                                    })
+                                }
+                                ConnectedPoint::Listener { .. } => unreachable!(
+                                    "There shouldn't be an expected PeerId on inbound connections."
+                                ),
+                            };
                         }
 
                         if self.local_id == obtained_peer_id {
@@ -982,6 +995,8 @@ pub(crate) struct PoolConfig {
     pub(crate) per_connection_event_buffer_size: usize,
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub(crate) dial_concurrency_factor: NonZeroU8,
+    /// Ranker that determines the ranking of outgoing connection attempts.
+    pub(crate) smart_dial: bool,
     /// How long a connection should be kept alive once it is idling.
     pub(crate) idle_connection_timeout: Duration,
     /// The configured override for substream protocol upgrades, if any.
@@ -1003,6 +1018,7 @@ impl PoolConfig {
             idle_connection_timeout: Duration::from_secs(10),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
+            smart_dial: false,
         }
     }
 

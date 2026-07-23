@@ -20,7 +20,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::{types::Subscription, TopicHash};
+use crate::{TopicHash, types::Subscription};
 
 pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
@@ -105,6 +105,7 @@ impl TopicSubscriptionFilter for WhitelistSubscriptionFilter {
 }
 
 /// Adds a max count to a given subscription filter
+#[derive(Debug, Clone)]
 pub struct MaxCountSubscriptionFilter<T: TopicSubscriptionFilter> {
     pub filter: T,
     pub max_subscribed_topics: usize,
@@ -155,6 +156,19 @@ impl<T: TopicSubscriptionFilter> TopicSubscriptionFilter for MaxCountSubscriptio
         }
 
         Ok(result)
+    }
+}
+
+impl<T> Default for MaxCountSubscriptionFilter<T>
+where
+    T: TopicSubscriptionFilter + Default,
+{
+    fn default() -> Self {
+        Self {
+            filter: Default::default(),
+            max_subscribed_topics: 100,
+            max_subscriptions_per_request: 100,
+        }
     }
 }
 
@@ -225,22 +239,27 @@ mod test {
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t2.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
         ];
 
@@ -262,10 +281,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
         ];
 
@@ -291,14 +312,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
         ];
 
@@ -324,10 +348,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
+                options: Default::default(),
             },
         ];
 
@@ -353,22 +379,27 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t[4].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[0].clone(),
+                options: Default::default(),
             },
             Subscription {
                 action: Unsubscribe,
                 topic_hash: t[1].clone(),
+                options: Default::default(),
             },
         ];
 
@@ -390,10 +421,12 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
         ];
 
@@ -416,14 +449,17 @@ mod test {
             Subscription {
                 action: Subscribe,
                 topic_hash: t1,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t2,
+                options: Default::default(),
             },
             Subscription {
                 action: Subscribe,
                 topic_hash: t3,
+                options: Default::default(),
             },
         ];
 
