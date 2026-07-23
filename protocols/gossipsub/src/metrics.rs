@@ -29,7 +29,7 @@ use prometheus_client::{
         counter::Counter,
         family::{Family, MetricConstructor},
         gauge::Gauge,
-        histogram::{linear_buckets, Histogram},
+        histogram::{Histogram, linear_buckets},
     },
     registry::Registry,
 };
@@ -137,7 +137,7 @@ pub(crate) struct Metrics {
     // Metrics regarding mesh state
     /// Number of peers in our mesh. This metric should be updated with the count of peers for a
     /// topic in the mesh regardless of inclusion and churn events.
-    mesh_peer_counts: Family<TopicHash, Gauge>,
+    mesh_peer_counts: Family<MeshPeerLabel, Gauge>,
     /// Number of times we include peers in a topic mesh for different reasons.
     mesh_peer_inclusion_events: Family<InclusionLabel, Counter>,
     /// Number of times we remove peers in a topic mesh for different reasons.
@@ -147,7 +147,7 @@ pub(crate) struct Metrics {
     /// Number of gossip messages sent to each topic.
     topic_msg_sent_counts: Family<TopicHash, Counter>,
     /// Bytes from gossip messages sent to each topic.
-    topic_msg_sent_bytes: Family<TopicHash, Counter>,
+    topic_msg_sent_bytes: Family<RpcSentLabel, Counter>,
     /// Bytes from the last gossip messages sent to each topic.
     topic_msg_last_sent_bytes: Family<TopicHash, Gauge>,
     /// Number of gossipsub messages published to each topic.
@@ -283,7 +283,7 @@ impl Metrics {
         );
 
         let topic_msg_last_sent_bytes = register_family!(
-            "topic_msg_sent_bytes",
+            "topic_msg_last_sent_bytes",
             "bytes from the last gossip message sent to each topic (after duplicates being filtered)"
         );
 
@@ -489,24 +489,52 @@ impl Metrics {
 
     /// Registers the subscription to a topic if the configured limits allow it.
     /// Sets the registered number of peers in the mesh to 0.
-    pub(crate) fn joined(&mut self, topic: &TopicHash) {
-        if self.topic_info.contains_key(topic) || self.topic_info.len() < self.max_topics {
-            self.topic_info.insert(topic.clone(), true);
-            let was_subscribed = self.topic_subscription_status.get_or_create(topic).set(1);
+    pub(crate) fn joined(&mut self, topic_hash: &TopicHash) {
+        if self.topic_info.contains_key(topic_hash) || self.topic_info.len() < self.max_topics {
+            self.topic_info.insert(topic_hash.clone(), true);
+            let was_subscribed = self
+                .topic_subscription_status
+                .get_or_create(topic_hash)
+                .set(1);
             debug_assert_eq!(was_subscribed, 0);
-            self.mesh_peer_counts.get_or_create(topic).set(0);
+            self.mesh_peer_counts
+                .get_or_create(&MeshPeerLabel {
+                    supports_partial: true,
+                    topic_hash: topic_hash.to_string(),
+                })
+                .set(0);
+            self.mesh_peer_counts
+                .get_or_create(&MeshPeerLabel {
+                    supports_partial: false,
+                    topic_hash: topic_hash.to_string(),
+                })
+                .set(0);
         }
     }
 
     /// Registers the unsubscription to a topic if the topic was previously allowed.
     /// Sets the registered number of peers in the mesh to 0.
-    pub(crate) fn left(&mut self, topic: &TopicHash) {
-        if self.topic_info.contains_key(topic) {
+    pub(crate) fn left(&mut self, topic_hash: &TopicHash) {
+        if self.topic_info.contains_key(topic_hash) {
             // Depending on the configured topic bounds we could miss a mesh topic.
             // So, check first if the topic was previously allowed.
-            let was_subscribed = self.topic_subscription_status.get_or_create(topic).set(0);
+            let was_subscribed = self
+                .topic_subscription_status
+                .get_or_create(topic_hash)
+                .set(0);
             debug_assert_eq!(was_subscribed, 1);
-            self.mesh_peer_counts.get_or_create(topic).set(0);
+            self.mesh_peer_counts
+                .get_or_create(&MeshPeerLabel {
+                    supports_partial: true,
+                    topic_hash: topic_hash.to_string(),
+                })
+                .set(0);
+            self.mesh_peer_counts
+                .get_or_create(&MeshPeerLabel {
+                    supports_partial: false,
+                    topic_hash: topic_hash.to_string(),
+                })
+                .set(0);
         }
     }
 
@@ -535,10 +563,20 @@ impl Metrics {
     }
 
     /// Register the current number of peers in our mesh for this topic.
-    pub(crate) fn set_mesh_peers(&mut self, topic: &TopicHash, count: usize) {
-        if self.register_topic(topic).is_ok() {
+    pub(crate) fn set_mesh_peers(
+        &mut self,
+        topic_hash: &TopicHash,
+        count: usize,
+        supports_partial: bool,
+    ) {
+        if self.register_topic(topic_hash).is_ok() {
             // Due to limits, this topic could have not been allowed, so we check.
-            self.mesh_peer_counts.get_or_create(topic).set(count as i64);
+            self.mesh_peer_counts
+                .get_or_create(&MeshPeerLabel {
+                    supports_partial,
+                    topic_hash: topic_hash.to_string(),
+                })
+                .set(count as i64);
         }
     }
 
@@ -564,14 +602,17 @@ impl Metrics {
     }
 
     /// Register sending a message over a topic.
-    pub(crate) fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
-        if self.register_topic(topic).is_ok() {
-            self.topic_msg_sent_counts.get_or_create(topic).inc();
+    pub(crate) fn msg_sent(&mut self, topic_hash: &TopicHash, partial: bool, bytes: usize) {
+        if self.register_topic(topic_hash).is_ok() {
+            self.topic_msg_sent_counts.get_or_create(topic_hash).inc();
             self.topic_msg_sent_bytes
-                .get_or_create(topic)
+                .get_or_create(&RpcSentLabel {
+                    partial,
+                    topic_hash: topic_hash.to_string(),
+                })
                 .inc_by(bytes as u64);
             self.topic_msg_last_sent_bytes
-                .get_or_create(topic)
+                .get_or_create(topic_hash)
                 .set(bytes as i64);
         }
     }
@@ -801,6 +842,21 @@ struct MessageTypeLabel {
 #[derive(Clone)]
 struct HistBuilder {
     buckets: Vec<f64>,
+}
+
+/// Label for the total size of publish messages sent via RPC.
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
+struct RpcSentLabel {
+    partial: bool,
+    topic_hash: String,
+}
+
+/// Label for the mesh peers.
+/// Label for the total size of publish messages sent via RPC.
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
+struct MeshPeerLabel {
+    supports_partial: bool,
+    topic_hash: String,
 }
 
 impl MetricConstructor<Histogram> for HistBuilder {

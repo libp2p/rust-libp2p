@@ -62,6 +62,7 @@ pub fn make_client_config(
         ))
         .with_client_cert_resolver(cert_resolver);
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
+    crypto.key_log = Arc::new(rustls::KeyLogFile::new());
 
     Ok(crypto)
 }
@@ -86,6 +87,7 @@ pub fn make_server_config(
         .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
         .with_cert_resolver(cert_resolver);
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
+    crypto.key_log = Arc::new(rustls::KeyLogFile::new());
 
     Ok(crypto)
 }

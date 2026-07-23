@@ -65,7 +65,7 @@ mod ready;
 mod select;
 
 pub(crate) use apply::{
-    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
+    InboundUpgradeApply, OutboundUpgradeApply, apply, apply_inbound, apply_outbound,
 };
 pub(crate) use error::UpgradeError;
 use futures::future::Future;

@@ -25,12 +25,13 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
+    dummy,
 };
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
@@ -401,9 +402,9 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use libp2p_swarm::{
+        DialError, ListenError, Swarm, SwarmEvent,
         behaviour::toggle::Toggle,
         dial_opts::{DialOpts, PeerCondition},
-        DialError, ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;

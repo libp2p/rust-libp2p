@@ -12,7 +12,7 @@ use libp2p_core::{
 };
 use libp2p_identity::{Keypair, PeerId};
 
-use super::{upgrade, Connection, Error};
+use super::{Connection, Error, upgrade};
 
 /// Config for the [`Transport`].
 #[derive(Clone)]

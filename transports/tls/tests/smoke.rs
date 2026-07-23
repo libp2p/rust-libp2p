@@ -1,6 +1,6 @@
-use futures::{future, StreamExt};
-use libp2p_core::{multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Transport};
-use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};
+use futures::{StreamExt, future};
+use libp2p_core::{Transport, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version};
+use libp2p_swarm::{Config, Swarm, SwarmEvent, dummy};
 
 #[tokio::test]
 async fn can_establish_connection() {

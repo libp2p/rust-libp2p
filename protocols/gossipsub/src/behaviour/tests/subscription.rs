@@ -25,13 +25,13 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
 
-use super::{flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, flush_events};
 use crate::{
+    IdentTopic as Topic,
     behaviour::tests::BehaviourTestBuilder,
     subscription_filter::WhitelistSubscriptionFilter,
     transform::IdentityTransform,
     types::{PeerDetails, PeerKind, RpcOut, Subscription, SubscriptionAction},
-    IdentTopic as Topic,
 };
 
 #[test]
@@ -59,8 +59,10 @@ fn test_subscribe() {
         .into_values()
         .fold(0, |mut collected_subscriptions, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(_)) = queue.try_pop() {
-                    collected_subscriptions += 1
+                match queue.try_pop() {
+                    Some(RpcOut::Subscribe { .. }) => collected_subscriptions += 1,
+                    Some(RpcOut::SubscribeMany(topics)) => collected_subscriptions += topics.len(),
+                    _ => {}
                 }
             }
             collected_subscriptions
@@ -119,14 +121,16 @@ fn test_unsubscribe() {
         .into_values()
         .fold(0, |mut collected_subscriptions, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(_)) = queue.try_pop() {
-                    collected_subscriptions += 1
+                match queue.try_pop() {
+                    Some(RpcOut::Subscribe { .. }) => collected_subscriptions += 1,
+                    Some(RpcOut::SubscribeMany(topics)) => collected_subscriptions += topics.len(),
+                    _ => {}
                 }
             }
             collected_subscriptions
         });
 
-    // we sent a unsubscribe to all known peers, for two topics
+    // we sent subscriptions to all known peers for two topics (20 peers × 2 topics)
     assert_eq!(subscriptions, 40);
 
     // check we clean up internal structures
@@ -141,9 +145,9 @@ fn test_unsubscribe() {
 /// Test JOIN(topic) functionality.
 #[test]
 fn test_join() {
-    use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+    use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
     use libp2p_identity::PeerId;
-    use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionId, NetworkBehaviour};
+    use libp2p_swarm::{ConnectionId, NetworkBehaviour, behaviour::ConnectionEstablished};
 
     use crate::{behaviour::FromSwarm, queue::Queue};
 
@@ -240,6 +244,7 @@ fn test_join() {
             random_peer,
             PeerDetails {
                 kind: PeerKind::Floodsub,
+                extensions: None,
                 outbound: false,
                 connections: vec![connection_id],
                 topics: Default::default(),
@@ -302,15 +307,16 @@ fn test_peer_added_on_connection() {
         .to_subscribe(true)
         .create_network();
 
-    // check that our subscriptions are sent to each of the peers
-    // collect all the SendEvents
+    // check that our subscriptions are sent to each of the peers as a single hello RPC
     let subscriptions = queues.into_iter().fold(
         HashMap::<libp2p_identity::PeerId, Vec<String>>::new(),
         |mut collected_subscriptions, (peer, mut queue)| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Subscribe(topic)) = queue.try_pop() {
-                    let mut peer_subs = collected_subscriptions.remove(&peer).unwrap_or_default();
-                    peer_subs.push(topic.into_string());
+                if let Some(RpcOut::SubscribeMany(topics)) = queue.try_pop() {
+                    let peer_subs: Vec<String> = topics
+                        .into_iter()
+                        .map(|(t, _, _)| t.into_string())
+                        .collect();
                     collected_subscriptions.insert(peer, peer_subs);
                 }
             }
@@ -318,7 +324,7 @@ fn test_peer_added_on_connection() {
         },
     );
 
-    // check that there are two subscriptions sent to each peer
+    // check that there are two subscriptions sent to each peer in a single RPC
     for peer_subs in subscriptions.values() {
         assert!(peer_subs.contains(&String::from("topic1")));
         assert!(peer_subs.contains(&String::from("topic2")));
@@ -334,6 +340,53 @@ fn test_peer_added_on_connection() {
         assert!(
             peer.topics == topic_hashes.iter().cloned().collect(),
             "The topics for each node should all topics"
+        );
+    }
+}
+
+/// Test that on new connection the hello RPC is a single batched message, not one per topic.
+#[test]
+fn test_hello_rpc_is_single_batched_message() {
+    let topic_names = vec![
+        String::from("alpha"),
+        String::from("beta"),
+        String::from("gamma"),
+    ];
+    let (_, _, queues, topic_hashes) = DefaultBehaviourTestBuilder::default()
+        .peer_no(5)
+        .topics(topic_names)
+        .to_subscribe(true)
+        .create_network();
+
+    for (_, mut queue) in queues {
+        let mut subscribe_many_count = 0;
+        let mut individual_subscribe_count = 0;
+
+        while !queue.is_empty() {
+            match queue.try_pop() {
+                Some(RpcOut::SubscribeMany(topics)) => {
+                    subscribe_many_count += 1;
+                    // All topics must be present in the single hello packet.
+                    let sent: Vec<_> = topics.into_iter().map(|(t, _, _)| t).collect();
+                    for topic_hash in &topic_hashes {
+                        assert!(
+                            sent.contains(topic_hash),
+                            "hello RPC must include all subscribed topics"
+                        );
+                    }
+                }
+                Some(RpcOut::Subscribe { .. }) => individual_subscribe_count += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(
+            subscribe_many_count, 1,
+            "exactly one batched hello RPC should be sent per peer"
+        );
+        assert_eq!(
+            individual_subscribe_count, 0,
+            "no individual Subscribe RPCs should be sent on connection"
         );
     }
 }
@@ -367,12 +420,14 @@ fn test_handle_received_subscriptions() {
         .map(|topic_hash| Subscription {
             action: SubscriptionAction::Subscribe,
             topic_hash: topic_hash.clone(),
+            options: Default::default(),
         })
         .collect::<Vec<Subscription>>();
 
     subscriptions.push(Subscription {
         action: SubscriptionAction::Unsubscribe,
         topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
+        options: Default::default(),
     });
 
     let unknown_peer = PeerId::random();
@@ -430,6 +485,7 @@ fn test_handle_received_subscriptions() {
         &[Subscription {
             action: SubscriptionAction::Unsubscribe,
             topic_hash: topic_hashes[0].clone(),
+            options: Default::default(),
         }],
         &peers[0],
     );

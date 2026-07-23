@@ -24,21 +24,21 @@ use std::{
 };
 
 use futures::{
-    stream::{BoxStream, SelectAll},
     StreamExt,
+    stream::{BoxStream, SelectAll},
 };
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
 use crate::{
-    client::{RunError, RunId},
     RunParams, RunUpdate,
+    client::{RunError, RunId},
 };
 
 #[derive(Debug)]

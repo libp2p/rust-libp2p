@@ -3,13 +3,13 @@ use std::{error::Error, net::Ipv4Addr, time::Duration};
 use cfg_if::cfg_if;
 use clap::Parser;
 use libp2p::{
-    autonat,
+    Multiaddr, SwarmBuilder, autonat,
     futures::StreamExt,
     identify, identity,
     multiaddr::Protocol,
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, SwarmBuilder,
+    tcp, yamux,
 };
 use rand::rngs::OsRng;
 

@@ -25,9 +25,9 @@ use std::iter::{Chain, Map};
 use either::Either;
 use futures::future;
 use libp2p_core::{
+    UpgradeInfo,
     either::EitherFuture,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    UpgradeInfo,
 };
 
 #[derive(Debug, Clone)]

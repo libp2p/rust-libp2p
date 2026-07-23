@@ -1,11 +1,11 @@
 use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    Transport,
-};
 #[cfg(feature = "relay")]
 use libp2p_core::{Negotiated, UpgradeInfo};
+use libp2p_core::{
+    Transport,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
@@ -132,7 +132,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
         MuxError: std::error::Error + Send + Sync + 'static,
     <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
+{
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()

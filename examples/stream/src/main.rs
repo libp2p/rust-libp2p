@@ -2,7 +2,7 @@ use std::{io, time::Duration};
 
 use anyhow::{Context, Result};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
-use libp2p::{multiaddr::Protocol, Multiaddr, PeerId, Stream, StreamProtocol};
+use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
 use libp2p_stream as stream;
 use rand::RngCore;
 use tracing::level_filters::LevelFilter;

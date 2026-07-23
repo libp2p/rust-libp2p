@@ -1,5 +1,7 @@
-## 0.45.2
+## 0.46.0
 
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport
   See [PR 6041](https://github.com/your-username/rust-libp2p/pull/6041)
 

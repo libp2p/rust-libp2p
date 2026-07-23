@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 #[cfg(feature = "relay")]
+use libp2p_core::Transport;
+#[cfg(feature = "relay")]
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-#[cfg(feature = "relay")]
-use libp2p_core::Transport;
 #[cfg(any(feature = "relay", feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
 #[cfg(feature = "relay")]
@@ -75,7 +75,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         MuxError: std::error::Error + Send + Sync + 'static,
     <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
+{
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new(self.keypair.public().to_peer_id());
         let relay_transport = relay_transport

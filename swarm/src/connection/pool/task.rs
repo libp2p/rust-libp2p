@@ -24,20 +24,20 @@
 use std::{convert::Infallible, pin::Pin};
 
 use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
+    channel::{mpsc, oneshot},
+    future::{Either, Future, poll_fn},
 };
 use libp2p_core::muxing::StreamMuxerBox;
 
-use super::concurrent_dial::ConcurrentDial;
+use super::concurrent_dial::DialResult;
 use crate::{
+    ConnectionHandler, Multiaddr, PeerId,
     connection::{
         self, ConnectionError, ConnectionId, PendingInboundConnectionError,
         PendingOutboundConnectionError,
     },
     transport::TransportError,
-    ConnectionHandler, Multiaddr, PeerId,
 };
 
 /// Commands that can be sent to a task driving an established connection.
@@ -91,9 +91,9 @@ pub(crate) enum EstablishedConnectionEvent<ToBehaviour> {
     },
 }
 
-pub(crate) async fn new_for_pending_outgoing_connection(
+pub(crate) async fn new_for_pending_outgoing_connection<D: Future<Output = DialResult>>(
     connection_id: ConnectionId,
-    dial: ConcurrentDial,
+    dial: D,
     abort_receiver: oneshot::Receiver<Infallible>,
     mut events: mpsc::Sender<PendingConnectionEvent>,
 ) {

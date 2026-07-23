@@ -52,10 +52,10 @@ impl AsyncRead for Stream {
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        if let Some(close_result) = self.close_result {
-            if close_result.is_err() {
-                return Poll::Ready(Ok(0));
-            }
+        if let Some(close_result) = self.close_result
+            && close_result.is_err()
+        {
+            return Poll::Ready(Ok(0));
         }
         Pin::new(&mut self.recv).poll_read(cx, buf)
     }

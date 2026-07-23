@@ -25,10 +25,11 @@ use std::{error::Error, str::FromStr};
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
+    PeerId,
     core::multiaddr::{Multiaddr, Protocol},
     dcutr, identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId,
+    tcp, yamux,
 };
 use tracing_subscriber::EnvFilter;
 

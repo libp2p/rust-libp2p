@@ -296,7 +296,7 @@ mod tests {
     use futures::{channel::mpsc, prelude::*};
     use tokio::io::{self, AsyncWriteExt};
 
-    use crate::quicksink::{make_sink, Action};
+    use crate::quicksink::{Action, make_sink};
 
     #[tokio::test]
     async fn smoke_test() {

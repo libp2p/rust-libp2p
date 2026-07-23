@@ -42,10 +42,10 @@ use futures::prelude::*;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
-    cipher::{KeyIvInit, StreamCipher},
     Salsa20, XSalsa20,
+    cipher::{KeyIvInit, StreamCipher},
 };
-use sha3::{digest::ExtendableOutput, Shake128};
+use sha3::{Shake128, digest::ExtendableOutput};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;

@@ -23,7 +23,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use prometheus_client::{encoding::text::encode, registry::Registry};
 use tokio::net::TcpListener;
 

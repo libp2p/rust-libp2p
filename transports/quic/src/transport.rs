@@ -20,8 +20,8 @@
 
 use std::{
     collections::{
-        hash_map::{DefaultHasher, Entry},
         HashMap, HashSet,
+        hash_map::{DefaultHasher, Entry},
     },
     fmt,
     hash::{Hash, Hasher},
@@ -41,18 +41,18 @@ use futures::{
 };
 use if_watch::IfEvent;
 use libp2p_core::{
+    Endpoint, Transport,
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
-    Endpoint, Transport,
 };
 use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
 
 use crate::{
+    ConnectError, Connecting, Connection, Error,
     config::{Config, QuinnConfig},
     hole_punching::hole_puncher,
     provider::Provider,
-    ConnectError, Connecting, Connection, Error,
 };
 
 /// Implementation of the [`Transport`] trait for QUIC.
@@ -280,7 +280,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                     listener.endpoint.clone()
                 } else {
                     let socket_family = socket_addr.ip().into();
-                    let dialer = if dial_opts.port_use == PortUse::Reuse {
+
+                    if dial_opts.port_use == PortUse::Reuse {
                         if let Some(occupied) = self.dialer.get(&socket_family) {
                             occupied.clone()
                         } else {
@@ -290,8 +291,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                         }
                     } else {
                         self.bound_socket(socket_addr)?
-                    };
-                    dialer
+                    }
                 };
                 let handshake_timeout = self.handshake_timeout;
                 let mut client_config = self.quinn_config.client_config.clone();
@@ -566,7 +566,7 @@ impl<P: Provider> Listener<P> {
                     return Poll::Ready(TransportEvent::ListenerError {
                         listener_id: self.listener_id,
                         error: err.into(),
-                    })
+                    });
                 }
             }
         }
@@ -598,7 +598,7 @@ impl<P: Provider> Stream for Listener<P> {
                             return Poll::Ready(Some(TransportEvent::ListenerError {
                                 listener_id: self.listener_id,
                                 error: Error::Connection(crate::ConnectionError(error)),
-                            }))
+                            }));
                         }
                     };
 
@@ -748,11 +748,13 @@ mod tests {
 
     #[test]
     fn multiaddr_to_udp_conversion() {
-        assert!(multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap(),
-            true
-        )
-        .is_none());
+        assert!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap(),
+                true
+            )
+            .is_none()
+        );
 
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -821,11 +823,13 @@ mod tests {
             ))
         );
 
-        assert!(multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/1234/quic".parse::<Multiaddr>().unwrap(),
-            false
-        )
-        .is_none());
+        assert!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/1234/quic".parse::<Multiaddr>().unwrap(),
+                false
+            )
+            .is_none()
+        );
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip4/127.0.0.1/udp/1234/quic".parse::<Multiaddr>().unwrap(),
@@ -845,9 +849,11 @@ mod tests {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::tokio::Transport::new(config);
-        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-            .now_or_never()
-            .is_none());
+        assert!(
+            poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none()
+        );
 
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
@@ -885,9 +891,11 @@ mod tests {
             }
             // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
             // be removed from the list of listeners.
-            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-                .now_or_never()
-                .is_none());
+            assert!(
+                poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                    .now_or_never()
+                    .is_none()
+            );
             assert!(transport.listeners.is_empty());
         }
     }
