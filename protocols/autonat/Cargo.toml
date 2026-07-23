@@ -30,7 +30,8 @@ prost = { workspace = true }
 tracing = { workspace = true }
 prost-codec = { workspace = true }
 rand = { workspace = true }
-rand_core = { version = "0.10", optional = true }
+# TODO: update to workspace version when snow is bumped to 0.10
+rand_core = { version = "0.6", optional = true }
 thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]
