@@ -21,10 +21,10 @@ tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rand = { workspace = true }
-opentelemetry = { version = "0.27", optional = true }
-opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.27", optional = true }
-tracing-opentelemetry = { version = "0.28", optional = true }
+opentelemetry = { workspace = true, optional = true, features = [] }
+opentelemetry_sdk = { workspace = true, optional = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { workspace = true, optional = true, features = ["grpc-tonic"] }
+tracing-opentelemetry = { workspace = true, optional = true }
 cfg-if = "1.0"
 
 [features]
