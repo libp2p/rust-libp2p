@@ -273,8 +273,9 @@ where
         }
     };
     all_addrs.clone_from(&addrs);
-    let idx = 0;
-    let addr = addrs.pop().ok_or(HandleFail::DialRefused)?;
+    let idx = addrs.len().checked_sub(1).ok_or(HandleFail::DialRefused)?;
+    let addr = addrs.remove(idx);
+
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {

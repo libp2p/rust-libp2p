@@ -15,17 +15,17 @@ metrics = ["prometheus-client"]
 partial-messages = []
 
 [dependencies]
-async-channel = "2.5.0"
+async-channel = "2.5"
 asynchronous-codec = { workspace = true }
-base64 = "0.22.1"
-byteorder = "1.5.0"
+base64 = "0.22"
+byteorder = "1.5"
 bytes.workspace = true
 either = "1.16"
-fnv = "1.0.7"
+fnv = "1.0"
 futures = { workspace = true }
 futures-timer = { workspace = true }
 hashlink = { workspace = true }
-hex_fmt = "0.3.0"
+hex_fmt = "0.3"
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
@@ -33,9 +33,9 @@ libp2p-swarm = { workspace = true }
 prost = { workspace = true }
 prost-codec = { workspace = true }
 rand = { workspace = true }
-regex = "1.12.3"
+regex = "1.13"
 serde = { version = "1", optional = true, features = ["derive"] }
-sha2 = "0.10.8"
+sha2 = "0.11"
 tracing = { workspace = true }
 
 # Metrics dependencies
