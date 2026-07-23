@@ -1,5 +1,7 @@
 ## 0.57.0
-
+- Make the `dns` feature available on `wasm32` targets, where `libp2p-dns` resolves names over 
+  DNS-over-HTTPS. Previously `libp2p-dns` was a non-`wasm32` dependency only.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 - Raise MSRV to 1.88.0.

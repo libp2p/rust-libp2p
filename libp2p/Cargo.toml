@@ -99,6 +99,7 @@ libp2p-autonat = { workspace = true, optional = true }
 libp2p-connection-limits = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-dcutr = { workspace = true, optional = true }
+libp2p-dns = { workspace = true, optional = true }
 libp2p-floodsub = { workspace = true, optional = true }
 libp2p-gossipsub = { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
@@ -124,7 +125,6 @@ libp2p-websocket-websys = { workspace = true, optional = true }
 libp2p-webtransport-websys = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }
 libp2p-quic = { workspace = true, optional = true }

@@ -8,7 +8,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AbortSignal, Request, RequestInit, Response};
 
-use crate::web_context::WebContext;
+use crate::websys::web_context::WebContext;
 
 /// The Cloudflare DoH JSON endpoint.
 pub const CLOUDFLARE: &str = "https://cloudflare-dns.com/dns-query";
@@ -91,49 +91,37 @@ impl Config {
     }
 }
 
+/// A DNS resolver, as used by [`crate::Transport`] on `wasm32` targets.
+#[doc(hidden)]
+pub trait Resolver {
+    fn ipv4_lookup(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<Vec<Ipv4Addr>, ResolveError>>;
+    fn ipv6_lookup(
+        &self,
+        name: String,
+    ) -> impl Future<Output = Result<Vec<Ipv6Addr>, ResolveError>>;
+    fn txt_lookup(&self, name: String) -> impl Future<Output = Result<Vec<String>, ResolveError>>;
+
+    /// The policy applied to `/dns`, `/dns4` and `/dns6` components.
+    fn dns_resolution(&self) -> DnsResolution {
+        DnsResolution::default()
+    }
+}
+
 /// A DNS resolver that performs lookups over HTTPS (DoH) using the browser's
 /// `fetch` API. This is the only way to resolve arbitrary DNS records (in
 /// particular the TXT records behind `/dnsaddr`) from within a browser.
 #[derive(Debug, Clone)]
-pub(crate) struct Resolver {
+pub struct DohResolver {
     config: Config,
 }
 
-impl Resolver {
-    pub(crate) fn new(config: Config) -> Self {
-        Resolver { config }
-    }
-
-    /// The configured [`DnsResolution`] policy for `/dns*` components.
-    pub(crate) fn dns_resolution(&self) -> DnsResolution {
-        self.config.dns_resolution
-    }
-
-    pub(crate) async fn ipv4_lookup(&self, name: &str) -> Result<Vec<Ipv4Addr>, ResolveError> {
-        Ok(self
-            .query(name, TYPE_A)
-            .await?
-            .iter()
-            .filter_map(|d| d.parse::<Ipv4Addr>().ok())
-            .collect())
-    }
-
-    pub(crate) async fn ipv6_lookup(&self, name: &str) -> Result<Vec<Ipv6Addr>, ResolveError> {
-        Ok(self
-            .query(name, TYPE_AAAA)
-            .await?
-            .iter()
-            .filter_map(|d| d.parse::<Ipv6Addr>().ok())
-            .collect())
-    }
-
-    pub(crate) async fn txt_lookup(&self, name: &str) -> Result<Vec<String>, ResolveError> {
-        Ok(self
-            .query(name, TYPE_TXT)
-            .await?
-            .iter()
-            .map(|d| unquote_txt(d))
-            .collect())
+impl DohResolver {
+    /// Creates a resolver for the endpoint and policy given by `config`.
+    pub fn new(config: Config) -> Self {
+        DohResolver { config }
     }
 
     /// Performs a single DoH lookup, returning the `data` field of every answer
@@ -153,6 +141,39 @@ impl Resolver {
             .filter(|a| a.kind == qtype)
             .map(|a| a.data)
             .collect())
+    }
+}
+
+impl Resolver for DohResolver {
+    async fn ipv4_lookup(&self, name: String) -> Result<Vec<Ipv4Addr>, ResolveError> {
+        Ok(self
+            .query(&name, TYPE_A)
+            .await?
+            .iter()
+            .filter_map(|d| d.parse::<Ipv4Addr>().ok())
+            .collect())
+    }
+
+    async fn ipv6_lookup(&self, name: String) -> Result<Vec<Ipv6Addr>, ResolveError> {
+        Ok(self
+            .query(&name, TYPE_AAAA)
+            .await?
+            .iter()
+            .filter_map(|d| d.parse::<Ipv6Addr>().ok())
+            .collect())
+    }
+
+    async fn txt_lookup(&self, name: String) -> Result<Vec<String>, ResolveError> {
+        Ok(self
+            .query(&name, TYPE_TXT)
+            .await?
+            .iter()
+            .map(|d| unquote_txt(d))
+            .collect())
+    }
+
+    fn dns_resolution(&self) -> DnsResolution {
+        self.config.dns_resolution
     }
 }
 
@@ -285,16 +306,18 @@ pub enum ResolveError {
 
 #[cfg(test)]
 mod tests {
+    use wasm_bindgen_test::wasm_bindgen_test;
+
     use super::*;
 
-    #[test]
+    #[wasm_bindgen_test]
     fn unquote_txt_strips_single_surrounding_pair() {
         assert_eq!(unquote_txt("\"dnsaddr=/dns4/foo\""), "dnsaddr=/dns4/foo");
         assert_eq!(unquote_txt("dnsaddr=/dns4/foo"), "dnsaddr=/dns4/foo");
         assert_eq!(unquote_txt("\"\""), "");
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn parses_doh_json() {
         let body = r#"{"Status":0,"Answer":[
             {"name":"example.com.","type":1,"TTL":60,"data":"1.2.3.4"},

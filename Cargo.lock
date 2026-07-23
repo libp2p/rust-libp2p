@@ -3027,33 +3027,24 @@ name = "libp2p-dns"
 version = "0.45.0"
 dependencies = [
  "futures",
+ "getrandom 0.2.15",
  "hickory-resolver",
- "libp2p-core",
- "libp2p-identity",
- "parking_lot",
- "smallvec",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "libp2p-dns-websys"
-version = "0.1.0-alpha"
-dependencies = [
- "futures",
  "js-sys",
  "libp2p-core",
+ "libp2p-identity",
  "parking_lot",
  "send_wrapper 0.6.0",
  "serde",
  "serde_json",
  "smallvec",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 
