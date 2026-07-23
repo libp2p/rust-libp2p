@@ -27,18 +27,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             use opentelemetry::trace::TracerProvider as _;
             use opentelemetry::KeyValue;
             use opentelemetry_otlp::SpanExporter;
-            use opentelemetry_sdk::{runtime, trace::TracerProvider};
+            use opentelemetry_sdk::trace::SdkTracerProvider;
             use tracing_subscriber::layer::SubscriberExt;
 
-            let provider = TracerProvider::builder()
+            let provider = SdkTracerProvider::builder()
                 .with_batch_exporter(
                     SpanExporter::builder().with_tonic().build()?,
-                    runtime::Tokio,
                 )
-                .with_resource(opentelemetry_sdk::Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "autonatv2",
-                )]))
+                .with_resource(
+                    opentelemetry_sdk::Resource::builder_empty()
+                        .with_attribute(KeyValue::new("service.name", "autonatv2"))
+                        .build(),
+                )
                 .build();
             let telemetry = tracing_opentelemetry::layer()
                 .with_tracer(provider.tracer("autonatv2"));
