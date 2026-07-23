@@ -120,7 +120,7 @@ libp2p-yamux = { version = "0.48.0", path = "muxers/yamux" }
 
 # External dependencies
 asynchronous-codec = { version = "0.7" }
-axum = { version = "0.7" }
+axum = { version = "0.8" }
 criterion = { version = "0.5" }
 bytes = "1.12"
 env_logger = "0.11"
