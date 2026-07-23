@@ -128,7 +128,7 @@ futures = "0.3"
 futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
 futures-timer = "3.0"
-hex-literal = "0.4"
+hex-literal = "1.1"
 getrandom = { version = "0.2", features = ["js"] }
 hashlink = "0.12"
 hickory-proto = { version = "0.26", default-features = false }
