@@ -1342,7 +1342,7 @@ dependencies = [
  "ring",
  "rkyv",
  "rustls",
- "sec1",
+ "sec1 0.7.3",
  "sha1",
  "sha2 0.10.9",
  "thiserror 1.0.69",
@@ -1424,7 +1424,7 @@ dependencies = [
  "pem-rfc7468",
  "pkcs8",
  "rand_core 0.6.4",
- "sec1",
+ "sec1 0.7.3",
  "subtle",
  "zeroize",
 ]
@@ -2249,7 +2249,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.9",
+ "socket2 0.6.5",
  "system-configuration 0.6.1",
  "tokio",
  "tower-service",
@@ -3096,7 +3096,7 @@ dependencies = [
  "rand 0.8.6",
  "ring",
  "rmp-serde",
- "sec1",
+ "sec1 0.8.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4903,7 +4903,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.9",
+ "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -5667,6 +5667,12 @@ dependencies = [
  "subtle",
  "zeroize",
 ]
+
+[[package]]
+name = "sec1"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d56d437c2f19203ce5f7122e507831de96f3d2d4d3be5af44a0b0a09d8a80e4d"
 
 [[package]]
 name = "security-framework"
@@ -7350,7 +7356,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
