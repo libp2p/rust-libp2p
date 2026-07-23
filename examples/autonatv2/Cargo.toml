@@ -22,7 +22,7 @@ tracing = "0.1"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rand = { workspace = true }
 opentelemetry = { version = "0.27", optional = true }
-opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
+opentelemetry_sdk = { version = "0.32", optional = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.27", optional = true }
 tracing-opentelemetry = { version = "0.28", optional = true }
 cfg-if = "1.0"
