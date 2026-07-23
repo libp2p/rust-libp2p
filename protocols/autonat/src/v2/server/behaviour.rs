@@ -13,16 +13,16 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     dummy,
 };
-use rand_core::{OsRng, RngCore};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 use crate::v2::server::handler::{
     Handler, dial_back,
     dial_request::{self, DialBackCommand, DialBackStatus},
 };
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = StdRng>
 where
-    R: Clone + Send + RngCore + 'static,
+    R: Send + rand::Rng + SeedableRng + 'static,
 {
     dialing_dial_back: HashMap<ConnectionId, DialBackCommand>,
     pending_events: VecDeque<
@@ -34,15 +34,15 @@ where
     rng: R,
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<StdRng> {
     fn default() -> Self {
-        Self::new(OsRng)
+        Self::new(rand::make_rng::<StdRng>())
     }
 }
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     pub fn new(rng: R) -> Self {
         Self {
@@ -55,7 +55,7 @@ where
 
 impl<R> NetworkBehaviour for Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     type ConnectionHandler = Handler<R>;
 
@@ -71,7 +71,7 @@ where
         Ok(Either::Right(dial_request::Handler::new(
             peer,
             remote_addr.clone(),
-            self.rng.clone(),
+            self.rng.fork(),
         )))
     }
 

@@ -129,7 +129,7 @@ futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
 futures-timer = "3.0"
 hex-literal = "1.1"
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 hashlink = "0.12"
 hickory-proto = { version = "0.26", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false }
@@ -141,7 +141,7 @@ prometheus-client = "0.25"
 prost-codec = { version = "0.4.0", path = "misc/prost-codec" }
 prost = "0.14"
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
-rand = "0.8"
+rand = "0.10"
 rcgen = "0.13"
 ring = "0.17"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }

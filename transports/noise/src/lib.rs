@@ -132,7 +132,7 @@ impl Config {
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_responder()?;
 
         let state = State::new(
@@ -152,7 +152,7 @@ impl Config {
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_initiator()?;
 
         let state = State::new(

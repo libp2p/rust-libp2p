@@ -1,3 +1,4 @@
+use rand::{seq::IndexedRandom, RngExt};
 // Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,7 +31,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
 use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
-use rand::{seq::SliceRandom, thread_rng};
+
 use web_time::Instant;
 
 use super::{
@@ -265,7 +266,7 @@ impl AsClient<'_> {
 
         servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));
 
-        servers.choose(&mut thread_rng()).map(|&&p| p)
+        servers.choose(&mut rand::rng()).map(|&&p| p)
     }
 
     // Send a dial-request to a randomly selected server.

@@ -10,7 +10,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent, dial_opts::DialOpts},
     tcp, yamux,
 };
-use rand::rngs::OsRng;
+use rand::{rngs::StdRng, SeedableRng};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -105,7 +105,7 @@ impl Behaviour {
     pub fn new(key: identity::PublicKey, probe_interval: u64) -> Self {
         Self {
             autonat: autonat::v2::client::Behaviour::new(
-                OsRng,
+                rand::make_rng::<StdRng>(),
                 autonat::v2::client::Config::default()
                     .with_probe_interval(Duration::from_secs(probe_interval)),
             ),

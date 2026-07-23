@@ -28,7 +28,7 @@ pub(crate) mod proto {
 mod test {
     use libp2p_identity::PeerId;
     use prost::Message;
-    use rand::Rng;
+    use rand::RngExt;
 
     use crate::{IdentTopic as Topic, rpc_proto::proto::compat_pb};
 
@@ -39,27 +39,27 @@ mod test {
 
         let new_message1 = super::proto::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::random::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::random::<[u8; 8]>().to_vec()),
             topic: topic1.clone().into_string(),
-            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::random::<[u8; 32]>().to_vec()),
+            key: Some(rand::random::<[u8; 32]>().to_vec()),
         };
         let old_message1 = compat_pb::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::random::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::random::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string()],
-            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::random::<[u8; 32]>().to_vec()),
+            key: Some(rand::random::<[u8; 32]>().to_vec()),
         };
         let old_message2 = compat_pb::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::random::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::random::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string(), topic2.clone().into_string()],
-            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::random::<[u8; 32]>().to_vec()),
+            key: Some(rand::random::<[u8; 32]>().to_vec()),
         };
 
         let new_message1b = new_message1.encode_to_vec();

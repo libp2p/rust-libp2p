@@ -20,7 +20,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
-use rand_core::RngCore;
+use rand::{Rng, SeedableRng};
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,
@@ -55,7 +55,7 @@ pub struct Handler<R> {
 
 impl<R> Handler<R>
 where
-    R: RngCore,
+    R: rand::Rng,
 {
     pub(crate) fn new(client_id: PeerId, observed_multiaddr: Multiaddr, rng: R) -> Self {
         let (dial_back_cmd_sender, dial_back_cmd_receiver) = mpsc::channel(10);
@@ -75,7 +75,7 @@ where
 
 impl<R> ConnectionHandler for Handler<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     type FromBehaviour = Infallible;
     type ToBehaviour = Either<DialBackCommand, Event>;
@@ -132,7 +132,7 @@ where
                         self.observed_multiaddr.clone(),
                         self.client_id,
                         self.dial_back_cmd_sender.clone(),
-                        self.rng.clone(),
+                        self.rng.fork(),
                     ))
                     .is_err()
                 {
@@ -195,7 +195,7 @@ async fn handle_request(
     observed_multiaddr: Multiaddr,
     client: PeerId,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    rng: impl RngCore,
+    rng: impl rand::Rng,
 ) -> Event {
     let mut coder = Coder::new(stream);
     let mut all_addrs = Vec::new();
@@ -254,7 +254,7 @@ async fn handle_request_internal<I>(
     coder: &mut Coder<I>,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    mut rng: impl RngCore,
+    mut rng: impl rand::Rng,
     all_addrs: &mut Vec<Multiaddr>,
     tested_addrs: &mut Option<Multiaddr>,
     data_amount: &mut usize,

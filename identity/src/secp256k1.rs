@@ -94,7 +94,7 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::thread_rng()))
+        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::rng()))
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.
@@ -197,11 +197,7 @@ impl PublicKey {
     /// Will return false if the hash is not 32 bytes long, or the signature cannot be parsed.
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
         Signature::from_der(sig).is_ok_and(|s| {
-            k256::ecdsa::hazmat::verify_prehashed(
-                &ProjectivePoint::from(self.0.as_affine()),
-                msg.into(),
-                &s,
-            )
+            k256::ecdsa::signature::hazmat::PrehashVerifier::verify_prehash(&self.0, msg, &s)
             .is_ok()
         })
     }
@@ -209,7 +205,7 @@ impl PublicKey {
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
     /// represented by a single bit.
     pub fn to_bytes(&self) -> [u8; 33] {
-        let encoded_point = self.0.to_encoded_point(true);
+        let encoded_point = self.0.to_sec1_point(true);
         debug_assert!(encoded_point.as_bytes().len() == 33);
         let mut array: [u8; 33] = [0u8; 33];
         array.copy_from_slice(encoded_point.as_bytes());
@@ -218,7 +214,7 @@ impl PublicKey {
 
     /// Convert the public key to a byte buffer in uncompressed form.
     pub fn to_bytes_uncompressed(&self) -> [u8; 65] {
-        let encoded_point = self.0.to_encoded_point(false);
+        let encoded_point = self.0.to_sec1_point(false);
         debug_assert!(encoded_point.as_bytes().len() == 65);
         let mut array: [u8; 65] = [0u8; 65];
         array.copy_from_slice(encoded_point.as_bytes());

@@ -142,7 +142,7 @@ pub(crate) mod native {
                     .with_other_transport(|key| {
                         Ok(webrtc::tokio::Transport::new(
                             key.clone(),
-                            webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
+                            webrtc::tokio::Certificate::generate(&mut rand::rng())?,
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
