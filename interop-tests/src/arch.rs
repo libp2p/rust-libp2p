@@ -164,12 +164,12 @@ pub(crate) mod native {
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
-            let mut conn = self.0.get_async_connection().await?;
+            let mut conn = self.0.get_multiplexed_async_connection().await?;
             Ok(conn.blpop(key, timeout as f64).await?)
         }
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
-            let mut conn = self.0.get_async_connection().await?;
+            let mut conn = self.0.get_multiplexed_async_connection().await?;
             conn.rpush(key, value).await.map_err(Into::into)
         }
     }
