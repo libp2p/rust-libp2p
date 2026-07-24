@@ -27,6 +27,7 @@ use p256::ecdsa::{
     Signature, SigningKey, VerifyingKey,
     signature::{Signer, Verifier},
 };
+use p256::elliptic_curve::point::Generate;
 use p256::elliptic_curve::sec1::Sec1Point;
 use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use zeroize::Zeroize;
@@ -94,7 +95,7 @@ impl SecretKey {
     /// Generate a new random ECDSA secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(SigningKey::random(&mut rand::rng())) // TODO: use Generate trait in future
+        SecretKey(Generate::generate(&mut rand::rng()))
     }
 
     /// Sign a message with this secret key, producing a DER-encoded ECDSA signature.
@@ -159,7 +160,7 @@ impl PublicKey {
     /// Try to parse a public key from a byte buffer containing raw
     /// components of a key with or without compression.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let enc_pt = p256::elliptic_curve::sec1::Sec1Point::<p256::NistP256>::from_bytes(k)
+        let enc_pt = Sec1Point::<p256::NistP256>::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
 
         VerifyingKey::from_sec1_point(&enc_pt)
