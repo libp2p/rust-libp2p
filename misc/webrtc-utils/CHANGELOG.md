@@ -1,5 +1,7 @@
 ## 0.5.0
 
+- Negotiate WebRTC data-channel message limits after Noise authentication.
+
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
