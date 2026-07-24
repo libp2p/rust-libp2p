@@ -29,6 +29,7 @@ snow = { version = "0.10", features = ["ring-resolver"], default-features = fals
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 snow = { version = "0.10", features = ["default-resolver", "default-resolver-crypto"], default-features = false }
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 futures_ringbuf = "0.4"

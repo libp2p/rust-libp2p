@@ -129,7 +129,7 @@ futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
 futures-timer = "3.0"
 hex-literal = "1.1"
-getrandom = { version = "0.4", features = ["wasm_js"] }
+getrandom = { version = "=0.4.3", features = ["wasm_js"] }
 hashlink = "0.12"
 hickory-proto = { version = "0.26", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false }
@@ -166,8 +166,6 @@ web-time = "1.1"
 # Patch getrandom so all transitive deps (including snow 0.10) use the same
 # version with wasm_js feature enabled. TODO: remove when snow depends on
 # getrandom >= 0.4.
-getrandom = { version = "0.4", features = ["wasm_js"] }
-
 # Patch away `libp2p-identity` in our dependency tree with the workspace version.
 # `libp2p-identity` is a leaf dependency and used within `rust-multiaddr` which is **not** part of the workspace.
 # As a result, we cannot just reference the workspace version in our crates because the types would mismatch with what
