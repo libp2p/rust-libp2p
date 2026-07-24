@@ -4,7 +4,6 @@ use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 use prost_codec::Codec;
-use rand::RngExt;
 
 use crate::v2::{Nonce, generated::structs as proto};
 
@@ -246,7 +245,7 @@ impl From<Response> for proto::Message {
 }
 
 impl DialDataRequest {
-    pub(crate) fn from_rng<R: rand::Rng>(addr_idx: usize, mut rng: R) -> Self {
+    pub(crate) fn from_rng<R: rand::Rng>(addr_idx: usize, _rng: R) -> Self {
         let num_bytes = rand::random_range(DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND);
         Self {
             addr_idx,

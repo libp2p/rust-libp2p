@@ -1,4 +1,4 @@
-use rand::{seq::IndexedRandom, RngExt};
+use rand::seq::IndexedRandom;
 // Copyright 2021 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

@@ -25,7 +25,6 @@ use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{PeerRecord, SignedEnvelope, peer_record, signed_envelope};
 use libp2p_swarm::StreamProtocol;
 use prost_codec::Codec as ProtobufCodec;
-use rand::Rng;
 
 use crate::DEFAULT_TTL;
 

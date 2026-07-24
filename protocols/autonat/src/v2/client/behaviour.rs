@@ -16,7 +16,7 @@ use libp2p_swarm::{
     behaviour::ConnectionEstablished,
 };
 use rand::prelude::*;
-use rand::seq::IndexedRandom;
+
 
 use super::handler::{
     dial_back::{self, IncomingNonce},

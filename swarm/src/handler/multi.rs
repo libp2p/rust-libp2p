@@ -33,7 +33,6 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
 
 use crate::{
     Stream,

@@ -10,7 +10,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent, dial_opts::DialOpts},
     tcp, yamux,
 };
-use rand::{rngs::StdRng, SeedableRng};
+use rand::rngs::StdRng;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]

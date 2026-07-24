@@ -23,7 +23,7 @@
 use std::sync::LazyLock;
 
 use libp2p_identity as identity;
-use rand::{Rng as _, SeedableRng, TryRng as _};
+use rand::TryRng as _;
 use snow::params::NoiseParams;
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
 use zeroize::Zeroize;

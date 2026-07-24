@@ -20,7 +20,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,

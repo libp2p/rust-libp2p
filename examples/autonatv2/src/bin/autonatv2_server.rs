@@ -11,7 +11,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use rand::{rngs::StdRng, SeedableRng};
+use rand::rngs::StdRng;
 
 #[derive(Debug, Parser)]
 #[command(name = "libp2p autonatv2 server")]

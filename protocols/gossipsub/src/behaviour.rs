@@ -48,9 +48,7 @@ use libp2p_swarm::{
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
 use prost::Message as _;
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-};
+use rand::seq::{IteratorRandom, SliceRandom};
 use web_time::{Instant, SystemTime};
 
 #[cfg(feature = "metrics")]
@@ -807,7 +805,7 @@ where
                         .filter(|peer_id| {
                             !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
                         })
-                        .choose_multiple(&mut rand::rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
@@ -837,7 +835,7 @@ where
                     let new_peers = candidates
                         .into_iter()
                         .filter(|peer_id| !recipients.contains(peer_id))
-                        .choose_multiple(&mut rand::rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
@@ -1432,7 +1430,7 @@ where
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
             let mut rng = rand::rng();
-            iwant_ids_vec.partial_shuffle(&mut rng, iask);
+            let _ = iwant_ids_vec.partial_shuffle(&mut rng, iask);
 
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
@@ -1814,7 +1812,7 @@ where
         if px.len() > n {
             // only use at most prune_peers many random peers
             let mut rng = rand::rng();
-            px.partial_shuffle(&mut rng, n);
+            let _ = px.partial_shuffle(&mut rng, n);
             px = px.into_iter().take(n).collect();
         }
 
@@ -2845,7 +2843,7 @@ where
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids
+                    let _ = peer_message_ids
                         .partial_shuffle(&mut rng, self.config.max_control_messages_sent());
                     peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
@@ -3858,7 +3856,7 @@ fn get_random_peers_dynamic(
 
     // we have more peers than needed, shuffle them and return n of them
     let mut rng = rand::rng();
-    gossip_peers.partial_shuffle(&mut rng, n);
+    let _ = gossip_peers.partial_shuffle(&mut rng, n);
 
     tracing::debug!("RANDOM PEERS: Got {:?} peers", n);
 

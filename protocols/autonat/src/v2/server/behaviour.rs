@@ -13,7 +13,8 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     dummy,
 };
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use crate::v2::server::handler::{
     Handler, dial_back,

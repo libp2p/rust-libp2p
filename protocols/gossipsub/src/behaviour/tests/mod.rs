@@ -645,7 +645,9 @@ pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage 
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rand::random_range(10..10024)).map(|_| rand::random()).collect(),
+        data: (0..rand::random_range(10..10024))
+            .map(|_| rand::random())
+            .collect(),
         sequence_number: Some(*seq),
         topic: topics[rand::random_range(0..topics.len())].clone(),
         signature: None,

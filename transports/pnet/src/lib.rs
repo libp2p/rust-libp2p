@@ -40,7 +40,7 @@ use std::{
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
 use pin_project::pin_project;
-use rand::Rng;
+
 use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
