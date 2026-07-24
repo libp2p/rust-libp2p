@@ -576,8 +576,9 @@ where
     /// this bucket w.r.t `k` gives rise to the corresponding (random) key `b` s.t.
     /// the XOR distance between `a` and `b` is `d`. In other words, it gives
     /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
-    pub fn rand_distance(&self, _rng: &mut impl rand::Rng) -> Distance {
-        self.index.rand_distance(_rng)
+    pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
+        let _ = &mut *rng;
+        self.index.rand_distance(rng)
     }
 
     /// Returns an iterator over the entries in the bucket.

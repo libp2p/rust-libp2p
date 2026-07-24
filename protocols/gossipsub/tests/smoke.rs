@@ -20,6 +20,8 @@
 
 use std::{task::Poll, time::Duration};
 
+use rand::seq::IndexedMutRandom;
+
 use futures::{
     StreamExt,
     stream::{FuturesUnordered, SelectAll},
@@ -29,7 +31,7 @@ use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::SeedableRng;
 use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
 

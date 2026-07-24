@@ -33,7 +33,6 @@ use libp2p_quic as quic;
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
-use rand::RngExt;
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]

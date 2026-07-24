@@ -2,7 +2,6 @@
 use std::{future::poll_fn, pin::Pin};
 
 use futures::{AsyncReadExt, AsyncWriteExt, channel::oneshot};
-use getrandom;
 use libp2p_core::{
     Endpoint, StreamMuxer, Transport as _,
     transport::{DialOpts, PortUse},

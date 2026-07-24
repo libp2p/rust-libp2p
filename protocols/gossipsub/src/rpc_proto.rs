@@ -28,7 +28,6 @@ pub(crate) mod proto {
 mod test {
     use libp2p_identity::PeerId;
     use prost::Message;
-    use rand::RngExt;
 
     use crate::{IdentTopic as Topic, rpc_proto::proto::compat_pb};
 

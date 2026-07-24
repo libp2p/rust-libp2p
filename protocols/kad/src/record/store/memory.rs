@@ -212,7 +212,6 @@ impl RecordStore for MemoryStore {
 #[cfg(test)]
 mod tests {
     use quickcheck::*;
-    use rand::RngExt;
 
     use super::*;
     use crate::SHA_256_MH;

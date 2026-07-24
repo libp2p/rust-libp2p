@@ -28,7 +28,6 @@ use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 

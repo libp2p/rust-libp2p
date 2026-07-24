@@ -155,7 +155,7 @@ impl Arbitrary for Seed {
 #[test]
 fn bootstrap() {
     fn prop(seed: Seed) {
-        let mut rng = StdRng::from_seed(seed.0);
+        let _rng = StdRng::from_seed(seed.0);
 
         let num_total = rand::random_range(2..20);
         // When looking for the closest node to a key, Kademlia considers
@@ -248,7 +248,7 @@ fn query_iter() {
             .collect()
     }
 
-    fn run(rng: &mut impl Rng) {
+    fn run(_rng: &mut impl Rng) {
         let num_total = rand::random_range(2..20);
         let mut config = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
@@ -564,7 +564,7 @@ fn get_record_not_found() {
 #[test]
 fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
-        let mut rng = StdRng::from_seed(seed.0);
+        let _rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rand::random_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
@@ -943,7 +943,7 @@ fn get_record_many() {
 #[test]
 fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
-        let mut rng = StdRng::from_seed(seed.0);
+        let _rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rand::random_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.

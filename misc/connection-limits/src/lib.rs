@@ -413,7 +413,6 @@ mod tests {
     use super::*;
 
     fn fill_outgoing() -> (Swarm<Behaviour>, Multiaddr, u32) {
-        use rand::RngExt;
 
         let outgoing_limit = rand::random_range(1..10);
 

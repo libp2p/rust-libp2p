@@ -93,8 +93,8 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        use k256::elliptic_curve::point::Generate;
-        SecretKey(Generate::generate(&mut rand::rng()))
+        use k256::elliptic_curve::Generate;
+        SecretKey(Generate::generate_from_rng(&mut rand::rng()))
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.

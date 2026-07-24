@@ -27,7 +27,7 @@ use p256::ecdsa::{
     Signature, SigningKey, VerifyingKey,
     signature::{Signer, Verifier},
 };
-use p256::elliptic_curve::point::Generate;
+use p256::elliptic_curve::Generate;
 use p256::elliptic_curve::sec1::Sec1Point;
 use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use zeroize::Zeroize;
@@ -95,7 +95,7 @@ impl SecretKey {
     /// Generate a new random ECDSA secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(Generate::generate(&mut rand::rng()))
+        SecretKey(Generate::generate_from_rng(&mut rand::rng()))
     }
 
     /// Sign a message with this secret key, producing a DER-encoded ECDSA signature.

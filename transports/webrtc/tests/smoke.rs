@@ -41,7 +41,6 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
-use rand::RngExt;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
