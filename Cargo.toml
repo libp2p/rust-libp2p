@@ -128,7 +128,7 @@ futures = "0.3"
 futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
 futures-timer = "3.0"
-hex-literal = "0.4"
+hex-literal = "1.1"
 getrandom = { version = "0.2", features = ["js"] }
 hashlink = "0.12"
 hickory-proto = { version = "0.26", default-features = false }
@@ -137,7 +137,7 @@ if-watch = "3.2"
 multiaddr = "0.18"
 multihash = "0.19"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
-prometheus-client = "0.24"
+prometheus-client = "0.25"
 prost-codec = { version = "0.4.0", path = "misc/prost-codec" }
 prost = "0.14"
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
