@@ -5,6 +5,7 @@ use std::{
 };
 
 use futures::{AsyncRead, AsyncWrite};
+use libp2p_webrtc_utils::StreamConfig;
 use send_wrapper::SendWrapper;
 use web_sys::RtcDataChannel;
 
@@ -23,9 +24,11 @@ pub struct Stream {
 pub(crate) type DropListener = SendWrapper<libp2p_webrtc_utils::DropListener<PollDataChannel>>;
 
 impl Stream {
-    pub(crate) fn new(data_channel: RtcDataChannel) -> (Self, DropListener) {
-        let (inner, drop_listener) =
-            libp2p_webrtc_utils::Stream::new(PollDataChannel::new(data_channel));
+    pub(crate) fn new(data_channel: RtcDataChannel, config: StreamConfig) -> (Self, DropListener) {
+        let (inner, drop_listener) = libp2p_webrtc_utils::Stream::with_config(
+            PollDataChannel::new(data_channel, config),
+            config,
+        );
 
         (
             Self {

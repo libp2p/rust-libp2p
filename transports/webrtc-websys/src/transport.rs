@@ -1,5 +1,7 @@
+use libp2p_webrtc_utils::StreamConfig;
 use std::{
     future::Future,
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -18,6 +20,7 @@ use super::{Connection, Error, upgrade};
 #[derive(Clone)]
 pub struct Config {
     keypair: Keypair,
+    stream_config: StreamConfig,
 }
 
 /// A WebTransport [`Transport`](libp2p_core::Transport) that works with `web-sys`.
@@ -30,7 +33,14 @@ impl Config {
     pub fn new(keypair: &Keypair) -> Self {
         Config {
             keypair: keypair.to_owned(),
+            stream_config: StreamConfig::default(),
         }
+    }
+
+    /// Limits encoded WebRTC data-channel messages for connections created by this transport.
+    pub fn with_max_message_size(mut self, max_message_size: NonZeroUsize) -> Self {
+        self.stream_config = StreamConfig::new(max_message_size);
+        self
     }
 }
 
@@ -93,8 +103,13 @@ impl libp2p_core::Transport for Transport {
         let config = self.config.clone();
 
         Ok(async move {
-            let (peer_id, connection) =
-                upgrade::outbound(sock_addr, server_fingerprint, config.keypair.clone()).await?;
+            let (peer_id, connection) = upgrade::outbound(
+                sock_addr,
+                server_fingerprint,
+                config.keypair.clone(),
+                config.stream_config,
+            )
+            .await?;
 
             Ok((peer_id, connection))
         }

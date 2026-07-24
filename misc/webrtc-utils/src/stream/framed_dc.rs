@@ -23,21 +23,21 @@ use futures::{AsyncRead, AsyncWrite};
 
 use crate::{
     proto::Message,
-    stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN},
+    stream::{StreamConfig, VARINT_LEN},
 };
 
 pub(crate) type FramedDc<T> = Framed<T, prost_codec::Codec<Message>>;
-pub(crate) fn new<T>(inner: T) -> FramedDc<T>
+pub(crate) fn new<T>(inner: T, config: StreamConfig) -> FramedDc<T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    let mut framed = Framed::new(inner, codec());
+    let mut framed = Framed::new(inner, codec(config));
     // If not set, `Framed` buffers up to 131kB of data before sending, which leads to "outbound
     // packet larger than maximum message size" error in webrtc-rs.
-    framed.set_send_high_water_mark(MAX_DATA_LEN);
+    framed.set_send_high_water_mark(config.max_data_size());
     framed
 }
 
-pub(crate) fn codec() -> prost_codec::Codec<Message, Message> {
-    prost_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN)
+pub(crate) fn codec(config: StreamConfig) -> prost_codec::Codec<Message, Message> {
+    prost_codec::Codec::new(config.max_message_size() - VARINT_LEN)
 }
