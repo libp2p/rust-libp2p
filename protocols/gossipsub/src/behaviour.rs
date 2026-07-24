@@ -1429,8 +1429,7 @@ where
 
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
-            let mut rng = rand::rng();
-            let _ = iwant_ids_vec.partial_shuffle(&mut rng, iask);
+            iwant_ids_vec.shuffle(&mut rand::rng());
 
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
@@ -1812,7 +1811,7 @@ where
         if px.len() > n {
             // only use at most prune_peers many random peers
             let mut rng = rand::rng();
-            let _ = px.partial_shuffle(&mut rng, n);
+            px.shuffle(&mut rng);
             px = px.into_iter().take(n).collect();
         }
 
@@ -2843,8 +2842,7 @@ where
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    let _ = peer_message_ids
-                        .partial_shuffle(&mut rng, self.config.max_control_messages_sent());
+                    peer_message_ids.shuffle(&mut rng);
                     peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
@@ -3856,7 +3854,7 @@ fn get_random_peers_dynamic(
 
     // we have more peers than needed, shuffle them and return n of them
     let mut rng = rand::rng();
-    let _ = gossip_peers.partial_shuffle(&mut rng, n);
+    gossip_peers.shuffle(&mut rng);
 
     tracing::debug!("RANDOM PEERS: Got {:?} peers", n);
 

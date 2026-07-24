@@ -504,7 +504,7 @@ mod tests {
 
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
-    use rand::{SeedableRng, rngs::StdRng};
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::SHA_256_MH;
@@ -600,7 +600,7 @@ mod tests {
     fn termination_and_parallelism() {
         fn prop(mut iter: ClosestPeersIter, seed: Seed) {
             let now = Instant::now();
-            let _rng = StdRng::from_seed(seed.0);
+            let mut rng = StdRng::from_seed(seed.0);
 
             let mut expected = iter
                 .closest_peers
@@ -647,8 +647,8 @@ mod tests {
                 // Report results back to the iterator with a random number of "closer"
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
-                    if rand::random_bool(0.75) {
-                        let num_closer = rand::random_range(0..iter.config.num_results.get() + 1);
+                    if rng.random_bool(0.75) {
+                        let num_closer = rng.random_range(0..iter.config.num_results.get() + 1);
                         let closer_peers = random_peers(num_closer);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);

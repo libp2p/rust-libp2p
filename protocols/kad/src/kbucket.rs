@@ -77,6 +77,7 @@ use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 use bucket::KBucket;
 pub use bucket::NodeStatus;
 pub use entry::*;
+use rand::RngExt;
 use smallvec::SmallVec;
 use web_time::Instant;
 
@@ -166,16 +167,16 @@ impl BucketIndex {
     }
 
     /// Generates a random distance that falls into the bucket for this index.
-    fn rand_distance(&self, _rng: &mut impl rand::Rng) -> Distance {
+    fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         let mut bytes = [0u8; 32];
         let quot = self.0 / 8;
         for i in 0..quot {
-            bytes[31 - i] = rand::random();
+            bytes[31 - i] = rng.random();
         }
         let rem = (self.0 % 8) as u32;
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
-        bytes[31 - quot] = rand::random_range(lower..upper) as u8;
+        bytes[31 - quot] = rng.random_range(lower..upper) as u8;
         Distance(U256::from_big_endian(bytes.as_slice()))
     }
 }
@@ -577,7 +578,6 @@ where
     /// the XOR distance between `a` and `b` is `d`. In other words, it gives
     /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
     pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
-        let _ = &mut *rng;
         self.index.rand_distance(rng)
     }
 
