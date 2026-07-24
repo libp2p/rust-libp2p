@@ -125,7 +125,7 @@ criterion = { version = "0.5.1" }
 bytes = "1.11.1"
 env_logger = "0.11"
 futures = "0.3.30"
-futures-bounded = { version = "0.3", features = ["tokio"] }
+futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26.0", default-features = false }
 futures-timer = "3.0"
 hex-literal = "0.4"
