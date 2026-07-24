@@ -161,8 +161,6 @@ where
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
-
-            
             let jitter = rand::random_range(0..100);
             config.query_interval + Duration::from_millis(jitter)
         };

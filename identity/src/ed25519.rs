@@ -187,7 +187,9 @@ impl SecretKey {
         use rand::TryRng as _;
 
         let mut secret = [0u8; 32];
-        rand::rngs::SysRng.try_fill_bytes(&mut secret).expect("RNG failure");
+        rand::rngs::SysRng
+            .try_fill_bytes(&mut secret)
+            .expect("RNG failure");
         SecretKey(secret)
     }
 

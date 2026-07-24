@@ -21,8 +21,6 @@
 use std::{fmt, str::FromStr};
 
 use sha2::Digest as _;
-
-#[cfg(feature = "rand")]
 use thiserror::Error;
 
 /// Local type-alias for multihash.

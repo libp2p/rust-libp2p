@@ -23,13 +23,14 @@
 use core::{cmp, fmt, hash};
 use std::convert::Infallible;
 
-use p256::ecdsa::{
-    Signature, SigningKey, VerifyingKey,
-    signature::{Signer, Verifier},
+use p256::{
+    ecdsa::{
+        Signature, SigningKey, VerifyingKey,
+        signature::{Signer, Verifier},
+    },
+    elliptic_curve::{Generate, sec1::Sec1Point},
+    pkcs8::{DecodePrivateKey, EncodePrivateKey},
 };
-use p256::elliptic_curve::Generate;
-use p256::elliptic_curve::sec1::Sec1Point;
-use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use zeroize::Zeroize;
 
 use super::error::DecodingError;

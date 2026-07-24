@@ -97,7 +97,6 @@ enum Kind {
 
 #[cfg(all(test, feature = "pem"))]
 mod test {
-    
 
     use super::*;
 

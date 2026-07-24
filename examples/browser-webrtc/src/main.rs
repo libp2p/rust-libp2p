@@ -18,7 +18,6 @@ use libp2p::{
     swarm::SwarmEvent,
 };
 use libp2p_webrtc as webrtc;
-
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 

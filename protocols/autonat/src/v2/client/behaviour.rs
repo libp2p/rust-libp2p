@@ -17,7 +17,6 @@ use libp2p_swarm::{
 };
 use rand::prelude::*;
 
-
 use super::handler::{
     dial_back::{self, IncomingNonce},
     dial_request,

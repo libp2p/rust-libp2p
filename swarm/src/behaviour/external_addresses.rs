@@ -89,7 +89,6 @@ mod tests {
     use std::sync::LazyLock;
 
     use libp2p_core::multiaddr::Protocol;
-    
 
     use super::*;
 

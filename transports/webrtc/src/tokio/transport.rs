@@ -60,7 +60,6 @@ impl Transport {
     /// ```
     /// use libp2p_identity as identity;
     /// use libp2p_webrtc::tokio::{Certificate, Transport};
-    /// 
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     /// let transport = Transport::new(id_keys, Certificate::generate(&mut rand::rng()).unwrap());
@@ -429,7 +428,6 @@ mod tests {
 
     use futures::future::poll_fn;
     use libp2p_core::Transport as _;
-    
 
     use super::*;
 

@@ -413,7 +413,6 @@ mod tests {
     use super::*;
 
     fn fill_outgoing() -> (Swarm<Behaviour>, Multiaddr, u32) {
-
         let outgoing_limit = rand::random_range(1..10);
 
         let mut network = Swarm::new_ephemeral_tokio(|_| {
