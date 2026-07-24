@@ -32,7 +32,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -143,7 +143,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -168,7 +168,7 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -188,7 +188,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -205,7 +205,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -231,7 +231,7 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -247,7 +247,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -266,7 +266,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -317,7 +317,7 @@ jobs:
         with:
           components: rustfmt
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -329,7 +329,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - name: Ensure `full` feature contains all features
         run: |
