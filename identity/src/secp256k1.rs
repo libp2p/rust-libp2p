@@ -26,7 +26,6 @@ use asn1_der::typed::{DerDecodable, Sequence};
 use k256::{
     ecdsa::Signature,
     sha2::{Digest as ShaDigestTrait, Sha256},
-    ProjectivePoint,
 };
 use zeroize::Zeroize;
 
@@ -94,7 +93,7 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::rng()))
+        SecretKey(k256::ecdsa::SigningKey::random(&mut rand::rng())) // TODO: use Generate trait in future
     }
 
     /// Create a secret key from a byte slice, zeroing the slice on success.
@@ -198,7 +197,7 @@ impl PublicKey {
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
         Signature::from_der(sig).is_ok_and(|s| {
             k256::ecdsa::signature::hazmat::PrehashVerifier::verify_prehash(&self.0, msg, &s)
-            .is_ok()
+                .is_ok()
         })
     }
 

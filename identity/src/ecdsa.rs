@@ -23,14 +23,12 @@
 use core::{cmp, fmt, hash};
 use std::convert::Infallible;
 
-use p256::{
-    ecdsa::{
-        signature::{Signer, Verifier},
-        Signature, SigningKey, VerifyingKey,
-    },
-    EncodedPoint,
+use p256::ecdsa::{
+    Signature, SigningKey, VerifyingKey,
+    signature::{Signer, Verifier},
 };
-use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
+use p256::elliptic_curve::sec1::Sec1Point;
+use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey};
 use zeroize::Zeroize;
 
 use super::error::DecodingError;
@@ -96,7 +94,7 @@ impl SecretKey {
     /// Generate a new random ECDSA secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        SecretKey(SigningKey::random(&mut rand::rng()))
+        SecretKey(SigningKey::random(&mut rand::rng())) // TODO: use Generate trait in future
     }
 
     /// Sign a message with this secret key, producing a DER-encoded ECDSA signature.
@@ -124,7 +122,7 @@ impl SecretKey {
             .to_pkcs8_der()
             .expect("Encoding to pkcs#8 format to succeed")
             .as_bytes()
-            .to_vec()
+            .to_vec() // use EncodePrivateKey trait
     }
 
     /// Try to decode a secret key from a DER-encoded byte buffer, zeroize the buffer on success.
@@ -161,7 +159,7 @@ impl PublicKey {
     /// Try to parse a public key from a byte buffer containing raw
     /// components of a key with or without compression.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let enc_pt = Sec1Point::<p256::NistP256>::from_bytes(k)
+        let enc_pt = p256::elliptic_curve::sec1::Sec1Point::<p256::NistP256>::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
 
         VerifyingKey::from_sec1_point(&enc_pt)
