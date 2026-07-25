@@ -1,6 +1,7 @@
 ## 0.5.0
 
 - Add `Config::with_max_message_size` to configure the WebRTC data-channel framing limit.
+- Add `Config::with_max_read_buffer_size` to configure the browser callback receive buffer.
 
 - Require `getrandom/js` feature only under `wasm` target.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)

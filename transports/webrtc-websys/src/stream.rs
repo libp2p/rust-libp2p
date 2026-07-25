@@ -1,5 +1,6 @@
 //! The WebRTC [Stream] over the Connection
 use std::{
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -24,9 +25,13 @@ pub struct Stream {
 pub(crate) type DropListener = SendWrapper<libp2p_webrtc_utils::DropListener<PollDataChannel>>;
 
 impl Stream {
-    pub(crate) fn new(data_channel: RtcDataChannel, config: StreamConfig) -> (Self, DropListener) {
+    pub(crate) fn new(
+        data_channel: RtcDataChannel,
+        config: StreamConfig,
+        max_read_buffer_size: NonZeroUsize,
+    ) -> (Self, DropListener) {
         let (inner, drop_listener) = libp2p_webrtc_utils::Stream::with_config(
-            PollDataChannel::new(data_channel, config),
+            PollDataChannel::new(data_channel, config, max_read_buffer_size),
             config,
         );
 

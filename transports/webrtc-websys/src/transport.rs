@@ -16,11 +16,16 @@ use libp2p_identity::{Keypair, PeerId};
 
 use super::{Connection, Error, upgrade};
 
+/// Default maximum number of bytes browser callbacks may queue before the Rust task polls them.
+const DEFAULT_MAX_READ_BUFFER_SIZE: NonZeroUsize =
+    NonZeroUsize::new(256 * 1024).expect("constant is non-zero");
+
 /// Config for the [`Transport`].
 #[derive(Clone)]
 pub struct Config {
     keypair: Keypair,
     stream_config: StreamConfig,
+    max_read_buffer_size: NonZeroUsize,
 }
 
 /// A WebTransport [`Transport`](libp2p_core::Transport) that works with `web-sys`.
@@ -34,12 +39,22 @@ impl Config {
         Config {
             keypair: keypair.to_owned(),
             stream_config: StreamConfig::default(),
+            max_read_buffer_size: DEFAULT_MAX_READ_BUFFER_SIZE,
         }
     }
 
     /// Limits encoded WebRTC data-channel messages for connections created by this transport.
     pub fn with_max_message_size(mut self, max_message_size: NonZeroUsize) -> Self {
         self.stream_config = StreamConfig::new(max_message_size);
+        self
+    }
+
+    /// Limits bytes queued by browser data-channel callbacks before the stream is polled.
+    ///
+    /// The effective limit is raised as needed to hold one valid encoded message. This limit is
+    /// local to the browser transport and is not negotiated with the remote peer.
+    pub fn with_max_read_buffer_size(mut self, max_read_buffer_size: NonZeroUsize) -> Self {
+        self.max_read_buffer_size = max_read_buffer_size;
         self
     }
 }
@@ -108,6 +123,7 @@ impl libp2p_core::Transport for Transport {
                 server_fingerprint,
                 config.keypair.clone(),
                 config.stream_config,
+                config.max_read_buffer_size,
             )
             .await?;
 

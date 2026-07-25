@@ -1,6 +1,7 @@
 //! A libp2p connection backed by an [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection).
 
 use std::{
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll, Waker, ready},
 };
@@ -39,13 +40,18 @@ pub struct Connection {
     drop_listeners: FuturesUnordered<DropListener>,
     no_drop_listeners_waker: Option<Waker>,
     stream_config: StreamConfig,
+    max_read_buffer_size: NonZeroUsize,
 
     _ondatachannel_closure: SendWrapper<Closure<dyn FnMut(RtcDataChannelEvent)>>,
 }
 
 impl Connection {
     /// Create a new inner WebRTC Connection
-    pub(crate) fn new(peer_connection: RtcPeerConnection, stream_config: StreamConfig) -> Self {
+    pub(crate) fn new(
+        peer_connection: RtcPeerConnection,
+        stream_config: StreamConfig,
+        max_read_buffer_size: NonZeroUsize,
+    ) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in
         // poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
@@ -74,13 +80,15 @@ impl Connection {
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
             stream_config,
+            max_read_buffer_size,
             inbound_data_channels: SendWrapper::new(rx_ondatachannel),
             _ondatachannel_closure: SendWrapper::new(ondatachannel_closure),
         }
     }
 
     fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
-        let (stream, drop_listener) = Stream::new(data_channel, self.stream_config);
+        let (stream, drop_listener) =
+            Stream::new(data_channel, self.stream_config, self.max_read_buffer_size);
 
         self.drop_listeners.push(drop_listener);
         if let Some(waker) = self.no_drop_listeners_waker.take() {
@@ -206,8 +214,12 @@ impl RtcPeerConnection {
     /// Creates the stream for the initial noise handshake.
     ///
     /// The underlying data channel MUST have `negotiated` set to `true` and carry the ID 0.
-    pub(crate) fn new_handshake_stream(&self, config: StreamConfig) -> (Stream, DropListener) {
-        Stream::new(self.new_data_channel(true), config)
+    pub(crate) fn new_handshake_stream(
+        &self,
+        config: StreamConfig,
+        max_read_buffer_size: NonZeroUsize,
+    ) -> (Stream, DropListener) {
+        Stream::new(self.new_data_channel(true), config, max_read_buffer_size)
     }
 
     /// Creates a regular data channel for when the connection is already established.

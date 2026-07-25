@@ -1,6 +1,7 @@
 use std::{
-    cmp::min,
+    cmp::{max, min},
     io,
+    num::NonZeroUsize,
     pin::Pin,
     rc::Rc,
     sync::{
@@ -15,6 +16,14 @@ use futures::{AsyncRead, AsyncWrite, task::AtomicWaker};
 use libp2p_webrtc_utils::StreamConfig;
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
+
+fn effective_max_read_buffer_size(config: StreamConfig, configured: NonZeroUsize) -> usize {
+    max(configured.get(), config.max_message_size())
+}
+
+fn read_buffer_overflows(buffered: usize, incoming: usize, max_read_buffer_size: usize) -> bool {
+    buffered.saturating_add(incoming) > max_read_buffer_size
+}
 
 /// [`PollDataChannel`] is a wrapper around [`RtcDataChannel`] which implements [`AsyncRead`] and
 /// [`AsyncWrite`].
@@ -55,7 +64,13 @@ pub(crate) struct PollDataChannel {
 }
 
 impl PollDataChannel {
-    pub(crate) fn new(inner: RtcDataChannel, config: StreamConfig) -> Self {
+    pub(crate) fn new(
+        inner: RtcDataChannel,
+        config: StreamConfig,
+        configured_max_read_buffer_size: NonZeroUsize,
+    ) -> Self {
+        let max_read_buffer_size =
+            effective_max_read_buffer_size(config, configured_max_read_buffer_size);
         let open_waker = Rc::new(AtomicWaker::new());
         let on_open_closure = Closure::new({
             let open_waker = open_waker.clone();
@@ -106,7 +121,11 @@ impl PollDataChannel {
 
                 let mut read_buffer = read_buffer.lock().unwrap();
 
-                if read_buffer.len() + data.length() as usize > config.max_message_size() {
+                if read_buffer_overflows(
+                    read_buffer.len(),
+                    data.length() as usize,
+                    max_read_buffer_size,
+                ) {
                     overloaded.store(true, Ordering::SeqCst);
                     tracing::warn!("Remote is overloading us with messages, resetting stream",);
                     return;
@@ -166,6 +185,54 @@ impl PollDataChannel {
         }
 
         Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use libp2p_webrtc_utils::StreamConfig;
+
+    use super::{effective_max_read_buffer_size, read_buffer_overflows};
+
+    #[test]
+    fn read_buffer_accepts_multiple_valid_messages() {
+        let message_size = NonZeroUsize::new(8 * 1024).unwrap();
+        let max_read_buffer_size = effective_max_read_buffer_size(
+            StreamConfig::new(message_size),
+            NonZeroUsize::new(256 * 1024).unwrap(),
+        );
+
+        assert!(!read_buffer_overflows(
+            message_size.get(),
+            message_size.get(),
+            max_read_buffer_size,
+        ));
+    }
+
+    #[test]
+    fn configured_read_buffer_remains_bounded() {
+        let max_read_buffer_size = 16 * 1024;
+
+        assert!(read_buffer_overflows(
+            max_read_buffer_size,
+            1,
+            max_read_buffer_size,
+        ));
+    }
+
+    #[test]
+    fn read_buffer_can_hold_one_larger_valid_message() {
+        let message_size = NonZeroUsize::new(512 * 1024).unwrap();
+
+        assert_eq!(
+            effective_max_read_buffer_size(
+                StreamConfig::new(message_size),
+                NonZeroUsize::new(256 * 1024).unwrap(),
+            ),
+            message_size.get(),
+        );
     }
 }
 
