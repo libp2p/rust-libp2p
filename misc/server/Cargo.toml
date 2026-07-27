@@ -11,7 +11,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 clap = { version = "4.6", features = ["derive"] }
 futures = { workspace = true }
 axum = { workspace = true }

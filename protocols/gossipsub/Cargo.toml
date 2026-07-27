@@ -17,7 +17,7 @@ partial-messages = []
 [dependencies]
 async-channel = "2.5"
 asynchronous-codec = { workspace = true }
-base64 = "0.22"
+base64 = "0.23"
 byteorder = "1.5"
 bytes.workspace = true
 either = "1.16"
