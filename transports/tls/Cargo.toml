@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
@@ -22,10 +22,12 @@ yasna = "0.6"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.23"
+version = "0.23.22"
 default-features = false
-features = ["ring", "std"] # Must enable this to allow for custom verification code.
+features = ["aws-lc-rs", "std"] # Must enable this to allow for custom verification code.
 
+[features]
+prefer-post-quantum = ["rustls/prefer-post-quantum"]
 
 [dev-dependencies]
 hex-literal = { workspace = true }

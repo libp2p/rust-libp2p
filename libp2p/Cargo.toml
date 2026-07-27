@@ -32,6 +32,7 @@ full = [
     "ping",
     "plaintext",
     "pnet",
+    "prefer-post-quantum",
     "quic",
     "relay",
     "rendezvous",
@@ -71,6 +72,7 @@ noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
+prefer-post-quantum = ["libp2p-quic?/prefer-post-quantum", "libp2p-tls?/prefer-post-quantum"]
 quic = ["dep:libp2p-quic"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 rendezvous = ["dep:libp2p-rendezvous"]
@@ -115,7 +117,6 @@ libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
-pin-project = "1.1"
 thiserror = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

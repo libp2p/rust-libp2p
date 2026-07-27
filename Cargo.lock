@@ -2817,7 +2817,6 @@ dependencies = [
  "libp2p-webtransport-websys",
  "libp2p-yamux",
  "multiaddr",
- "pin-project",
  "rw-stream-sink",
  "thiserror 2.0.19",
  "tokio",
@@ -3294,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3311,7 +3310,6 @@ dependencies = [
  "quinn-proto",
  "rand 0.8.6",
  "ring",
- "rustls",
  "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",
@@ -3501,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "futures",
  "futures-rustls",

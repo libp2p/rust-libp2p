@@ -1,3 +1,7 @@
+## 0.8.0
+
+- Use the AWS-LC crypto provider for TLS configurations.
+
 ## 0.7.0
 
 - Replace deprecated `webpki::Error` variants with their new context-based equivalents.
