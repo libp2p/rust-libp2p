@@ -28,15 +28,15 @@ jobs:
     env:
       CRATE: ${{ matrix.crate }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -53,7 +53,7 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: tomlq
 
@@ -104,18 +104,18 @@ jobs:
     name: Run all WASM tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: wasm32-unknown-unknown
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: wasm-pack@0.12.0
 
       - name: Install chromedriver
-        uses: nanasess/setup-chromedriver@v2
+        uses: nanasess/setup-chromedriver@v3
 
       - name: Run all tests
         run: ./wasm-tests/run-all.sh
@@ -137,15 +137,15 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -156,7 +156,7 @@ jobs:
     name: Compile with MSRV
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Extract MSRV from workspace manifest
         shell: bash
@@ -168,9 +168,9 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -184,13 +184,13 @@ jobs:
         include:
           - features: "mdns tcp dns tokio"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -201,13 +201,13 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -224,16 +224,16 @@ jobs:
           beta,
         ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -243,13 +243,13 @@ jobs:
     name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -262,13 +262,13 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -281,7 +281,7 @@ jobs:
             cargo check --manifest-path "$toml";
           done
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: wasm-pack@0.12.0
 
@@ -302,8 +302,8 @@ jobs:
       # https://github.com/obi1kenobi/cargo-semver-checks/issues/589
       RUSTFLAGS: ''
     steps:
-      - uses: actions/checkout@v5
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: semver
       - uses: obi1kenobi/cargo-semver-checks-action@v2
@@ -311,13 +311,13 @@ jobs:
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -325,11 +325,11 @@ jobs:
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
+      - uses: r7kamura/rust-problem-matchers@7e46a19e8d2f3a44f97b551aee14a7b3cc18fcd0 #v1.5.1
 
       - name: Ensure `full` feature contains all features
         run: |
@@ -346,7 +346,7 @@ jobs:
     outputs:
       members: ${{ steps.cargo-metadata.outputs.members }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -359,11 +359,11 @@ jobs:
     name: Check for changes in proto files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Generate proto files
         run: cd misc/gen-proto && cargo run
@@ -379,14 +379,14 @@ jobs:
     name: Ensure that `Cargo.lock` is up-to-date
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - run: cargo metadata --locked --format-version=1 > /dev/null
 
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     - uses: EmbarkStudios/cargo-deny-action@v2
       with:
         command: check advisories bans licenses sources

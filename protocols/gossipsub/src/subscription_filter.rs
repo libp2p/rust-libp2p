@@ -105,6 +105,7 @@ impl TopicSubscriptionFilter for WhitelistSubscriptionFilter {
 }
 
 /// Adds a max count to a given subscription filter
+#[derive(Debug, Clone)]
 pub struct MaxCountSubscriptionFilter<T: TopicSubscriptionFilter> {
     pub filter: T,
     pub max_subscribed_topics: usize,
@@ -155,6 +156,19 @@ impl<T: TopicSubscriptionFilter> TopicSubscriptionFilter for MaxCountSubscriptio
         }
 
         Ok(result)
+    }
+}
+
+impl<T> Default for MaxCountSubscriptionFilter<T>
+where
+    T: TopicSubscriptionFilter + Default,
+{
+    fn default() -> Self {
+        Self {
+            filter: Default::default(),
+            max_subscribed_topics: 100,
+            max_subscriptions_per_request: 100,
+        }
     }
 }
 

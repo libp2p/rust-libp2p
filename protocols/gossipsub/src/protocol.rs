@@ -192,6 +192,8 @@ where
 // Gossip codec for the framing
 
 pub struct GossipsubCodec {
+    /// The global max transmit size.
+    global_max_transmit_size: usize,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
@@ -207,14 +209,15 @@ pub struct GossipsubCodec {
 
 impl GossipsubCodec {
     pub fn new(
-        max_length: usize,
+        global_max_transmit_size: usize,
         validation_mode: ValidationMode,
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
         max_control_message_size: usize,
     ) -> GossipsubCodec {
-        let codec = prost_codec::Codec::new(max_length);
+        let codec = prost_codec::Codec::new(global_max_transmit_size);
         GossipsubCodec {
+            global_max_transmit_size,
             validation_mode,
             codec,
             max_transmit_sizes,
@@ -291,9 +294,18 @@ impl Encoder for GossipsubCodec {
 /// Validate RPC limits by parsing the wire format without allocating.
 fn validate_rpc_limits(
     mut buf: &[u8],
+    max_message_size: usize,
     max_publish_messages: usize,
     max_control_message_size: usize,
 ) -> io::Result<bool> {
+    let message_length = buf.len();
+    if message_length > max_message_size {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("message with {message_length}b exceeds maximum of {max_message_size}b",),
+        ));
+    }
+
     // Consume length prefix and get message bytes from length-prefixed buffer for validation
     if !consume_message_prefix(&mut buf)? {
         return Ok(false);
@@ -342,6 +354,7 @@ impl Decoder for GossipsubCodec {
         // Pre-validate: discard if limits exceeded
         if !validate_rpc_limits(
             src.as_ref(),
+            self.global_max_transmit_size,
             self.max_publish_messages,
             self.max_control_message_size,
         )? {
