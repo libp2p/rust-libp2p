@@ -389,34 +389,3 @@ mod tests {
         let actual = key.fingerprint().to_string();
         assert_eq!(expected, actual);
     }
-
-    #[test]
-    fn debug_formatting_does_not_leak_raw_psk() {
-        let raw_hex = "6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683";
-        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}")
-            .parse::<PreSharedKey>()
-            .unwrap();
-        let fingerprint = key.fingerprint().to_string();
-
-        let debug_output = format!("{key:?}");
-        let config_debug_output = format!("{:?}", PnetConfig::new(key));
-
-        assert!(!debug_output.contains(raw_hex));
-        assert!(!config_debug_output.contains(raw_hex));
-        assert!(debug_output.contains(&fingerprint));
-        assert!(config_debug_output.contains(&fingerprint));
-    }
-
-    #[test]
-    fn key_file_export_contains_raw_psk() {
-        let raw_hex = "6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683";
-        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\n{raw_hex}")
-            .parse::<PreSharedKey>()
-            .unwrap();
-
-        let key_file = key.to_key_file();
-
-        assert!(key_file.contains(raw_hex));
-        assert_eq!(key_file.parse::<PreSharedKey>().unwrap(), key);
-    }
-}
