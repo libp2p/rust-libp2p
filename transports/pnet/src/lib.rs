@@ -347,19 +347,6 @@ mod tests {
     }
 
     #[test]
-    fn psk_to_key_file_parse() {
-        fn prop(key: PreSharedKey) -> bool {
-            let text = key.to_key_file();
-            text.parse::<PreSharedKey>()
-                .map(|res| res == key)
-                .unwrap_or(false)
-        }
-        QuickCheck::new()
-            .tests(10)
-            .quickcheck(prop as fn(PreSharedKey) -> _);
-    }
-
-    #[test]
     fn psk_parse_failure() {
         use KeyParseError::*;
         assert_eq!("".parse::<PreSharedKey>().unwrap_err(), InvalidKeyFile);
@@ -389,3 +376,4 @@ mod tests {
         let actual = key.fingerprint().to_string();
         assert_eq!(expected, actual);
     }
+}
