@@ -1,6 +1,6 @@
 ## 0.8.0
 
-- Use the AWS-LC crypto provider for TLS configurations.
+- Use the AWS-LC crypto provider and prefer the X25519MLKEM768 key exchange group for TLS configurations.
 
 ## 0.7.0
 

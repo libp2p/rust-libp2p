@@ -99,21 +99,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn advertises_x25519_mlkem768() {
-        let keypair = Keypair::generate_ed25519();
-        let config = make_client_config(&keypair, None).unwrap();
-
-        assert!(
-            config
-                .crypto_provider()
-                .kx_groups
-                .iter()
-                .any(|group| group.name() == NamedGroup::X25519MLKEM768)
-        );
-    }
-
-    #[cfg(feature = "prefer-post-quantum")]
-    #[test]
     fn prefers_x25519_mlkem768() {
         let keypair = Keypair::generate_ed25519();
         let config = make_client_config(&keypair, None).unwrap();
@@ -121,18 +106,6 @@ mod tests {
         assert_eq!(
             config.crypto_provider().kx_groups[0].name(),
             NamedGroup::X25519MLKEM768
-        );
-    }
-
-    #[cfg(not(feature = "prefer-post-quantum"))]
-    #[test]
-    fn does_not_prefer_x25519_mlkem768() {
-        let keypair = Keypair::generate_ed25519();
-        let config = make_client_config(&keypair, None).unwrap();
-
-        assert_eq!(
-            config.crypto_provider().kx_groups[0].name(),
-            NamedGroup::X25519
         );
     }
 }

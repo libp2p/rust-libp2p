@@ -1,6 +1,6 @@
 ## 0.15.0
 
-- Advertise the X25519MLKEM768 key exchange group for QUIC. The `prefer-post-quantum` feature places it first in the ClientHello.
+- Prefer and advertise the X25519MLKEM768 key exchange group for QUIC.
 
 ## 0.14.0
 

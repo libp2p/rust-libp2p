@@ -24,10 +24,7 @@ yasna = "0.6"
 [dependencies.rustls]
 version = "0.23.22"
 default-features = false
-features = ["aws-lc-rs", "std"] # Must enable this to allow for custom verification code.
-
-[features]
-prefer-post-quantum = ["rustls/prefer-post-quantum"]
+features = ["aws-lc-rs", "prefer-post-quantum", "std"] # Must enable this to allow for custom verification code.
 
 [dev-dependencies]
 hex-literal = { workspace = true }

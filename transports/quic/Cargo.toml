@@ -25,7 +25,6 @@ socket2 = "0.6"
 ring = { workspace = true }
 
 [features]
-prefer-post-quantum = ["libp2p-tls/prefer-post-quantum"]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
