@@ -292,7 +292,7 @@ where
                 return;
             };
 
-            let nonce: u64 = rand::random();
+            let nonce = self.rng.random();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")

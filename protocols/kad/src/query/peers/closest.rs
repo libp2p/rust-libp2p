@@ -509,11 +509,11 @@ mod tests {
     use super::*;
     use crate::SHA_256_MH;
 
-    fn random_peers(n: usize) -> Vec<PeerId> {
+    fn random_peers<R: RngExt>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
             .map(|_| {
                 PeerId::from_multihash(
-                    Multihash::wrap(SHA_256_MH, &rand::random::<[u8; 32]>()).unwrap(),
+                    Multihash::wrap(SHA_256_MH, &g.random::<[u8; 32]>()).unwrap(),
                 )
                 .unwrap()
             })
@@ -649,7 +649,7 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.random_bool(0.75) {
                         let num_closer = rng.random_range(0..iter.config.num_results.get() + 1);
-                        let closer_peers = random_peers(num_closer);
+                        let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {

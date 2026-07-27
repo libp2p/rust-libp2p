@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.14"
+version = "0.3.0"
 edition = "2024" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
 description = "Data structures and algorithms for identifying peers in libp2p."
-rust-version = "1.85" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
+rust-version = "1.88.0" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking", "cryptography"]
@@ -22,7 +22,6 @@ multihash = { version = "0.19", optional = true }
 p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 prost = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-sec1 = { version = "0.8", default-features = false, optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.11", optional = true }
 thiserror = { workspace = true, optional = true }
@@ -33,7 +32,7 @@ ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
 [features]
 secp256k1 = ["dep:k256", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize", "dep:prost"]
-ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf", "dep:prost"]
+ecdsa = ["dep:p256", "dep:zeroize", "dep:sha2", "dep:hkdf", "dep:prost"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize", "dep:prost"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf", "dep:prost"]
 peerid = ["dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2", "dep:hkdf"]
