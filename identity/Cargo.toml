@@ -19,7 +19,7 @@ hkdf = { version = "0.12", optional = true }
 k256 = { version = "0.13", optional = true, features = ["ecdsa", "arithmetic"] }
 tracing = { workspace = true }
 multihash = { version = "0.19", optional = true }
-p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 prost = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 sec1 = { version = "0.7", default-features = false, optional = true }
