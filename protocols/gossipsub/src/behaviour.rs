@@ -57,7 +57,8 @@ use web_time::{Instant, SystemTime};
 #[cfg(feature = "metrics")]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
-    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
+    FailedMessages, MaxCountSubscriptionFilter, PublishError, SubscriptionError, TopicScoreParams,
+    ValidationError,
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
     gossip_promises::GossipPromises,
@@ -292,7 +293,10 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
+pub struct Behaviour<
+    D = IdentityTransform,
+    F = MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>,
+> {
     /// Configuration providing gossipsub performance parameters.
     config: Config,
 
