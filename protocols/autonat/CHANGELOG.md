@@ -35,7 +35,7 @@
 ## 0.13.0
 
 - Due to the refactor of `Transport` it's no longer required to create a separate transport for
-  AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
+AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
 - Introduce the new AutoNATv2 protocol.
   It's split into a client and a server part, represented in their respective modules
@@ -43,12 +43,11 @@
     - The server now always dials back over a newly allocated port.
       This more accurately reflects the reachability state for other peers and avoids accidental hole punching.
     - The server can now test addresses different from the observed address (i.e., the connection to the server was made through a `p2p-circuit`). To mitigate against DDoS attacks, the client has to send more data to the server than the dial-back costs.
-      See [PR 5526](https://github.com/libp2p/rust-libp2p/pull/5526).
+  See [PR 5526](https://github.com/libp2p/rust-libp2p/pull/5526).
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
 ## 0.12.1
-
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
@@ -95,6 +94,7 @@
 - Skip unparsable multiaddr in `DialRequest::from_bytes`. See [PR 3351].
 
 [PR 3351]: https://github.com/libp2p/rust-libp2p/pull/3351
+
 
 ## 0.9.0
 
@@ -180,7 +180,7 @@
 
 - Update to `libp2p-request-response` `v0.16.0`.
 
-- Merge NetworkBehaviour's inject\_\* paired methods (see PR 2445).
+- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
 
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 
