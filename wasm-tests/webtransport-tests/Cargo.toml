@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 futures = { workspace = true }
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }

@@ -20,7 +20,7 @@
 
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use libp2p_identity::{Keypair, PeerId};
 
 fn from_bytes(c: &mut Criterion) {
