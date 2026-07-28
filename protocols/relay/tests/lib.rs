@@ -35,7 +35,10 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
+use libp2p_swarm::{
+    Config, DialError, NetworkBehaviour, Swarm, SwarmEvent,
+    dial_opts::{DialOpts, PeerCondition},
+};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
@@ -289,6 +292,85 @@ async fn connect() {
         false, // No renewal.
     )
     .await;
+
+    let mut src = build_client();
+    let src_peer_id = *src.local_peer_id();
+
+    src.dial(dst_addr).unwrap();
+
+    futures::future::join(
+        connection_established_to(&mut src, relay_peer_id, dst_peer_id),
+        connection_established_to(&mut dst, relay_peer_id, src_peer_id),
+    )
+    .await;
+}
+
+/// A destination peer may hold several connections to the relay while only one of them
+/// carries the reservation: a reconnect leaves the old connection around for a while, and
+/// nothing stops a peer from dialing the relay again for other reasons.
+///
+/// The relay used to pick an arbitrary connection out of a  and assert that it was
+/// the reserved one, which panicked the whole relay task as soon as the (randomly ordered)
+/// iterator yielded any of the others.
+#[tokio::test]
+async fn connect_with_extra_non_reserved_connections_to_relay() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut dst = build_client();
+    let dst_peer_id = *dst.local_peer_id();
+    let dst_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    dst.listen_on(dst_addr.clone()).unwrap();
+
+    assert!(wait_for_dial(&mut dst, relay_peer_id).await);
+
+    wait_for_reservation(
+        &mut dst,
+        dst_addr.clone(),
+        relay_peer_id,
+        false, // No renewal.
+    )
+    .await;
+
+    // Open additional connections to the relay that do *not* carry a reservation. Several of
+    // them, so the test does not depend on which one the relay happens to look at first.
+    const EXTRA_CONNECTIONS: usize = 5;
+    for _ in 0..EXTRA_CONNECTIONS {
+        dst.dial(
+            DialOpts::peer_id(relay_peer_id)
+                .condition(PeerCondition::Always)
+                .addresses(vec![relay_addr.clone()])
+                .build(),
+        )
+        .unwrap();
+    }
+
+    let mut established = 0;
+    while established < EXTRA_CONNECTIONS {
+        match dst.select_next_some().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {
+                established += 1;
+            }
+            SwarmEvent::Dialing { .. } | SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            e => panic!("{e:?}"),
+        }
+    }
 
     let mut src = build_client();
     let src_peer_id = *src.local_peer_id();

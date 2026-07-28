@@ -1,5 +1,12 @@
 ## 0.22.0
 
+- Don't panic when the destination peer has connections to the relay that carry no reservation.
+  The relay picked an arbitrary connection out of a `HashMap` and asserted that it held the
+  reservation, crashing the whole relay as soon as the (randomly ordered) iterator yielded any
+  of the others. It now looks for the connection that actually holds the reservation and falls
+  back to denying the request with `NO_RESERVATION`.
+  See [PR 6570](https://github.com/libp2p/rust-libp2p/pull/6570).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
