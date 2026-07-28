@@ -1137,7 +1137,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
- "digest 0.10.7",
  "fiat-crypto 0.2.9",
  "rustc_version",
  "subtle",
@@ -1344,13 +1343,13 @@ dependencies = [
 
 [[package]]
 name = "displaydoc"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
+checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1443,16 +1442,6 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
-version = "2.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
-dependencies = [
- "pkcs8 0.10.2",
- "signature 2.2.0",
-]
-
-[[package]]
-name = "ed25519"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29fcf32e6c73d1079f83ab4d782de2d81620346a5f38c6237a86a22f8368980a"
@@ -1462,26 +1451,12 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
-dependencies = [
- "curve25519-dalek 4.1.3",
- "ed25519 2.2.3",
- "serde",
- "sha2 0.10.9",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-dalek"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ebaa1a2bf1290ab3bfe5a7b771d050ebffab2711c19a81691c683a5144a25de"
 dependencies = [
  "curve25519-dalek 5.0.0",
- "ed25519 3.0.0",
+ "ed25519",
  "sha2 0.11.0",
  "subtle",
  "zeroize",
@@ -1585,11 +1560,10 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.4.1"
+version = "5.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13b66accf52311f30a0db42147dadea9850cb48cd070028831ae5f5d4b856ab"
+checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
- "concurrent-queue",
  "parking",
  "pin-project-lite",
 ]
@@ -2356,7 +2330,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2786,20 +2760,6 @@ dependencies = [
 
 [[package]]
 name = "k256"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6e3919bbaa2945715f0bb6d3934a173d1e9a59ac23767fbaaef277265a7411b"
-dependencies = [
- "cfg-if",
- "ecdsa 0.16.9",
- "elliptic-curve 0.13.8",
- "once_cell",
- "sha2 0.10.9",
- "signature 2.2.0",
-]
-
-[[package]]
-name = "k256"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93f50113171a713f4a4231ef82eb26703607139b35dcb56241f0ceab2ae1f7d8"
@@ -2828,7 +2788,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.0",
  "clap",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "serde",
  "serde_json",
  "zeroize",
@@ -2885,7 +2845,7 @@ dependencies = [
  "libp2p-floodsub",
  "libp2p-gossipsub",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-kad",
  "libp2p-mdns",
  "libp2p-memory-connection-limits",
@@ -2922,7 +2882,7 @@ name = "libp2p-allow-block-list"
 version = "0.7.0"
 dependencies = [
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
@@ -2940,7 +2900,7 @@ dependencies = [
  "futures-timer",
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
@@ -2961,7 +2921,7 @@ version = "0.7.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-ping",
  "libp2p-swarm",
  "libp2p-swarm-derive",
@@ -2979,7 +2939,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-mplex",
  "libp2p-noise",
  "multiaddr",
@@ -3009,7 +2969,7 @@ dependencies = [
  "hashlink",
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-plaintext",
  "libp2p-relay",
  "libp2p-swarm",
@@ -3032,7 +2992,7 @@ dependencies = [
  "futures",
  "hickory-resolver",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "parking_lot",
  "smallvec",
  "tokio",
@@ -3051,7 +3011,7 @@ dependencies = [
  "futures",
  "hashlink",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "prost",
  "prost-codec",
@@ -3078,7 +3038,7 @@ dependencies = [
  "hashlink",
  "hex_fmt",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "prometheus-client",
@@ -3105,7 +3065,7 @@ dependencies = [
  "futures-bounded",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "prost",
@@ -3119,39 +3079,15 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9525f3831544f7ae497bde79adf114ef127b0fbbb97edbbf692a80408636421c"
-dependencies = [
- "asn1_der",
- "bs58",
- "ed25519-dalek 2.2.0",
- "hkdf 0.12.4",
- "k256 0.13.4",
- "multihash",
- "p256 0.13.2",
- "prost",
- "rand 0.8.7",
- "ring",
- "sec1 0.7.3",
- "serde",
- "sha2 0.10.9",
- "thiserror 2.0.19",
- "tracing",
- "zeroize",
-]
-
-[[package]]
-name = "libp2p-identity"
 version = "0.3.0"
 dependencies = [
  "asn1_der",
  "bs58",
  "criterion",
- "ed25519-dalek 3.0.0",
+ "ed25519-dalek",
  "hex-literal",
  "hkdf 0.13.0",
- "k256 0.14.0",
+ "k256",
  "multihash",
  "p256 0.14.0",
  "prost",
@@ -3180,7 +3116,7 @@ dependencies = [
  "futures-timer",
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-swarm",
  "libp2p-swarm-test",
@@ -3208,7 +3144,7 @@ dependencies = [
  "hickory-proto",
  "if-watch",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "rand 0.10.2",
@@ -3225,7 +3161,7 @@ version = "0.6.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
@@ -3244,7 +3180,7 @@ dependencies = [
  "libp2p-dcutr",
  "libp2p-gossipsub",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-kad",
  "libp2p-ping",
  "libp2p-relay",
@@ -3263,7 +3199,7 @@ dependencies = [
  "criterion",
  "futures",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-muxer-test-harness",
  "libp2p-plaintext",
  "libp2p-tcp",
@@ -3299,7 +3235,7 @@ dependencies = [
  "futures_ringbuf",
  "getrandom 0.3.4",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "multiaddr",
  "multihash",
  "prost",
@@ -3321,7 +3257,7 @@ dependencies = [
  "hashlink",
  "libp2p",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "serde_json",
@@ -3339,7 +3275,7 @@ dependencies = [
  "futures-timer",
  "libp2p",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
@@ -3361,7 +3297,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "quickcheck-ext",
@@ -3380,7 +3316,7 @@ dependencies = [
  "futures",
  "futures_ringbuf",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "prost",
  "prost-codec",
  "quickcheck-ext",
@@ -3394,7 +3330,7 @@ version = "0.27.0"
 dependencies = [
  "futures",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-swarm",
  "libp2p-tcp",
@@ -3417,7 +3353,7 @@ dependencies = [
  "futures-timer",
  "if-watch",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-muxer-test-harness",
  "libp2p-noise",
  "libp2p-tcp",
@@ -3447,7 +3383,7 @@ dependencies = [
  "futures-bounded",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-swarm",
@@ -3475,7 +3411,7 @@ dependencies = [
  "futures-timer",
  "hashlink",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
@@ -3499,7 +3435,7 @@ dependencies = [
  "futures-bounded",
  "futures_ringbuf",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "rand 0.10.2",
@@ -3535,7 +3471,7 @@ version = "0.5.0-alpha"
 dependencies = [
  "futures",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "rand 0.10.2",
@@ -3557,7 +3493,7 @@ dependencies = [
  "hashlink",
  "libp2p-core",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-kad",
  "libp2p-ping",
  "libp2p-plaintext",
@@ -3593,7 +3529,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-plaintext",
  "libp2p-swarm",
  "libp2p-tcp",
@@ -3624,7 +3560,7 @@ dependencies = [
  "futures-rustls",
  "hex-literal",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-yamux",
  "rcgen",
@@ -3671,7 +3607,7 @@ dependencies = [
  "hex",
  "if-watch",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-webrtc-utils",
  "multihash",
@@ -3697,7 +3633,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "prost",
  "prost-codec",
@@ -3718,7 +3654,7 @@ dependencies = [
  "hex",
  "js-sys",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-webrtc-utils",
  "send_wrapper 0.6.0",
  "thiserror 2.0.19",
@@ -3737,7 +3673,7 @@ dependencies = [
  "futures-rustls",
  "libp2p-core",
  "libp2p-dns",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-tcp",
  "parking_lot",
  "pin-project-lite",
@@ -3759,7 +3695,7 @@ dependencies = [
  "futures",
  "js-sys",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-yamux",
  "send_wrapper 0.6.0",
@@ -3776,7 +3712,7 @@ dependencies = [
  "futures",
  "js-sys",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "multiaddr",
  "multibase",
@@ -4082,14 +4018,15 @@ dependencies = [
 
 [[package]]
 name = "multiaddr"
-version = "0.18.2"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe6351f60b488e04c1d21bc69e56b89cb3f5e8f5d22557d6e8031bdfd79b6961"
+checksum = "d96879ec0057cf5f99543c5333f6818c1473081684ae7ad55da21b6ea65ba214"
 dependencies = [
  "arrayref",
  "byteorder",
+ "bytes",
  "data-encoding",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "multibase",
  "multihash",
  "percent-encoding",
@@ -5022,7 +4959,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -5062,7 +4999,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -6332,7 +6269,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -6573,9 +6510,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.3+spec-1.1.0"
+version = "1.1.4+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53c96ecdfa941c8fc4fcaed14f99ada8ebed502eef533015095a07e3301d4c3c"
+checksum = "3aace63f4bbcdfc2c965b059de67119c89c4017a70d633be6c104910f67056f5"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -6597,9 +6534,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.2+spec-1.1.0"
+version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2abe9b86193656635d2411dc43050282ca48aa31c2451210f4202550afb7526"
+checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
 dependencies = [
  "winnow",
 ]
@@ -7381,7 +7318,7 @@ dependencies = [
  "futures",
  "getrandom 0.4.3",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-webtransport-websys",
  "multiaddr",
