@@ -1,5 +1,9 @@
 ## 0.10.0-alpha
 
+- Move the offer SDP template into `libp2p-webrtc-utils` and render it through the new
+  `sdp::offer` there. No behaviour change.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 - Update webrtc-rs to `v0.17` and fix libp2p noise data channel negotiation.
   See [PR 6429](https://github.com/libp2p/rust-libp2p/pull/6429)
 
