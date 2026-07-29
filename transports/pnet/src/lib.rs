@@ -40,12 +40,11 @@ use std::{
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
 use pin_project::pin_project;
-use rand::RngCore;
 use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
 };
-use sha3::{Shake128, digest::ExtendableOutput};
+use shake::{ExtendableOutput, Shake128, Update, XofReader};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -68,18 +67,14 @@ impl PreSharedKey {
     /// This provides a way to check that private keys are properly configured
     /// without dumping the key itself to the console.
     pub fn fingerprint(&self) -> Fingerprint {
-        use std::io::{Read, Write};
         let mut enc = [0u8; 64];
         let nonce: [u8; 8] = *b"finprint";
         let mut out = [0u8; 16];
         let mut cipher = Salsa20::new(&self.0.into(), &nonce.into());
         cipher.apply_keystream(&mut enc);
         let mut hasher = Shake128::default();
-        hasher.write_all(&enc).expect("shake128 failed");
-        hasher
-            .finalize_xof()
-            .read_exact(&mut out)
-            .expect("shake128 failed");
+        hasher.update(&enc);
+        hasher.finalize_xof().read(&mut out);
         Fingerprint(out)
     }
 
@@ -215,7 +210,7 @@ impl PnetConfig {
         tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut local_nonce);
+        rand::fill(&mut local_nonce);
         socket
             .write_all(&local_nonce)
             .await
