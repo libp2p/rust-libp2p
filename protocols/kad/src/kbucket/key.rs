@@ -26,8 +26,10 @@ use std::{
 
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
-use sha2::digest::common::array::{Array, typenum::U32};
-use sha2::{Digest, Sha256};
+use sha2::{
+    Digest, Sha256,
+    digest::common::array::{Array, typenum::U32},
+};
 use uint::*;
 
 use crate::record;
