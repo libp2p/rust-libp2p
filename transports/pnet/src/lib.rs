@@ -44,7 +44,7 @@ use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
 };
-use sha3::{Shake128, digest::ExtendableOutput};
+use sha3::{Sha3_256, digest::Digest};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -67,18 +67,14 @@ impl PreSharedKey {
     /// This provides a way to check that private keys are properly configured
     /// without dumping the key itself to the console.
     pub fn fingerprint(&self) -> Fingerprint {
-        use std::io::{Read, Write};
         let mut enc = [0u8; 64];
         let nonce: [u8; 8] = *b"finprint";
         let mut out = [0u8; 16];
         let mut cipher = Salsa20::new(&self.0.into(), &nonce.into());
         cipher.apply_keystream(&mut enc);
-        let mut hasher = Shake128::default();
-        hasher.write_all(&enc).expect("shake128 failed");
-        hasher
-            .finalize_xof()
-            .read_exact(&mut out)
-            .expect("shake128 failed");
+        let mut hasher = Sha3_256::default();
+        hasher.update(enc);
+        out.copy_from_slice(&hasher.finalize()[..16]);
         Fingerprint(out)
     }
 
