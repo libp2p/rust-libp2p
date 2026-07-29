@@ -48,10 +48,7 @@ use libp2p_swarm::{
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
 use prost::Message as _;
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng,
-};
+use rand::seq::{IteratorRandom, SliceRandom};
 use web_time::{Instant, SystemTime};
 
 #[cfg(feature = "metrics")]
@@ -808,7 +805,7 @@ where
                         .filter(|peer_id| {
                             !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
                         })
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
@@ -838,7 +835,7 @@ where
                     let new_peers = candidates
                         .into_iter()
                         .filter(|peer_id| !recipients.contains(peer_id))
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
@@ -1432,8 +1429,7 @@ where
 
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
-            let mut rng = thread_rng();
-            iwant_ids_vec.partial_shuffle(&mut rng, iask);
+            iwant_ids_vec.shuffle(&mut rand::rng());
 
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
@@ -1814,8 +1810,8 @@ where
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
-            let mut rng = thread_rng();
-            px.partial_shuffle(&mut rng, n);
+            let mut rng = rand::rng();
+            px.shuffle(&mut rng);
             px = px.into_iter().take(n).collect();
         }
 
@@ -2433,7 +2429,7 @@ where
                 let excess_peer_no = peers.len() - mesh_n;
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
-                let mut rng = thread_rng();
+                let mut rng = rand::rng();
                 let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
@@ -2791,7 +2787,7 @@ where
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut messages = Vec::new();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
@@ -2846,8 +2842,7 @@ where
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids
-                        .partial_shuffle(&mut rng, self.config.max_control_messages_sent());
+                    peer_message_ids.shuffle(&mut rng);
                     peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
@@ -3858,8 +3853,8 @@ fn get_random_peers_dynamic(
     }
 
     // we have more peers than needed, shuffle them and return n of them
-    let mut rng = thread_rng();
-    gossip_peers.partial_shuffle(&mut rng, n);
+    let mut rng = rand::rng();
+    gossip_peers.shuffle(&mut rng);
 
     tracing::debug!("RANDOM PEERS: Got {:?} peers", n);
 

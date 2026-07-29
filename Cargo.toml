@@ -85,7 +85,7 @@ libp2p-dns = { version = "0.45.0", path = "transports/dns" }
 libp2p-floodsub = { version = "0.48.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.50.0", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.48.0", path = "protocols/identify" }
-libp2p-identity = { version = "0.2.14" }
+libp2p-identity = { version = "0.3.0" }
 libp2p-kad = { version = "0.49.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.49.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.6.0", path = "misc/memory-connection-limits" }
@@ -129,19 +129,19 @@ futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
 futures-timer = "3.0"
 hex-literal = "1.1"
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 hashlink = "0.12"
 hickory-proto = { version = "0.26", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false }
 if-watch = "3.2"
-multiaddr = "0.18"
+multiaddr = "0.19"
 multihash = "0.19"
 multistream-select = { version = "0.14.0", path = "misc/multistream-select" }
 prometheus-client = "0.25"
 prost-codec = { version = "0.4.0", path = "misc/prost-codec" }
 prost = "0.14"
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
-rand = "0.8"
+rand = "0.10"
 rcgen = "0.13"
 ring = "0.17"
 rw-stream-sink = { version = "0.5.0", path = "misc/rw-stream-sink" }
