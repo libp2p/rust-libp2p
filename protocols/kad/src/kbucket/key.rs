@@ -26,10 +26,8 @@ use std::{
 
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
-use sha2::{
-    Digest, Sha256,
-    digest::generic_array::{GenericArray, typenum::U32},
-};
+use sha2::digest::common::array::{Array, typenum::U32};
+use sha2::{Digest, Sha256};
 use uint::*;
 
 use crate::record;
@@ -153,7 +151,7 @@ impl<T> Hash for Key<T> {
 
 /// The raw bytes of a key in the DHT keyspace.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct KeyBytes(GenericArray<u8, U32>);
+pub struct KeyBytes(Array<u8, U32>);
 
 impl KeyBytes {
     /// Creates a new key in the DHT keyspace by running the given
@@ -182,7 +180,7 @@ impl KeyBytes {
     /// `self xor other = distance <==> other = self xor distance`
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
         let key_int = U256::from_big_endian(self.0.as_slice()) ^ d.0;
-        KeyBytes(GenericArray::from(key_int.to_big_endian()))
+        KeyBytes(Array::from(key_int.to_big_endian()))
     }
 }
 

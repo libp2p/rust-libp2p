@@ -35,7 +35,7 @@ prost-codec = { workspace = true }
 rand = { workspace = true }
 regex = "1.13"
 serde = { version = "1", optional = true, features = ["derive"] }
-sha2 = "0.11"
+sha2 = { workspace = true }
 tracing = { workspace = true }
 
 # Metrics dependencies
