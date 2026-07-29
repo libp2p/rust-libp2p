@@ -44,7 +44,7 @@ use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
 };
-use sha3::{Sha3_256, digest::Digest};
+use shake::{ExtendableOutput, Shake128, Update, XofReader};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -72,9 +72,9 @@ impl PreSharedKey {
         let mut out = [0u8; 16];
         let mut cipher = Salsa20::new(&self.0.into(), &nonce.into());
         cipher.apply_keystream(&mut enc);
-        let mut hasher = Sha3_256::default();
-        hasher.update(enc);
-        out.copy_from_slice(&hasher.finalize()[..16]);
+        let mut hasher = Shake128::default();
+        hasher.update(&enc);
+        hasher.finalize_xof().read(&mut out);
         Fingerprint(out)
     }
 
