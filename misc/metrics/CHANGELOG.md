@@ -1,5 +1,8 @@
 ## 0.18.0
 
+- Forward `StreamMuxer::substream_id` through the bandwidth-metering muxer.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

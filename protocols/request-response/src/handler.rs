@@ -127,6 +127,7 @@ where
         FullyNegotiatedInbound {
             protocol: (mut stream, protocol),
             info: (),
+            ..
         }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         let mut codec = self.codec.clone();
@@ -175,6 +176,7 @@ where
         FullyNegotiatedOutbound {
             protocol: (mut stream, protocol),
             info: (),
+            ..
         }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         let message = self

@@ -2956,6 +2956,7 @@ dependencies = [
 name = "libp2p-core"
 version = "0.44.0"
 dependencies = [
+ "bytes",
  "either",
  "fnv",
  "futures",
@@ -2976,6 +2977,22 @@ dependencies = [
  "tracing",
  "unsigned-varint",
  "web-time",
+]
+
+[[package]]
+name = "libp2p-datagram"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-quic",
+ "libp2p-swarm",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing-subscriber",
+ "unsigned-varint",
 ]
 
 [[package]]
@@ -3370,6 +3387,7 @@ dependencies = [
 name = "libp2p-quic"
 version = "0.14.0"
 dependencies = [
+ "bytes",
  "futures",
  "futures-timer",
  "if-watch",
@@ -3505,6 +3523,7 @@ dependencies = [
 name = "libp2p-swarm"
 version = "0.48.0"
 dependencies = [
+ "bytes",
  "criterion",
  "either",
  "fnv",
@@ -6896,6 +6915,8 @@ checksum = "eb066959b24b5196ae73cb057f45598450d2c5f71460e98c49b738086eff9c06"
 dependencies = [
  "asynchronous-codec",
  "bytes",
+ "futures-io",
+ "futures-util",
 ]
 
 [[package]]

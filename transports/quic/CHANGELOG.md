@@ -1,5 +1,8 @@
 ## 0.14.0
 
+- Support unreliable QUIC datagrams, enabled by default. Tune via `Config::datagram_receive_buffer_size` and `datagram_send_buffer_size`. Substreams now report their QUIC stream id via `StreamMuxer::substream_id`.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
