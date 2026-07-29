@@ -48,16 +48,14 @@ use libp2p_swarm::{
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
 use prost::Message as _;
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng,
-};
+use rand::seq::{IteratorRandom, SliceRandom};
 use web_time::{Instant, SystemTime};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
-    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
+    FailedMessages, MaxCountSubscriptionFilter, PublishError, SubscriptionError, TopicScoreParams,
+    ValidationError,
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
     gossip_promises::GossipPromises,
@@ -292,7 +290,10 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
+pub struct Behaviour<
+    D = IdentityTransform,
+    F = MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>,
+> {
     /// Configuration providing gossipsub performance parameters.
     config: Config,
 
@@ -804,7 +805,7 @@ where
                         .filter(|peer_id| {
                             !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
                         })
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
@@ -834,7 +835,7 @@ where
                     let new_peers = candidates
                         .into_iter()
                         .filter(|peer_id| !recipients.contains(peer_id))
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
@@ -1352,7 +1353,7 @@ where
         }
 
         if let Some(iasked) = self.count_sent_iwant.get(peer_id)
-            && *iasked >= self.config.max_control_messages()
+            && *iasked >= self.config.max_control_messages_sent()
         {
             tracing::debug!(
                 peer=%peer_id,
@@ -1411,8 +1412,11 @@ where
         if !iwant_ids.is_empty() {
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
-            if *iasked + iask > self.config.max_control_messages() {
-                iask = self.config.max_control_messages().saturating_sub(*iasked);
+            if *iasked + iask > self.config.max_control_messages_sent() {
+                iask = self
+                    .config
+                    .max_control_messages_sent()
+                    .saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -1425,8 +1429,7 @@ where
 
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
-            let mut rng = thread_rng();
-            iwant_ids_vec.partial_shuffle(&mut rng, iask);
+            iwant_ids_vec.shuffle(&mut rand::rng());
 
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
@@ -1498,7 +1501,7 @@ where
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
-                        RpcOut::Forward {
+                        RpcOut::Publish {
                             message_id: id.clone(),
                             message: msg,
                             timeout: Delay::new(self.config.forward_queue_duration()),
@@ -1538,133 +1541,129 @@ where
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             tracing::warn!(peer=%peer_id, "GRAFT: ignoring request from direct peer");
-            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
-            to_prune_topics = topics.into_iter().collect();
-            // but don't PX
-            do_px = false
-        } else {
-            let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
-            let now = Instant::now();
-            for topic_hash in topics {
-                if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                    // if the peer is already in the mesh ignore the graft
-                    if peers.contains(peer_id) {
-                        tracing::debug!(
-                            peer=%peer_id,
-                            topic=%&topic_hash,
-                            "GRAFT: Received graft for peer that is already in topic"
-                        );
-                        continue;
-                    }
+            return;
+        }
 
-                    // make sure we are not backing off that peer
-                    if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
-                        && backoff_time > now
+        let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
+        let now = Instant::now();
+        for topic_hash in topics {
+            let Some(peers) = self.mesh.get_mut(&topic_hash) else {
+                // don't do PX when there is an unknown topic to avoid leaking our peers
+                do_px = false;
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "GRAFT: Received graft for unknown topic from peer"
+                );
+                // spam hardening: ignore GRAFTs for unknown topics
+                continue;
+            };
+
+            // if the peer is already in the mesh ignore the graft
+            if peers.contains(peer_id) {
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%&topic_hash,
+                    "GRAFT: Received graft for peer that is already in topic"
+                );
+                continue;
+            }
+
+            // make sure we are not backing off that peer
+            if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
+                && backoff_time > now
+            {
+                tracing::warn!(
+                    peer=%peer_id,
+                    "[Penalty] Peer attempted graft within backoff time, penalizing"
+                );
+                // add behavioural penalty
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    #[cfg(feature = "metrics")]
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.register_score_penalty(Penalty::GraftBackoff);
+                    }
+                    peer_score.add_penalty(peer_id, 1);
+
+                    // Apply an extra graft-backoff penalty only when the peer is still
+                    // far enough from backoff expiry.
+                    // This compares durations only,
+                    // avoiding Instant arithmetic and handling config edge cases
+                    // safely: any active backoff
+                    // qualifies for the extra penalty.
+                    let apply_extra_penalty = match self
+                        .config
+                        .prune_backoff()
+                        .checked_sub(self.config.graft_flood_threshold())
                     {
-                        tracing::warn!(
-                            peer=%peer_id,
-                            "[Penalty] Peer attempted graft within backoff time, penalizing"
-                        );
-                        // add behavioural penalty
-                        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                            #[cfg(feature = "metrics")]
-                            if let Some(metrics) = self.metrics.as_mut() {
-                                metrics.register_score_penalty(Penalty::GraftBackoff);
-                            }
-                            peer_score.add_penalty(peer_id, 1);
-
-                            // Apply an extra graft-backoff penalty only when the peer is still
-                            // far enough from backoff expiry.
-                            // This compares durations only,
-                            // avoiding Instant arithmetic and handling config edge cases
-                            // safely: any active backoff
-                            // qualifies for the extra penalty.
-                            let apply_extra_penalty = match self
-                                .config
-                                .prune_backoff()
-                                .checked_sub(self.config.graft_flood_threshold())
-                            {
-                                Some(required_remaining) => {
-                                    let remaining_backoff =
-                                        backoff_time.saturating_duration_since(now);
-                                    remaining_backoff > required_remaining
-                                }
-                                // graft_flood_threshold >= prune_backoff
-                                None => true,
-                            };
-                            if apply_extra_penalty {
-                                peer_score.add_penalty(peer_id, 1);
-                            }
+                        Some(required_remaining) => {
+                            let remaining_backoff = backoff_time.saturating_duration_since(now);
+                            remaining_backoff > required_remaining
                         }
-                        // no PX
-                        do_px = false;
-
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
+                        // graft_flood_threshold >= prune_backoff
+                        None => true,
+                    };
+                    if apply_extra_penalty {
+                        peer_score.add_penalty(peer_id, 1);
                     }
-
-                    // check the score
-                    if below_zero {
-                        // we don't GRAFT peers with negative score
-                        tracing::debug!(
-                            peer=%peer_id,
-                            %score,
-                            topic=%topic_hash,
-                            "GRAFT: ignoring peer with negative score"
-                        );
-                        // we do send them PRUNE however, because it's a matter of protocol
-                        // correctness
-                        to_prune_topics.insert(topic_hash.clone());
-                        // but we won't PX to them
-                        do_px = false;
-                        continue;
-                    }
-
-                    // check mesh upper bound and only allow graft if the upper bound is not reached
-                    let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
-
-                    if peers.len() >= mesh_n_high {
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
-                    }
-
-                    // add peer to the mesh
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Mesh link added for peer in topic"
-                    );
-
-                    if peers.insert(*peer_id) {
-                        #[cfg(feature = "metrics")]
-                        if let Some(m) = self.metrics.as_mut() {
-                            m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
-                        }
-                    }
-
-                    // If the peer did not previously exist in any mesh, inform the handler
-                    peer_added_to_mesh(
-                        *peer_id,
-                        vec![&topic_hash],
-                        &self.mesh,
-                        &mut self.events,
-                        &self.connected_peers,
-                    );
-
-                    if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                        peer_score.graft(peer_id, topic_hash);
-                    }
-                } else {
-                    // don't do PX when there is an unknown topic to avoid leaking our peers
-                    do_px = false;
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Received graft for unknown topic from peer"
-                    );
-                    // spam hardening: ignore GRAFTs for unknown topics
-                    continue;
                 }
+                // no PX
+                do_px = false;
+
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // check the score
+            if below_zero {
+                // we don't GRAFT peers with negative score
+                tracing::debug!(
+                    peer=%peer_id,
+                    %score,
+                    topic=%topic_hash,
+                    "GRAFT: ignoring peer with negative score"
+                );
+                // we do send them PRUNE however, because it's a matter of protocol
+                // correctness
+                to_prune_topics.insert(topic_hash.clone());
+                // but we won't PX to them
+                do_px = false;
+                continue;
+            }
+
+            // check mesh upper bound and only allow graft if the upper bound is not reached
+            let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+
+            if peers.len() >= mesh_n_high {
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // add peer to the mesh
+            tracing::debug!(
+                peer=%peer_id,
+                topic=%topic_hash,
+                "GRAFT: Mesh link added for peer in topic"
+            );
+
+            if peers.insert(*peer_id) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
+                }
+            }
+
+            // If the peer did not previously exist in any mesh, inform the handler
+            peer_added_to_mesh(
+                *peer_id,
+                vec![&topic_hash],
+                &self.mesh,
+                &mut self.events,
+                &self.connected_peers,
+            );
+
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                peer_score.graft(peer_id, topic_hash);
             }
         }
 
@@ -1811,8 +1810,8 @@ where
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
-            let mut rng = thread_rng();
-            px.partial_shuffle(&mut rng, n);
+            let mut rng = rand::rng();
+            px.shuffle(&mut rng);
             px = px.into_iter().take(n).collect();
         }
 
@@ -2430,7 +2429,7 @@ where
                 let excess_peer_no = peers.len() - mesh_n;
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
-                let mut rng = thread_rng();
+                let mut rng = rand::rng();
                 let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
@@ -2788,7 +2787,7 @@ where
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut messages = Vec::new();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
@@ -2797,7 +2796,7 @@ where
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
-            if message_ids.len() > self.config.max_control_messages() {
+            if message_ids.len() > self.config.max_control_messages_sent() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
                     "too many messages for gossip; will truncate IHAVE list ({} messages)",
@@ -2839,12 +2838,12 @@ where
             for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
-                if peer_message_ids.len() > self.config.max_control_messages() {
+                if peer_message_ids.len() > self.config.max_control_messages_sent() {
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_control_messages());
-                    peer_message_ids.truncate(self.config.max_control_messages());
+                    peer_message_ids.shuffle(&mut rng);
+                    peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
                 // send an IHAVE message
@@ -3021,7 +3020,7 @@ where
 
                 self.send_message(
                     *peer_id,
-                    RpcOut::Forward {
+                    RpcOut::Publish {
                         message_id: msg_id.clone(),
                         message: message.clone(),
                         timeout: Delay::new(self.config.forward_queue_duration()),
@@ -3854,8 +3853,8 @@ fn get_random_peers_dynamic(
     }
 
     // we have more peers than needed, shuffle them and return n of them
-    let mut rng = thread_rng();
-    gossip_peers.partial_shuffle(&mut rng, n);
+    let mut rng = rand::rng();
+    gossip_peers.shuffle(&mut rng);
 
     tracing::debug!("RANDOM PEERS: Got {:?} peers", n);
 

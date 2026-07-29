@@ -10,17 +10,17 @@ release = false
 
 [dependencies]
 futures = { workspace = true }
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }
 libp2p-webtransport-websys = { workspace = true }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
-wasm-bindgen = "0.2.93"
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = { workspace = true }
-wasm-bindgen-test = "0.3.50"
-web-sys = { version = "0.3.70", features = ["Response", "Window"] }
+wasm-bindgen-test = "0.3"
+web-sys = { version = "0.3", features = ["Response", "Window"] }
 
 [lints]
 workspace = true
