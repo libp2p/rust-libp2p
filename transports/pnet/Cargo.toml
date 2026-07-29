@@ -13,7 +13,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = { workspace = true }
 salsa20 = "0.10"
-sha3 = "0.12"
 shake = "0.1"
 tracing = { workspace = true }
 rand = { workspace = true }
