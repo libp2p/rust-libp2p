@@ -3126,7 +3126,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.10.2",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "smallvec",
  "thiserror 2.0.19",
  "tokio",
@@ -3639,7 +3639,7 @@ dependencies = [
  "prost-codec",
  "rand 0.10.2",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tinytemplate",
  "tracing",
 ]
