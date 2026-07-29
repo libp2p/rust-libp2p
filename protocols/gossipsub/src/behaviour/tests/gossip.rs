@@ -72,7 +72,7 @@ fn test_handle_iwant_msg_cached() {
         .into_values()
         .fold(vec![], |mut collected_messages, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Forward { message, .. }) = queue.try_pop() {
+                if let Some(RpcOut::Publish { message, .. }) = queue.try_pop() {
                     collected_messages.push(message)
                 }
             }
@@ -129,7 +129,7 @@ fn test_handle_iwant_msg_cached_shifted() {
             .into_iter()
             .map(|(peer_id, mut queue)| {
                 while !queue.is_empty() {
-                    if matches!(queue.try_pop(), Some(RpcOut::Forward{message, ..}) if
+                    if matches!(queue.try_pop(), Some(RpcOut::Publish{message, ..}) if
                         gs.config.message_id(
                             &gs.data_transform
                                 .inbound_transform(message.clone())
@@ -438,7 +438,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         queues.into_values().fold(0, |mut fwds, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Forward { .. }) = queue.try_pop() {
+                if let Some(RpcOut::Publish { .. }) = queue.try_pop() {
                     fwds += 1;
                 }
             }

@@ -582,6 +582,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_expired_certificate() {
+        // Regression for GHSA-5hq8-qhww-jm7q: expired cert must error, not panic.
+        let identity = identity::Keypair::generate_ed25519();
+        let signing = rcgen::KeyPair::generate_for(P2P_SIGNATURE_ALGORITHM).unwrap();
+
+        let mut params = rcgen::CertificateParams::default();
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.not_before = rcgen::date_time_ymd(1970, 1, 1);
+        params.not_after = rcgen::date_time_ymd(1975, 1, 1);
+        params
+            .custom_extensions
+            .push(make_libp2p_extension(&identity, &signing).unwrap());
+        let cert: rustls::pki_types::CertificateDer = params.self_signed(&signing).unwrap().into();
+
+        assert!(parse(&cert).is_err());
+    }
+
+    #[test]
     fn can_parse_certificate_with_ed25519_keypair() {
         let certificate = rustls::pki_types::CertificateDer::from(hex!("308201773082011ea003020102020900f5bd0debaa597f52300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d030107034200046bf9871220d71dcb3483ecdfcbfcc7c103f8509d0974b3c18ab1f1be1302d643103a08f7a7722c1b247ba3876fe2c59e26526f479d7718a85202ddbe47562358a37f307d307b060a2b0601040183a25a01010101ff046a30680424080112207fda21856709c5ae12fd6e8450623f15f11955d384212b89f56e7e136d2e17280440aaa6bffabe91b6f30c35e3aa4f94b1188fed96b0ffdd393f4c58c1c047854120e674ce64c788406d1c2c4b116581fd7411b309881c3c7f20b46e54c7e6fe7f0f300a06082a8648ce3d040302034700304402207d1a1dbd2bda235ff2ec87daf006f9b04ba076a5a5530180cd9c2e8f6399e09d0220458527178c7e77024601dbb1b256593e9b96d961b96349d1f560114f61a87595").to_vec());
 

@@ -33,7 +33,6 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
 
 use crate::{
     Stream,
@@ -255,7 +254,7 @@ where
 
         // Not always polling handlers in the same order
         // should give anyone the chance to make progress.
-        let pos = rand::thread_rng().gen_range(0..self.handlers.len());
+        let pos = rand::random_range(0..self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {
             if let Poll::Ready(e) = h.poll(cx) {
