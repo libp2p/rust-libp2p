@@ -1,5 +1,14 @@
 ## 0.16.0
 
+- Update to rand 0.10. `client::Behaviour<R>` and `server::Behaviour<R>`
+  default RNG type changed from `OsRng` to `StdRng`. Server Behaviour's
+  `R` bound changed from `Clone + rand_core::RngCore` to
+  `SeedableRng + rand::Rng`.
+  See [PR 6559](https://github.com/libp2p/rust-libp2p/pull/6559).
+
+- Fix AutoNAT v2 server preserving the selected address index for multi-address `DialRequest`s.
+  See [PR 6514](https://github.com/libp2p/rust-libp2p/pull/6514).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).

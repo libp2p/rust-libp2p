@@ -20,7 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 use std::net::{IpAddr, SocketAddr};
 
-use rand::{Rng, distributions::Alphanumeric, thread_rng};
+use rand::{RngExt, distr::Alphanumeric};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 
@@ -149,7 +149,7 @@ pub fn render_description(
 pub fn random_ufrag() -> String {
     format!(
         "libp2p+webrtc+v1/{}",
-        thread_rng()
+        rand::rng()
             .sample_iter(&Alphanumeric)
             .take(64)
             .map(char::from)

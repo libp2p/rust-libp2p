@@ -40,7 +40,6 @@ use std::{
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
 use pin_project::pin_project;
-use rand::RngCore;
 use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
@@ -81,6 +80,11 @@ impl PreSharedKey {
             .read_exact(&mut out)
             .expect("shake128 failed");
         Fingerprint(out)
+    }
+
+    /// Export the unredacted private key.
+    pub fn to_key_file(self) -> String {
+        format!("/key/swarm/psk/1.0.0/\n/base16/\n{}\n", to_hex(&self.0))
     }
 }
 
@@ -130,18 +134,16 @@ impl FromStr for PreSharedKey {
 
 impl fmt::Debug for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PreSharedKey")
-            .field(&to_hex(&self.0))
+        f.debug_struct("PreSharedKey")
+            .field("fingerprint", &self.fingerprint().to_string())
             .finish()
     }
 }
 
-/// Dumps a PreSharedKey in key file format compatible with go-libp2p
+/// Formats the unredacted key in go-libp2p key file format.
 impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "/key/swarm/psk/1.0.0/")?;
-        writeln!(f, "/base16/")?;
-        writeln!(f, "{}", to_hex(&self.0))
+        f.write_str(&self.to_key_file())
     }
 }
 
@@ -212,7 +214,7 @@ impl PnetConfig {
         tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut local_nonce);
+        rand::fill(&mut local_nonce);
         socket
             .write_all(&local_nonce)
             .await
