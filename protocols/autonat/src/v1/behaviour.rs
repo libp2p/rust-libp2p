@@ -39,8 +39,8 @@ use libp2p_request_response::{
     self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
 };
 use libp2p_swarm::{
-    CloseConnection, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
 };
 use web_time::Instant;
@@ -349,12 +349,6 @@ impl Behaviour {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_actions
                         .push_back(ToSwarm::GenerateEvent(Event::InboundProbe(event)));
-                    // The probe is resolved and the response is sent over the peer's own
-                    // connection. Close the dial-back connection.
-                    self.pending_actions.push_back(ToSwarm::CloseConnection {
-                        peer_id: peer,
-                        connection: CloseConnection::One(conn),
-                    });
                 }
             }
             ConnectedPoint::Dialer {

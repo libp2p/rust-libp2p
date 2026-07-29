@@ -110,8 +110,10 @@ where
                 if let Err(e) = result {
                     tracing::debug!("dial back error: {e:?}");
                 }
-                // The dial-back has completed and its outcome reaches the client over
-                // the client's own connection. Close the dial-back connection.
+                // By now the dial-back exchange has concluded: the handler
+                // waited for the `DialBackResponse` confirming the nonce was
+                // delivered, or failed. Either way the connection is safe to
+                // close.
                 self.pending_events.push_back(ToSwarm::CloseConnection {
                     peer_id,
                     connection: CloseConnection::One(connection_id),
