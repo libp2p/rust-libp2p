@@ -173,7 +173,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider> SwarmBuilder<Provider, Webs
         MuxError: std::error::Error + Send + Sync + 'static,
     <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
+{
         self.without_websocket()
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }

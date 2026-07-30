@@ -75,7 +75,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         MuxError: std::error::Error + Send + Sync + 'static,
     <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
+{
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new(self.keypair.public().to_peer_id());
         let relay_transport = relay_transport

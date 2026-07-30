@@ -194,6 +194,20 @@ impl Behaviour {
             self.queued_actions
                 .push_back(ToSwarm::ExternalAddrExpired(addr));
         }
+
+        if let Some(peer_id) = self.peer_for_connection(connection_id) {
+            self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(connection_id),
+                event: Either::Left(handler::In::ResetReservation),
+            });
+        }
+    }
+
+    fn peer_for_connection(&self, connection_id: ConnectionId) -> Option<PeerId> {
+        self.directly_connected_peers
+            .iter()
+            .find_map(|(peer, connections)| connections.contains(&connection_id).then_some(*peer))
     }
 }
 
