@@ -1,9 +1,7 @@
-## 0.48.1
+## 0.48.0
 
 - Bound `Connection::poll` fixed-point loop iterations to improve cooperative scheduling under load.
   See [Issue 6438](https://github.com/libp2p/rust-libp2p/issues/6438).
-
-## 0.48.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)

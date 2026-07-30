@@ -69,15 +69,14 @@ use crate::{
 /// can schedule other tasks. Aligned with Tokio's default cooperative budget (128).
 const CONNECTION_POLL_ITERATION_BUDGET: u32 = 128;
 
-macro_rules! continue_after_poll_progress {
-    ($budget:expr, $cx:expr) => {{
-        $budget -= 1;
-        if $budget == 0 {
-            $cx.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-        continue;
-    }};
+fn consume_poll_budget(budget: &mut u32, cx: &Context<'_>) -> bool {
+    *budget -= 1;
+    if *budget == 0 {
+        cx.waker().wake_by_ref();
+        true
+    } else {
+        false
+    }
 }
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
@@ -292,7 +291,12 @@ where
 
         loop {
             match requested_substreams.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(()))) => continue_after_poll_progress!(poll_budget, cx),
+                Poll::Ready(Some(Ok(()))) => {
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
+                }
                 Poll::Ready(Some(Err(info))) => {
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError {
@@ -300,7 +304,10 @@ where
                             error: StreamUpgradeError::Timeout,
                         },
                     ));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(None) | Poll::Pending => {}
             }
@@ -313,7 +320,10 @@ where
                     let (upgrade, user_data) = protocol.into_upgrade();
 
                     requested_substreams.push(SubstreamRequested::new(user_data, timeout, upgrade));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
@@ -327,7 +337,10 @@ where
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
                         remote_supported_protocols.extend(protocol_buffer.drain(..));
                     }
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
@@ -340,7 +353,10 @@ where
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
                     }
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
             }
 
@@ -352,13 +368,19 @@ where
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
                         FullyNegotiatedOutbound { protocol, info },
                     ));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(Some((info, Err(error)))) => {
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError { info, error },
                     ));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
             }
 
@@ -370,25 +392,40 @@ where
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
                         FullyNegotiatedInbound { protocol, info },
                     ));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(Some((info, Err(StreamUpgradeError::Apply(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
                     tracing::debug!("failed to upgrade inbound stream: {e}");
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
                     tracing::debug!("no protocol could be agreed upon for inbound stream");
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
                     tracing::debug!("inbound stream upgrade timed out");
-                    continue_after_poll_progress!(poll_budget, cx);
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
             }
 
@@ -447,7 +484,10 @@ where
 
                         // Go back to the top,
                         // handler can potentially make progress again.
-                        continue_after_poll_progress!(poll_budget, cx);
+                        if consume_poll_budget(&mut poll_budget, cx) {
+                            return Poll::Pending;
+                        }
+                        continue;
                     }
                 }
             }
@@ -466,7 +506,10 @@ where
 
                         // Go back to the top,
                         // handler can potentially make progress again.
-                        continue_after_poll_progress!(poll_budget, cx);
+                        if consume_poll_budget(&mut poll_budget, cx) {
+                            return Poll::Pending;
+                        }
+                        continue;
                     }
                 }
             }
@@ -482,7 +525,10 @@ where
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
                 // Go back to the top, handler can potentially make progress again.
-                continue_after_poll_progress!(poll_budget, cx);
+                if consume_poll_budget(&mut poll_budget, cx) {
+                    return Poll::Pending;
+                }
+                continue;
             }
 
             // Nothing can make progress, return `Pending`.
