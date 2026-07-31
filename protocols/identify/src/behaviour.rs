@@ -295,6 +295,41 @@ impl Behaviour {
         }
     }
 
+    /// Updates the agent version advertised to remote peers.
+    ///
+    /// Existing connections are updated in place, i.e. the new value is used for the next
+    /// identify exchange on every established connection. Connections established from now
+    /// on pick it up as well.
+    ///
+    /// This does not send anything to remote peers on its own. Combine it with
+    /// [`Behaviour::push`] to propagate the change immediately, otherwise peers learn about
+    /// it with the next periodic identify exchange.
+    ///
+    /// Setting the currently advertised agent version is a no-op.
+    pub fn set_agent_version(&mut self, agent_version: String) {
+        if self.config.agent_version == agent_version {
+            return;
+        }
+
+        self.config.agent_version = agent_version;
+
+        // Notify all connected handlers about the changed agent version. This has to be
+        // `NotifyHandler::One` per connection: a peer may be reachable over several
+        // connections at once and each of them holds its own copy of the agent version.
+        let change_events = self
+            .connected
+            .iter()
+            .flat_map(|(peer, map)| map.keys().map(|id| (*peer, id)))
+            .map(|(peer_id, connection_id)| ToSwarm::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(*connection_id),
+                event: InEvent::AgentVersionChanged(self.config.agent_version.clone()),
+            })
+            .collect::<Vec<_>>();
+
+        self.events.extend(change_events);
+    }
+
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
@@ -753,5 +788,52 @@ mod tests {
             &peer_id
         ));
         assert!(multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id));
+    }
+
+    #[test]
+    fn set_agent_version_does_not_notify_handlers_on_unchanged_value() {
+        let mut behaviour = Behaviour::new(
+            Config::new(
+                "/test/1.0.0".to_owned(),
+                Keypair::generate_ed25519().public(),
+            )
+            .with_agent_version("agent/1.0.0".to_owned()),
+        );
+
+        let endpoint = ConnectedPoint::Dialer {
+            address: "/ip4/127.0.0.1/tcp/4001".parse().unwrap(),
+            role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
+        };
+        behaviour.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: PeerId::random(),
+            connection_id: ConnectionId::new_unchecked(0),
+            endpoint: &endpoint,
+            failed_addresses: &[],
+            other_established: 0,
+        }));
+        assert_eq!(notify_handler_events(&behaviour), 0);
+
+        behaviour.set_agent_version("agent/1.0.0".to_owned());
+        assert_eq!(
+            notify_handler_events(&behaviour),
+            0,
+            "setting the current agent version should not notify any handler"
+        );
+
+        behaviour.set_agent_version("agent/2.0.0".to_owned());
+        assert_eq!(
+            notify_handler_events(&behaviour),
+            1,
+            "setting a new agent version should notify every connection once"
+        );
+    }
+
+    fn notify_handler_events(behaviour: &Behaviour) -> usize {
+        behaviour
+            .events
+            .iter()
+            .filter(|event| matches!(event, ToSwarm::NotifyHandler { .. }))
+            .count()
     }
 }
