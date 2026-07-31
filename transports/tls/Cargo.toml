@@ -22,7 +22,7 @@ yasna = "0.6"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.23.22"
+version = "0.23"
 default-features = false
 features = ["aws-lc-rs", "prefer-post-quantum", "std"] # Must enable this to allow for custom verification code.
 
