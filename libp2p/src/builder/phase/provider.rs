@@ -19,7 +19,8 @@ pub enum Tokio {}
 /// Represents the WasmBindgen environment for WebAssembly.
 pub enum WasmBindgen {}
 
-/// Represents a phase in the SwarmBuilder where a provider has been chosen but not yet specified.
+/// Represents a phase in the SwarmBuilder where the identity has been set, but the runtime provider
+/// is not yet specified.
 pub struct ProviderPhase {}
 
 impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
