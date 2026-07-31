@@ -54,7 +54,7 @@ impl AlwaysResolvesCert {
     ) -> Result<Self, rustls::Error> {
         let certified_key = rustls::sign::CertifiedKey::new(
             vec![cert],
-            rustls::crypto::ring::sign::any_ecdsa_type(key)?,
+            rustls::crypto::aws_lc_rs::sign::any_ecdsa_type(key)?,
         );
         Ok(Self(Arc::new(certified_key)))
     }

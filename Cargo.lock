@@ -3385,7 +3385,6 @@ dependencies = [
  "quinn-proto",
  "rand 0.10.2",
  "ring",
- "rustls",
  "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",

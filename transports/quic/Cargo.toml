@@ -15,10 +15,9 @@ if-watch = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
-quinn = { version = "0.11", default-features = false, features = ["rustls", "futures-io"] }
-quinn-proto = { version = "0.11" }
+quinn = { version = "0.11", default-features = false, features = ["rustls-aws-lc-rs", "futures-io"] }
+quinn-proto = { version = "0.11", default-features = false, features = ["bloom", "log", "ring"] }
 rand = { workspace = true }
-rustls = { version = "0.23", default-features = false }
 thiserror = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
