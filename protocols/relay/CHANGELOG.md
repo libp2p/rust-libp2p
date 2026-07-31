@@ -1,5 +1,8 @@
 ## 0.22.0
 
+- Avoid panic when dst has connections without reservations.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
@@ -16,6 +19,8 @@
   See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
 - Expire external address when a relay listener is closed without a replacement reservation.
   See [PR 6285](https://github.com/libp2p/rust-libp2p/pull/6285).
+- Reset reservation state on listener close.
+  See [PR 6461](https://github.com/libp2p/rust-libp2p/pull/6461).
 
 ## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
