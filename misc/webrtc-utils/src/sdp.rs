@@ -91,7 +91,7 @@ a=ice-pwd:{pwd}
 a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 a=setup:passive
 a=sctp-port:5000
-a=max-message-size:16384
+a=max-message-size:{max_message_size}
 a=candidate:1467250027 1 UDP 1467250027 {target_ip} {target_port} typ host
 a=end-of-candidates
 ";
@@ -114,6 +114,7 @@ struct DescriptionContext {
     pub(crate) fingerprint_value: String,
     pub(crate) ufrag: String,
     pub(crate) pwd: String,
+    pub(crate) max_message_size: usize,
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
@@ -141,6 +142,7 @@ pub fn render_description(
         // NOTE: ufrag is equal to pwd.
         ufrag: ufrag.to_owned(),
         pwd: ufrag.to_owned(),
+        max_message_size: 16 * 1024,
     };
     tt.render("description", &context).unwrap()
 }
