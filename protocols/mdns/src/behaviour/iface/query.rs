@@ -184,7 +184,7 @@ impl MdnsResponse {
                 let new_expiration = now + peer.ttl();
 
                 peer.addresses().iter().filter_map(move |address| {
-                    let new_addr = _address_translation(address, &observed)?;
+                    let new_addr = if observed_is_link_local(&observed) { address.clone() } else { match _address_translation(address, &observed) { Some(a) => a, None => return None } };
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
@@ -311,6 +311,15 @@ impl fmt::Debug for MdnsPeer {
     }
 }
 
+/// Returns `true` when the first component of `observed` is an IPv6 link-local
+/// address (fe80::/10).  mDNS multicast on an IPv6-only LAN always originates
+pub(crate) fn observed_is_link_local(observed: &Multiaddr) -> bool {
+    match observed.iter().next() {
+        Some(Protocol::Ip6(addr)) => addr.is_unicast_link_local(),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{super::dns::build_query_response, *};
@@ -351,6 +360,70 @@ mod tests {
 
             let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
+    }
+}
+
+        }
+
+mod tests_ipv6 {
+    #[allow(unused_imports)]
+    use super::{super::dns::build_query_response, *};
+
+    #[test]
+    fn test_observed_is_link_local() {
+        let ll: Multiaddr = "/ip6/fe80::1/udp/5353".parse().unwrap();
+        assert!(observed_is_link_local(&ll));
+
+        let ula: Multiaddr = "/ip6/fd12::1/udp/5353".parse().unwrap();
+        assert!(!observed_is_link_local(&ula));
+
+        let v4: Multiaddr = "/ip4/192.168.1.1/udp/5353".parse().unwrap();
+        assert!(!observed_is_link_local(&v4));
+    }
+
+    /// Regression test for https://github.com/libp2p/rust-libp2p/issues/6474
+    #[test]
+    fn test_extract_discovered_ipv6_lan_preserves_ula_address() {
+        use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+
+        let peer_id = PeerId::random();
+        let local_peer_id = PeerId::random();
+
+        let mut announced_addr: Multiaddr = "/ip6/fd12::1/udp/4001/quic-v1"
+            .parse()
+            .expect("bad multiaddress");
+        announced_addr.push(Protocol::P2p(peer_id));
+
+        let packets = build_query_response(
+            0x1234,
+            peer_id,
+            vec![&announced_addr].into_iter(),
+            Duration::from_secs(300),
+        );
+
+        for bytes in packets {
+            let packet = Message::from_vec(&bytes).expect("unable to parse packet");
+
+            let link_local_src = SocketAddr::V6(SocketAddrV6::new(
+                "fe80::abcd:ef01".parse::<Ipv6Addr>().unwrap(),
+                5353,
+                0,
+                0,
+            ));
+            let response = MdnsResponse::new(&packet, link_local_src);
+
+            let discovered: Vec<_> = response
+                .extract_discovered(Instant::now(), local_peer_id)
+                .collect();
+
+            assert!(!discovered.is_empty(), "expected at least one discovered address");
+
+            for (pid, addr, _) in &discovered {
+                assert_eq!(*pid, peer_id);
+                let addr_str = addr.to_string();
+                assert!(addr_str.contains("fd12"), "expected ULA in {addr_str}");
+                assert!(!addr_str.contains("fe80"), "fe80 must not appear in {addr_str}");
+            }
         }
     }
 }
