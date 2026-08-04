@@ -107,6 +107,7 @@ pub struct Handler {
 #[derive(Debug)]
 pub enum InEvent {
     AddressesChanged(HashSet<Multiaddr>),
+    AgentVersionChanged(String),
     Push,
 }
 
@@ -322,6 +323,9 @@ impl ConnectionHandler for Handler {
         match event {
             InEvent::AddressesChanged(addresses) => {
                 self.external_addresses = addresses;
+            }
+            InEvent::AgentVersionChanged(agent_version) => {
+                self.agent_version = agent_version;
             }
             InEvent::Push => {
                 self.events

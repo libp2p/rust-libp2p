@@ -1,5 +1,10 @@
 ## 0.48.0
 
+- Add `Behaviour::set_agent_version` to update the advertised agent version at runtime.
+  Established connections are updated in place; combine it with `Behaviour::push` to propagate
+  the new value immediately.
+  See [PR 6576](https://github.com/libp2p/rust-libp2p/pull/6576).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
