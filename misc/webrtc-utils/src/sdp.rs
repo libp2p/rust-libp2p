@@ -24,14 +24,20 @@ use rand::{Rng, distributions::Alphanumeric, thread_rng};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 
-use crate::fingerprint::Fingerprint;
+use crate::{fingerprint::Fingerprint, stream::StreamConfig};
 
-pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &str) -> String {
+pub fn answer(
+    addr: SocketAddr,
+    server_fingerprint: Fingerprint,
+    client_ufrag: &str,
+    config: StreamConfig,
+) -> String {
     let answer = render_description(
         SERVER_SESSION_DESCRIPTION,
         addr,
         server_fingerprint,
         client_ufrag,
+        config,
     );
 
     tracing::trace!(%answer, "Created SDP answer");
@@ -118,11 +124,18 @@ struct DescriptionContext {
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
+///
+/// `config` supplies `a=max-message-size`, which tells the remote how large an SCTP user
+/// message this endpoint is willing to receive (RFC 8841). It is deliberately the same
+/// [`StreamConfig`] the framing layer is built from rather than a separate number: the two
+/// must agree, and a peer that sends up to what we advertised has to find the framing layer
+/// able to accept it.
 pub fn render_description(
     description: &str,
     addr: SocketAddr,
     fingerprint: Fingerprint,
     ufrag: &str,
+    config: StreamConfig,
 ) -> String {
     let mut tt = TinyTemplate::new();
     tt.add_template("description", description).unwrap();
@@ -142,7 +155,7 @@ pub fn render_description(
         // NOTE: ufrag is equal to pwd.
         ufrag: ufrag.to_owned(),
         pwd: ufrag.to_owned(),
-        max_message_size: 16 * 1024,
+        max_message_size: config.max_message_size(),
     };
     tt.render("description", &context).unwrap()
 }
@@ -157,4 +170,50 @@ pub fn random_ufrag() -> String {
             .map(char::from)
             .collect::<String>()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use super::*;
+
+    fn config(bytes: usize) -> StreamConfig {
+        StreamConfig::new(NonZeroUsize::new(bytes).expect("non-zero"))
+    }
+
+    fn addr() -> SocketAddr {
+        "127.0.0.1:1234".parse().expect("valid address")
+    }
+
+    /// `a=max-message-size` must follow the configured limit rather than a constant.
+    ///
+    /// Several sizes on purpose: asserting a single one would also pass against a hard-coded
+    /// value that happens to match it, which is exactly how this went unnoticed — the template
+    /// took a `{max_message_size}` placeholder while the context still filled in `16 * 1024`.
+    #[test]
+    fn advertised_message_size_follows_the_config() {
+        for bytes in [8 * 1024, 16 * 1024, 64 * 1024, 256 * 1024] {
+            let sdp = render_description(
+                SERVER_SESSION_DESCRIPTION,
+                addr(),
+                Fingerprint::FF,
+                "ufrag",
+                config(bytes),
+            );
+
+            assert!(
+                sdp.contains(&format!("a=max-message-size:{bytes}")),
+                "a {bytes} B limit was not advertised; rendered SDP was:\n{sdp}"
+            );
+        }
+    }
+
+    /// The answer helper must forward the config too, not just `render_description`.
+    #[test]
+    fn answer_advertises_the_configured_message_size() {
+        let sdp = answer(addr(), Fingerprint::FF, "ufrag", config(64 * 1024));
+
+        assert!(sdp.contains("a=max-message-size:65536"), "{sdp}");
+    }
 }

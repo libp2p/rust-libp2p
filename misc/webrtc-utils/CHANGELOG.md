@@ -1,6 +1,8 @@
 ## 0.5.0
 
 - Negotiate WebRTC data-channel message limits after Noise authentication.
+  `sdp::answer` and `sdp::render_description` now take the `StreamConfig` they advertise
+  `a=max-message-size` from, instead of always announcing 16 KiB.
 
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).

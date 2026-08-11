@@ -50,7 +50,7 @@ async fn outbound_inner(
         .set_local_description(munged_offer)
         .await?;
 
-    let answer = sdp::answer(sock_addr, remote_fingerprint, &ufrag);
+    let answer = sdp::answer(sock_addr, remote_fingerprint, &ufrag, stream_config);
     rtc_peer_connection.set_remote_description(answer).await?;
 
     let local_fingerprint = rtc_peer_connection.local_fingerprint()?;

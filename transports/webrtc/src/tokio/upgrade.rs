@@ -63,7 +63,7 @@ pub(crate) async fn outbound(
     tracing::debug!(offer=%offer.sdp, "created SDP offer for outbound connection");
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, server_fingerprint, &ufrag);
+    let answer = sdp::answer(addr, server_fingerprint, &ufrag, stream_config);
     tracing::debug!(?answer, "calculated SDP answer for outbound connection");
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
@@ -99,7 +99,7 @@ pub(crate) async fn inbound(
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
     let noise_channel_open_rx = create_noise_data_channel(&peer_connection).await?;
 
-    let offer = sdp::offer(addr, &remote_ufrag);
+    let offer = sdp::offer(addr, &remote_ufrag, stream_config);
     tracing::debug!(?offer, "calculated SDP offer for inbound connection");
     peer_connection.set_remote_description(offer).await?;
 

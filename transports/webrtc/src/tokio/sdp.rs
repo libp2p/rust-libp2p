@@ -21,7 +21,7 @@
 use std::net::SocketAddr;
 
 pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
-use libp2p_webrtc_utils::{Fingerprint, sdp::render_description};
+use libp2p_webrtc_utils::{Fingerprint, StreamConfig, sdp::render_description};
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 /// Creates the SDP answer used by the client.
@@ -29,11 +29,13 @@ pub(crate) fn answer(
     addr: SocketAddr,
     server_fingerprint: Fingerprint,
     client_ufrag: &str,
+    config: StreamConfig,
 ) -> RTCSessionDescription {
     RTCSessionDescription::answer(libp2p_webrtc_utils::sdp::answer(
         addr,
         server_fingerprint,
         client_ufrag,
+        config,
     ))
     .unwrap()
 }
@@ -41,12 +43,17 @@ pub(crate) fn answer(
 /// Creates the SDP offer used by the server.
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
+pub(crate) fn offer(
+    addr: SocketAddr,
+    client_ufrag: &str,
+    config: StreamConfig,
+) -> RTCSessionDescription {
     let offer = render_description(
         CLIENT_SESSION_DESCRIPTION,
         addr,
         Fingerprint::FF,
         client_ufrag,
+        config,
     );
 
     tracing::trace!(offer=%offer, "Created SDP offer");
