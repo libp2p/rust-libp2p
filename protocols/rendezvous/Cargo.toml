@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-bimap = "0.6.3"
+bimap = "0.6"
 futures = { workspace = true, features = ["std"] }
 futures-timer = { workspace = true }
 hashlink = { workspace = true }

@@ -161,9 +161,7 @@ where
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-            let jitter = rng.gen_range(0..100);
+            let jitter = rand::random_range(0..100);
             config.query_interval + Duration::from_millis(jitter)
         };
         let multicast_addr = match addr {
