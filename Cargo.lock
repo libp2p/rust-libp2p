@@ -6182,7 +6182,7 @@ dependencies = [
 [[package]]
 name = "snow"
 version = "0.10.0"
-source = "git+https://github.com/royzah/snow?branch=feat/ml-kem-hfs#407dd908c134c8872b39a228d17f151560ca7221"
+source = "git+https://github.com/royzah/snow?branch=feat/ml-kem-hfs#858dc27ca4b847e4eae582b3878f5906fc595e6a"
 dependencies = [
  "curve25519-dalek",
  "ml-kem",

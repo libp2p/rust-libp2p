@@ -42,7 +42,7 @@ pub(crate) static PARAMS_XX: LazyLock<NoiseParams> = LazyLock::new(|| {
 /// Hybrid XX: X25519 auth plus an ML-KEM-768 (FIPS 203) ephemeral KEM.
 #[cfg(feature = "mlkem-hfs")]
 pub(crate) static PARAMS_XX_HFS: LazyLock<NoiseParams> = LazyLock::new(|| {
-    "Noise_XXhfs_25519+ML-KEM-768_ChaChaPoly_SHA256"
+    "Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256"
         .parse()
         .expect("Invalid protocol name")
 });
