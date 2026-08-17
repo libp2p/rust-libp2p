@@ -84,7 +84,7 @@ use crate::{
 
 const NOISE_PROTOCOL: &str = "/noise";
 
-/// `Noise_XXhfs_25519+ML-KEM-768_ChaChaPoly_SHA256`. Provisional, pending a spec.
+/// `Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256`. Provisional, pending a spec.
 #[cfg(feature = "mlkem-hfs")]
 const NOISE_MLKEM_HFS_PROTOCOL: &str = "/noise-mlkem768-hfs/0.1.0";
 
