@@ -3011,7 +3011,7 @@ name = "libp2p-dns"
 version = "0.45.0"
 dependencies = [
  "futures",
- "getrandom 0.2.15",
+ "getrandom 0.4.3",
  "hickory-resolver",
  "js-sys",
  "libp2p-core",
@@ -3021,7 +3021,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
- "thiserror 2.0.18",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "tracing-subscriber",
