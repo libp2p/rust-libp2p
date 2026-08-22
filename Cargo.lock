@@ -2989,7 +2989,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-quic",
  "libp2p-swarm",
- "thiserror 2.0.19",
+ "thiserror 2.0.20",
  "tokio",
  "tracing-subscriber",
  "unsigned-varint",
