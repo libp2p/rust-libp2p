@@ -30,7 +30,7 @@ use futures::{
 };
 use libp2p_core::muxing::StreamMuxerBox;
 
-use super::concurrent_dial::ConcurrentDial;
+use super::concurrent_dial::DialResult;
 use crate::{
     ConnectionHandler, Multiaddr, PeerId,
     connection::{
@@ -91,9 +91,9 @@ pub(crate) enum EstablishedConnectionEvent<ToBehaviour> {
     },
 }
 
-pub(crate) async fn new_for_pending_outgoing_connection(
+pub(crate) async fn new_for_pending_outgoing_connection<D: Future<Output = DialResult>>(
     connection_id: ConnectionId,
-    dial: ConcurrentDial,
+    dial: D,
     abort_receiver: oneshot::Receiver<Infallible>,
     mut events: mpsc::Sender<PendingConnectionEvent>,
 ) {

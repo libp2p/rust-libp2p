@@ -23,7 +23,7 @@
 use std::sync::LazyLock;
 
 use libp2p_identity as identity;
-use rand::{Rng as _, SeedableRng};
+use rand::TryRng as _;
 use snow::params::NoiseParams;
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
 use zeroize::Zeroize;
@@ -53,9 +53,9 @@ pub(crate) fn noise_params_into_builder<'b>(
     private_key: &'b SecretKey,
     remote_public_key: Option<&'b PublicKey>,
 ) -> Result<snow::Builder<'b>, snow::Error> {
-    let mut builder = snow::Builder::with_resolver(params, Box::new(Resolver))
-        .prologue(prologue.as_ref())?
-        .local_private_key(private_key.as_ref())?;
+    let builder = snow::Builder::with_resolver(params, Box::new(Resolver));
+    let mut builder = builder.prologue(prologue.as_ref())?;
+    builder = builder.local_private_key(private_key.as_ref())?;
 
     if let Some(remote_public_key) = remote_public_key {
         builder = builder.remote_public_key(remote_public_key.as_ref())?;
@@ -124,7 +124,7 @@ impl Keypair {
     /// Create a new X25519 keypair.
     pub(crate) fn new() -> Keypair {
         let mut sk_bytes = [0u8; 32];
-        rand::thread_rng().fill(&mut sk_bytes);
+        rand::fill(&mut sk_bytes);
         let sk = SecretKey(sk_bytes); // Copy
         sk_bytes.zeroize();
         Self::from(sk)
@@ -177,7 +177,7 @@ struct Resolver;
 
 impl snow::resolvers::CryptoResolver for Resolver {
     fn resolve_rng(&self) -> Option<Box<dyn snow::types::Random>> {
-        Some(Box::new(Rng(rand::rngs::StdRng::from_entropy())))
+        Some(Box::new(Rng(rand::make_rng::<rand::rngs::StdRng>())))
     }
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
@@ -228,8 +228,7 @@ struct Rng(rand::rngs::StdRng);
 
 impl snow::types::Random for Rng {
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), snow::Error> {
-        rand::RngCore::fill_bytes(&mut self.0, dest);
-        Ok(())
+        self.0.try_fill_bytes(dest).map_err(|e| match e {})
     }
 }
 

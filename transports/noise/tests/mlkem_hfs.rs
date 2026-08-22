@@ -20,8 +20,12 @@ fn xxhfs_mlkem768_handshake_and_transport() {
     futures::executor::block_on(async move {
         let ((reported_client_id, mut server_session), (reported_server_id, mut client_session)) =
             futures::future::try_join(
-                noise::Config::new(&server_id).unwrap().upgrade_inbound(server, HFS),
-                noise::Config::new(&client_id).unwrap().upgrade_outbound(client, HFS),
+                noise::Config::new(&server_id)
+                    .unwrap()
+                    .upgrade_inbound(server, HFS),
+                noise::Config::new(&client_id)
+                    .unwrap()
+                    .upgrade_outbound(client, HFS),
             )
             .await
             .unwrap();
@@ -53,8 +57,12 @@ fn falls_back_to_classical_when_peer_is_old() {
 
     futures::executor::block_on(async move {
         let (_, _) = futures::future::try_join(
-            noise::Config::new(&server_id).unwrap().upgrade_inbound(server, "/noise"),
-            noise::Config::new(&client_id).unwrap().upgrade_outbound(client, "/noise"),
+            noise::Config::new(&server_id)
+                .unwrap()
+                .upgrade_inbound(server, "/noise"),
+            noise::Config::new(&client_id)
+                .unwrap()
+                .upgrade_outbound(client, "/noise"),
         )
         .await
         .unwrap();
