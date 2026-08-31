@@ -199,6 +199,7 @@ fn parses_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
+        large_message_fragments: vec![],
         #[cfg(feature = "partial-messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {

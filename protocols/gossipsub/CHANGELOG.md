@@ -1,4 +1,9 @@
 ## 0.50.0
+- Add the gossipsub v1.4 large message extension wire types and the `largeMessageHandling`
+  capability advertisement behind the default-off `large_message_handling` config option
+  ([issue 6597](https://github.com/libp2p/rust-libp2p/issues/6597)).
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 - Change default `TopicSubscriptionFilter` from `AllowAllSubscriptionFilter` to `MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>`
   with default limits of `100` for both `max_subscribed_topics` and `max_subscriptions_per_request`,
   providing built-in protection against excessive subscription requests.
