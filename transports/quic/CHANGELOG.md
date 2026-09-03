@@ -1,5 +1,8 @@
 ## 0.14.0
 
+- Prefer and advertise the X25519MLKEM768 key exchange group for QUIC.
+  See [PR 6568](https://github.com/libp2p/rust-libp2p/pull/6568).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
