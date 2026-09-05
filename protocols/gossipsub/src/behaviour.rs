@@ -63,7 +63,9 @@ use crate::{
     protocol::SIGNING_PREFIX,
     rpc::Sender,
     rpc_proto::proto,
-    subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
+    subscription_filter::{
+        AllowAllSubscriptionFilter, MaxCountSubscriptionFilter, TopicSubscriptionFilter,
+    },
     time_cache::DuplicateCache,
     topic::{Hasher, Topic, TopicHash},
     transform::{DataTransform, IdentityTransform},
@@ -261,7 +263,10 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
+pub struct Behaviour<
+    D = IdentityTransform,
+    F = MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>,
+> {
     /// Configuration providing gossipsub performance parameters.
     config: Config,
 
@@ -1379,23 +1384,12 @@ where
 
         let mut do_px = self.config.do_px();
 
-        let Some(connected_peer) = self.connected_peers.get_mut(peer_id) else {
+        let Some(connected_peer) = self.connected_peers.get(peer_id) else {
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
         // Needs to be here to comply with the borrow checker.
         let is_outbound = connected_peer.outbound;
-
-        // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
-        // and they must be subscribed to the topic. Ensure we have recorded the mapping.
-        for topic in &topics {
-            if connected_peer.topics.insert(topic.clone()) {
-                #[cfg(feature = "metrics")]
-                if let Some(m) = self.metrics.as_mut() {
-                    m.inc_topic_peers(topic);
-                }
-            }
-        }
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
@@ -1479,6 +1473,14 @@ where
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
+                        continue;
+                    }
+
+                    // Discard the GRAFT if the user hasn't subscribed to the topic.
+                    if !connected_peer.topics.contains(&topic_hash) {
+                        do_px = false;
+                        tracing::debug!(peer=%peer_id, topic=%topic_hash,
+                            "GRAFT: dropping unsubscribed topic from peer");
                         continue;
                     }
 

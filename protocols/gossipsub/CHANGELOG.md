@@ -1,3 +1,11 @@
+## 0.49.5
+- Default `TopicSubscriptionFilter` to `MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>`
+  with caps of 2000 for `max_subscribed_topics` and `max_subscriptions_per_request`,
+  capping per-peer subscription memory. Additionally, discard GRAFT control messages
+  for topics the peer has not previously SUBSCRIBEd to, while still applying the
+  existing backoff-violation scoring penalty where applicable.
+  See [GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)
+
 ## 0.49.4
 - Harden time arithmetic and bound remote PRUNE backoff.
   See [CVE](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-xqmp-fxgv-xvq5)
