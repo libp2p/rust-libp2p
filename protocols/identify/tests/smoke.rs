@@ -350,6 +350,61 @@ async fn identify_push() {
 }
 
 #[tokio::test]
+async fn runtime_agent_version_update() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
+        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+    });
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string()),
+        )
+    });
+
+    swarm1.listen().with_memory_addr_external().await;
+    swarm2.connect(&mut swarm1).await;
+
+    // First, let the periodic identify do its thing so that both sides have exchanged the
+    // initial agent version.
+    let ([e1, e2], [e3, e4]) = libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await;
+
+    {
+        use identify::Event::{Received, Sent};
+
+        // These can be received in any order, hence assert them here.
+        assert!(matches!(e1, Received { .. } | Sent { .. }));
+        assert!(matches!(e2, Received { .. } | Sent { .. }));
+        assert!(matches!(e3, Received { .. } | Sent { .. }));
+        assert!(matches!(e4, Received { .. } | Sent { .. }));
+    }
+
+    // Second, change the agent version on the already established connection and push it.
+    swarm2.behaviour_mut().set_agent_version("c".to_string());
+    swarm2
+        .behaviour_mut()
+        .push(iter::once(*swarm1.local_peer_id()));
+
+    let swarm1_received_info = match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+        ([identify::Event::Received { info, .. }], [identify::Event::Pushed { .. }]) => info,
+        other => panic!("Unexpected events: {other:?}"),
+    };
+
+    assert_eq!(
+        swarm1_received_info.public_key.to_peer_id(),
+        *swarm2.local_peer_id()
+    );
+    assert_eq!(
+        swarm1_received_info.agent_version, "c",
+        "the updated agent version should be advertised on the existing connection"
+    );
+    assert_eq!(swarm1_received_info.protocol_version, "a");
+}
+
+#[tokio::test]
 async fn discover_peer_after_disconnect() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
