@@ -618,7 +618,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
     let (mut gs, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
-        .to_subscribe(false)
+        .to_subscribe(true)
         .gs_config(config)
         .create_network();
 
