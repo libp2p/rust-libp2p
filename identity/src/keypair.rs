@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::convert::Infallible;
+
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
@@ -176,12 +178,12 @@ impl Keypair {
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
     #[allow(unused_variables)]
-    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
+    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, Infallible> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
             KeyPairInner::Ed25519(ref pair) => Ok(pair.sign(msg)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(ref pair) => pair.sign(msg),
+            KeyPairInner::Rsa(ref pair) => Ok(pair.sign(msg)),
             #[cfg(feature = "secp256k1")]
             KeyPairInner::Secp256k1(ref pair) => Ok(pair.secret().sign(msg)),
             #[cfg(feature = "ecdsa")]
