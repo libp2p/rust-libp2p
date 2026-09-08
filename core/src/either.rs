@@ -163,16 +163,9 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        use TransportError::*;
         match self {
-            Either::Left(a) => a.listen_on(id, addr).map_err(|e| match e {
-                MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
-                Other(err) => Other(Either::Left(err)),
-            }),
-            Either::Right(b) => b.listen_on(id, addr).map_err(|e| match e {
-                MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
-                Other(err) => Other(Either::Right(err)),
-            }),
+            Either::Left(a) => a.listen_on(id, addr).map_err(|e| e.map(Either::Left)),
+            Either::Right(b) => b.listen_on(id, addr).map_err(|e| e.map(Either::Right)),
         }
     }
 
@@ -181,18 +174,15 @@ where
         addr: Multiaddr,
         opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        use TransportError::*;
         match self {
-            Either::Left(a) => match a.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(Either::Left(err))),
-            },
-            Either::Right(b) => match b.dial(addr, opts) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(Either::Right(err))),
-            },
+            Either::Left(a) => a
+                .dial(addr, opts)
+                .map(EitherFuture::First)
+                .map_err(|e| e.map(Either::Left)),
+            Either::Right(b) => b
+                .dial(addr, opts)
+                .map(EitherFuture::Second)
+                .map_err(|e| e.map(Either::Right)),
         }
     }
 }
