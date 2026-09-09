@@ -20,11 +20,11 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
-use rand_core::RngCore;
+use rand::SeedableRng;
 
 use crate::v2::{
     DIAL_REQUEST_PROTOCOL, Nonce,
-    generated::structs::{DialStatus, mod_DialResponse::ResponseStatus},
+    generated::structs::{DialStatus, dial_response::ResponseStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::Event,
 };
@@ -55,7 +55,7 @@ pub struct Handler<R> {
 
 impl<R> Handler<R>
 where
-    R: RngCore,
+    R: rand::Rng,
 {
     pub(crate) fn new(client_id: PeerId, observed_multiaddr: Multiaddr, rng: R) -> Self {
         let (dial_back_cmd_sender, dial_back_cmd_receiver) = mpsc::channel(10);
@@ -65,7 +65,7 @@ where
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
             inbound: FuturesSet::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 10,
             ),
             rng,
@@ -75,7 +75,7 @@ where
 
 impl<R> ConnectionHandler for Handler<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     type FromBehaviour = Infallible;
     type ToBehaviour = Either<DialBackCommand, Event>;
@@ -132,7 +132,7 @@ where
                         self.observed_multiaddr.clone(),
                         self.client_id,
                         self.dial_back_cmd_sender.clone(),
-                        self.rng.clone(),
+                        self.rng.fork(),
                     ))
                     .is_err()
                 {
@@ -163,27 +163,27 @@ impl From<HandleFail> for DialResponse {
     fn from(value: HandleFail) -> Self {
         match value {
             HandleFail::InternalError(addr_idx) => Self {
-                status: ResponseStatus::E_INTERNAL_ERROR,
+                status: ResponseStatus::EInternalError,
                 addr_idx,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::RequestRejected => Self {
-                status: ResponseStatus::E_REQUEST_REJECTED,
+                status: ResponseStatus::ERequestRejected,
                 addr_idx: 0,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::DialRefused => Self {
-                status: ResponseStatus::E_DIAL_REFUSED,
+                status: ResponseStatus::EDialRefused,
                 addr_idx: 0,
-                dial_status: DialStatus::UNUSED,
+                dial_status: DialStatus::Unused,
             },
             HandleFail::DialBack { idx, result } => Self {
-                status: ResponseStatus::OK,
+                status: ResponseStatus::Ok,
                 addr_idx: idx,
                 dial_status: match result {
-                    Err(DialBackStatus::DialErr) => DialStatus::E_DIAL_ERROR,
-                    Err(DialBackStatus::DialBackErr) => DialStatus::E_DIAL_BACK_ERROR,
-                    Ok(()) => DialStatus::OK,
+                    Err(DialBackStatus::DialErr) => DialStatus::EDialError,
+                    Err(DialBackStatus::DialBackErr) => DialStatus::EDialBackError,
+                    Ok(()) => DialStatus::Ok,
                 },
             },
         }
@@ -195,7 +195,7 @@ async fn handle_request(
     observed_multiaddr: Multiaddr,
     client: PeerId,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    rng: impl RngCore,
+    rng: impl rand::Rng,
 ) -> Event {
     let mut coder = Coder::new(stream);
     let mut all_addrs = Vec::new();
@@ -254,7 +254,7 @@ async fn handle_request_internal<I>(
     coder: &mut Coder<I>,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    mut rng: impl RngCore,
+    mut rng: impl rand::Rng,
     all_addrs: &mut Vec<Multiaddr>,
     tested_addrs: &mut Option<Multiaddr>,
     data_amount: &mut usize,
@@ -273,8 +273,9 @@ where
         }
     };
     all_addrs.clone_from(&addrs);
-    let idx = 0;
-    let addr = addrs.pop().ok_or(HandleFail::DialRefused)?;
+    let idx = addrs.len().checked_sub(1).ok_or(HandleFail::DialRefused)?;
+    let addr = addrs.remove(idx);
+
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {
@@ -322,8 +323,8 @@ where
         });
     }
     Ok(DialResponse {
-        status: ResponseStatus::OK,
+        status: ResponseStatus::Ok,
         addr_idx: idx,
-        dial_status: DialStatus::OK,
+        dial_status: DialStatus::Ok,
     })
 }

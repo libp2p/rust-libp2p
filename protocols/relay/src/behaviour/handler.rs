@@ -403,11 +403,11 @@ impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint, status: behaviour::Status) -> Handler {
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             outbound_workers: futures_bounded::FuturesMap::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             endpoint,
@@ -492,7 +492,7 @@ impl Handler {
                     src_peer_id: stop_command.src_peer_id,
                     src_connection_id: stop_command.src_connection_id,
                     inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto::Status::CONNECTION_FAILED,
+                    status: proto::Status::ConnectionFailed,
                     error,
                 },
             ));
@@ -742,7 +742,7 @@ impl ConnectionHandler for Handler {
                         src_peer_id: connect.src_peer_id,
                         src_connection_id: connect.src_connection_id,
                         inbound_circuit_req: connect.inbound_circuit_req,
-                        status: proto::Status::CONNECTION_FAILED, // Best fit?
+                        status: proto::Status::ConnectionFailed, // Best fit?
                         error: outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
                     },
                 ));

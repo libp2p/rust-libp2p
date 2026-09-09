@@ -30,12 +30,12 @@ use libp2p_swarm::Stream;
 use thiserror::Error;
 use web_time::SystemTime;
 
-use crate::{proto, proto::message_v2::pb::mod_HopMessage::Type, protocol::MAX_MESSAGE_SIZE};
+use crate::{proto, proto::HopMessageType as Type, protocol::MAX_MESSAGE_SIZE};
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
-    Codec(#[from] quick_protobuf_codec::Error),
+    Codec(#[from] prost_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Failed to parse peer id.")]
@@ -44,10 +44,12 @@ pub enum Error {
     MissingPeer,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
+    #[error("Unexpected message type '{0}'")]
+    UnexpectedType(String),
 }
 
 pub struct ReservationReq {
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    substream: Framed<Stream, prost_codec::Codec<proto::HopMessage>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
@@ -63,7 +65,7 @@ impl ReservationReq {
         }
 
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            r#type: proto::HopMessageType::Status as i32,
             peer: None,
             reservation: Some(proto::Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
@@ -82,7 +84,7 @@ impl ReservationReq {
                 ),
                 data: Some(self.max_circuit_bytes),
             }),
-            status: Some(proto::Status::OK),
+            status: Some(proto::Status::Ok as i32),
         };
 
         self.send(msg).await
@@ -90,11 +92,11 @@ impl ReservationReq {
 
     pub async fn deny(self, status: proto::Status) -> Result<(), Error> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            r#type: proto::HopMessageType::Status as i32,
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(status),
+            status: Some(status as i32),
         };
 
         self.send(msg).await
@@ -111,7 +113,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    substream: Framed<Stream, prost_codec::Codec<proto::HopMessage>>,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
 }
@@ -123,7 +125,7 @@ impl CircuitReq {
 
     pub async fn accept(mut self) -> Result<(Stream, Bytes), Error> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            r#type: proto::HopMessageType::Status as i32,
             peer: None,
             reservation: None,
             limit: Some(proto::Limit {
@@ -135,7 +137,7 @@ impl CircuitReq {
                 ),
                 data: Some(self.max_circuit_bytes),
             }),
-            status: Some(proto::Status::OK),
+            status: Some(proto::Status::Ok as i32),
         };
 
         self.send(msg).await?;
@@ -156,17 +158,17 @@ impl CircuitReq {
 
     pub async fn deny(mut self, status: proto::Status) -> Result<(), Error> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            r#type: proto::HopMessageType::Status as i32,
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(status),
+            status: Some(status as i32),
         };
         self.send(msg).await?;
         self.substream.close().await.map_err(Into::into)
     }
 
-    async fn send(&mut self, msg: proto::HopMessage) -> Result<(), quick_protobuf_codec::Error> {
+    async fn send(&mut self, msg: proto::HopMessage) -> Result<(), prost_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 
@@ -180,7 +182,7 @@ pub(crate) async fn handle_inbound_request(
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
 ) -> Result<Either<ReservationReq, CircuitReq>, Error> {
-    let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(io, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     let res = substream.next().await;
 
@@ -189,21 +191,23 @@ pub(crate) async fn handle_inbound_request(
     }
 
     let proto::HopMessage {
-        type_pb,
+        r#type,
         peer,
         reservation: _,
         limit: _,
         status: _,
     } = res.unwrap().expect("should be ok");
 
-    let req = match type_pb {
-        Type::RESERVE => Either::Left(ReservationReq {
+    let msg_type = Type::try_from(r#type).map_err(|_| Error::UnexpectedType(r#type.to_string()))?;
+
+    let req = match msg_type {
+        Type::Reserve => Either::Left(ReservationReq {
             substream,
             reservation_duration,
             max_circuit_duration,
             max_circuit_bytes,
         }),
-        Type::CONNECT => {
+        Type::Connect => {
             let peer_id_res = match peer {
                 Some(r) => PeerId::from_bytes(&r.id),
                 None => return Err(Error::MissingPeer),
@@ -218,7 +222,7 @@ pub(crate) async fn handle_inbound_request(
                 max_circuit_bytes,
             })
         }
-        Type::STATUS => return Err(Error::UnexpectedTypeStatus),
+        Type::Status => return Err(Error::UnexpectedTypeStatus),
     };
 
     Ok(req)

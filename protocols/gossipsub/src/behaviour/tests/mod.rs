@@ -36,7 +36,7 @@ mod gossip;
 mod graft_prune;
 mod idontwant;
 mod mesh;
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 mod partial;
 mod peer_queues;
 mod publish;
@@ -49,7 +49,6 @@ use std::collections::HashMap;
 use byteorder::{BigEndian, ByteOrder};
 use hashlink::LinkedHashMap;
 use libp2p_core::ConnectedPoint;
-use rand::Rng;
 
 use super::*;
 use crate::{
@@ -59,7 +58,7 @@ use crate::{
 
 /// Convenience alias for [`BehaviourTestBuilder`] with default transform and subscription filter.
 pub(super) type DefaultBehaviourTestBuilder =
-    BehaviourTestBuilder<IdentityTransform, AllowAllSubscriptionFilter>;
+    BehaviourTestBuilder<IdentityTransform, MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>>;
 
 /// A builder for creating test gossipsub networks with configurable peers and topics.
 ///
@@ -135,13 +134,10 @@ where
         // subscribe to the topics
         for t in self.topics {
             let topic = Topic::new(t);
-            #[cfg(feature = "partial_messages")]
-            if self.requests_partial {
-                gs.subscribe_partial(&topic, self.requests_partial).unwrap();
-            } else {
-                gs.subscribe(&topic).unwrap();
+            #[cfg(feature = "partial-messages")]
+            if self.supports_partial || self.requests_partial {
+                gs.enable_partials_for_topic(topic.hash().clone(), self.requests_partial);
             }
-            #[cfg(not(feature = "partial_messages"))]
             gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
@@ -234,14 +230,14 @@ where
     }
 
     /// Sets whether peers request partial messages.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub(super) fn requests_partial(mut self, requests_partial: bool) -> Self {
         self.requests_partial = requests_partial;
         self
     }
 
     /// Sets whether peers support partial messages.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub(super) fn supports_partial(mut self, supports_partial: bool) -> Self {
         self.supports_partial = supports_partial;
         self
@@ -442,7 +438,7 @@ where
 /// This is useful for simulating incoming RPC messages from peers in tests.
 /// It parses all message types: publish messages, subscriptions, and control
 /// messages (IHAVE, IWANT, GRAFT, PRUNE).
-pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
+pub(super) fn proto_to_message(rpc: &proto::Rpc) -> RpcIn {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
@@ -547,7 +543,7 @@ pub(super) fn proto_to_message(rpc: &proto::RPC) -> RpcIn {
             })
             .collect(),
         control_msgs,
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         partial_message: None,
     }
 }
@@ -644,13 +640,14 @@ pub(super) fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
 /// * `seq` - Mutable sequence counter (incremented each call)
 /// * `topics` - Pool of topics to randomly select from
 pub(super) fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
-    let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..10024)).map(|_| rng.r#gen()).collect(),
+        data: (0..rand::random_range(10..10024))
+            .map(|_| rand::random())
+            .collect(),
         sequence_number: Some(*seq),
-        topic: topics[rng.gen_range(0..topics.len())].clone(),
+        topic: topics[rand::random_range(0..topics.len())].clone(),
         signature: None,
         key: None,
         validated: true,

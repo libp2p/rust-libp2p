@@ -1,8 +1,32 @@
 ## 0.50.0
+- Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
+  ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
+  Backported from `libp2p-gossipsub v0.49.5`.
+
+- Change default `TopicSubscriptionFilter` from `AllowAllSubscriptionFilter` to `MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>`
+  with default limits of `100` for both `max_subscribed_topics` and `max_subscriptions_per_request`,
+  providing built-in protection against excessive subscription requests.
+  See [PR 6527](https://github.com/libp2p/rust-libp2p/pull/6527).
+
+- Account for forwarded messages in `topic_mesg_sent_*` metrics.
+  See [PR 6502](https://github.com/libp2p/rust-libp2p/pull/6502)
+
+- Simplify gossipsub control message validation by scanning protobuf bytes before decoding
+  to validate cumulative control message size, rather than decoding then counting individual IDs
+  to prevent memory amplification from decoding.
+  Introduce `max_control_message_size` (default 16KB) to limit total control bytes in an RPC.
+  Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
+  Rename `max_control_messages` to `max_control_messages_sent`.
+  See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
+
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
 - Optimize IDONTWANT sending by avoiding broadcasts for already-seen messages and deduplicating recipient peers.
   See [PR 6356](https://github.com/libp2p/rust-libp2p/pull/6356)
@@ -26,7 +50,7 @@
   See [PR 6183](https://github.com/libp2p/rust-libp2p/pull/6183)
 
 - Implement gossipsub 1.3 partial messages extension.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 6275](https://github.com/libp2p/rust-libp2p/pull/6275)
 
 - Remove peer penalty for duplicate messages.
   See [PR 6112](https://github.com/libp2p/rust-libp2p/pull/6112)

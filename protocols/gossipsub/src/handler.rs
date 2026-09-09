@@ -156,7 +156,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::Rpc>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
@@ -263,28 +263,17 @@ impl EnabledHandler {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
                         tracing::debug!(peer=%self.peer_id, ?message, "Sending gossipsub message");
-                        match message {
-                            RpcOut::Publish {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            }
-                            | RpcOut::Forward {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            } => {
-                                #[allow(clippy::collapsible_match)]
-                                if Pin::new(timeout).poll(cx).is_ready() {
-                                    // Inform the behaviour and end the poll.
-                                    self.outbound_substream =
-                                        Some(OutboundSubstreamState::WaitingOutput(substream));
-                                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                        HandlerEvent::MessageDropped(message),
-                                    ));
-                                }
-                            }
-                            _ => {} // All other messages are not time-bound.
+                        if let RpcOut::Publish {
+                            ref mut timeout, ..
+                        } = message
+                            && Pin::new(timeout).poll(cx).is_ready()
+                        {
+                            // Inform the behaviour and end the poll.
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::WaitingOutput(substream));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                HandlerEvent::MessageDropped(message),
+                            ));
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,

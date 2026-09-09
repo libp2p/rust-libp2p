@@ -170,7 +170,7 @@ fn doesnt_forward_idontwant() {
             .into_iter()
             .fold(0, |mut fwds, (peer_id, mut queue)| {
                 while !queue.is_empty() {
-                    if let Some(RpcOut::Forward { .. }) = queue.try_pop() {
+                    if let Some(RpcOut::Publish { .. }) = queue.try_pop() {
                         assert_ne!(peer_id, peers[2]);
                         fwds += 1;
                     }
@@ -199,7 +199,7 @@ fn parses_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![message_id.clone()],

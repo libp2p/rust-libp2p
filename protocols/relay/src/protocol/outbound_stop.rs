@@ -46,14 +46,14 @@ pub enum Error {
 impl Error {
     pub(crate) fn to_status(&self) -> proto::Status {
         match self {
-            Error::ResourceLimitExceeded => proto::Status::RESOURCE_LIMIT_EXCEEDED,
-            Error::PermissionDenied => proto::Status::PERMISSION_DENIED,
-            Error::Unsupported => proto::Status::CONNECTION_FAILED,
-            Error::Io(_) => proto::Status::CONNECTION_FAILED,
+            Error::ResourceLimitExceeded => proto::Status::ResourceLimitExceeded,
+            Error::PermissionDenied => proto::Status::PermissionDenied,
+            Error::Unsupported => proto::Status::ConnectionFailed,
+            Error::Io(_) => proto::Status::ConnectionFailed,
             Error::Protocol(
                 ProtocolViolation::UnexpectedStatus(_) | ProtocolViolation::UnexpectedTypeConnect,
-            ) => proto::Status::UNEXPECTED_MESSAGE,
-            Error::Protocol(_) => proto::Status::MALFORMED_MESSAGE,
+            ) => proto::Status::UnexpectedMessage,
+            Error::Protocol(_) => proto::Status::MalformedMessage,
         }
     }
 }
@@ -62,17 +62,19 @@ impl Error {
 #[derive(Debug, Error)]
 pub enum ProtocolViolation {
     #[error(transparent)]
-    Codec(#[from] quick_protobuf_codec::Error),
+    Codec(#[from] prost_codec::Error),
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
-    #[error("Unexpected message status '{0:?}'")]
-    UnexpectedStatus(proto::Status),
+    #[error("Unexpected message type '{0}'")]
+    UnexpectedType(String),
+    #[error("Unexpected message status '{0}'")]
+    UnexpectedStatus(String),
 }
 
-impl From<quick_protobuf_codec::Error> for Error {
-    fn from(e: quick_protobuf_codec::Error) -> Self {
+impl From<prost_codec::Error> for Error {
+    fn from(e: prost_codec::Error) -> Self {
         Error::Protocol(ProtocolViolation::Codec(e))
     }
 }
@@ -85,7 +87,7 @@ pub(crate) async fn connect(
     max_bytes: u64,
 ) -> Result<Circuit, Error> {
     let msg = proto::StopMessage {
-        type_pb: proto::StopMessageType::CONNECT,
+        r#type: proto::StopMessageType::Connect as i32,
         peer: Some(proto::Peer {
             id: src_peer_id.to_bytes(),
             addrs: vec![],
@@ -102,12 +104,12 @@ pub(crate) async fn connect(
         status: None,
     };
 
-    let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(io, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     substream.send(msg).await?;
 
     let proto::StopMessage {
-        type_pb,
+        r#type,
         peer: _,
         limit: _,
         status,
@@ -116,18 +118,32 @@ pub(crate) async fn connect(
         .await
         .ok_or(Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
-    match type_pb {
-        proto::StopMessageType::CONNECT => {
+    let msg_type = proto::StopMessageType::try_from(r#type)
+        .map_err(|_| Error::Protocol(ProtocolViolation::UnexpectedType(r#type.to_string())))?;
+
+    match msg_type {
+        proto::StopMessageType::Connect => {
             return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect));
         }
-        proto::StopMessageType::STATUS => {}
+        proto::StopMessageType::Status => {}
     }
 
     match status {
-        Some(proto::Status::OK) => {}
-        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => return Err(Error::ResourceLimitExceeded),
-        Some(proto::Status::PERMISSION_DENIED) => return Err(Error::PermissionDenied),
-        Some(s) => return Err(Error::Protocol(ProtocolViolation::UnexpectedStatus(s))),
+        Some(s) => match proto::Status::try_from(s) {
+            Ok(proto::Status::Ok) => {}
+            Ok(proto::Status::ResourceLimitExceeded) => return Err(Error::ResourceLimitExceeded),
+            Ok(proto::Status::PermissionDenied) => return Err(Error::PermissionDenied),
+            Ok(other) => {
+                return Err(Error::Protocol(ProtocolViolation::UnexpectedStatus(
+                    other.as_str_name().to_string(),
+                )));
+            }
+            Err(_) => {
+                return Err(Error::Protocol(ProtocolViolation::UnexpectedStatus(
+                    s.to_string(),
+                )));
+            }
+        },
         None => return Err(Error::Protocol(ProtocolViolation::MissingStatusField)),
     }
 

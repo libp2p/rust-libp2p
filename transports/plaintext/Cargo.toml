@@ -12,18 +12,18 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-bytes = "1"
+bytes.workspace = true
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-quick-protobuf = "0.8"
+prost = { workspace = true }
 tracing = { workspace = true }
-quick-protobuf-codec = { workspace = true }
+prost-codec = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
-futures_ringbuf = "0.4.0"
+futures_ringbuf = "0.4"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

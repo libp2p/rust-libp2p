@@ -72,7 +72,7 @@ fn test_handle_iwant_msg_cached() {
         .into_values()
         .fold(vec![], |mut collected_messages, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Forward { message, .. }) = queue.try_pop() {
+                if let Some(RpcOut::Publish { message, .. }) = queue.try_pop() {
                     collected_messages.push(message)
                 }
             }
@@ -129,7 +129,7 @@ fn test_handle_iwant_msg_cached_shifted() {
             .into_iter()
             .map(|(peer_id, mut queue)| {
                 while !queue.is_empty() {
-                    if matches!(queue.try_pop(), Some(RpcOut::Forward{message, ..}) if
+                    if matches!(queue.try_pop(), Some(RpcOut::Publish{message, ..}) if
                         gs.config.message_id(
                             &gs.data_transform
                                 .inbound_transform(message.clone())
@@ -207,7 +207,7 @@ fn test_handle_iwant_msg_but_already_sent_idontwant() {
     let rpc = RpcIn {
         messages: vec![],
         subscriptions: vec![],
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         partial_message: None,
         control_msgs: vec![ControlAction::IDontWant(IDontWant {
             message_ids: vec![msg_id.clone()],
@@ -438,7 +438,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         queues.into_values().fold(0, |mut fwds, mut queue| {
             while !queue.is_empty() {
-                if let Some(RpcOut::Forward { .. }) = queue.try_pop() {
+                if let Some(RpcOut::Publish { .. }) = queue.try_pop() {
                     fwds += 1;
                 }
             }
@@ -452,7 +452,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 #[test]
 fn test_ignore_too_many_ihaves() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
+        .max_ihave_messages_heartbeat(10)
         .build()
         .unwrap();
     // build gossipsub with full mesh
@@ -529,8 +529,8 @@ fn test_ignore_too_many_ihaves() {
 #[test]
 fn test_ignore_too_many_messages_in_ihave() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(10)
+        .max_ihave_messages_heartbeat(10)
+        .max_control_messages_sent(10)
         .build()
         .unwrap();
     // build gossipsub with full mesh
@@ -610,15 +610,15 @@ fn test_ignore_too_many_messages_in_ihave() {
 #[test]
 fn test_limit_number_of_message_ids_inside_ihave() {
     let config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(100)
+        .max_ihave_messages_heartbeat(10)
+        .max_control_messages_sent(100)
         .build()
         .unwrap();
     // build gossipsub with full mesh
     let (mut gs, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
-        .to_subscribe(false)
+        .to_subscribe(true)
         .gs_config(config)
         .create_network();
 

@@ -54,23 +54,23 @@ impl MdnsPacket {
     ) -> Result<Option<MdnsPacket>, hickory_proto::ProtoError> {
         let packet = Message::from_vec(buf)?;
 
-        if packet.query().is_none() {
+        if packet.queries.is_empty() {
             return Ok(Some(MdnsPacket::Response(MdnsResponse::new(&packet, from))));
         }
 
         if packet
-            .queries()
+            .queries
             .iter()
             .any(|q| q.name().to_utf8() == SERVICE_NAME_FQDN)
         {
             return Ok(Some(MdnsPacket::Query(MdnsQuery {
                 from,
-                query_id: packet.header().id(),
+                query_id: packet.metadata.id,
             })));
         }
 
         if packet
-            .queries()
+            .queries
             .iter()
             .any(|q| q.name().to_utf8() == META_QUERY_SERVICE_FQDN)
         {
@@ -78,7 +78,7 @@ impl MdnsPacket {
             // one with SERVICE_NAME and one with META_QUERY_SERVICE?
             return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                 from,
-                query_id: packet.header().id(),
+                query_id: packet.metadata.id,
             })));
         }
 
@@ -154,18 +154,18 @@ impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
     pub(crate) fn new(packet: &Message, from: SocketAddr) -> MdnsResponse {
         let peers = packet
-            .answers()
+            .answers
             .iter()
             .filter_map(|record| {
-                if record.name().to_string() != SERVICE_NAME_FQDN {
+                if record.name.to_string() != SERVICE_NAME_FQDN {
                     return None;
                 }
 
-                let RData::PTR(record_value) = record.data() else {
+                let RData::PTR(record_value) = &record.data else {
                     return None;
                 };
 
-                MdnsPeer::new(packet, record_value, record.ttl())
+                MdnsPeer::new(packet, record_value, record.ttl)
             })
             .collect();
 
@@ -236,20 +236,20 @@ impl MdnsPeer {
     pub(crate) fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
-            .additionals()
+            .additionals
             .iter()
             .filter_map(|add_record| {
-                if add_record.name() != record_value {
+                if &add_record.name != record_value {
                     return None;
                 }
 
-                if let RData::TXT(txt) = add_record.data() {
+                if let RData::TXT(txt) = &add_record.data {
                     Some(txt)
                 } else {
                     None
                 }
             })
-            .flat_map(|txt| txt.iter())
+            .flat_map(|txt| txt.txt_data.iter())
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
                 let addr = dns::decode_character_string(txt).ok()?;
@@ -335,13 +335,13 @@ mod tests {
         for bytes in packets {
             let packet = Message::from_vec(&bytes).expect("unable to parse packet");
             let record_value = packet
-                .answers()
+                .answers
                 .iter()
                 .filter_map(|record| {
-                    if record.name().to_utf8() != SERVICE_NAME_FQDN {
+                    if record.name.to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let RData::PTR(record_value) = record.data() else {
+                    let RData::PTR(record_value) = &record.data else {
                         return None;
                     };
                     Some(record_value)

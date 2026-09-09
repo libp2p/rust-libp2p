@@ -33,6 +33,7 @@ use futures::{
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use quinn::rustls::pki_types::CertificateDer;
+use quinn_proto::TransportError;
 
 use crate::{Connection, ConnectionError, Error};
 
@@ -51,20 +52,29 @@ impl Connecting {
 }
 
 impl Connecting {
-    /// Returns the address of the node we're connected to.
-    /// Panics if the connection is still handshaking.
-    fn remote_peer_id(connection: &quinn::Connection) -> PeerId {
+    fn remote_peer_id(connection: &quinn::Connection) -> Result<PeerId, Error> {
+        fn transport_err(reason: &str) -> Error {
+            Error::Connection(ConnectionError(quinn::ConnectionError::TransportError(
+                TransportError {
+                    code: quinn::TransportErrorCode::PROTOCOL_VIOLATION,
+                    frame: None,
+                    reason: reason.to_string(),
+                },
+            )))
+        }
+
         let identity = connection
             .peer_identity()
-            .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<CertificateDer>> =
-            identity.downcast().expect("we rely on rustls feature; qed");
+            .ok_or_else(|| transport_err("No crypto identity in quinn's Connection"))?;
+        let certificates: Box<Vec<CertificateDer>> = identity
+            .downcast()
+            .map_err(|_| transport_err("Could not downcast identity"))?;
         let end_entity = certificates
             .first()
-            .expect("there should be exactly one certificate; qed");
+            .ok_or_else(|| transport_err("No certificate found"))?;
         let p2p_cert = libp2p_tls::certificate::parse(end_entity)
-            .expect("the certificate was validated during TLS handshake; qed");
-        p2p_cert.peer_id()
+            .map_err(|_| transport_err("Could not parse certificate"))?;
+        Ok(p2p_cert.peer_id())
     }
 }
 
@@ -77,7 +87,7 @@ impl Future for Connecting {
             Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
         };
 
-        let peer_id = Self::remote_peer_id(&connection);
+        let peer_id = Self::remote_peer_id(&connection)?;
         let muxer = Connection::new(connection);
         Poll::Ready(Ok((peer_id, muxer)))
     }

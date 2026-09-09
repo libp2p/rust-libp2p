@@ -48,9 +48,9 @@ mod record;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::dht::pb::{
+    pub use self::dht_pb::{
         Message, Record,
-        mod_Message::{ConnectionType, MessageType, Peer},
+        message::{ConnectionType, MessageType, Peer},
     };
 }
 

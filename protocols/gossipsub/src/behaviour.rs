@@ -47,17 +47,15 @@ use libp2p_swarm::{
 };
 #[cfg(feature = "metrics")]
 use prometheus_client::registry::Registry;
-use quick_protobuf::{MessageWrite, Writer};
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng,
-};
+use prost::Message as _;
+use rand::seq::{IteratorRandom, SliceRandom};
 use web_time::{Instant, SystemTime};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
-    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
+    FailedMessages, MaxCountSubscriptionFilter, PublishError, SubscriptionError, TopicScoreParams,
+    ValidationError,
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
     gossip_promises::GossipPromises,
@@ -77,7 +75,7 @@ use crate::{
         SubscriptionAction,
     },
 };
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 use crate::{
     extensions::partial_messages::{self, Partial, PublishAction, ReceivedAction},
     types::SubscriptionOpts,
@@ -153,7 +151,7 @@ pub enum Event {
         message: Message,
     },
     /// A new partial message has been received.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     Partial {
         /// Topic on which the partiall was published.
         topic_hash: TopicHash,
@@ -172,6 +170,12 @@ pub enum Event {
         peer_id: PeerId,
         /// The topic it has subscribed to.
         topic: TopicHash,
+        /// Whether the remote peer indicated it supports partial messages on this topic.
+        #[cfg(feature = "partial-messages")]
+        supports_partial: bool,
+        /// Whether the remote peer indicated it requests partial messages on this topic.
+        #[cfg(feature = "partial-messages")]
+        requests_partial: bool,
     },
     /// A remote unsubscribed from a topic.
     Unsubscribed {
@@ -286,7 +290,10 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
+pub struct Behaviour<
+    D = IdentityTransform,
+    F = MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>,
+> {
     /// Configuration providing gossipsub performance parameters.
     config: Config,
 
@@ -316,7 +323,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// Partial Messages extension handler.
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     partial_messages_extension: partial_messages::State,
 
     /// Map of topics to list of peers that we publish to, but don't subscribe to.
@@ -482,7 +489,7 @@ where
             data_transform,
             failed_messages: Default::default(),
             gossip_promises: Default::default(),
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             partial_messages_extension: Default::default(),
         })
     }
@@ -548,32 +555,6 @@ where
     /// Returns [`Ok(true)`](Ok) if the subscription worked.
     /// Returns [`Ok(false)`](Ok) if we were already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, false, false)
-    }
-
-    /// Subscribe to a topic with partial options.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    #[cfg(feature = "partial_messages")]
-    pub fn subscribe_partial<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
-        self.subscribe_inner(topic, true, requests_partial)
-    }
-
-    /// Subscribe to a topic.
-    ///
-    /// Returns [`Ok(true)`](Ok) if the subscription worked.
-    /// Returns [`Ok(false)`](Ok) if we were already subscribed.
-    fn subscribe_inner<H: Hasher>(
-        &mut self,
-        topic: &Topic<H>,
-        supports_partial: bool,
-        requests_partial: bool,
-    ) -> Result<bool, SubscriptionError> {
         let topic_hash = topic.hash();
         if !self.subscription_filter.can_subscribe(&topic_hash) {
             return Err(SubscriptionError::NotAllowed);
@@ -583,6 +564,14 @@ where
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
+
+        #[cfg(not(feature = "partial-messages"))]
+        let (requests_partial, supports_partial) = (false, false);
+        #[cfg(feature = "partial-messages")]
+        let SubscriptionOpts {
+            requests_partial,
+            supports_partial,
+        } = self.partial_messages_extension.opts(&topic_hash);
 
         // send subscription request to all peers
         for peer_id in self.connected_peers.keys().copied().collect::<Vec<_>>() {
@@ -599,10 +588,6 @@ where
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
         self.join(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .subscribe(topic_hash, supports_partial, requests_partial);
 
         tracing::debug!(%topic, "Subscribed to topic");
         Ok(true)
@@ -630,10 +615,6 @@ where
         // call LEAVE(topic)
         // this will remove the topic from the mesh
         self.leave(&topic_hash);
-
-        #[cfg(feature = "partial_messages")]
-        self.partial_messages_extension
-            .unsubscribe(&topic_hash.clone());
 
         tracing::debug!(topic=%topic_hash, "Unsubscribed from topic");
         true
@@ -690,15 +671,23 @@ where
 
         let candidates = self.publish_peers(&topic_hash);
 
-        #[cfg(feature = "partial_messages")]
-        let candidates = candidates
-            .filter(|peer_id| {
-                !self
-                    .partial_messages_extension
-                    .requests_partial(peer_id, &topic_hash)
-            })
-            .collect();
-        #[cfg(not(feature = "partial_messages"))]
+        #[cfg(feature = "partial-messages")]
+        let candidates = if self
+            .partial_messages_extension
+            .opts(&topic_hash)
+            .supports_partial
+        {
+            candidates
+                .filter(|peer_id| {
+                    !self
+                        .partial_messages_extension
+                        .requests_partial(peer_id, &topic_hash)
+                })
+                .collect()
+        } else {
+            candidates.collect()
+        };
+        #[cfg(not(feature = "partial-messages"))]
         let candidates = candidates.collect();
 
         let recipients = self.filter_publish_candidates(&topic_hash, candidates);
@@ -816,7 +805,7 @@ where
                         .filter(|peer_id| {
                             !mesh_peers.contains(peer_id) && !recipients.contains(peer_id)
                         })
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", extras.len());
                     recipients.extend(extras);
@@ -846,7 +835,7 @@ where
                     let new_peers = candidates
                         .into_iter()
                         .filter(|peer_id| !recipients.contains(peer_id))
-                        .choose_multiple(&mut thread_rng(), needed_extra_peers);
+                        .sample(&mut rand::rng(), needed_extra_peers);
 
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
@@ -861,7 +850,19 @@ where
         recipients
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
+    /// Enable partial messages for a topic. This must be called while not subscribed to the topic.
+    /// Partials can be enabled only once per topic.
+    pub fn enable_partials_for_topic(&mut self, topic_hash: TopicHash, requests_partials: bool) {
+        if self.mesh.contains_key(&topic_hash) {
+            tracing::warn!(topic=%topic_hash, "Tried to enable partials while subscribed");
+            return;
+        }
+        self.partial_messages_extension
+            .enable_partials_for_topic(topic_hash, requests_partials);
+    }
+
+    #[cfg(feature = "partial-messages")]
     /// Report an invalid partial message from a peer, originating at the application layer.
     /// This triggers penalties for the peer that sent the invalid partial.
     pub fn report_invalid_partial(&mut self, peer_id: PeerId, topic_hash: &TopicHash) {
@@ -870,7 +871,7 @@ where
         }
     }
 
-    #[cfg(feature = "partial_messages")]
+    #[cfg(feature = "partial-messages")]
     pub fn publish_partial<P: Partial + 'static>(
         &mut self,
         topic: impl Into<TopicHash>,
@@ -1341,7 +1342,7 @@ where
         // IHAVE flood protection
         let peer_have = self.count_received_ihave.entry(*peer_id).or_insert(0);
         *peer_have += 1;
-        if *peer_have > self.config.max_ihave_messages() {
+        if *peer_have > self.config.max_ihave_messages_heartbeat() {
             tracing::debug!(
                 peer=%peer_id,
                 "IHAVE: peer has advertised too many times ({}) within this heartbeat \
@@ -1352,7 +1353,7 @@ where
         }
 
         if let Some(iasked) = self.count_sent_iwant.get(peer_id)
-            && *iasked >= self.config.max_ihave_length()
+            && *iasked >= self.config.max_control_messages_sent()
         {
             tracing::debug!(
                 peer=%peer_id,
@@ -1378,11 +1379,11 @@ where
 
             // We should not handle IHAVEs from peers that support partials on topics where we
             // request partial messages.
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             if self
                 .partial_messages_extension
                 .opts(&topic)
-                .is_some_and(|opts| opts.requests_partial)
+                .requests_partial
                 && self
                     .partial_messages_extension
                     .supports_partial(peer_id, &topic)
@@ -1411,8 +1412,11 @@ where
         if !iwant_ids.is_empty() {
             let iasked = self.count_sent_iwant.entry(*peer_id).or_insert(0);
             let mut iask = iwant_ids.len();
-            if *iasked + iask > self.config.max_ihave_length() {
-                iask = self.config.max_ihave_length().saturating_sub(*iasked);
+            if *iasked + iask > self.config.max_control_messages_sent() {
+                iask = self
+                    .config
+                    .max_control_messages_sent()
+                    .saturating_sub(*iasked);
             }
 
             // Send the list of IWANT control messages
@@ -1425,8 +1429,7 @@ where
 
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
-            let mut rng = thread_rng();
-            iwant_ids_vec.partial_shuffle(&mut rng, iask);
+            iwant_ids_vec.shuffle(&mut rand::rng());
 
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
@@ -1498,7 +1501,7 @@ where
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
-                        RpcOut::Forward {
+                        RpcOut::Publish {
                             message_id: id.clone(),
                             message: msg,
                             timeout: Delay::new(self.config.forward_queue_duration()),
@@ -1519,152 +1522,147 @@ where
 
         let mut do_px = self.config.do_px();
 
-        let Some(connected_peer) = self.connected_peers.get_mut(peer_id) else {
+        let Some(connected_peer) = self.connected_peers.get(peer_id) else {
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-
-        // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
-        // and they must be subscribed to the topic. Ensure we have recorded the mapping.
-        for topic in &topics {
-            if connected_peer.topics.insert(topic.clone()) {
-                #[cfg(feature = "metrics")]
-                if let Some(m) = self.metrics.as_mut() {
-                    m.inc_topic_peers(topic);
-                }
-            }
-        }
+        // Needs to be here to comply with the borrow checker.
+        let is_outbound = connected_peer.outbound;
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             tracing::warn!(peer=%peer_id, "GRAFT: ignoring request from direct peer");
-            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
-            to_prune_topics = topics.into_iter().collect();
-            // but don't PX
-            do_px = false
-        } else {
-            let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
-            let now = Instant::now();
-            for topic_hash in topics {
-                if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                    // if the peer is already in the mesh ignore the graft
-                    if peers.contains(peer_id) {
-                        tracing::debug!(
-                            peer=%peer_id,
-                            topic=%&topic_hash,
-                            "GRAFT: Received graft for peer that is already in topic"
-                        );
-                        continue;
-                    }
+            return;
+        }
 
-                    // make sure we are not backing off that peer
-                    if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
-                        && backoff_time > now
+        let (below_zero, score) = self.peer_score.below_threshold(peer_id, |_| 0.0);
+        let now = Instant::now();
+        for topic_hash in topics {
+            let Some(peers) = self.mesh.get_mut(&topic_hash) else {
+                // don't do PX when there is an unknown topic to avoid leaking our peers
+                do_px = false;
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "GRAFT: Received graft for unknown topic from peer"
+                );
+                // spam hardening: ignore GRAFTs for unknown topics
+                continue;
+            };
+
+            // if the peer is already in the mesh ignore the graft
+            if peers.contains(peer_id) {
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%&topic_hash,
+                    "GRAFT: Received graft for peer that is already in topic"
+                );
+                continue;
+            }
+
+            // make sure we are not backing off that peer
+            if let Some(backoff_time) = self.backoffs.get_backoff_time(&topic_hash, peer_id)
+                && backoff_time > now
+            {
+                tracing::warn!(
+                    peer=%peer_id,
+                    "[Penalty] Peer attempted graft within backoff time, penalizing"
+                );
+                // add behavioural penalty
+                if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                    #[cfg(feature = "metrics")]
+                    if let Some(metrics) = self.metrics.as_mut() {
+                        metrics.register_score_penalty(Penalty::GraftBackoff);
+                    }
+                    peer_score.add_penalty(peer_id, 1);
+
+                    // Apply an extra graft-backoff penalty only when the peer is still
+                    // far enough from backoff expiry.
+                    // This compares durations only,
+                    // avoiding Instant arithmetic and handling config edge cases
+                    // safely: any active backoff
+                    // qualifies for the extra penalty.
+                    let apply_extra_penalty = match self
+                        .config
+                        .prune_backoff()
+                        .checked_sub(self.config.graft_flood_threshold())
                     {
-                        tracing::warn!(
-                            peer=%peer_id,
-                            "[Penalty] Peer attempted graft within backoff time, penalizing"
-                        );
-                        // add behavioural penalty
-                        if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                            #[cfg(feature = "metrics")]
-                            if let Some(metrics) = self.metrics.as_mut() {
-                                metrics.register_score_penalty(Penalty::GraftBackoff);
-                            }
-                            peer_score.add_penalty(peer_id, 1);
-
-                            // Apply an extra graft-backoff penalty only when the peer is still
-                            // far enough from backoff expiry.
-                            // This compares durations only,
-                            // avoiding Instant arithmetic and handling config edge cases
-                            // safely: any active backoff
-                            // qualifies for the extra penalty.
-                            let apply_extra_penalty = match self
-                                .config
-                                .prune_backoff()
-                                .checked_sub(self.config.graft_flood_threshold())
-                            {
-                                Some(required_remaining) => {
-                                    let remaining_backoff =
-                                        backoff_time.saturating_duration_since(now);
-                                    remaining_backoff > required_remaining
-                                }
-                                // graft_flood_threshold >= prune_backoff
-                                None => true,
-                            };
-                            if apply_extra_penalty {
-                                peer_score.add_penalty(peer_id, 1);
-                            }
+                        Some(required_remaining) => {
+                            let remaining_backoff = backoff_time.saturating_duration_since(now);
+                            remaining_backoff > required_remaining
                         }
-                        // no PX
-                        do_px = false;
-
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
+                        // graft_flood_threshold >= prune_backoff
+                        None => true,
+                    };
+                    if apply_extra_penalty {
+                        peer_score.add_penalty(peer_id, 1);
                     }
-
-                    // check the score
-                    if below_zero {
-                        // we don't GRAFT peers with negative score
-                        tracing::debug!(
-                            peer=%peer_id,
-                            %score,
-                            topic=%topic_hash,
-                            "GRAFT: ignoring peer with negative score"
-                        );
-                        // we do send them PRUNE however, because it's a matter of protocol
-                        // correctness
-                        to_prune_topics.insert(topic_hash.clone());
-                        // but we won't PX to them
-                        do_px = false;
-                        continue;
-                    }
-
-                    // check mesh upper bound and only allow graft if the upper bound is not reached
-                    let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
-
-                    if peers.len() >= mesh_n_high {
-                        to_prune_topics.insert(topic_hash.clone());
-                        continue;
-                    }
-
-                    // add peer to the mesh
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Mesh link added for peer in topic"
-                    );
-
-                    if peers.insert(*peer_id) {
-                        #[cfg(feature = "metrics")]
-                        if let Some(m) = self.metrics.as_mut() {
-                            m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
-                        }
-                    }
-
-                    // If the peer did not previously exist in any mesh, inform the handler
-                    peer_added_to_mesh(
-                        *peer_id,
-                        vec![&topic_hash],
-                        &self.mesh,
-                        &mut self.events,
-                        &self.connected_peers,
-                    );
-
-                    if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
-                        peer_score.graft(peer_id, topic_hash);
-                    }
-                } else {
-                    // don't do PX when there is an unknown topic to avoid leaking our peers
-                    do_px = false;
-                    tracing::debug!(
-                        peer=%peer_id,
-                        topic=%topic_hash,
-                        "GRAFT: Received graft for unknown topic from peer"
-                    );
-                    // spam hardening: ignore GRAFTs for unknown topics
-                    continue;
                 }
+                // no PX
+                do_px = false;
+
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // check the score
+            if below_zero {
+                // we don't GRAFT peers with negative score
+                tracing::debug!(
+                    peer=%peer_id,
+                    %score,
+                    topic=%topic_hash,
+                    "GRAFT: ignoring peer with negative score"
+                );
+                // we do send them PRUNE however, because it's a matter of protocol
+                // correctness
+                to_prune_topics.insert(topic_hash.clone());
+                // but we won't PX to them
+                do_px = false;
+                continue;
+            }
+
+            // Discard the GRAFT if the user hasn't subscribed to the topic.
+            if !connected_peer.topics.contains(&topic_hash) {
+                do_px = false;
+                tracing::debug!(peer=%peer_id, topic=%topic_hash,
+                            "GRAFT: dropping unsubscribed topic from peer");
+                continue;
+            }
+
+            // check mesh upper bound and only allow graft if the upper bound is not reached
+            // or if it is an outbound peer
+            let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+            if peers.len() >= mesh_n_high && !is_outbound {
+                to_prune_topics.insert(topic_hash.clone());
+                continue;
+            }
+
+            // add peer to the mesh
+            tracing::debug!(
+                peer=%peer_id,
+                topic=%topic_hash,
+                "GRAFT: Mesh link added for peer in topic"
+            );
+
+            if peers.insert(*peer_id) {
+                #[cfg(feature = "metrics")]
+                if let Some(m) = self.metrics.as_mut() {
+                    m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
+                }
+            }
+
+            // If the peer did not previously exist in any mesh, inform the handler
+            peer_added_to_mesh(
+                *peer_id,
+                vec![&topic_hash],
+                &self.mesh,
+                &mut self.events,
+                &self.connected_peers,
+            );
+
+            if let PeerScoreState::Active(peer_score) = &mut self.peer_score {
+                peer_score.graft(peer_id, topic_hash);
             }
         }
 
@@ -1811,8 +1809,8 @@ where
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
-            let mut rng = thread_rng();
-            px.partial_shuffle(&mut rng, n);
+            let mut rng = rand::rng();
+            px.shuffle(&mut rng);
             px = px.into_iter().take(n).collect();
         }
 
@@ -2127,7 +2125,7 @@ where
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension.peer_subscribed(
                         propagation_source,
                         topic_hash.clone(),
@@ -2187,6 +2185,10 @@ where
                     application_event.push(ToSwarm::GenerateEvent(Event::Subscribed {
                         peer_id: *propagation_source,
                         topic: topic_hash.clone(),
+                        #[cfg(feature = "partial-messages")]
+                        supports_partial: subscription.options.supports_partial,
+                        #[cfg(feature = "partial-messages")]
+                        requests_partial: subscription.options.requests_partial,
                     }));
                 }
                 SubscriptionAction::Unsubscribe => {
@@ -2203,7 +2205,7 @@ where
                         }
                     }
 
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     self.partial_messages_extension
                         .peer_unsubscribed(*propagation_source, topic_hash);
 
@@ -2426,7 +2428,7 @@ where
                 let excess_peer_no = peers.len() - mesh_n;
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
-                let mut rng = thread_rng();
+                let mut rng = rand::rng();
                 let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
@@ -2601,12 +2603,12 @@ where
             #[cfg(feature = "metrics")]
             {
                 if let Some(m) = self.metrics.as_mut() {
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     {
                         let mesh_peers = peers.len();
                         m.set_mesh_peers(topic_hash, mesh_peers, false);
                     }
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     {
                         let (partial, full): (Vec<PeerId>, Vec<PeerId>) =
                             peers.iter().partition(|peer_id| {
@@ -2748,7 +2750,7 @@ where
             }
         }
 
-        #[cfg(feature = "partial_messages")]
+        #[cfg(feature = "partial-messages")]
         {
             let actions = self.partial_messages_extension.heartbeat(
                 &self.mesh,
@@ -2784,7 +2786,7 @@ where
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut messages = Vec::new();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let mut message_ids = self.mcache.get_gossip_message_ids(topic_hash);
@@ -2793,7 +2795,7 @@ where
             }
 
             // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
-            if message_ids.len() > self.config.max_ihave_length() {
+            if message_ids.len() > self.config.max_control_messages_sent() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
                     "too many messages for gossip; will truncate IHAVE list ({} messages)",
@@ -2822,7 +2824,7 @@ where
                             .0;
                     // Don't send IHAVE to peers that requested partial messages -
                     // they receive metadata via partial message gossip instead.
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     let filter = filter
                         && !self
                             .partial_messages_extension
@@ -2835,12 +2837,12 @@ where
             for peer_id in to_msg_peers {
                 let mut peer_message_ids = message_ids.clone();
 
-                if peer_message_ids.len() > self.config.max_ihave_length() {
+                if peer_message_ids.len() > self.config.max_control_messages_sent() {
                     // We do this per peer so that we emit a different set for each peer.
                     // we have enough redundancy in the system that this will significantly increase
                     // the message coverage when we do truncate.
-                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_ihave_length());
-                    peer_message_ids.truncate(self.config.max_ihave_length());
+                    peer_message_ids.shuffle(&mut rng);
+                    peer_message_ids.truncate(self.config.max_control_messages_sent());
                 }
 
                 // send an IHAVE message
@@ -3005,7 +3007,7 @@ where
                     continue;
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 if self
                     .partial_messages_extension
                     .requests_partial(peer_id, topic)
@@ -3017,7 +3019,7 @@ where
 
                 self.send_message(
                     *peer_id,
-                    RpcOut::Forward {
+                    RpcOut::Publish {
                         message_id: msg_id.clone(),
                         message: message.clone(),
                         timeout: Delay::new(self.config.forward_queue_duration()),
@@ -3054,12 +3056,7 @@ where
                         key: None,
                     };
 
-                    let mut buf = Vec::with_capacity(message.get_size());
-                    let mut writer = Writer::new(&mut buf);
-
-                    message
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
+                    let buf = message.encode_to_vec();
 
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
@@ -3136,7 +3133,7 @@ where
                     m.msg_sent(&message.topic, false, message.raw_protobuf_len())
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
                     topic_hash,
                     body,
@@ -3230,24 +3227,15 @@ where
             .mesh
             .keys()
             .cloned()
-            .filter_map(|topic_hash| {
-                #[cfg(not(feature = "partial_messages"))]
+            .map(|topic_hash| {
+                #[cfg(not(feature = "partial-messages"))]
                 let (requests_partial, supports_partial) = (false, false);
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 let (requests_partial, supports_partial) = {
-                    let Some(SubscriptionOpts {
-                        requests_partial,
-                        supports_partial,
-                    }) = self.partial_messages_extension.opts(&topic_hash)
-                    else {
-                        tracing::error!(
-                            "Partial subscription options should exist for subscribed topic"
-                        );
-                        return None;
-                    };
-                    (requests_partial, supports_partial)
+                    let opts = self.partial_messages_extension.opts(&topic_hash);
+                    (opts.requests_partial, opts.supports_partial)
                 };
-                Some((topic_hash, requests_partial, supports_partial))
+                (topic_hash, requests_partial, supports_partial)
             })
             .collect();
 
@@ -3332,7 +3320,7 @@ where
                     m.dec_topic_peers(topic);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 self.partial_messages_extension.peer_disconnected(peer_id);
 
                 // remove from fanout
@@ -3445,10 +3433,10 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
 
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3485,9 +3473,9 @@ where
             self.send_message(
                 peer_id,
                 RpcOut::Extensions(Extensions {
-                    #[cfg(feature = "partial_messages")]
+                    #[cfg(feature = "partial-messages")]
                     partial_messages: Some(true),
-                    #[cfg(not(feature = "partial_messages"))]
+                    #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
                 }),
             );
@@ -3592,19 +3580,7 @@ where
                 }
 
                 // Handle messages
-                for (count, raw_message) in rpc.messages.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
+                for raw_message in rpc.messages {
                     self.handle_received_message(raw_message, &propagation_source);
                 }
 
@@ -3614,20 +3590,7 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
-                    // Only process the amount of messages the configuration allows.
-                    if self
-                        .config
-                        .max_messages_per_rpc()
-                        .is_some_and(|max_msg| count >= max_msg)
-                    {
-                        tracing::warn!(
-                            "Received more control messages than permitted. Ignoring further messages. Processed: {}",
-                            count
-                        );
-                        break;
-                    }
-
+                for control_msg in rpc.control_msgs {
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,
@@ -3687,7 +3650,7 @@ where
                     self.handle_prune(&propagation_source, prune_msgs);
                 }
 
-                #[cfg(feature = "partial_messages")]
+                #[cfg(feature = "partial-messages")]
                 if let Some(partial_message) = rpc.partial_message {
                     if self
                         .peer_score
@@ -3889,8 +3852,8 @@ fn get_random_peers_dynamic(
     }
 
     // we have more peers than needed, shuffle them and return n of them
-    let mut rng = thread_rng();
-    gossip_peers.partial_shuffle(&mut rng, n);
+    let mut rng = rand::rng();
+    gossip_peers.shuffle(&mut rng);
 
     tracing::debug!("RANDOM PEERS: Got {:?} peers", n);
 
