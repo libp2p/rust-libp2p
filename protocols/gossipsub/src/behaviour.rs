@@ -1522,21 +1522,12 @@ where
 
         let mut do_px = self.config.do_px();
 
-        let Some(connected_peer) = self.connected_peers.get_mut(peer_id) else {
+        let Some(connected_peer) = self.connected_peers.get(peer_id) else {
             tracing::error!(peer_id = %peer_id, "Peer non-existent when handling graft");
             return;
         };
-
-        // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
-        // and they must be subscribed to the topic. Ensure we have recorded the mapping.
-        for topic in &topics {
-            if connected_peer.topics.insert(topic.clone()) {
-                #[cfg(feature = "metrics")]
-                if let Some(m) = self.metrics.as_mut() {
-                    m.inc_topic_peers(topic);
-                }
-            }
-        }
+        // Needs to be here to comply with the borrow checker.
+        let is_outbound = connected_peer.outbound;
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
@@ -1631,10 +1622,18 @@ where
                 continue;
             }
 
-            // check mesh upper bound and only allow graft if the upper bound is not reached
-            let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+            // Discard the GRAFT if the user hasn't subscribed to the topic.
+            if !connected_peer.topics.contains(&topic_hash) {
+                do_px = false;
+                tracing::debug!(peer=%peer_id, topic=%topic_hash,
+                            "GRAFT: dropping unsubscribed topic from peer");
+                continue;
+            }
 
-            if peers.len() >= mesh_n_high {
+            // check mesh upper bound and only allow graft if the upper bound is not reached
+            // or if it is an outbound peer
+            let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+            if peers.len() >= mesh_n_high && !is_outbound {
                 to_prune_topics.insert(topic_hash.clone());
                 continue;
             }
