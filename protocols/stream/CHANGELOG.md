@@ -1,3 +1,8 @@
+## 0.5.0-alpha
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.4.0-alpha
 
 - Garbage-collect deregistered streams when accepting new streams.

@@ -29,12 +29,12 @@ use std::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::ToSwarm;
 
-use super::{count_control_msgs, disconnect_peer, flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, count_control_msgs, disconnect_peer, flush_events};
 use crate::{
+    IdentTopic as Topic,
     config::{Config, ConfigBuilder},
     topic::TopicHash,
     types::{PeerInfo, Prune, RpcOut},
-    IdentTopic as Topic,
 };
 
 /// tests that a peer is added to our mesh when we are both subscribed
@@ -189,11 +189,13 @@ fn test_connect_to_px_peers_on_handle_prune() {
     assert_eq!(dials_set.len(), config.prune_peers());
 
     // all dial peers must be in px
-    assert!(dials_set.is_subset(
-        &px.iter()
-            .map(|i| *i.peer_id.as_ref().unwrap())
-            .collect::<HashSet<_>>()
-    ));
+    assert!(
+        dials_set.is_subset(
+            &px.iter()
+                .map(|i| *i.peer_id.as_ref().unwrap())
+                .collect::<HashSet<_>>()
+        )
+    );
 }
 
 #[test]

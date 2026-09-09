@@ -1,4 +1,9 @@
-## 0.13.0 
+## 0.14.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+## 0.13.0
 
 - Don't wait for negotiation on `<Negotiated as AsyncWrite>::poll_close`.
   This can save one round-trip for protocols that use stream closing as an operation in ones protocol, e.g. using stream closing to signal the end of a request.

@@ -140,15 +140,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         },
                     ..
                 } = e
+                    && protocols.contains(&kad::PROTOCOL_NAME)
                 {
-                    if protocols.contains(&kad::PROTOCOL_NAME) {
-                        for addr in listen_addrs {
-                            swarm
-                                .behaviour_mut()
-                                .kademlia
-                                .as_mut()
-                                .map(|k| k.add_address(&peer_id, addr));
-                        }
+                    for addr in listen_addrs {
+                        swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .as_mut()
+                            .map(|k| k.add_address(&peer_id, addr));
                     }
                 }
             }

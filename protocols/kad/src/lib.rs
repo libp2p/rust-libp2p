@@ -48,9 +48,9 @@ mod record;
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::dht::pb::{
-        mod_Message::{ConnectionType, MessageType, Peer},
+    pub use self::dht_pb::{
         Message, Record,
+        message::{ConnectionType, MessageType, Peer},
     };
 }
 
@@ -72,7 +72,7 @@ pub use kbucket::{
 use libp2p_swarm::StreamProtocol;
 pub use protocol::{ConnectionType, KadPeer};
 pub use query::QueryId;
-pub use record::{store, Key as RecordKey, ProviderRecord, Record};
+pub use record::{Key as RecordKey, ProviderRecord, Record, store};
 
 /// The `k` parameter of the Kademlia specification.
 ///

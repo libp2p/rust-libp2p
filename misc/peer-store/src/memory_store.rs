@@ -2,7 +2,7 @@
 //!
 //! ## Usage
 //! ```
-//! use libp2p_peer_store::{memory_store::MemoryStore, Behaviour};
+//! use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
 //!
 //! let store: MemoryStore<()> = MemoryStore::new(Default::default());
 //! let behaviour = Behaviour::new(store);
@@ -16,7 +16,7 @@ use std::{
 
 use hashlink::LruCache;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{behaviour::ConnectionEstablished, DialError, FromSwarm};
+use libp2p_swarm::{DialError, FromSwarm, behaviour::ConnectionEstablished};
 
 use super::Store;
 
@@ -119,17 +119,17 @@ impl<T> MemoryStore<T> {
     /// Returns `true` when the address is removed, `false` if the address didn't exist
     /// or the address is permanent and `force` false.
     fn remove_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            if record.remove_address(address, force) {
-                if record.addresses.is_empty() && record.custom_data.is_none() {
-                    self.records.remove(peer);
-                }
-                self.push_event_and_wake(Event::PeerAddressRemoved {
-                    peer_id: *peer,
-                    address: address.clone(),
-                });
-                return true;
+        if let Some(record) = self.records.get_mut(peer)
+            && record.remove_address(address, force)
+        {
+            if record.addresses.is_empty() && record.custom_data.is_none() {
+                self.records.remove(peer);
             }
+            self.push_event_and_wake(Event::PeerAddressRemoved {
+                peer_id: *peer,
+                address: address.clone(),
+            });
+            return true;
         }
         false
     }
@@ -220,11 +220,11 @@ impl<T> Store for MemoryStore<T> {
                 };
 
                 match info.error {
-                    DialError::WrongPeerId { obtained, address } => {
+                    DialError::WrongPeerId { obtained, address }
+                        if self.remove_address_inner(&peer, address, false) =>
+                    {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
-                        if self.remove_address_inner(&peer, address, false) {
-                            self.add_address_inner(obtained, address, false);
-                        }
+                        self.add_address_inner(obtained, address, false);
                     }
                     DialError::Transport(errors) => {
                         for (addr, _) in errors {
@@ -394,7 +394,7 @@ mod test {
     use std::{num::NonZero, str::FromStr};
 
     use libp2p::identify;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
+    use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
     use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
@@ -454,10 +454,12 @@ mod test {
             );
         }
         let first_record = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
-        assert!(!store
-            .addresses_of_peer(&peer)
-            .expect("peer to be in the store")
-            .any(|addr| *addr == first_record));
+        assert!(
+            !store
+                .addresses_of_peer(&peer)
+                .expect("peer to be in the store")
+                .any(|addr| *addr == first_record)
+        );
         let second_record = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
         assert!(
             *store
@@ -511,16 +513,20 @@ mod test {
 
             listen_addr.push(Protocol::P2p(swarm1_peer_id));
             expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
-            assert!(swarm2
-                .behaviour()
-                .address_of_peer(&swarm1_peer_id)
-                .expect("swarm should be connected and record about it should be created")
-                .any(|addr| *addr == listen_addr));
+            assert!(
+                swarm2
+                    .behaviour()
+                    .address_of_peer(&swarm1_peer_id)
+                    .expect("swarm should be connected and record about it should be created")
+                    .any(|addr| *addr == listen_addr)
+            );
             // Address from connection is not stored on the listener side.
-            assert!(swarm1
-                .behaviour()
-                .address_of_peer(&swarm2_peer_id)
-                .is_none());
+            assert!(
+                swarm1
+                    .behaviour()
+                    .address_of_peer(&swarm2_peer_id)
+                    .is_none()
+            );
             let (mut new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             tokio::spawn(swarm1.loop_on_next());
             swarm2

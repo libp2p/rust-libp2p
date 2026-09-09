@@ -27,18 +27,18 @@ use fnv::FnvHashMap;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use peers::{
-    closest::{disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig},
-    fixed::FixedPeersIter,
     PeersIterState,
+    closest::{ClosestPeersIter, ClosestPeersIterConfig, disjoint::ClosestDisjointPeersIter},
+    fixed::FixedPeersIter,
 };
 use smallvec::SmallVec;
 use web_time::Instant;
 
 use crate::{
+    ALPHA_VALUE, K_VALUE, QueryInfo,
     behaviour::PeerInfo,
     handler::HandlerIn,
     kbucket::{Key, KeyBytes},
-    QueryInfo, ALPHA_VALUE, K_VALUE,
 };
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.

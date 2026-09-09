@@ -26,7 +26,7 @@ mod syn_ext;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, punctuated::Punctuated, Data, DataStruct, DeriveInput, Meta, Token};
+use syn::{Data, DataStruct, DeriveInput, Meta, Token, parse_macro_input, punctuated::Punctuated};
 
 use crate::syn_ext::RequireStrLit;
 

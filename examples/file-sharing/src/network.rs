@@ -1,22 +1,23 @@
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map},
     error::Error,
     time::Duration,
 };
 
 use futures::{
+    StreamExt,
     channel::{mpsc, oneshot},
     prelude::*,
-    StreamExt,
 };
 use libp2p::{
+    PeerId, StreamProtocol,
     core::Multiaddr,
     identity, kad,
     multiaddr::Protocol,
     noise,
     request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    tcp, yamux, PeerId, StreamProtocol,
+    tcp, yamux,
 };
 use serde::{Deserialize, Serialize};
 
@@ -308,18 +309,18 @@ impl EventLoop {
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
             } => {
-                if endpoint.is_dialer() {
-                    if let Some(sender) = self.pending_dial.remove(&peer_id) {
-                        let _ = sender.send(Ok(()));
-                    }
+                if endpoint.is_dialer()
+                    && let Some(sender) = self.pending_dial.remove(&peer_id)
+                {
+                    let _ = sender.send(Ok(()));
                 }
             }
             SwarmEvent::ConnectionClosed { .. } => {}
             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                if let Some(peer_id) = peer_id {
-                    if let Some(sender) = self.pending_dial.remove(&peer_id) {
-                        let _ = sender.send(Err(Box::new(error)));
-                    }
+                if let Some(peer_id) = peer_id
+                    && let Some(sender) = self.pending_dial.remove(&peer_id)
+                {
+                    let _ = sender.send(Err(Box::new(error)));
                 }
             }
             SwarmEvent::IncomingConnectionError { .. } => {}

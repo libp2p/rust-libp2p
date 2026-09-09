@@ -28,17 +28,17 @@ use std::task::{Context, Poll};
 
 pub use external_addresses::ExternalAddresses;
 use libp2p_core::{
-    transport::{ListenerId, PortUse},
     ConnectedPoint, Endpoint, Multiaddr,
+    transport::{ListenerId, PortUse},
 };
 use libp2p_identity::PeerId;
 pub use listen_addresses::ListenAddresses;
 pub use peer_addresses::PeerAddresses;
 
 use crate::{
-    connection::ConnectionId, dial_opts::DialOpts, listen_opts::ListenOpts, ConnectionDenied,
-    ConnectionError, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    ConnectionDenied, ConnectionError, ConnectionHandler, DialError, ListenError, THandler,
+    THandlerInEvent, THandlerOutEvent, connection::ConnectionId, dial_opts::DialOpts,
+    listen_opts::ListenOpts,
 };
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
@@ -227,7 +227,7 @@ pub trait NetworkBehaviour: 'static {
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
     fn poll(&mut self, cx: &mut Context<'_>)
-        -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
+    -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].

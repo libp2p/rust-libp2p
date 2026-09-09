@@ -62,6 +62,7 @@ enum EventType {
     CircuitReqAccepted,
     CircuitReqAcceptFailed,
     CircuitClosed,
+    StatusChanged,
 }
 
 impl From<&libp2p_relay::Event> for EventType {
@@ -90,6 +91,7 @@ impl From<&libp2p_relay::Event> for EventType {
             #[allow(deprecated)]
             libp2p_relay::Event::CircuitReqAcceptFailed { .. } => EventType::CircuitReqAcceptFailed,
             libp2p_relay::Event::CircuitClosed { .. } => EventType::CircuitClosed,
+            libp2p_relay::Event::StatusChanged { .. } => EventType::StatusChanged,
         }
     }
 }

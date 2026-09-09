@@ -43,7 +43,7 @@
 
 pub use self::{
     behaviour::{Behaviour, Config, Event},
-    protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME},
+    protocol::{Info, PROTOCOL_NAME, PUSH_PROTOCOL_NAME, UpgradeError},
 };
 
 mod behaviour;

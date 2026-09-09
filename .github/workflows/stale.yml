@@ -11,4 +11,12 @@ permissions:
 
 jobs:
   stale:
-    uses: ipdxco/unified-github-workflows/.github/workflows/reusable-stale-issue.yml@v1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v10
+        with:
+          days-before-stale: 30
+          days-before-close: 7
+          stale-issue-message: 'This issue has been automatically marked as stale due to inactivity.'
+          close-issue-message: 'Closing this issue due to prolonged inactivity.'
+          exempt-issue-labels: 'keep-open'

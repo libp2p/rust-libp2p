@@ -26,8 +26,8 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
     DialError, Swarm,
+    dial_opts::{DialOpts, PeerCondition},
 };
 use libp2p_swarm_test::SwarmExt;
 use sysinfo::{MemoryRefreshKind, RefreshKind};

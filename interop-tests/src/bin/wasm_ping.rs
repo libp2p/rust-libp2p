@@ -2,13 +2,13 @@
 
 use std::{future::IntoFuture, process::Stdio, time::Duration};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{
+    Json, Router,
     extract::State,
-    http::{header, StatusCode, Uri},
+    http::{StatusCode, Uri, header},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
 };
 use interop_tests::{BlpopRequest, Report};
 use redis::{AsyncCommands, Client};
@@ -20,7 +20,7 @@ use tokio::{
     sync::mpsc,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod config;
 
@@ -147,10 +147,13 @@ async fn redis_blpop(
     request: Json<BlpopRequest>,
 ) -> Result<Json<Vec<String>>, StatusCode> {
     let client = state.0.redis_client;
-    let mut conn = client.get_async_connection().await.map_err(|e| {
-        tracing::warn!("Failed to connect to redis: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to connect to redis: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     let res = conn
         .blpop(&request.key, request.timeout as f64)
         .await

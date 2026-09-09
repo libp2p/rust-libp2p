@@ -35,8 +35,8 @@ use futures::prelude::*;
 use futures_timer::Delay;
 
 use crate::{
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds

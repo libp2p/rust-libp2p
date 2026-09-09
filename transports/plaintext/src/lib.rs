@@ -31,8 +31,8 @@ use std::{
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
     UpgradeInfo,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
 };
 use libp2p_identity as identity;
 use libp2p_identity::{PeerId, PublicKey};

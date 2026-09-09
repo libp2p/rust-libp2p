@@ -1,3 +1,8 @@
+## 0.44.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.43.1
 
 - Rename `MplexConfig` to `Config` for consistency with other crates (see [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174)).

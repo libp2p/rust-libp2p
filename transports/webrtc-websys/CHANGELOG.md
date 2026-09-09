@@ -1,3 +1,11 @@
+## 0.5.0
+
+- Require `getrandom/js` feature only under `wasm` target.
+  See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.4.0
 
 - Cut stable release.

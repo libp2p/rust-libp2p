@@ -8,20 +8,20 @@ use std::{
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
-    ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm,
+    NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    behaviour::ConnectionEstablished,
 };
 use rand::prelude::*;
-use rand_core::OsRng;
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
     dial_request,
 };
-use crate::v2::{protocol::DialRequest, Nonce};
+use crate::v2::{Nonce, protocol::DialRequest};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
@@ -57,9 +57,9 @@ impl Default for Config {
     }
 }
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = rand::rngs::StdRng>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     rng: R,
     config: Config,
@@ -76,7 +76,7 @@ where
 
 impl<R> NetworkBehaviour for Behaviour<R>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     type ConnectionHandler = Either<dial_request::Handler, dial_back::Handler>;
 
@@ -114,7 +114,6 @@ where
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
-                endpoint: _,
                 ..
             }) => {
                 self.peer_info.insert(
@@ -267,7 +266,7 @@ where
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     pub fn new(rng: R, config: Config) -> Self {
         Self {
@@ -293,7 +292,7 @@ where
                 return;
             };
 
-            let nonce = self.rng.gen();
+            let nonce = self.rng.random();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
@@ -314,7 +313,7 @@ where
     ///
     /// More frequently reported candidates are considered to more likely be external addresses and
     /// thus tested first.
-    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> {
+    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> + use<R> {
         let mut entries = self
             .address_candidates
             .iter()
@@ -368,9 +367,9 @@ where
     }
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<rand::rngs::StdRng> {
     fn default() -> Self {
-        Self::new(OsRng, Config::default())
+        Self::new(rand::make_rng::<rand::rngs::StdRng>(), Config::default())
     }
 }
 

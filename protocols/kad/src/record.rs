@@ -28,7 +28,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use libp2p_core::{multihash::Multihash, Multiaddr};
+use libp2p_core::{Multiaddr, multihash::Multihash};
 use libp2p_identity::PeerId;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

@@ -1,14 +1,22 @@
+## 0.44.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
 ## 0.43.2
 
 - Add `*_interop` methods to `PeerRecord` for cross-implementation compatibility with Go and JavaScript libp2p.
   - `PeerRecord::new_interop()` - Create peer records using standard format
   - `PeerRecord::from_signed_envelope_interop()` - Verify peer records using standard format
-  
+
   The standard format uses libp2p-peer-record domain and multicodec identifier (0x0301) for interoperability.
   Existing methods (`new()`, `from_signed_envelope()`) maintain backward compatibility with legacy Rust libp2p format.
-  
+
   Use the `*_interop` variants when exchanging peer records with non-Rust libp2p implementations.
-  
+
   See [PR 6230](https://github.com/libp2p/rust-libp2p/pull/6230).
 
 ## 0.43.1
@@ -23,8 +31,8 @@
 ## 0.42.0
 
 - Update `Transport::dial` function signature with a `DialOpts` param and remove `Transport::dial_as_listener`:
-  - `DialOpts` struct contains `PortUse` and `Endpoint`, 
-  - `PortUse` allows controlling port allocation of new connections (defaults to `PortUse::Reuse`)   - 
+  - `DialOpts` struct contains `PortUse` and `Endpoint`,
+  - `PortUse` allows controlling port allocation of new connections (defaults to `PortUse::Reuse`)   -
   - Add `port_use` field to `ConnectedPoint`
   - Set `endpoint` field in `DialOpts` to `Endpoint::Listener` to dial as a listener
 - Remove `Transport::address_translation` and relocate functionality to `libp2p_swarm`

@@ -1,7 +1,7 @@
 use std::{
     future::Future,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
 };
 
 use futures::FutureExt;
@@ -47,11 +47,12 @@ impl Future for FusedJsPromise {
     type Output = Result<JsValue, JsValue>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let val = ready!(self
-            .promise
-            .as_mut()
-            .expect("FusedJsPromise not initialized")
-            .poll_unpin(cx));
+        let val = ready!(
+            self.promise
+                .as_mut()
+                .expect("FusedJsPromise not initialized")
+                .poll_unpin(cx)
+        );
 
         // Future finished, drop it
         self.promise.take();

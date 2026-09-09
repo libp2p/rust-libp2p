@@ -7,13 +7,13 @@ use std::{
 };
 
 use futures::{
-    channel::{mpsc, oneshot},
     SinkExt as _, StreamExt as _,
+    channel::{mpsc, oneshot},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{Stream, StreamProtocol};
 
-use crate::{handler::NewStream, shared::Shared, AlreadyRegistered};
+use crate::{AlreadyRegistered, handler::NewStream, shared::Shared};
 
 /// A (remote) control for opening new streams and registration of inbound protocols.
 ///

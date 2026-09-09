@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use libp2p_core::{transport::timeout::TransportTimeout, Transport};
+use libp2p_core::{Transport, transport::timeout::TransportTimeout};
 use libp2p_swarm::Swarm;
 
 #[allow(unused_imports)]

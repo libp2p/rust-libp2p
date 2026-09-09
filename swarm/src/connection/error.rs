@@ -20,7 +20,7 @@
 
 use std::{fmt, io};
 
-use crate::{transport::TransportError, Multiaddr, PeerId};
+use crate::{Multiaddr, PeerId, transport::TransportError};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]

@@ -25,11 +25,11 @@ use std::collections::BTreeSet;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ToSwarm;
 
-use super::{count_control_msgs, disconnect_peer, flush_events, DefaultBehaviourTestBuilder};
+use super::{DefaultBehaviourTestBuilder, count_control_msgs, disconnect_peer, flush_events};
 use crate::{
+    IdentTopic as Topic,
     config::{Config, ConfigBuilder},
     types::{Prune, RawMessage, RpcOut, Subscription, SubscriptionAction},
-    IdentTopic as Topic,
 };
 
 /// tests that a peer added as explicit peer gets connected to
@@ -144,9 +144,9 @@ fn test_handle_graft_explicit_peer() {
                 _ => false,
             }
     });
-    assert!(
-        control_msgs >= 2,
-        "Not enough prunes sent when grafting from explicit peer"
+    assert_eq!(
+        control_msgs, 0,
+        "Prunes sent when grafting from explicit peer"
     );
 }
 
@@ -235,7 +235,7 @@ fn do_forward_messages_to_explicit_peers() {
     assert_eq!(
         queues.into_iter().fold(0, |mut fwds, (peer_id, mut queue)| {
             while !queue.is_empty() {
-                if matches!(queue.try_pop(), Some(RpcOut::Forward{message: m, ..}) if peer_id == peers[0] && m.data == message.data) {
+                if matches!(queue.try_pop(), Some(RpcOut::Publish{message: m, ..}) if peer_id == peers[0] && m.data == message.data) {
                     fwds +=1;
                 }
             }
@@ -264,6 +264,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
+                options: Default::default(),
             }],
             peer,
         );
@@ -312,6 +313,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
             &[Subscription {
                 action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
+                options: Default::default(),
             }],
             peer,
         );

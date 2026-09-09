@@ -29,7 +29,7 @@ use futures::{
     future::{BoxFuture, FutureExt},
     stream::{FuturesUnordered, StreamExt},
 };
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr, PeerRecord};
+use libp2p_core::{Endpoint, Multiaddr, PeerRecord, transport::PortUse};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
@@ -82,7 +82,7 @@ impl Behaviour {
             discovered_peers: Default::default(),
             registered_namespaces: Default::default(),
             expiring_registrations: FuturesUnordered::from_iter(vec![
-                futures::future::pending().boxed()
+                futures::future::pending().boxed(),
             ]),
             external_addresses: Default::default(),
         }

@@ -26,7 +26,7 @@ use crate::{
     stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN},
 };
 
-pub(crate) type FramedDc<T> = Framed<T, quick_protobuf_codec::Codec<Message>>;
+pub(crate) type FramedDc<T> = Framed<T, prost_codec::Codec<Message>>;
 pub(crate) fn new<T>(inner: T) -> FramedDc<T>
 where
     T: AsyncRead + AsyncWrite,
@@ -38,6 +38,6 @@ where
     framed
 }
 
-pub(crate) fn codec() -> quick_protobuf_codec::Codec<Message, Message> {
-    quick_protobuf_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN)
+pub(crate) fn codec() -> prost_codec::Codec<Message, Message> {
+    prost_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN)
 }

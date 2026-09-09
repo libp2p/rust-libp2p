@@ -21,8 +21,8 @@
 use std::{sync::Arc, time::Duration};
 
 use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
 };
 
 /// Config for the transport.

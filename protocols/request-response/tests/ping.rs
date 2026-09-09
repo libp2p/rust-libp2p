@@ -28,7 +28,6 @@ use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
@@ -72,12 +71,16 @@ async fn is_response_outbound() {
 
     let request_id2 = swarm1.behaviour_mut().send_request(&offline_peer, ping);
 
-    assert!(!swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id1));
-    assert!(swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id2));
+    assert!(
+        !swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id1)
+    );
+    assert!(
+        swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id2)
+    );
 }
 
 /// Exercises a simple ping protocol.
@@ -134,7 +137,7 @@ async fn ping_protocol() {
         }
     };
 
-    let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+    let num_pings: u8 = rand::random_range(1..100);
 
     let peer2 = async {
         let mut count = 0;
@@ -427,7 +430,7 @@ async fn concurrent_ping_protocol() {
     use std::{collections::HashMap, num::NonZero};
 
     use libp2p_core::ConnectedPoint;
-    use libp2p_swarm::{dial_opts::PeerCondition, DialError};
+    use libp2p_swarm::{DialError, dial_opts::PeerCondition};
 
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
@@ -474,7 +477,7 @@ async fn concurrent_ping_protocol() {
 
     let peer2 = async {
         let mut count = 0;
-        let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+        let num_pings: u8 = rand::random_range(1..100);
         let mut expected_pongs = HashMap::new();
         for i in 0..num_pings {
             let ping_bytes = vec![i];

@@ -26,7 +26,7 @@ use futures::{
     task::{Context, Poll},
 };
 use pin_project::pin_project;
-use salsa20::{cipher::StreamCipher, XSalsa20};
+use salsa20::{XSalsa20, cipher::StreamCipher};
 
 /// A writer that encrypts and forwards to an inner writer
 #[pin_project]

@@ -24,20 +24,20 @@ use std::{
 };
 
 use libp2p_core::{
+    ConnectedPoint, Endpoint,
     multiaddr::Multiaddr,
     transport::{ListenerId, PortUse},
-    ConnectedPoint, Endpoint,
 };
 use libp2p_identity::PeerId;
 
 use crate::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
     behaviour::{
         ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
         ExternalAddrExpired, FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate,
         NewListenAddr, NewListener,
     },
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
 };
 
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
