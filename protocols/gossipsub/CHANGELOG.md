@@ -1,4 +1,16 @@
 ## 0.50.0
+- Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
+  ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
+  Backported from `libp2p-gossipsub v0.49.5`.
+
+- Change default `TopicSubscriptionFilter` from `AllowAllSubscriptionFilter` to `MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>`
+  with default limits of `100` for both `max_subscribed_topics` and `max_subscriptions_per_request`,
+  providing built-in protection against excessive subscription requests.
+  See [PR 6527](https://github.com/libp2p/rust-libp2p/pull/6527).
+
+- Account for forwarded messages in `topic_mesg_sent_*` metrics.
+  See [PR 6502](https://github.com/libp2p/rust-libp2p/pull/6502)
+
 - Simplify gossipsub control message validation by scanning protobuf bytes before decoding
   to validate cumulative control message size, rather than decoding then counting individual IDs
   to prevent memory amplification from decoding.

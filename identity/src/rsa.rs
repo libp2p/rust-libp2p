@@ -23,12 +23,12 @@
 use std::{fmt, sync::Arc};
 
 use asn1_der::{
-    typed::{DerDecodable, DerEncodable, DerTypeView, Sequence},
     Asn1DerError, Asn1DerErrorVariant, DerObject, Sink, VecBacking,
+    typed::{DerDecodable, DerEncodable, DerTypeView, Sequence},
 };
 use ring::{
     rand::SystemRandom,
-    signature::{self, KeyPair, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256},
+    signature::{self, KeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, RsaKeyPair},
 };
 use zeroize::Zeroize;
 
