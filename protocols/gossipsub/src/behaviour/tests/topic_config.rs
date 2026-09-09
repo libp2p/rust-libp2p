@@ -290,8 +290,8 @@ fn test_mesh_subtraction_with_topic_config_min_outbound() {
 
     assert_eq!(
         gs.mesh.get(&topics[0]).unwrap().len(),
-        mesh_n_high,
-        "Initially mesh should be {mesh_n_high}"
+        peer_no,
+        "Initially mesh should contain all {peer_no} outbound peers"
     );
 
     // run a heartbeat

@@ -1983,7 +1983,7 @@ fn test_opportunistic_grafting() {
     let (mut gs, peers, _queues, topics) = DefaultBehaviourTestBuilder::default()
         .peer_no(5)
         .topics(vec!["test".into()])
-        .to_subscribe(false)
+        .to_subscribe(true)
         .gs_config(config)
         .explicit(0)
         .outbound(0)
