@@ -279,22 +279,20 @@ where
                     // Only send addresses that belong to this interface.
                     // This prevents advertising loopback or other interface addresses
                     // to peers that can't reach them.
-                    // Note: We collect into a Vec because build_query_response requires
-                    // an ExactSizeIterator, which Filter doesn't implement.
                     let iface_ip = this.addr;
-                    let relevant_addrs: Vec<_> = this
+                    let read = this
                         .listen_addresses
                         .read()
-                        .unwrap_or_else(|e| e.into_inner())
+                        .unwrap_or_else(|e| e.into_inner());
+                    let relevant_addrs = read
                         .iter()
                         .filter(|multiaddr| addr_matches_interface(multiaddr, iface_ip))
-                        .cloned()
                         .collect();
 
                     this.send_buffer.extend(build_query_response(
                         query.query_id(),
                         this.local_peer_id,
-                        relevant_addrs.iter(),
+                        relevant_addrs,
                         this.ttl,
                     ));
                     continue;
