@@ -403,7 +403,7 @@ mod tests_ipv6 {
         let packets = build_query_response(
             0x1234,
             peer_id,
-            vec![&announced_addr].into_iter(),
+            vec![&announced_addr],
             Duration::from_secs(300),
         );
 
