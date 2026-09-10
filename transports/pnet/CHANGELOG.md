@@ -1,5 +1,8 @@
 ## 0.27.0
 
+- Redact `PreSharedKey` from `Debug` output and add `PreSharedKey::to_key_file` for
+  explicit raw key file export.
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
