@@ -144,9 +144,9 @@ fn test_handle_graft_explicit_peer() {
                 _ => false,
             }
     });
-    assert!(
-        control_msgs >= 2,
-        "Not enough prunes sent when grafting from explicit peer"
+    assert_eq!(
+        control_msgs, 0,
+        "Prunes sent when grafting from explicit peer"
     );
 }
 

@@ -6,6 +6,12 @@
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
+- Add smart dialing support (`with_smart_dial`).
+  Ranks dial addresses by transport priority (QUIC > TCP, IPv6 > IPv4)
+  with Happy Eyeballs (RFC 8305) staggered delays. All addresses are
+  dialed concurrently.
+  See [PR 6229](https://github.com/libp2p/rust-libp2p/pull/6229).
+
 ## 0.47.1
 
 - Replace `lru::LruCache` with `hashlink::LruCache`.

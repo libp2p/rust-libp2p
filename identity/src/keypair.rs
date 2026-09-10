@@ -55,8 +55,8 @@ use crate::rsa;
 #[cfg(feature = "secp256k1")]
 use crate::secp256k1;
 use crate::{
-    error::{DecodingError, SigningError},
     KeyType,
+    error::{DecodingError, SigningError},
 };
 
 /// Identity keypair of a node.

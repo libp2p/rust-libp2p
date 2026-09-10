@@ -16,7 +16,7 @@ release = false
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0"
 futures = { workspace = true }
 rand = { workspace = true }
 tracing = { workspace = true }
@@ -26,19 +26,19 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 axum = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
-rust-embed = { version = "8.11.0", features = ["include-exclude", "interpolate-folder-path"] }
+rust-embed = { version = "8.12", features = ["include-exclude", "interpolate-folder-path"] }
 tokio = { workspace = true, features = ["macros", "net", "rt", "signal"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
-mime_guess = "2.0.4"
+tower-http = { version = "0.7", features = ["cors"] }
+mime_guess = "2.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.69"
+js-sys = "0.3"
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping"] }
 libp2p-webrtc-websys = { workspace = true }
-tracing-wasm = "0.2.1"
-wasm-bindgen = "0.2.90"
+tracing-wasm = "0.2"
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = { workspace = true}
 web-sys = { version = "0.3", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window'] }
 
