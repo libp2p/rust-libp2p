@@ -184,7 +184,14 @@ impl MdnsResponse {
                 let new_expiration = now + peer.ttl();
 
                 peer.addresses().iter().filter_map(move |address| {
-                    let new_addr = if observed_is_link_local(&observed) { address.clone() } else { match _address_translation(address, &observed) { Some(a) => a, None => return None } };
+                    let new_addr = if observed_is_link_local(&observed) {
+                        address.clone()
+                    } else {
+                        match _address_translation(address, &observed) {
+                            Some(a) => a,
+                            None => return None,
+                        }
+                    };
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
@@ -360,10 +367,9 @@ mod tests {
 
             let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
+        }
     }
 }
-
-        }
 
 mod tests_ipv6 {
     #[allow(unused_imports)]
@@ -416,13 +422,19 @@ mod tests_ipv6 {
                 .extract_discovered(Instant::now(), local_peer_id)
                 .collect();
 
-            assert!(!discovered.is_empty(), "expected at least one discovered address");
+            assert!(
+                !discovered.is_empty(),
+                "expected at least one discovered address"
+            );
 
             for (pid, addr, _) in &discovered {
                 assert_eq!(*pid, peer_id);
                 let addr_str = addr.to_string();
                 assert!(addr_str.contains("fd12"), "expected ULA in {addr_str}");
-                assert!(!addr_str.contains("fe80"), "fe80 must not appear in {addr_str}");
+                assert!(
+                    !addr_str.contains("fe80"),
+                    "fe80 must not appear in {addr_str}"
+                );
             }
         }
     }
