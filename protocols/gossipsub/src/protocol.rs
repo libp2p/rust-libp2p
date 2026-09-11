@@ -39,8 +39,9 @@ use crate::{
     rpc_proto::proto,
     topic::TopicHash,
     types::{
-        ControlAction, Extensions, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind,
-        Prune, RawMessage, RpcIn, Subscription, SubscriptionAction, SubscriptionOpts,
+        ControlAction, Extensions, Graft, IDontWant, IHave, IWant, ImReceiving,
+        LargeMessageFragment, MessageId, PeerInfo, PeerKind, Preamble, Prune, RawMessage, RpcIn,
+        Subscription, SubscriptionAction, SubscriptionOpts,
     },
 };
 
@@ -653,8 +654,45 @@ impl Decoder for GossipsubCodec {
 
         let extensions_msg = control.extensions.map(|extensions| Extensions {
             partial_messages: extensions.partial_messages,
+            large_message_handling: extensions.large_message_handling,
         });
         control_msgs.push(ControlAction::Extensions(extensions_msg));
+
+        let preamble_msgs: Vec<ControlAction> = control
+            .preamble
+            .into_iter()
+            .map(|preamble| {
+                ControlAction::Preamble(Preamble {
+                    message_id: MessageId::from(preamble.message_id.unwrap_or_default()),
+                    message_size: preamble.message_size.unwrap_or_default(),
+                    topic_hash: TopicHash::from_raw(preamble.topic_id.unwrap_or_default()),
+                })
+            })
+            .collect();
+        control_msgs.extend(preamble_msgs);
+
+        let imreceiving_msgs: Vec<ControlAction> = control
+            .imreceiving
+            .into_iter()
+            .map(|imreceiving| {
+                ControlAction::ImReceiving(ImReceiving {
+                    message_id: MessageId::from(imreceiving.message_id.unwrap_or_default()),
+                })
+            })
+            .collect();
+        control_msgs.extend(imreceiving_msgs);
+
+        let large_message_fragments: Vec<LargeMessageFragment> = rpc
+            .large_message_fragments
+            .into_iter()
+            .map(|fragment| LargeMessageFragment {
+                message_id: MessageId::from(fragment.message_id.unwrap_or_default()),
+                fragment_index: fragment.fragment_index.unwrap_or_default(),
+                total_fragments: fragment.total_fragments.unwrap_or_default(),
+                fragment_data: fragment.fragment_data.unwrap_or_default(),
+                topic_hash: TopicHash::from_raw(fragment.topic_id.unwrap_or_default()),
+            })
+            .collect();
 
         #[cfg(feature = "partial-messages")]
         let partial_message = rpc.partial.and_then(|partial_proto| {
@@ -697,6 +735,7 @@ impl Decoder for GossipsubCodec {
                     })
                     .collect(),
                 control_msgs,
+                large_message_fragments,
                 #[cfg(feature = "partial-messages")]
                 partial_message,
             },

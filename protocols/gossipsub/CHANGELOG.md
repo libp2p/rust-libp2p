@@ -1,4 +1,9 @@
 ## 0.50.0
+- Add the gossipsub v1.4 large message extension wire types and the `largeMessageHandling`
+  capability advertisement behind the default-off `large_message_handling` config option
+  ([issue 6597](https://github.com/libp2p/rust-libp2p/issues/6597)).
+  See [PR 6599](https://github.com/libp2p/rust-libp2p/pull/6599).
+
 - Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
   ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
   Backported from `libp2p-gossipsub v0.49.5`.
