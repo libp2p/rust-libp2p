@@ -20,7 +20,7 @@ pub(crate) struct Shared {
     supported_inbound_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
 
     connections: HashMap<ConnectionId, PeerId>,
-    senders: HashMap<ConnectionId, mpsc::Sender<NewStream>>,
+    pub(crate) senders: HashMap<ConnectionId, mpsc::Sender<NewStream>>,
 
     /// Tracks channel pairs for a peer whilst we are dialing them.
     pending_channels: HashMap<PeerId, (mpsc::Sender<NewStream>, mpsc::Receiver<NewStream>)>,
