@@ -33,7 +33,7 @@ use std::{
 };
 
 use futures::{SinkExt, StreamExt, channel::mpsc};
-use libp2p_core::Multiaddr;
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
@@ -274,13 +274,23 @@ where
                         "received query from remote address on address"
                     );
 
+                    // Only send addresses that belong to this interface.
+                    // This prevents advertising loopback or other interface addresses
+                    // to peers that can't reach them.
+                    let iface_ip = this.addr;
+                    let read = this
+                        .listen_addresses
+                        .read()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let relevant_addrs = read
+                        .iter()
+                        .filter(|multiaddr| addr_matches_interface(multiaddr, iface_ip))
+                        .collect();
+
                     this.send_buffer.extend(build_query_response(
                         query.query_id(),
                         this.local_peer_id,
-                        this.listen_addresses
-                            .read()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .iter(),
+                        relevant_addrs,
                         this.ttl,
                     ));
                     continue;
@@ -331,5 +341,18 @@ where
 
             return Poll::Pending;
         }
+    }
+}
+
+/// Returns `true` if the first protocol component of `addr` is an IP address equal to
+/// `iface_ip`.
+///
+/// Used when answering mDNS queries to advertise only the listening addresses that are
+/// reachable on the interface the query arrived on, instead of every listening address.
+fn addr_matches_interface(addr: &Multiaddr, iface_ip: IpAddr) -> bool {
+    match addr.iter().next() {
+        Some(Protocol::Ip4(v4)) => IpAddr::V4(v4) == iface_ip,
+        Some(Protocol::Ip6(v6)) => IpAddr::V6(v6) == iface_ip,
+        _ => false,
     }
 }
