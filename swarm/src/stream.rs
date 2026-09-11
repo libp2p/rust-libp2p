@@ -51,6 +51,15 @@ impl Stream {
     pub fn ignore_for_keep_alive(&mut self) {
         self.counter.take();
     }
+
+    /// Transport-assigned stream id, where one exists (QUIC, WebTransport).
+    ///
+    /// See [libp2p/specs#680](https://github.com/libp2p/specs/pull/680).
+    pub fn transport_stream_id(&self) -> Option<u64> {
+        self.stream
+            .as_inner()
+            .and_then(SubstreamBox::transport_stream_id)
+    }
 }
 
 impl AsyncRead for Stream {

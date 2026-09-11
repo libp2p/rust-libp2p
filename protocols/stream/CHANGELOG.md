@@ -1,5 +1,9 @@
 ## 0.5.0-alpha
 
+- Ignore unhandled `ConnectionEvent` variants so the new datagram event does not
+  break the match. No functional change.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
