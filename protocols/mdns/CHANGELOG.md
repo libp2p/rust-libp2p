@@ -1,9 +1,13 @@
 ## 0.49.0
 
+- Fix mDNS to only advertise listening addresses that match the interface IP.
+  Previously, all listening addresses (including loopback and addresses from other interfaces)
+  were sent in mDNS responses, causing dial failures when peers tried to connect via
+  unreachable addresses.
+  See [PR 6500](https://github.com/libp2p/rust-libp2p/pull/6500)
 - Skip address translation when the observed mDNS source is IPv6 link-local, keeping
   the announced routable address intact.
   See [PR 6479](https://github.com/libp2p/rust-libp2p/pull/6479).
-
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 
