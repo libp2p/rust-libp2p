@@ -69,6 +69,10 @@ impl<T: AsyncRead + Unpin> AsyncRead for Output<T> {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
+
         loop {
             let len = self.recv_buffer.len();
             let off = self.recv_offset;
