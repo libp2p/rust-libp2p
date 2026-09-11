@@ -31,7 +31,7 @@ use futures::{channel::oneshot, future::Either};
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::{Fingerprint, noise};
+use libp2p_webrtc_utils::{Fingerprint, StreamConfig, noise};
 use webrtc::{
     api::{APIBuilder, setting_engine::SettingEngine},
     data::data_channel::DataChannel,
@@ -48,6 +48,7 @@ use crate::tokio::{Connection, error::Error, sdp, sdp::random_ufrag, stream::Str
 pub(crate) async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
+    stream_config: StreamConfig,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     client_fingerprint: Fingerprint,
     server_fingerprint: Fingerprint,
@@ -62,20 +63,24 @@ pub(crate) async fn outbound(
     tracing::debug!(offer=%offer.sdp, "created SDP offer for outbound connection");
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, server_fingerprint, &ufrag);
+    let answer = sdp::answer(addr, server_fingerprint, &ufrag, stream_config);
     tracing::debug!(?answer, "calculated SDP answer for outbound connection");
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
     let data_channel = await_noise_data_channel_open(noise_channel_open_rx).await?;
-    let peer_id = noise::outbound(
+    let (peer_id, stream_config) = noise::outbound_with_message_size(
         id_keys,
         data_channel,
         server_fingerprint,
         client_fingerprint,
+        stream_config,
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection).await))
+    Ok((
+        peer_id,
+        Connection::new(peer_connection, stream_config).await,
+    ))
 }
 
 /// Creates a new inbound WebRTC connection.
@@ -83,6 +88,7 @@ pub(crate) async fn outbound(
 pub(crate) async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
+    stream_config: StreamConfig,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     server_fingerprint: Fingerprint,
     remote_ufrag: String,
@@ -93,7 +99,7 @@ pub(crate) async fn inbound(
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
     let noise_channel_open_rx = create_noise_data_channel(&peer_connection).await?;
 
-    let offer = sdp::offer(addr, &remote_ufrag);
+    let offer = sdp::offer(addr, &remote_ufrag, stream_config);
     tracing::debug!(?offer, "calculated SDP offer for inbound connection");
     peer_connection.set_remote_description(offer).await?;
 
@@ -103,15 +109,19 @@ pub(crate) async fn inbound(
 
     let data_channel = await_noise_data_channel_open(noise_channel_open_rx).await?;
     let client_fingerprint = get_remote_fingerprint(&peer_connection).await;
-    let peer_id = noise::inbound(
+    let (peer_id, stream_config) = noise::inbound_with_message_size(
         id_keys,
         data_channel,
         client_fingerprint,
         server_fingerprint,
+        stream_config,
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection).await))
+    Ok((
+        peer_id,
+        Connection::new(peer_connection, stream_config).await,
+    ))
 }
 
 #[allow(clippy::result_large_err)]
@@ -248,7 +258,7 @@ async fn await_noise_data_channel_open(
         }
     };
 
-    let (substream, drop_listener) = Stream::new(channel);
+    let (substream, drop_listener) = Stream::new(channel, StreamConfig::default());
     drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
 
     Ok(substream)
