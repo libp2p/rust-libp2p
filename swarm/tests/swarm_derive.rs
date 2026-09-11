@@ -613,6 +613,23 @@ fn custom_out_event_no_type_parameters() {
     require_net_behaviour::<Behaviour<()>>();
 }
 
+// Regression test for https://github.com/libp2p/rust-libp2p/issues/6600: a field whose
+// `NetworkBehaviour::ToSwarm` is uninhabited (`dummy::Behaviour`'s is `Infallible`) must not
+// make the generated `poll()` fail to compile under `-D warnings` on toolchains that lint the
+// resulting unreachable `Poll::Ready(e) => ...` arm as `unreachable_code`.
+#[test]
+fn uninhabited_to_swarm_field_compiles() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo {
+        ping: ping::Behaviour,
+        limits: dummy::Behaviour,
+    }
+
+    require_net_behaviour::<Foo>();
+}
+
 #[test]
 fn ui() {
     let t = trybuild::TestCases::new();
