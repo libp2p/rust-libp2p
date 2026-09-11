@@ -8,6 +8,11 @@ authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 
+[features]
+# Hybrid PQ handshake, off by default. use-curve25519 satisfies snow's
+# default-resolver guard (the ML-KEM impl lives there).
+mlkem-hfs = ["snow/use-ml-kem", "snow/use-curve25519"]
+
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes.workspace = true
