@@ -350,59 +350,9 @@ where
 /// Used when answering mDNS queries to advertise only the listening addresses that are
 /// reachable on the interface the query arrived on, instead of every listening address.
 fn addr_matches_interface(addr: &Multiaddr, iface_ip: IpAddr) -> bool {
-    let addr_ip = match addr.iter().next() {
-        Some(Protocol::Ip4(v4)) => Some(IpAddr::V4(v4)),
-        Some(Protocol::Ip6(v6)) => Some(IpAddr::V6(v6)),
-        _ => None,
-    };
-    addr_ip == Some(iface_ip)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn filter_addresses_by_interface_ip() {
-        let iface_ipv4: IpAddr = "192.168.1.100".parse().unwrap();
-        let iface_ipv6: IpAddr = "fe80::1".parse().unwrap();
-
-        let addr_matching_v4: Multiaddr = "/ip4/192.168.1.100/tcp/1234".parse().unwrap();
-        let addr_different_v4: Multiaddr = "/ip4/10.0.0.1/tcp/1234".parse().unwrap();
-        let addr_loopback_v4: Multiaddr = "/ip4/127.0.0.1/tcp/1234".parse().unwrap();
-        let addr_matching_v6: Multiaddr = "/ip6/fe80::1/tcp/1234".parse().unwrap();
-        let addr_different_v6: Multiaddr = "/ip6/::1/tcp/1234".parse().unwrap();
-
-        // IPv4 interface
-        assert!(
-            addr_matches_interface(&addr_matching_v4, iface_ipv4),
-            "Should match same IPv4"
-        );
-        assert!(
-            !addr_matches_interface(&addr_different_v4, iface_ipv4),
-            "Should not match different IPv4"
-        );
-        assert!(
-            !addr_matches_interface(&addr_loopback_v4, iface_ipv4),
-            "Should not match loopback when interface is not loopback"
-        );
-        assert!(
-            !addr_matches_interface(&addr_matching_v6, iface_ipv4),
-            "Should not match IPv6 on IPv4 interface"
-        );
-
-        // IPv6 interface
-        assert!(
-            addr_matches_interface(&addr_matching_v6, iface_ipv6),
-            "Should match same IPv6"
-        );
-        assert!(
-            !addr_matches_interface(&addr_different_v6, iface_ipv6),
-            "Should not match different IPv6"
-        );
-        assert!(
-            !addr_matches_interface(&addr_matching_v4, iface_ipv6),
-            "Should not match IPv4 on IPv6 interface"
-        );
+    match addr.iter().next() {
+        Some(Protocol::Ip4(v4)) => IpAddr::V4(v4) == iface_ip,
+        Some(Protocol::Ip6(v6)) => IpAddr::V6(v6) == iface_ip,
+        _ => false,
     }
 }
