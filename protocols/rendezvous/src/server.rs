@@ -26,7 +26,11 @@ use std::{
 };
 
 use bimap::BiMap;
-use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
+use futures::{
+    FutureExt, StreamExt,
+    future::{AbortHandle, Abortable, Aborted, BoxFuture},
+    stream::FuturesUnordered,
+};
 use hashlink::LruCache;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
@@ -383,7 +387,8 @@ struct Registrations {
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: LruCache<Cookie, HashSet<RegistrationId>>,
-    next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
+    next_expiry: FuturesUnordered<BoxFuture<'static, Result<RegistrationId, Aborted>>>,
+    abort_handles: HashMap<RegistrationId, AbortHandle>,
 }
 
 impl Default for Registrations {
@@ -399,7 +404,10 @@ impl Registrations {
             registrations: Default::default(),
             cookies: LruCache::new(config.max_cookies),
             config,
-            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
+            next_expiry: FuturesUnordered::from_iter(vec![
+                futures::future::pending::<Result<RegistrationId, Aborted>>().boxed(),
+            ]),
+            abort_handles: Default::default(),
         }
     }
 
@@ -423,12 +431,19 @@ impl Registrations {
         }
 
         let namespace = new_registration.namespace;
+
+        if let Some(existing_id) = self
+            .registrations_for_peer
+            .get_by_left(&(peer, namespace.clone()))
+            .copied()
+        {
+            self.remove_registration(&existing_id);
+        }
+
         let registration_id = RegistrationId::new();
 
-        self.registrations_for_peer.insert(
-            (new_registration.record.peer_id(), namespace.clone()),
-            registration_id,
-        );
+        self.registrations_for_peer
+            .insert((peer, namespace.clone()), registration_id);
 
         let registration = Registration {
             namespace,
@@ -438,11 +453,15 @@ impl Registrations {
         self.registrations
             .insert(registration_id, registration.clone());
 
-        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl))
-            .map(move |_| registration_id)
-            .boxed();
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        self.abort_handles.insert(registration_id, abort_handle);
 
-        self.next_expiry.push(next_expiry);
+        let next_expiry = Abortable::new(
+            futures_timer::Delay::new(Duration::from_secs(ttl)).map(move |_| registration_id),
+            abort_registration,
+        );
+
+        self.next_expiry.push(next_expiry.boxed());
 
         Ok(registration)
     }
@@ -453,8 +472,21 @@ impl Registrations {
             .remove_by_left(&(peer_id, namespace));
 
         if let Some((_, reggo_to_remove)) = reggo_to_remove {
-            self.registrations.remove(&reggo_to_remove);
+            self.remove_registration(&reggo_to_remove);
         }
+    }
+
+    fn remove_registration(&mut self, id: &RegistrationId) {
+        if let Some(handle) = self.abort_handles.remove(id) {
+            handle.abort();
+        }
+        self.registrations.remove(id);
+        self.cookies.retain(|_, registrations| {
+            registrations.remove(id);
+
+            // retain all cookies where there are still registrations left
+            !registrations.is_empty()
+        });
     }
 
     fn get(
@@ -521,9 +553,17 @@ impl Registrations {
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
         loop {
-            let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
-                "This stream should never finish because it is initialised with a pending future",
-            );
+            let expired_registration = match ready!(self.next_expiry.poll_next_unpin(cx)) {
+                // A timer for a registration that was replaced or unregistered. Nothing to clean
+                // up.
+                Some(Err(_)) => continue,
+                Some(Ok(registration_id)) => registration_id,
+                None => unreachable!(
+                    "This stream should never finish because it is initialised with a pending future"
+                ),
+            };
+
+            self.abort_handles.remove(&expired_registration);
 
             // clean up our cookies
             self.cookies.retain(|_, registrations| {
