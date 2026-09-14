@@ -37,11 +37,8 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
-use crate::{
-    MAX_TTL,
-    codec::{
-        Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
-    },
+use crate::codec::{
+    Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
 };
 
 pub struct Behaviour {
@@ -396,7 +393,8 @@ impl Behaviour {
                     let peer_id = registration.record.peer_id();
                     let addresses = registration.record.addresses();
                     let namespace = registration.namespace.clone();
-                    let ttl = registration.ttl.min(MAX_TTL);
+                    // Max TTL allowed, 1 year to avoid overflows.
+                    let ttl = registration.ttl.min(31_556_952);
 
                     // Emit events for all newly discovered addresses.
                     let new_addr_events = addresses
