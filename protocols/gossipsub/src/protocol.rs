@@ -434,6 +434,11 @@ impl Decoder for GossipsubCodec {
                             "Message dropped. Message source was non-empty and anonymous validation mode is set"
                         );
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
+                    } else if message.key.is_some() {
+                        tracing::warn!(
+                            "Message dropped. Message key was non-empty and anonymous validation mode is set"
+                        );
+                        invalid_kind = Some(ValidationError::KeyPresent);
                     }
                 }
                 ValidationMode::None => {}

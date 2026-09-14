@@ -111,6 +111,9 @@ pub enum ValidationError {
     /// Message source existed when validation has been sent to
     /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
     MessageSourcePresent,
+    /// Message key existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    KeyPresent,
     /// The data transformation failed.
     TransformFailed,
     /// Message size was too large for topic
