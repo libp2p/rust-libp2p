@@ -1,5 +1,8 @@
 ## 0.18.1
 
+- Cancel superseded registration timers.
+  See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)
+
 - Cap TTL from discovery responses.
   See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
 
