@@ -1,3 +1,8 @@
+## 0.51.0
+- Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
+  `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
+  See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6621).
+
 ## 0.50.0
 - Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
   ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
