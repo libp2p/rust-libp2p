@@ -3011,14 +3011,25 @@ name = "libp2p-dns"
 version = "0.45.0"
 dependencies = [
  "futures",
+ "getrandom 0.4.3",
  "hickory-resolver",
+ "js-sys",
  "libp2p-core",
  "libp2p-identity",
  "parking_lot",
+ "send_wrapper 0.6.0",
+ "serde",
+ "serde_json",
  "smallvec",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]
