@@ -1,3 +1,8 @@
+## 0.18.1
+
+- Cap TTL from discovery responses.
+  See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
+
 ## 0.18.0
 
 - Expose `PROTOCOL_NAME` constant for the protocol ID.
