@@ -29,17 +29,29 @@ fn xxhfs_mlkem768_handshake_and_transport() {
         assert_eq!(reported_client_id, client_id.public().to_peer_id());
         assert_eq!(reported_server_id, server_id.public().to_peer_id());
 
-        let msg = b"harvest now, decrypt never";
+        let to_server = b"harvest now, decrypt never";
         let client_fut = async {
-            client_session.write_all(msg).await.expect("write");
+            client_session.write_all(to_server).await.expect("write");
             client_session.flush().await.expect("flush");
         };
         let server_fut = async {
-            let mut buf = vec![0u8; msg.len()];
+            let mut buf = vec![0u8; to_server.len()];
             server_session.read_exact(&mut buf).await.expect("read");
-            assert_eq!(&buf, msg);
+            assert_eq!(&buf, to_server);
         };
         futures::future::join(client_fut, server_fut).await;
+
+        let to_client = b"and the other cipher state";
+        let server_fut = async {
+            server_session.write_all(to_client).await.expect("write");
+            server_session.flush().await.expect("flush");
+        };
+        let client_fut = async {
+            let mut buf = vec![0u8; to_client.len()];
+            client_session.read_exact(&mut buf).await.expect("read");
+            assert_eq!(&buf, to_client);
+        };
+        futures::future::join(server_fut, client_fut).await;
     });
 }
 
