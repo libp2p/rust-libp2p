@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-cuckoofilter = "0.5"
 bytes.workspace = true
 fnv = "1.0"
 futures = { workspace = true }
