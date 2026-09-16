@@ -37,11 +37,8 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
-use crate::{
-    MAX_TTL,
-    codec::{
-        Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
-    },
+use crate::codec::{
+    Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
 };
 
 pub struct Behaviour {
