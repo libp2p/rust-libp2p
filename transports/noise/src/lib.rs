@@ -186,17 +186,20 @@ impl Config {
 
 impl UpgradeInfo for Config {
     type Info = &'static str;
-    type InfoIter = std::vec::IntoIter<Self::Info>;
+    #[cfg(feature = "mlkem-hfs")]
+    type InfoIter = std::array::IntoIter<Self::Info, 2>;
+    #[cfg(not(feature = "mlkem-hfs"))]
+    type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        // Hybrid PQ first, classical fallback.
+        // Preference order: the dialer offers hybrid first.
         #[cfg(feature = "mlkem-hfs")]
         {
-            vec![NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL].into_iter()
+            [NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL].into_iter()
         }
         #[cfg(not(feature = "mlkem-hfs"))]
         {
-            vec![NOISE_PROTOCOL].into_iter()
+            std::iter::once(NOISE_PROTOCOL)
         }
     }
 }
