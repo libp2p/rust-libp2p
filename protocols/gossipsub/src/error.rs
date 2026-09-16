@@ -112,7 +112,7 @@ pub enum ValidationError {
     /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
     MessageSourcePresent,
     /// Message key existed when validation has been sent to
-    /// [`crate::behaviour::ValidationMode::Anonymous`].
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
     KeyPresent,
     /// The data transformation failed.
     TransformFailed,
