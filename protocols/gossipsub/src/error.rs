@@ -103,16 +103,16 @@ pub enum ValidationError {
     /// The PeerId was invalid
     InvalidPeerId,
     /// Signature existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     SignaturePresent,
     /// Sequence number existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     SequenceNumberPresent,
     /// Message source existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     MessageSourcePresent,
     /// Message key existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     KeyPresent,
     /// The data transformation failed.
     TransformFailed,
