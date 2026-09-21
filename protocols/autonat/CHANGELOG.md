@@ -6,6 +6,9 @@
   `SeedableRng + rand::Rng`.
   See [PR 6559](https://github.com/libp2p/rust-libp2p/pull/6559).
 
+- Close v2 server dial-back connections once the client acknowledges the dial-back instead of leaving them open.
+  See [PR 6528](https://github.com/libp2p/rust-libp2p/pull/6528).
+
 - Fix AutoNAT v2 server preserving the selected address index for multi-address `DialRequest`s.
   See [PR 6514](https://github.com/libp2p/rust-libp2p/pull/6514).
 
