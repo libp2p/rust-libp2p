@@ -97,6 +97,16 @@ impl Record {
         Record {
             key: key.into(),
             value,
+            publisher: Some(PeerId::random()),
+            expires: None,
+        }
+    }
+
+    /// Creates a new record for insertion into the DHT.
+    pub fn new_anonymous(key: impl Into<Key>, value: Vec<u8>) -> Self {
+        Record {
+            key: key.into(),
+            value,
             publisher: None,
             expires: None,
         }
