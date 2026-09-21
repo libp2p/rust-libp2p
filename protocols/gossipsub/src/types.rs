@@ -283,6 +283,11 @@ pub enum ControlAction {
     IDontWant(IDontWant),
     /// The Node has sent us its supported extensions.
     Extensions(Option<Extensions>),
+    /// The node announces a large message before transmitting it - Preamble control message.
+    Preamble(Preamble),
+    /// The node signals that it is currently receiving a large message - ImReceiving control
+    /// message.
+    ImReceiving(ImReceiving),
 }
 
 /// Node broadcasts known messages per topic - IHave control message.
@@ -326,10 +331,44 @@ pub struct IDontWant {
     pub(crate) message_ids: Vec<MessageId>,
 }
 
+/// The node announces a large message before transmitting it - Preamble control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Preamble {
+    /// The id of the message about to be transmitted.
+    pub(crate) message_id: MessageId,
+    /// The total size in bytes of the full message.
+    pub(crate) message_size: u64,
+    /// The topic the message belongs to.
+    pub(crate) topic_hash: TopicHash,
+}
+
+/// The node signals that it is currently receiving a large message - ImReceiving control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ImReceiving {
+    /// The id of the message currently being received.
+    pub(crate) message_id: MessageId,
+}
+
+/// A single fragment of a large message - LargeMessageFragment RPC entry.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LargeMessageFragment {
+    /// The id of the full message this fragment belongs to.
+    pub(crate) message_id: MessageId,
+    /// 0-based index of this fragment.
+    pub(crate) fragment_index: u32,
+    /// Total number of fragments.
+    pub(crate) total_fragments: u32,
+    /// The fragment payload.
+    pub(crate) fragment_data: Vec<u8>,
+    /// The topic the original message belongs to.
+    pub(crate) topic_hash: TopicHash,
+}
+
 /// The node has sent us the supported Gossipsub Extensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Extensions {
     pub(crate) partial_messages: Option<bool>,
+    pub(crate) large_message_handling: Option<bool>,
 }
 
 /// A Gossipsub RPC message sent.
@@ -403,6 +442,7 @@ impl From<RpcOut> for proto::Rpc {
                 publish: vec![message.into()],
                 control: None,
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::Subscribe {
                 topic,
@@ -418,6 +458,7 @@ impl From<RpcOut> for proto::Rpc {
                 }],
                 control: None,
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::SubscribeMany(topics) => proto::Rpc {
                 publish: Vec::new(),
@@ -434,6 +475,7 @@ impl From<RpcOut> for proto::Rpc {
                     .collect(),
                 control: None,
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::Unsubscribe(topic) => proto::Rpc {
                 publish: Vec::new(),
@@ -445,6 +487,7 @@ impl From<RpcOut> for proto::Rpc {
                 }],
                 control: None,
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::IHave(IHave {
                 topic_hash,
@@ -462,8 +505,11 @@ impl From<RpcOut> for proto::Rpc {
                     prune: vec![],
                     idontwant: vec![],
                     extensions: None,
+                    preamble: vec![],
+                    imreceiving: vec![],
                 }),
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::IWant(IWant { message_ids }) => proto::Rpc {
                 publish: Vec::new(),
@@ -477,8 +523,11 @@ impl From<RpcOut> for proto::Rpc {
                     prune: vec![],
                     idontwant: vec![],
                     extensions: None,
+                    preamble: vec![],
+                    imreceiving: vec![],
                 }),
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::Graft(Graft { topic_hash }) => proto::Rpc {
                 publish: Vec::new(),
@@ -492,8 +541,11 @@ impl From<RpcOut> for proto::Rpc {
                     prune: vec![],
                     idontwant: vec![],
                     extensions: None,
+                    preamble: vec![],
+                    imreceiving: vec![],
                 }),
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::Prune(Prune {
                 topic_hash,
@@ -521,8 +573,11 @@ impl From<RpcOut> for proto::Rpc {
                         }],
                         idontwant: vec![],
                         extensions: None,
+                        preamble: vec![],
+                        imreceiving: vec![],
                     }),
                     partial: None,
+                    large_message_fragments: vec![],
                 }
             }
             RpcOut::IDontWant(IDontWant { message_ids }) => proto::Rpc {
@@ -537,10 +592,16 @@ impl From<RpcOut> for proto::Rpc {
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     }],
                     extensions: None,
+                    preamble: vec![],
+                    imreceiving: vec![],
                 }),
                 partial: None,
+                large_message_fragments: vec![],
             },
-            RpcOut::Extensions(Extensions { partial_messages }) => proto::Rpc {
+            RpcOut::Extensions(Extensions {
+                partial_messages,
+                large_message_handling,
+            }) => proto::Rpc {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -549,15 +610,22 @@ impl From<RpcOut> for proto::Rpc {
                     graft: vec![],
                     prune: vec![],
                     idontwant: vec![],
-                    extensions: Some(proto::ControlExtensions { partial_messages }),
+                    extensions: Some(proto::ControlExtensions {
+                        partial_messages,
+                        large_message_handling,
+                    }),
+                    preamble: vec![],
+                    imreceiving: vec![],
                 }),
                 partial: None,
+                large_message_fragments: vec![],
             },
             RpcOut::TestExtension => proto::Rpc {
                 subscriptions: vec![],
                 publish: vec![],
                 control: None,
                 partial: None,
+                large_message_fragments: vec![],
             },
             #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(crate::partial_messages::PartialMessage {
@@ -575,6 +643,7 @@ impl From<RpcOut> for proto::Rpc {
                     partial_message: body,
                     parts_metadata: metadata,
                 }),
+                large_message_fragments: vec![],
             },
         }
     }
@@ -589,6 +658,8 @@ pub struct RpcIn {
     pub subscriptions: Vec<Subscription>,
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<ControlAction>,
+    /// Large message fragments.
+    pub large_message_fragments: Vec<LargeMessageFragment>,
     /// Partial messages extension.
     #[cfg(feature = "partial-messages")]
     pub partial_message: Option<crate::extensions::partial_messages::PartialMessage>,
@@ -605,6 +676,9 @@ impl fmt::Debug for RpcIn {
         }
         if !self.control_msgs.is_empty() {
             b.field("control_msgs", &self.control_msgs);
+        }
+        if !self.large_message_fragments.is_empty() {
+            b.field("large_message_fragments", &self.large_message_fragments);
         }
         #[cfg(feature = "partial-messages")]
         b.field("partial_messages", &self.partial_message);

@@ -135,6 +135,7 @@ pub struct Config {
     connection_handler_forward_duration: Duration,
     idontwant_message_size_threshold: usize,
     idontwant_on_publish: bool,
+    large_message_handling: bool,
     topic_configuration: TopicConfigs,
 }
 
@@ -485,6 +486,14 @@ impl Config {
         self.idontwant_on_publish
     }
 
+    /// Advertise support for the gossipsub v1.4 Large Message Handling extension
+    /// (see <https://github.com/libp2p/specs/pull/720>) to peers on connection.
+    /// This only advertises the capability, large message fragmentation is not yet implemented.
+    /// By default it is false.
+    pub fn large_message_handling(&self) -> bool {
+        self.large_message_handling
+    }
+
     /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
     /// within a heartbeat.
     pub fn max_ihave_messages_heartbeat(&self) -> usize {
@@ -562,6 +571,7 @@ impl Default for ConfigBuilder {
                 connection_handler_forward_duration: Duration::from_secs(1),
                 idontwant_message_size_threshold: 1000,
                 idontwant_on_publish: false,
+                large_message_handling: false,
                 topic_configuration: TopicConfigs::default(),
             },
             invalid_protocol: false,
@@ -1072,6 +1082,15 @@ impl ConfigBuilder {
         self
     }
 
+    /// Advertise support for the gossipsub v1.4 Large Message Handling extension
+    /// (see <https://github.com/libp2p/specs/pull/720>) to peers on connection.
+    /// This only advertises the capability, large message fragmentation is not yet implemented.
+    /// By default it is false.
+    pub fn large_message_handling(&mut self, large_message_handling: bool) -> &mut Self {
+        self.config.large_message_handling = large_message_handling;
+        self
+    }
+
     /// The maximum total byte size of all control messages and subscriptions in an RPC.
     /// Validates cumulative size by scanning protobuf bytes before decoding.
     /// Messages exceeding this limit will be rejected. The default is 16KB.
@@ -1202,6 +1221,7 @@ impl std::fmt::Debug for Config {
             &self.idontwant_message_size_threshold,
         );
         let _ = builder.field("idontwant_on_publish", &self.idontwant_on_publish);
+        let _ = builder.field("large_message_handling", &self.large_message_handling);
         builder.finish()
     }
 }
