@@ -49,7 +49,7 @@ def main():
 
         # Don't modify code that is not in the current workspace
         if str(Path.cwd()) not in str(warning['target']['src_path']):
-            return
+            continue  # Use continue instead of return to process other warnings
 
         m = warning["message"]
 
@@ -61,7 +61,7 @@ def main():
         if code is None:
             continue
 
-        fix_unreachable_pub_warning(m)
+        fix_unreachable_pub_warning(warning)  # Pass the entire warning object, not just m
 
 
 if __name__ == "__main__":
