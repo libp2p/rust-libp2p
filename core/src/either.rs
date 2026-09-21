@@ -89,6 +89,13 @@ where
             future::Either::Right(inner) => inner.poll(cx).map_err(Either::Right),
         }
     }
+
+    fn substream_id(substream: &Self::Substream) -> Option<u64> {
+        match substream {
+            future::Either::Left(s) => A::substream_id(s),
+            future::Either::Right(s) => B::substream_id(s),
+        }
+    }
 }
 
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.

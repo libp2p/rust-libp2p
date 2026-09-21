@@ -44,6 +44,10 @@ impl Stream {
             close_result: None,
         }
     }
+
+    pub(super) fn id(&self) -> u64 {
+        self.send.id().into()
+    }
 }
 
 impl AsyncRead for Stream {
