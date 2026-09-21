@@ -21,6 +21,8 @@
   See [PR 6285](https://github.com/libp2p/rust-libp2p/pull/6285).
 - Reset reservation state on listener close.
   See [PR 6461](https://github.com/libp2p/rust-libp2p/pull/6461).
+- Implements autorelay that would make a reservation as soon as a connection reports supporting HOP protocol.
+  See [PR 6156](https://github.com/libp2p/rust-libp2p/pull/6156)
 
 ## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`
