@@ -131,6 +131,24 @@ pub fn parse<'a>(
     Ok(certificate)
 }
 
+/// Verify the transcript signature using the certificate already validated by rustls.
+///
+/// Only call this from the TLS 1.3 signature callbacks: rustls first calls
+/// `verify_server_cert` or `verify_client_cert` with the same certificate. Repeating
+/// its self-signature and libp2p extension checks here is unnecessary. Keep the
+/// parsed certificate local so no unverified peer identity escapes this boundary.
+pub(crate) fn verify_tls13_signature(
+    certificate: &rustls::pki_types::CertificateDer<'_>,
+    signature_scheme: rustls::SignatureScheme,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), rustls::Error> {
+    parse_unverified(certificate.as_ref())
+        .map_err(ParseError::from)?
+        .verify_signature(signature_scheme, message, signature)
+        .map_err(Into::into)
+}
+
 /// An X.509 certificate with a libp2p-specific extension
 /// is used to secure libp2p connections.
 #[derive(Debug)]
@@ -166,7 +184,7 @@ pub struct VerificationError(#[from] pub(crate) webpki::Error);
 
 /// Internal function that only parses but does not verify the certificate.
 ///
-/// Useful for testing but unsuitable for production.
+/// Callers must verify the certificate before trusting its peer identity.
 fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate<'_>, webpki::Error> {
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
@@ -516,6 +534,14 @@ impl P2pCertificate<'_> {
         )))
     }
 }
+
+#[cfg(test)]
+#[path = "certificate_profile.rs"]
+mod profile;
+
+#[cfg(test)]
+#[path = "certificate_handshake_tests.rs"]
+mod handshake_tests;
 
 #[cfg(test)]
 mod tests {

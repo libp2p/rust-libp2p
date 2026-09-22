@@ -1,3 +1,8 @@
+## 0.7.1
+
+- Avoid repeating certificate and identity-extension signature checks in TLS 1.3 transcript verification.
+  See [issue 6633](https://github.com/libp2p/rust-libp2p/issues/6633).
+
 ## 0.7.0
 
 - Use the AWS-LC crypto provider and prefer the X25519MLKEM768 key exchange group for TLS configurations.
