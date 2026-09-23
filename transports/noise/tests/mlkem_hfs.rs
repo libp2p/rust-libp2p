@@ -3,7 +3,10 @@
 #![cfg(feature = "mlkem-hfs")]
 
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::{
+    UpgradeInfo,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 
@@ -79,4 +82,20 @@ fn falls_back_to_classical_when_peer_is_old() {
         .await
         .unwrap();
     });
+}
+
+#[test]
+fn classical_fallback_can_be_refused() {
+    let id = identity::Keypair::generate_ed25519();
+    let offered = |c: noise::Config| c.protocol_info().collect::<Vec<_>>();
+
+    assert_eq!(offered(noise::Config::new(&id).unwrap()), [HFS, "/noise"]);
+    assert_eq!(
+        offered(
+            noise::Config::new(&id)
+                .unwrap()
+                .with_classical_fallback(false)
+        ),
+        [HFS]
+    );
 }

@@ -102,6 +102,9 @@ pub struct Config {
     ///
     /// For further information, see <https://noiseprotocol.org/noise.html#prologue>.
     prologue: Vec<u8>,
+
+    #[cfg(feature = "mlkem-hfs")]
+    classical_fallback: bool,
 }
 
 impl Config {
@@ -114,12 +117,22 @@ impl Config {
             params: PARAMS_XX.clone(),
             webtransport_certhashes: None,
             prologue: vec![],
+            #[cfg(feature = "mlkem-hfs")]
+            classical_fallback: true,
         })
     }
 
     /// Set the noise prologue.
     pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
         self.prologue = prologue;
+        self
+    }
+
+    /// Offer and accept classical `/noise` beside the hybrid suite, on by default.
+    /// Disabling it fails the connection rather than downgrading silently.
+    #[cfg(feature = "mlkem-hfs")]
+    pub fn with_classical_fallback(mut self, enabled: bool) -> Self {
+        self.classical_fallback = enabled;
         self
     }
 
@@ -187,7 +200,7 @@ impl Config {
 impl UpgradeInfo for Config {
     type Info = &'static str;
     #[cfg(feature = "mlkem-hfs")]
-    type InfoIter = std::array::IntoIter<Self::Info, 2>;
+    type InfoIter = std::iter::Take<std::array::IntoIter<Self::Info, 2>>;
     #[cfg(not(feature = "mlkem-hfs"))]
     type InfoIter = std::iter::Once<Self::Info>;
 
@@ -195,7 +208,9 @@ impl UpgradeInfo for Config {
         // Preference order: the dialer offers hybrid first.
         #[cfg(feature = "mlkem-hfs")]
         {
-            [NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL].into_iter()
+            [NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL]
+                .into_iter()
+                .take(if self.classical_fallback { 2 } else { 1 })
         }
         #[cfg(not(feature = "mlkem-hfs"))]
         {
