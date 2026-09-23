@@ -3208,6 +3208,11 @@ where
         }
 
         if other_established > 0 {
+            tracing::debug!(
+                peer=%peer_id,
+                %other_established,
+                "Not sending subscriptions: this is an additional connection to a known peer"
+            );
             return; // Not our first connection to this peer, hence nothing to do.
         }
 
