@@ -1,7 +1,7 @@
 use rustls::{CertificateError, pki_types::PrivatePkcs8KeyDer, quic::Connection};
 
 use super::{
-    profile::{certificate_for, client, server},
+    test_support::{certificate_for, client, rsa_fixtures, server},
     *,
 };
 
@@ -64,6 +64,14 @@ fn drive(
         deliver(client, server, |bytes| mutate(Sender::Client, bytes))?;
         deliver(server, client, |bytes| mutate(Sender::Server, bytes))
     })
+}
+
+fn webpki_cause(error: &rustls::Error) -> Option<&webpki::Error> {
+    if let rustls::Error::InvalidCertificate(CertificateError::Other(other)) = error {
+        other.0.downcast_ref::<webpki::Error>()
+    } else {
+        None
+    }
 }
 
 fn resolver(
@@ -134,71 +142,68 @@ fn independently_invalid_proofs_fail_in_both_directions() {
         &rcgen::PKCS_ED25519,
     ]
     .into_iter()
-    .for_each(|algorithm| {
-        [Sender::Client, Sender::Server]
-            .into_iter()
-            .for_each(|sender| {
-                [
-                    InvalidProof::Certificate,
-                    InvalidProof::Extension,
-                    InvalidProof::Transcript,
-                ]
-                .into_iter()
-                .for_each(|proof| {
-                    let client_key = identity::Keypair::generate_ed25519();
-                    let server_key = identity::Keypair::generate_ed25519();
-                    let mut client_config = crate::make_client_config(
-                        &client_key,
-                        Some(server_key.public().to_peer_id()),
-                    )
-                    .unwrap();
-                    let mut server_config = crate::make_server_config(&server_key).unwrap();
-                    let identity = match sender {
-                        Sender::Client => &client_key,
-                        Sender::Server => &server_key,
-                    };
-                    let (cert, key) = invalid_certificate(identity, algorithm, proof);
-                    if let InvalidProof::Transcript = proof {
-                        assert!(parse(&cert).is_ok());
-                    } else {
-                        assert!(
-                            parse(&cert).is_err(),
-                            "the public parser must still verify certificates"
-                        );
-                    }
-                    match sender {
-                        Sender::Client => {
-                            client_config.client_auth_cert_resolver = resolver(cert, &key)
-                        }
-                        Sender::Server => server_config.cert_resolver = resolver(cert, &key),
-                    }
-                    let mut client = client(Arc::new(client_config));
-                    let mut server = server(Arc::new(server_config));
-                    let mut corrupted = 0;
-                    let error = drive(&mut client, &mut server, |source, bytes| {
-                        if source == sender && matches!(proof, InvalidProof::Transcript) {
-                            corrupted += invalidate_transcript(bytes);
-                        }
-                    })
-                    .expect_err("invalid authentication proof must abort the handshake");
-                    match proof {
-                        InvalidProof::Certificate => assert!(
-                            format!("{error:?}").contains("SignatureAlgorithmMismatch"),
-                            "{error:?}"
-                        ),
-                        InvalidProof::Extension => {
-                            assert!(format!("{error:?}").contains("UnknownIssuer"), "{error:?}")
-                        }
-                        InvalidProof::Transcript => {
-                            assert_eq!(corrupted, 1);
-                            assert_eq!(
-                                error,
-                                rustls::Error::InvalidCertificate(CertificateError::BadSignature)
-                            );
-                        }
-                    }
-                });
-            });
+    .flat_map(|algorithm| [Sender::Client, Sender::Server].map(|sender| (algorithm, sender)))
+    .flat_map(|(algorithm, sender)| {
+        [
+            InvalidProof::Certificate,
+            InvalidProof::Extension,
+            InvalidProof::Transcript,
+        ]
+        .map(|proof| (algorithm, sender, proof))
+    })
+    .for_each(|(algorithm, sender, proof)| {
+        let client_key = identity::Keypair::generate_ed25519();
+        let server_key = identity::Keypair::generate_ed25519();
+        let mut client_config =
+            crate::make_client_config(&client_key, Some(server_key.public().to_peer_id())).unwrap();
+        let mut server_config = crate::make_server_config(&server_key).unwrap();
+        let identity = match sender {
+            Sender::Client => &client_key,
+            Sender::Server => &server_key,
+        };
+        let (cert, key) = invalid_certificate(identity, algorithm, proof);
+        if let InvalidProof::Transcript = proof {
+            assert!(parse(&cert).is_ok());
+        } else {
+            assert!(
+                parse(&cert).is_err(),
+                "the public parser must still verify certificates"
+            );
+        }
+        match sender {
+            Sender::Client => client_config.client_auth_cert_resolver = resolver(cert, &key),
+            Sender::Server => server_config.cert_resolver = resolver(cert, &key),
+        }
+        let mut client = client(Arc::new(client_config));
+        let mut server = server(Arc::new(server_config));
+        let mut corrupted = 0;
+        let error = drive(&mut client, &mut server, |source, bytes| {
+            if source == sender && matches!(proof, InvalidProof::Transcript) {
+                corrupted += invalidate_transcript(bytes);
+            }
+        })
+        .expect_err("invalid authentication proof must abort the handshake");
+        match proof {
+            InvalidProof::Certificate => assert_eq!(
+                webpki_cause(&error),
+                // Pre-existing label: `P2pCertificate::verify` maps every self-signature
+                // failure to `SignatureAlgorithmMismatch`.
+                Some(&webpki::Error::SignatureAlgorithmMismatch),
+                "{error:?}"
+            ),
+            InvalidProof::Extension => assert_eq!(
+                webpki_cause(&error),
+                Some(&webpki::Error::UnknownIssuer),
+                "{error:?}"
+            ),
+            InvalidProof::Transcript => {
+                assert_eq!(corrupted, 1);
+                assert_eq!(
+                    error,
+                    rustls::Error::InvalidCertificate(CertificateError::BadSignature)
+                );
+            }
+        }
     });
 }
 
@@ -223,26 +228,24 @@ fn rsa_signature_schemes_retain_verification_and_scheme_checks() {
         include_bytes!("test_assets/rsa-2048.pk8").to_vec(),
     ));
     let signing_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key).unwrap();
-    profile::rsa_fixtures()
-        .into_iter()
-        .for_each(|(name, bytes)| {
-            let der = rustls::pki_types::CertificateDer::from(bytes);
-            let scheme = parse(&der).unwrap().signature_scheme().unwrap();
-            let signer = signing_key.choose_scheme(&[scheme]).unwrap();
-            let message = b"independent transcript signature";
-            let mut signature = signer.sign(message).unwrap();
-            verify_tls13_signature(&der, scheme, message, &signature).unwrap();
-            signature[0] ^= 1;
-            assert_eq!(
-                verify_tls13_signature(&der, scheme, message, &signature).unwrap_err(),
-                rustls::Error::InvalidCertificate(CertificateError::BadSignature),
-                "{name}"
-            );
-            assert!(
-                verify_tls13_signature(&der, rustls::SignatureScheme::ED25519, message, &signature)
-                    .is_err()
-            );
-        });
+    rsa_fixtures().into_iter().for_each(|(name, bytes)| {
+        let der = rustls::pki_types::CertificateDer::from(bytes);
+        let scheme = parse(&der).unwrap().signature_scheme().unwrap();
+        let signer = signing_key.choose_scheme(&[scheme]).unwrap();
+        let message = b"independent transcript signature";
+        let mut signature = signer.sign(message).unwrap();
+        verify_tls13_signature(&der, scheme, message, &signature).unwrap();
+        signature[0] ^= 1;
+        assert_eq!(
+            verify_tls13_signature(&der, scheme, message, &signature).unwrap_err(),
+            rustls::Error::InvalidCertificate(CertificateError::BadSignature),
+            "{name}"
+        );
+        assert!(
+            verify_tls13_signature(&der, rustls::SignatureScheme::ED25519, message, &signature)
+                .is_err()
+        );
+    });
 }
 
 #[test]
@@ -255,7 +258,7 @@ fn valid_certificate_schemes_establish_authenticated_connections() {
     ]
     .into_iter()
     .map(|algorithm| certificate_for(&identity, algorithm));
-    let rsa = profile::rsa_fixtures()
+    let rsa = rsa_fixtures()
         .into_iter()
         // RSA negotiation prefers SHA-512. The existing verifier requires the
         // transcript scheme to match the certificate's self-signature scheme.
@@ -267,50 +270,49 @@ fn valid_certificate_schemes_establish_authenticated_connections() {
                     .into(),
             )
         });
-    generated.chain(rsa).for_each(|(certificate, key)| {
-        let fixture_id = parse(&certificate).unwrap().peer_id();
-        let scheme = parse(&certificate).unwrap().signature_scheme().unwrap();
-        [Sender::Client, Sender::Server]
-            .into_iter()
-            .for_each(|sender| {
-                let client_key = identity::Keypair::generate_ed25519();
-                let server_key = identity::Keypair::generate_ed25519();
-                let (client_id, server_id) = match sender {
-                    Sender::Client => (fixture_id, server_key.public().to_peer_id()),
-                    Sender::Server => (client_key.public().to_peer_id(), fixture_id),
-                };
-                let mut client_config =
-                    crate::make_client_config(&client_key, Some(server_id)).unwrap();
-                let mut server_config = crate::make_server_config(&server_key).unwrap();
-                match sender {
-                    Sender::Client => {
-                        client_config.client_auth_cert_resolver =
-                            resolver(certificate.clone(), &key)
-                    }
-                    Sender::Server => {
-                        server_config.cert_resolver = resolver(certificate.clone(), &key)
-                    }
+    generated
+        .chain(rsa)
+        .flat_map(|(certificate, key)| {
+            [Sender::Client, Sender::Server]
+                .map(|sender| (certificate.clone(), key.clone_key(), sender))
+        })
+        .for_each(|(certificate, key, sender)| {
+            let fixture_id = parse(&certificate).unwrap().peer_id();
+            let scheme = parse(&certificate).unwrap().signature_scheme().unwrap();
+            let client_key = identity::Keypair::generate_ed25519();
+            let server_key = identity::Keypair::generate_ed25519();
+            let (client_id, server_id) = match sender {
+                Sender::Client => (fixture_id, server_key.public().to_peer_id()),
+                Sender::Server => (client_key.public().to_peer_id(), fixture_id),
+            };
+            let mut client_config =
+                crate::make_client_config(&client_key, Some(server_id)).unwrap();
+            let mut server_config = crate::make_server_config(&server_key).unwrap();
+            match sender {
+                Sender::Client => {
+                    client_config.client_auth_cert_resolver = resolver(certificate, &key)
                 }
-                let mut client = client(Arc::new(client_config));
-                let mut server = server(Arc::new(server_config));
-                drive(&mut client, &mut server, |_, _| {})
-                    .unwrap_or_else(|error| panic!("{scheme:?} from {sender:?}: {error:?}"));
-                assert!(!client.is_handshaking());
-                assert!(!server.is_handshaking());
-                assert_eq!(
-                    parse(&client.peer_certificates().unwrap()[0])
-                        .unwrap()
-                        .peer_id(),
-                    server_id
-                );
-                assert_eq!(
-                    parse(&server.peer_certificates().unwrap()[0])
-                        .unwrap()
-                        .peer_id(),
-                    client_id
-                );
-            });
-    });
+                Sender::Server => server_config.cert_resolver = resolver(certificate, &key),
+            }
+            let mut client = client(Arc::new(client_config));
+            let mut server = server(Arc::new(server_config));
+            drive(&mut client, &mut server, |_, _| {})
+                .unwrap_or_else(|error| panic!("{scheme:?} from {sender:?}: {error:?}"));
+            assert!(!client.is_handshaking());
+            assert!(!server.is_handshaking());
+            assert_eq!(
+                parse(&client.peer_certificates().unwrap()[0])
+                    .unwrap()
+                    .peer_id(),
+                server_id
+            );
+            assert_eq!(
+                parse(&server.peer_certificates().unwrap()[0])
+                    .unwrap()
+                    .peer_id(),
+                client_id
+            );
+        });
 }
 
 #[test]

@@ -10,10 +10,12 @@ use std::{
 use rustls::{
     HandshakeKind,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
-    quic::{ClientConnection, Connection, ServerConnection, Version},
 };
 
-use super::*;
+use super::{
+    test_support::{certificate_for, client, rsa_fixtures, server, transfer},
+    *,
+};
 
 const MESSAGE: &[u8] = b"a TLS 1.3 CertificateVerify transcript for profiling";
 const SAMPLES: usize = 7;
@@ -34,22 +36,6 @@ fn measure(label: &str, iterations: u32, mut operation: impl FnMut()) {
         samples[SAMPLES / 2],
         samples[SAMPLES - 1]
     );
-}
-
-pub(super) fn certificate_for(
-    identity: &identity::Keypair,
-    algorithm: &'static rcgen::SignatureAlgorithm,
-) -> (CertificateDer<'static>, PrivateKeyDer<'static>) {
-    let key = rcgen::KeyPair::generate_for(algorithm).unwrap();
-    let mut params = rcgen::CertificateParams::default();
-    params.distinguished_name = rcgen::DistinguishedName::new();
-    params
-        .custom_extensions
-        .push(make_libp2p_extension(identity, &key).unwrap());
-    (
-        params.self_signed(&key).unwrap().into(),
-        PrivatePkcs8KeyDer::from(key.serialize_der()).into(),
-    )
 }
 
 fn profile_certificate(label: &str, der: &CertificateDer<'_>, key: &PrivateKeyDer<'_>) {
@@ -110,32 +96,6 @@ fn profile_certificate(label: &str, der: &CertificateDer<'_>, key: &PrivateKeyDe
                 .unwrap();
         },
     );
-}
-
-pub(super) fn client(config: Arc<rustls::ClientConfig>) -> Connection {
-    Connection::Client(
-        ClientConnection::new(
-            config,
-            Version::V1,
-            "libp2p".try_into().unwrap(),
-            Vec::new(),
-        )
-        .unwrap(),
-    )
-}
-
-pub(super) fn server(config: Arc<rustls::ServerConfig>) -> Connection {
-    Connection::Server(ServerConnection::new(config, Version::V1, Vec::new()).unwrap())
-}
-
-fn transfer(from: &mut Connection, to: &mut Connection) -> Result<(), rustls::Error> {
-    let mut bytes = Vec::new();
-    let _ = from.write_hs(&mut bytes);
-    if bytes.is_empty() {
-        Ok(())
-    } else {
-        to.read_hs(&bytes)
-    }
 }
 
 fn handshake(
@@ -252,35 +212,6 @@ fn profile_quic_tls() {
     });
 }
 
-pub(super) fn rsa_fixtures() -> [(&'static str, &'static [u8]); 6] {
-    [
-        (
-            "rsa_pkcs1_sha256",
-            include_bytes!("test_assets/profile_rsa_pkcs1_sha256.der"),
-        ),
-        (
-            "rsa_pkcs1_sha384",
-            include_bytes!("test_assets/profile_rsa_pkcs1_sha384.der"),
-        ),
-        (
-            "rsa_pkcs1_sha512",
-            include_bytes!("test_assets/profile_rsa_pkcs1_sha512.der"),
-        ),
-        (
-            "rsa_pss_sha256",
-            include_bytes!("test_assets/profile_rsa_pss_sha256.der"),
-        ),
-        (
-            "rsa_pss_sha384",
-            include_bytes!("test_assets/profile_rsa_pss_sha384.der"),
-        ),
-        (
-            "rsa_pss_sha512",
-            include_bytes!("test_assets/profile_rsa_pss_sha512.der"),
-        ),
-    ]
-}
-
 #[test]
 #[ignore = "manual release-mode CPU profile"]
 fn profile_rsa_signatures() {
@@ -317,21 +248,23 @@ fn profile_handshakes() {
         ("rsa2048", rsa),
     ]
     .into_iter()
-    .for_each(|(identity_name, identity)| {
+    .flat_map(|(identity_name, identity)| {
         [
             ("p256", &rcgen::PKCS_ECDSA_P256_SHA256),
             ("p384", &rcgen::PKCS_ECDSA_P384_SHA384),
             ("ed25519", &rcgen::PKCS_ED25519),
         ]
-        .into_iter()
-        .for_each(|(certificate_name, algorithm)| {
-            let (certificate, key) = certificate_for(&identity, algorithm);
-            profile_certificate(
-                &format!("{identity_name}/{certificate_name}"),
-                &certificate,
-                &key,
-            );
-        });
+        .map(|(certificate_name, algorithm)| {
+            (identity_name, identity.clone(), certificate_name, algorithm)
+        })
+    })
+    .for_each(|(identity_name, identity, certificate_name, algorithm)| {
+        let (certificate, key) = certificate_for(&identity, algorithm);
+        profile_certificate(
+            &format!("{identity_name}/{certificate_name}"),
+            &certificate,
+            &key,
+        );
     });
     profile_quic_tls();
 }

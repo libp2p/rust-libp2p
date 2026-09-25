@@ -1,6 +1,14 @@
-"""Generate RSA profiling certificates using OpenSSL and the public test key.
+"""Generate the RSA certificate fixtures for the handshake tests and the CPU profile.
 
-Run with python3 -I gen_profile_rsa.py. No generated private identity key is kept.
+rsa-2048.pk8 is a copy of identity/src/test/rsa-2048.pk8. It is kept here so
+that the tests can sign with a known RSA key.
+
+Each certificate carries a libp2p SignedKey extension. A throwaway Ed25519 host
+key signs it, and the script does not keep that host key.
+
+The PSS fixtures use a salt length equal to the digest length.
+
+Run with python3 -I gen_rsa_fixtures.py.
 """
 
 import pathlib
@@ -39,7 +47,7 @@ with tempfile.TemporaryDirectory() as temp:
     )
     for padding in ("pkcs1", "pss"):
         for digest in ("sha256", "sha384", "sha512"):
-            destination = assets / f"profile_rsa_{padding}_{digest}.der"
+            destination = assets / f"rsa_fixture_{padding}_{digest}.der"
             options = [] if padding == "pkcs1" else [
                 "-sigopt", "rsa_padding_mode:pss", "-sigopt", "rsa_pss_saltlen:digest"
             ]

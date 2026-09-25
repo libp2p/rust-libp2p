@@ -536,6 +536,10 @@ impl P2pCertificate<'_> {
 }
 
 #[cfg(test)]
+#[path = "certificate_test_support.rs"]
+mod test_support;
+
+#[cfg(test)]
 #[path = "certificate_profile.rs"]
 mod profile;
 

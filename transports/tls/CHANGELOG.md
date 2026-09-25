@@ -1,7 +1,8 @@
 ## 0.7.1
 
 - Avoid repeating certificate and identity-extension signature checks in TLS 1.3 transcript verification.
-  See [issue 6633](https://github.com/libp2p/rust-libp2p/issues/6633).
+  See [issue 6633](https://github.com/libp2p/rust-libp2p/issues/6633) for details.
+  See [PR 6634](https://github.com/libp2p/rust-libp2p/pull/6634).
 
 ## 0.7.0
 
