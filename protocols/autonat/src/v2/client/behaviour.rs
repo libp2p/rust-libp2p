@@ -16,7 +16,6 @@ use libp2p_swarm::{
     behaviour::ConnectionEstablished,
 };
 use rand::prelude::*;
-use rand_core::OsRng;
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
@@ -58,9 +57,9 @@ impl Default for Config {
     }
 }
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = rand::rngs::StdRng>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     rng: R,
     config: Config,
@@ -77,7 +76,7 @@ where
 
 impl<R> NetworkBehaviour for Behaviour<R>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     type ConnectionHandler = Either<dial_request::Handler, dial_back::Handler>;
 
@@ -267,7 +266,7 @@ where
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + 'static,
+    R: rand::Rng + 'static,
 {
     pub fn new(rng: R, config: Config) -> Self {
         Self {
@@ -293,7 +292,7 @@ where
                 return;
             };
 
-            let nonce = self.rng.r#gen();
+            let nonce = self.rng.random();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
@@ -368,9 +367,9 @@ where
     }
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<rand::rngs::StdRng> {
     fn default() -> Self {
-        Self::new(OsRng, Config::default())
+        Self::new(rand::make_rng::<rand::rngs::StdRng>(), Config::default())
     }
 }
 

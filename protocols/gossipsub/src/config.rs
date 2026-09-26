@@ -43,8 +43,8 @@ pub enum ValidationMode {
     /// This setting permits messages that have no author, sequence number or signature. If any of
     /// these fields exist in the message these are validated.
     Permissive,
-    /// This setting requires the author, sequence number and signature fields of a message to be
-    /// empty. Any message that contains these fields is considered invalid.
+    /// This setting requires the author, key, sequence number and signature fields of a message to
+    /// be empty. Any message that contains these fields is considered invalid.
     Anonymous,
     /// This setting does not check the author, sequence number or signature fields of incoming
     /// messages. If these fields contain data, they are simply ignored.

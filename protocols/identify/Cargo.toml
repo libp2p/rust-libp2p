@@ -20,10 +20,10 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 prost-codec = { workspace = true }
 prost = { workspace = true }
-smallvec = "1.15.1"
+smallvec = "1.15"
 thiserror = { workspace = true }
 tracing = { workspace = true }
-either = "1.16.0"
+either = "1.16"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

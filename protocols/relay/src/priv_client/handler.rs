@@ -61,6 +61,7 @@ pub enum In {
     Reserve {
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
+    ResetReservation,
     EstablishCircuit {
         dst_peer_id: PeerId,
         to_dial: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
@@ -71,6 +72,7 @@ impl fmt::Debug for In {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             In::Reserve { to_listener: _ } => f.debug_struct("In::Reserve").finish(),
+            In::ResetReservation => f.debug_struct("In::ResetReservation").finish(),
             In::EstablishCircuit {
                 dst_peer_id,
                 to_dial: _,
@@ -142,19 +144,19 @@ impl Handler {
             queued_events: Default::default(),
             pending_streams: Default::default(),
             inflight_reserve_requests: futures_bounded::FuturesTupleSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_inbound_circuit_requests: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             inflight_outbound_circuit_deny_requests: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(DENYING_CIRCUIT_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(DENYING_CIRCUIT_TIMEOUT),
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
             reservation: Reservation::None,
@@ -249,6 +251,9 @@ impl ConnectionHandler for Handler {
         match event {
             In::Reserve { to_listener } => {
                 self.make_new_reservation(to_listener);
+            }
+            In::ResetReservation => {
+                self.reservation = Reservation::None;
             }
             In::EstablishCircuit {
                 to_dial,

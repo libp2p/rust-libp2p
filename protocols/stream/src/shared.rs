@@ -113,7 +113,7 @@ impl Shared {
             return;
         };
 
-        while let Ok(Some(new_stream)) = receiver.try_next() {
+        while let Ok(new_stream) = receiver.try_recv() {
             let _ = new_stream
                 .sender
                 .send(Err(crate::OpenStreamError::Io(io::Error::new(
@@ -128,7 +128,7 @@ impl Shared {
             .connections
             .iter()
             .filter_map(|(c, p)| (p == &peer).then_some(c))
-            .choose(&mut rand::thread_rng())
+            .choose(&mut rand::rng())
             .and_then(|c| self.senders.get(c));
 
         match maybe_sender {

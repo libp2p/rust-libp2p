@@ -339,23 +339,23 @@ impl AddProviderJob {
 mod tests {
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
     use crate::record::store::MemoryStore;
 
     fn rand_put_record_job() -> PutRecordJob {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let id = PeerId::random();
-        let replicate_interval = Duration::from_secs(rng.gen_range(1..60));
-        let publish_interval = Some(replicate_interval * rng.gen_range(1..10));
-        let record_ttl = Some(Duration::from_secs(rng.gen_range(1..600)));
+        let replicate_interval = Duration::from_secs(rng.random_range(1..60));
+        let publish_interval = Some(replicate_interval * rng.random_range(1..10));
+        let record_ttl = Some(Duration::from_secs(rng.random_range(1..600)));
         PutRecordJob::new(id, replicate_interval, publish_interval, record_ttl)
     }
 
     fn rand_add_provider_job() -> AddProviderJob {
-        let mut rng = rand::thread_rng();
-        let interval = Duration::from_secs(rng.gen_range(1..60));
+        let mut rng = rand::rng();
+        let interval = Duration::from_secs(rng.random_range(1..60));
         AddProviderJob::new(interval)
     }
 

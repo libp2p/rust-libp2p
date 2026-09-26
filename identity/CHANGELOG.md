@@ -1,4 +1,14 @@
-## 0.2.14
+## 0.3.0
+
+- **secp256k1**: `PublicKey::verify` now enforces low-S signatures.
+  High-S signatures that were previously accepted are now rejected
+  (ecdsa 0.17 gates low-S normalization on `k256`'s `NORMALIZE_S`
+  feature, set to `true` in k256 0.14). This aligns with go-libp2p
+  and js-libp2p which already sign low-S and may reject high-S.
+  See [PR 6559](https://github.com/libp2p/rust-libp2p/pull/6559).
+
+- Raise MSRV to 1.88.0.
+  See [PR 6559](https://github.com/libp2p/rust-libp2p/pull/6559).
 
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).

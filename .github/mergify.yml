@@ -71,11 +71,8 @@ queue_rules:
       - base=master
     merge_conditions: []
     merge_method: squash
-    commit_message_template: |
-      {{ title }}
-
-      {{ body | get_section("## Description", "") }}
-
-      Pull-Request: #{{ number }}.
-
-      {{ body | get_section("## Attributions", "") }}
+    commit_message_format:
+        title: pr-title
+        body: pr-body
+        trailers:
+          - approved-by

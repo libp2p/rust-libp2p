@@ -40,12 +40,11 @@ use std::{
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
 use pin_project::pin_project;
-use rand::RngCore;
 use salsa20::{
     Salsa20, XSalsa20,
     cipher::{KeyIvInit, StreamCipher},
 };
-use sha3::{Shake128, digest::ExtendableOutput};
+use shake::{ExtendableOutput, Shake128, Update, XofReader};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -68,19 +67,20 @@ impl PreSharedKey {
     /// This provides a way to check that private keys are properly configured
     /// without dumping the key itself to the console.
     pub fn fingerprint(&self) -> Fingerprint {
-        use std::io::{Read, Write};
         let mut enc = [0u8; 64];
         let nonce: [u8; 8] = *b"finprint";
         let mut out = [0u8; 16];
         let mut cipher = Salsa20::new(&self.0.into(), &nonce.into());
         cipher.apply_keystream(&mut enc);
         let mut hasher = Shake128::default();
-        hasher.write_all(&enc).expect("shake128 failed");
-        hasher
-            .finalize_xof()
-            .read_exact(&mut out)
-            .expect("shake128 failed");
+        hasher.update(&enc);
+        hasher.finalize_xof().read(&mut out);
         Fingerprint(out)
+    }
+
+    /// Export the unredacted private key.
+    pub fn to_key_file(self) -> String {
+        format!("/key/swarm/psk/1.0.0/\n/base16/\n{}\n", to_hex(&self.0))
     }
 }
 
@@ -130,18 +130,16 @@ impl FromStr for PreSharedKey {
 
 impl fmt::Debug for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PreSharedKey")
-            .field(&to_hex(&self.0))
+        f.debug_struct("PreSharedKey")
+            .field("fingerprint", &self.fingerprint().to_string())
             .finish()
     }
 }
 
-/// Dumps a PreSharedKey in key file format compatible with go-libp2p
+/// Formats the unredacted key in go-libp2p key file format.
 impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "/key/swarm/psk/1.0.0/")?;
-        writeln!(f, "/base16/")?;
-        writeln!(f, "{}", to_hex(&self.0))
+        f.write_str(&self.to_key_file())
     }
 }
 
@@ -212,7 +210,7 @@ impl PnetConfig {
         tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut local_nonce);
+        rand::fill(&mut local_nonce);
         socket
             .write_all(&local_nonce)
             .await

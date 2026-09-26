@@ -23,7 +23,7 @@ prost-codec = { workspace = true }
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
-futures_ringbuf = "0.4.0"
+futures_ringbuf = "0.4"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

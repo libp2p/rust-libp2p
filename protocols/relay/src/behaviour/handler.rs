@@ -403,11 +403,11 @@ impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint, status: behaviour::Status) -> Handler {
         Handler {
             inbound_workers: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             outbound_workers: futures_bounded::FuturesMap::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             endpoint,

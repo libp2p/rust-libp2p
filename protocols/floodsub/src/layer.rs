@@ -19,17 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{
-        VecDeque,
-        hash_map::{DefaultHasher, HashMap},
-    },
+    collections::{HashMap, VecDeque},
     iter,
     task::{Context, Poll},
 };
 
 use bytes::Bytes;
-use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
+use hashlink::LruCache;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -48,6 +45,9 @@ use crate::{
     },
     topic::Topic,
 };
+
+// Limit the number of received messages retained for deduplication.
+const RECEIVED_CACHE_CAPACITY: usize = 1 << 16;
 
 #[deprecated = "Use `Behaviour` instead."]
 pub type Floodsub = Behaviour;
@@ -71,9 +71,9 @@ pub struct Behaviour {
     // erroneously.
     subscribed_topics: SmallVec<[Topic; 16]>,
 
-    // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
-    // we don't dispatch the same message twice if we receive it twice on the network.
-    received: CuckooFilter<DefaultHasher>,
+    // We keep track of the messages we received so that we don't dispatch the same message twice
+    // if we receive it twice on the network.
+    received: LruCache<FloodsubMessage, ()>,
 }
 
 impl Behaviour {
@@ -90,7 +90,7 @@ impl Behaviour {
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
-            received: CuckooFilter::new(),
+            received: LruCache::new(RECEIVED_CACHE_CAPACITY),
         }
     }
 
@@ -235,13 +235,7 @@ impl Behaviour {
             .iter()
             .any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
-            if let Err(e @ CuckooError::NotEnoughSpace) = self.received.add(&message) {
-                tracing::warn!(
-                    "Message was added to 'received' Cuckoofilter but some \
-                     other message was removed as a consequence: {}",
-                    e,
-                );
-            }
+            self.received.insert(message.clone(), ());
             if self.config.subscribe_local_messages {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Message(message.clone())));
@@ -420,18 +414,8 @@ impl NetworkBehaviour for Behaviour {
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
-            // Note that this can result in false positives.
-            match self.received.test_and_add(&message) {
-                Ok(true) => {}         // Message  was added.
-                Ok(false) => continue, // Message already existed.
-                Err(e @ CuckooError::NotEnoughSpace) => {
-                    // Message added, but some other removed.
-                    tracing::warn!(
-                        "Message was added to 'received' Cuckoofilter but some \
-                         other message was removed as a consequence: {}",
-                        e,
-                    );
-                }
+            if self.received.insert(message.clone(), ()).is_some() {
+                continue;
             }
 
             // Add the message to be dispatched to the user.

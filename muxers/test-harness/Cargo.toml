@@ -14,7 +14,7 @@ release = false
 libp2p-core = { workspace = true }
 futures = { workspace = true }
 futures-timer = { workspace = true }
-futures_ringbuf = "0.4.0"
+futures_ringbuf = "0.4"
 tracing = { workspace = true }
 
 [lints]
