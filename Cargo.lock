@@ -4071,7 +4071,6 @@ version = "0.14.0"
 dependencies = [
  "bytes",
  "futures",
- "futures_ringbuf",
  "pin-project",
  "quickcheck-ext",
  "rw-stream-sink",
