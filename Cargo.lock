@@ -3430,7 +3430,6 @@ dependencies = [
  "cbor4ii",
  "futures",
  "futures-bounded",
- "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -3440,6 +3439,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
