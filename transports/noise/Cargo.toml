@@ -35,7 +35,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 [dev-dependencies]
 quickcheck = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
-tokio-util = { version = "0.7", features = ["compat"] }
+tokio-util = { workspace = true, features = ["compat"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 

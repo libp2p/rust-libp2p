@@ -30,7 +30,7 @@ cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 [dev-dependencies]
 anyhow = "1.0"
 tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread", "time"] }
-tokio-util = { version = "0.7", features = ["compat"] }
+tokio-util = { workspace = true, features = ["compat"] }
 rand = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 serde = { version = "1.0", features = ["derive"] }

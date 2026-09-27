@@ -26,7 +26,7 @@ rcgen = { workspace = true }
 stun = "0.17"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net"], optional = true }
-tokio-util = { version = "0.7", features = ["compat"], optional = true }
+tokio-util = { workspace = true, features = ["compat"], optional = true }
 tracing = { workspace = true }
 webrtc = { version = "0.17", optional = true }
 
