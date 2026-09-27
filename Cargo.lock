@@ -1847,18 +1847,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures_ringbuf"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6628abb6eb1fc74beaeb20cd0670c43d158b0150f7689b38c3eaf663f99bdec7"
-dependencies = [
- "futures",
- "log",
- "ringbuf",
- "rustc_version",
-]
-
-[[package]]
 name = "gen-proto"
 version = "0.0.0"
 dependencies = [
@@ -3218,8 +3206,9 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "futures-timer",
- "futures_ringbuf",
  "libp2p-core",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -5336,15 +5325,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "ringbuf"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
