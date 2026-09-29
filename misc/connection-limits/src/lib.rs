@@ -22,10 +22,11 @@ use std::{
     collections::{HashMap, HashSet},
     convert::Infallible,
     fmt,
+    net::Ipv4Addr,
     task::{Context, Poll},
 };
 
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
@@ -74,7 +75,8 @@ pub struct Behaviour {
     /// Peer IDs that bypass limit check, regardless of inbound or outbound.
     bypass_peer_id: HashSet<PeerId>,
 
-    pending_inbound_connections: HashSet<ConnectionId>,
+    /// Pending inbound connections, bucketed by remote source address.
+    pending_inbound_connections: HashMap<Source, HashSet<ConnectionId>>,
     pending_outbound_connections: HashSet<ConnectionId>,
     established_inbound_connections: HashSet<ConnectionId>,
     established_outbound_connections: HashSet<ConnectionId>,
@@ -125,6 +127,35 @@ fn check_limit(limit: Option<u32>, current: usize, kind: Kind) -> Result<(), Con
     Ok(())
 }
 
+/// Source key for pending inbound connections
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Source {
+    V4(Ipv4Addr),
+    V6(u64),
+    Memory(u64),
+}
+
+impl TryFrom<&Multiaddr> for Source {
+    type Error = std::io::Error;
+
+    fn try_from(remote_addr: &Multiaddr) -> Result<Self, Self::Error> {
+        match remote_addr.iter().next() {
+            Some(Protocol::Ip4(addr)) => Ok(Source::V4(addr)),
+            Some(Protocol::Ip6(addr)) => {
+                // Only the first 64 bits matter: rotation within a /64 maps to one bucket.
+                let mut prefix = [0u8; 8];
+                prefix.copy_from_slice(&addr.octets()[..8]);
+                Ok(Source::V6(u64::from_be_bytes(prefix)))
+            }
+            // `/memory/` (test transports) is the only non-IP address we accept.
+            Some(Protocol::Memory(port)) => Ok(Source::Memory(port)),
+            _ => Err(std::io::Error::other(
+                "remote address is neither an IP address nor a memory address",
+            )),
+        }
+    }
+}
+
 /// A connection limit has been exceeded.
 #[derive(Debug, Clone, Copy)]
 pub struct Exceeded {
@@ -161,7 +192,9 @@ enum Kind {
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Kind::PendingIncoming => write!(f, "pending incoming connections"),
+            Kind::PendingIncoming => {
+                write!(f, "pending incoming connections from the same address")
+            }
             Kind::PendingOutgoing => write!(f, "pending outgoing connections"),
             Kind::EstablishedIncoming => write!(f, "established incoming connections"),
             Kind::EstablishedOutgoing => write!(f, "established outgoing connections"),
@@ -185,7 +218,12 @@ pub struct ConnectionLimits {
 }
 
 impl ConnectionLimits {
-    /// Configures the maximum number of concurrently incoming connections being established.
+    /// Configures the maximum number of concurrently incoming connections being
+    /// established per remote address.
+    ///
+    /// IPv6 addresses are bucketed by their /64 prefix, `/memory/` addresses
+    /// per address. Remote addresses that are neither IP-based nor memory
+    /// addresses are rejected regardless of this limit.
     pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
         self.max_pending_incoming = limit;
         self
@@ -236,15 +274,22 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         _: &Multiaddr,
-        _: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
+        let source = Source::try_from(remote_addr).map_err(ConnectionDenied::new)?;
         check_limit(
             self.limits.max_pending_incoming,
-            self.pending_inbound_connections.len(),
+            self.pending_inbound_connections
+                .get(&source)
+                .map(HashSet::len)
+                .unwrap_or_default(),
             Kind::PendingIncoming,
         )?;
 
-        self.pending_inbound_connections.insert(connection_id);
+        self.pending_inbound_connections
+            .entry(source)
+            .or_default()
+            .insert(connection_id);
 
         Ok(())
     }
@@ -254,9 +299,26 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
-        _: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.pending_inbound_connections.remove(&connection_id);
+        match Source::try_from(remote_addr) {
+            Ok(source) => match self.pending_inbound_connections.remove(&source) {
+                Some(mut bucket) => {
+                    if !bucket.remove(&connection_id) {
+                        tracing::error!(%connection_id, ?source, "established connection was not pending");
+                    }
+                    if !bucket.is_empty() {
+                        self.pending_inbound_connections.insert(source, bucket);
+                    }
+                }
+                None => {
+                    tracing::error!(?source, %connection_id, "Failed to retrieve pending connection")
+                }
+            },
+            Err(cause) => {
+                tracing::error!(cause = %cause, "Failed to convert an addressable address")
+            }
+        }
 
         if self.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
@@ -378,8 +440,23 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.pending_outbound_connections.remove(&connection_id);
             }
-            FromSwarm::ListenFailure(ListenFailure { connection_id, .. }) => {
-                self.pending_inbound_connections.remove(&connection_id);
+            FromSwarm::ListenFailure(ListenFailure {
+                connection_id,
+                send_back_addr,
+                ..
+            }) => {
+                // Connection may have been denied by being non addressable.
+                let Ok(source) = Source::try_from(send_back_addr) else {
+                    return;
+                };
+                // Never inserted (our own rejection or denial) or already removed.
+                let Some(bucket) = self.pending_inbound_connections.get_mut(&source) else {
+                    return;
+                };
+                bucket.remove(&connection_id);
+                if bucket.is_empty() {
+                    self.pending_inbound_connections.remove(&source);
+                }
             }
             _ => {}
         }
@@ -686,6 +763,103 @@ mod tests {
             .await;
 
         assert_eq!(Some(dialer_peer_id), Some(peer_id));
+    }
+
+    #[test]
+    fn max_pending_incoming_is_per_source() {
+        let mut limits =
+            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(2)));
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let source_a: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
+        let source_b: Multiaddr = "/ip4/10.0.0.2/udp/1/quic-v1".parse().unwrap();
+
+        for id in 0..2 {
+            limits
+                .handle_pending_inbound_connection(
+                    ConnectionId::new_unchecked(id),
+                    &local,
+                    &source_a,
+                )
+                .expect("first two pending connections from a source are admitted");
+        }
+
+        let err = limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &source_a)
+            .expect_err("third pending connection from the same source is denied");
+        let exceeded = err
+            .downcast::<Exceeded>()
+            .expect("denied by this behaviour");
+        assert_eq!(exceeded.limit(), 2);
+        assert!(matches!(exceeded.kind, Kind::PendingIncoming));
+        assert!(
+            exceeded.to_string().contains("from the same address"),
+            "unexpected error message: {exceeded}"
+        );
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &source_b)
+            .expect("other sources are unaffected by a saturated source");
+    }
+
+    #[test]
+    fn pending_incoming_slot_released_on_established() {
+        let mut limits =
+            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(1)));
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let source: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
+        let first = ConnectionId::new_unchecked(1);
+
+        limits
+            .handle_pending_inbound_connection(first, &local, &source)
+            .expect("first pending connection is admitted");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &source)
+            .expect_err("source is at its pending limit");
+
+        limits
+            .handle_established_inbound_connection(first, PeerId::random(), &local, &source)
+            .expect("established connection is admitted");
+        assert!(
+            limits.pending_inbound_connections.is_empty(),
+            "empty source buckets must be pruned"
+        );
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &source)
+            .expect("slot is free again after the connection established");
+    }
+
+    #[test]
+    fn memory_addresses_are_bucketed_per_address() {
+        let mut limits =
+            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(2)));
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let memory_a: Multiaddr = "/memory/1".parse().unwrap();
+        let memory_b: Multiaddr = "/memory/2".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &memory_a)
+            .unwrap();
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &memory_a)
+            .unwrap();
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &memory_a)
+            .expect_err("per-address limit applies to memory addresses too");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(4), &local, &memory_b)
+            .expect("a different memory address has its own bucket");
+    }
+
+    #[test]
+    fn non_ip_non_memory_addresses_are_rejected() {
+        let mut limits = super::Behaviour::new(ConnectionLimits::default());
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let hostname: Multiaddr = "/dns4/example.com/tcp/443".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &hostname)
+            .expect_err("addresses that are neither IP nor /memory/ are rejected");
     }
 
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]

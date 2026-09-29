@@ -1,3 +1,7 @@
+## 0.7.1
+
+- Enforce `max_pending_incoming` per peer instead of globally.
+  See [PR 6657](https://github.com/libp2p/rust-libp2p/pull/6657).
 ## 0.7.0
 
 - Raise MSRV to 1.88.0.
