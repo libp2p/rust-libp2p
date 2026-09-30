@@ -1,3 +1,8 @@
+## 0.48.1
+
+- Release the outbound slot of `OneShotHandler` when an outbound upgrade fails.
+  See [PR 6651](https://github.com/libp2p/rust-libp2p/pull/6651).
+
 ## 0.48.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
