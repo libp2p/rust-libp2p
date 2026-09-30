@@ -1,7 +1,7 @@
 ## 0.51.0
 - Check the length of the current frame against `max_transmit_size` instead of the whole read
   buffer, which could already contain the next frames.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6645](https://github.com/libp2p/rust-libp2p/pull/6645).
 
 - Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
