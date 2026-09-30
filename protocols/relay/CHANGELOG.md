@@ -1,3 +1,9 @@
+## 0.22.1
+
+- Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
+  instead of keeping it pending until the connection closes.
+  See [PR 6647](https://github.com/libp2p/rust-libp2p/pull/6647).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.
