@@ -1,4 +1,4 @@
-## 0.7.1
+## 0.8.0
 
 - Enforce `max_pending_incoming` per peer instead of globally.
   See [PR 6657](https://github.com/libp2p/rust-libp2p/pull/6657).

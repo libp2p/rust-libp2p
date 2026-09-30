@@ -2910,7 +2910,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",

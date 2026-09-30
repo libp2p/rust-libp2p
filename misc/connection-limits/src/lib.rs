@@ -142,10 +142,12 @@ impl TryFrom<&Multiaddr> for Source {
         match remote_addr.iter().next() {
             Some(Protocol::Ip4(addr)) => Ok(Source::V4(addr)),
             Some(Protocol::Ip6(addr)) => {
-                // Only the first 64 bits matter: rotation within a /64 maps to one bucket.
+                // Only the first 58 bits matter: rotation within a /58 maps to one bucket.
                 let mut prefix = [0u8; 8];
                 prefix.copy_from_slice(&addr.octets()[..8]);
-                Ok(Source::V6(u64::from_be_bytes(prefix)))
+                // Mask off the remaining 6 bits of the /64 so that every address
+                // inside a /58 prefix hashes to the same bucket.
+                Ok(Source::V6(u64::from_be_bytes(prefix) & !0x3f))
             }
             // `/memory/` (test transports) is the only non-IP address we accept.
             Some(Protocol::Memory(port)) => Ok(Source::Memory(port)),
@@ -221,7 +223,7 @@ impl ConnectionLimits {
     /// Configures the maximum number of concurrently incoming connections being
     /// established per remote address.
     ///
-    /// IPv6 addresses are bucketed by their /64 prefix, `/memory/` addresses
+    /// IPv6 addresses are bucketed by their /58 prefix, `/memory/` addresses
     /// per address. Remote addresses that are neither IP-based nor memory
     /// addresses are rejected regardless of this limit.
     pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
@@ -799,6 +801,33 @@ mod tests {
         limits
             .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &source_b)
             .expect("other sources are unaffected by a saturated source");
+    }
+
+    #[test]
+    fn ipv6_addresses_are_bucketed_per_58_prefix() {
+        let mut limits =
+            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(1)));
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        // First 64 bits: 2001:0db8:0000:0000.
+        let source: Multiaddr = "/ip6/2001:db8::/udp/1/quic-v1".parse().unwrap();
+        // Differs only in bits 59..64 of the address, which a /58 mask discards.
+        let same_prefix: Multiaddr = "/ip6/2001:db8:0:3f::/udp/1/quic-v1".parse().unwrap();
+        // Differs in bit 58, which is part of the /58 prefix: a different bucket.
+        let other_prefix: Multiaddr = "/ip6/2001:db8:0:40::/udp/1/quic-v1".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &source)
+            .expect("first pending connection is admitted");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &same_prefix)
+            .expect_err("addresses within the same /58 share a bucket");
+        limits
+            .handle_pending_inbound_connection(
+                ConnectionId::new_unchecked(3),
+                &local,
+                &other_prefix,
+            )
+            .expect("addresses in a different /58 have their own bucket");
     }
 
     #[test]
