@@ -30,13 +30,17 @@ use sha2::{
     Digest, Sha256,
     digest::common::array::{Array, typenum::U32},
 };
-use uint::*;
 
+pub use self::u256::U256;
 use crate::record;
 
-construct_uint! {
-    /// 256-bit unsigned integer.
-    pub struct U256(4);
+// `construct_uint!` expands to code calling the deprecated `max_value()` functions.
+#[allow(deprecated)]
+mod u256 {
+    uint::construct_uint! {
+        /// 256-bit unsigned integer.
+        pub struct U256(4);
+    }
 }
 
 /// A `Key` in the DHT keyspace with preserved preimage.
