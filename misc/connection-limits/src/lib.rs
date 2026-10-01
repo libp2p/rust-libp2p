@@ -209,7 +209,7 @@ impl std::error::Error for Exceeded {}
 /// The configurable connection limits.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionLimits {
-    max_pending_incoming: Option<u32>,
+    max_pending_incoming_per_source: Option<u32>,
     max_pending_outgoing: Option<u32>,
     max_established_incoming: Option<u32>,
     max_established_outgoing: Option<u32>,
@@ -224,8 +224,8 @@ impl ConnectionLimits {
     /// IPv6 addresses are bucketed by their /58 prefix, `/memory/` addresses
     /// per address. Remote addresses that are neither IP-based nor memory
     /// addresses (e.g. relayed connections) share a single bucket.
-    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_incoming = limit;
+    pub fn with_max_pending_incoming_per_source(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_incoming_per_source = limit;
         self
     }
 
@@ -278,7 +278,7 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<(), ConnectionDenied> {
         let source = Source::from(remote_addr);
         check_limit(
-            self.limits.max_pending_incoming,
+            self.limits.max_pending_incoming_per_source,
             self.pending_inbound_connections
                 .get(&source)
                 .map(HashSet::len)
@@ -760,8 +760,9 @@ mod tests {
 
     #[test]
     fn max_pending_incoming_is_per_source() {
-        let mut limits =
-            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(2)));
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(2)),
+        );
         let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
         let source_a: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
         let source_b: Multiaddr = "/ip4/10.0.0.2/udp/1/quic-v1".parse().unwrap();
@@ -796,8 +797,9 @@ mod tests {
 
     #[test]
     fn ipv6_addresses_are_bucketed_per_58_prefix() {
-        let mut limits =
-            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(1)));
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
         let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
         // First 64 bits: 2001:0db8:0000:0000.
         let source: Multiaddr = "/ip6/2001:db8::/udp/1/quic-v1".parse().unwrap();
@@ -823,8 +825,9 @@ mod tests {
 
     #[test]
     fn pending_incoming_slot_released_on_established() {
-        let mut limits =
-            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(1)));
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
         let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
         let source: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
         let first = ConnectionId::new_unchecked(1);
@@ -851,8 +854,9 @@ mod tests {
 
     #[test]
     fn memory_addresses_are_bucketed_per_address() {
-        let mut limits =
-            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(2)));
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(2)),
+        );
         let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
         let memory_a: Multiaddr = "/memory/1".parse().unwrap();
         let memory_b: Multiaddr = "/memory/2".parse().unwrap();
@@ -885,8 +889,9 @@ mod tests {
 
     #[test]
     fn non_ip_non_memory_addresses_share_a_bucket() {
-        let mut limits =
-            super::Behaviour::new(ConnectionLimits::default().with_max_pending_incoming(Some(1)));
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
         let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
         let relayed_a: Multiaddr = Protocol::P2p(PeerId::random()).into();
         let relayed_b: Multiaddr = Protocol::P2p(PeerId::random()).into();
