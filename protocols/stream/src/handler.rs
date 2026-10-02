@@ -99,12 +99,14 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol: (stream, protocol),
                 info: (),
+                ..
             }) => {
                 Shared::lock(&self.shared).on_inbound_stream(self.remote, stream, protocol);
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: (stream, actual_protocol),
                 info: (),
+                ..
             }) => {
                 let Some((expected_protocol, sender)) = self.pending_upgrade.take() else {
                     debug_assert!(
