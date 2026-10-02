@@ -1,4 +1,8 @@
 ## 0.51.0
+- Log at debug level when an additional connection to an already-connected peer does not receive
+  our subscriptions.
+  See [PR 6635](https://github.com/libp2p/rust-libp2p/pull/6635).
+
 - Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
   See [PR 6621](https://github.com/libp2p/rust-libp2p/pull/6621).
