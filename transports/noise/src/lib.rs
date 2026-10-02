@@ -74,11 +74,19 @@ use multiaddr::Protocol;
 use multihash::Multihash;
 use snow::params::NoiseParams;
 
+#[cfg(feature = "mlkem-hfs")]
+use crate::protocol::PARAMS_XX_HFS;
 use crate::{
     handshake::State,
     io::handshake,
     protocol::{AuthenticKeypair, Keypair, PARAMS_XX, noise_params_into_builder},
 };
+
+const NOISE_PROTOCOL: &str = "/noise";
+
+/// `Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256`. Provisional, pending a spec.
+#[cfg(feature = "mlkem-hfs")]
+const NOISE_MLKEM_HFS_PROTOCOL: &str = "/noise-mlkem768-hfs/0.1.0";
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
@@ -94,6 +102,9 @@ pub struct Config {
     ///
     /// For further information, see <https://noiseprotocol.org/noise.html#prologue>.
     prologue: Vec<u8>,
+
+    #[cfg(feature = "mlkem-hfs")]
+    classical_fallback: bool,
 }
 
 impl Config {
@@ -106,12 +117,22 @@ impl Config {
             params: PARAMS_XX.clone(),
             webtransport_certhashes: None,
             prologue: vec![],
+            #[cfg(feature = "mlkem-hfs")]
+            classical_fallback: true,
         })
     }
 
     /// Set the noise prologue.
     pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
         self.prologue = prologue;
+        self
+    }
+
+    /// Offer and accept classical `/noise` beside the hybrid suite, on by default.
+    /// Disabling it fails the connection rather than downgrading silently.
+    #[cfg(feature = "mlkem-hfs")]
+    pub fn with_classical_fallback(mut self, enabled: bool) -> Self {
+        self.classical_fallback = enabled;
         self
     }
 
@@ -124,6 +145,15 @@ impl Config {
     pub fn with_webtransport_certhashes(mut self, certhashes: HashSet<Multihash<64>>) -> Self {
         self.webtransport_certhashes = Some(certhashes).filter(|h| !h.is_empty());
         self
+    }
+
+    #[cfg_attr(not(feature = "mlkem-hfs"), allow(unused_variables))]
+    fn params_for(&self, info: &str) -> NoiseParams {
+        #[cfg(feature = "mlkem-hfs")]
+        if info == NOISE_MLKEM_HFS_PROTOCOL {
+            return PARAMS_XX_HFS.clone();
+        }
+        self.params.clone()
     }
 
     fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
@@ -169,10 +199,23 @@ impl Config {
 
 impl UpgradeInfo for Config {
     type Info = &'static str;
+    #[cfg(feature = "mlkem-hfs")]
+    type InfoIter = std::iter::Take<std::array::IntoIter<Self::Info, 2>>;
+    #[cfg(not(feature = "mlkem-hfs"))]
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once("/noise")
+        // Preference order: the dialer offers hybrid first.
+        #[cfg(feature = "mlkem-hfs")]
+        {
+            [NOISE_MLKEM_HFS_PROTOCOL, NOISE_PROTOCOL]
+                .into_iter()
+                .take(if self.classical_fallback { 2 } else { 1 })
+        }
+        #[cfg(not(feature = "mlkem-hfs"))]
+        {
+            std::iter::once(NOISE_PROTOCOL)
+        }
     }
 }
 
@@ -184,8 +227,9 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(mut self, socket: T, info: Self::Info) -> Self::Future {
         async move {
+            self.params = self.params_for(info);
             let mut state = self.into_responder(socket)?;
 
             handshake::recv_empty(&mut state).await?;
@@ -208,8 +252,9 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, socket: T, info: Self::Info) -> Self::Future {
         async move {
+            self.params = self.params_for(info);
             let mut state = self.into_initiator(socket)?;
 
             handshake::send_empty(&mut state).await?;
