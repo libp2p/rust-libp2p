@@ -3438,6 +3438,7 @@ where
 
                     #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
+                    large_message_handling: self.config.large_message_handling().then_some(true),
                 }),
             );
         }
@@ -3477,6 +3478,7 @@ where
                     partial_messages: Some(true),
                     #[cfg(not(feature = "partial-messages"))]
                     partial_messages: None,
+                    large_message_handling: self.config.large_message_handling().then_some(true),
                 }),
             );
         }
@@ -3638,6 +3640,24 @@ where
                                 self.handle_extensions(&propagation_source, extensions);
                             }
                         }
+                        ControlAction::Preamble(preamble) => {
+                            // Large message handling is not yet implemented.
+                            tracing::trace!(
+                                peer=%propagation_source,
+                                message=%preamble.message_id,
+                                message_size=%preamble.message_size,
+                                topic=%preamble.topic_hash,
+                                "Ignoring PREAMBLE control message"
+                            );
+                        }
+                        ControlAction::ImReceiving(imreceiving) => {
+                            // Large message handling is not yet implemented.
+                            tracing::trace!(
+                                peer=%propagation_source,
+                                message=%imreceiving.message_id,
+                                "Ignoring IMRECEIVING control message"
+                            );
+                        }
                     }
                 }
                 if !ihave_msgs.is_empty() {
@@ -3649,6 +3669,21 @@ where
                 if !prune_msgs.is_empty() {
                     self.handle_prune(&propagation_source, prune_msgs);
                 }
+
+                // Large message handling is not yet implemented.
+                rpc.large_message_fragments
+                    .into_iter()
+                    .for_each(|fragment| {
+                        tracing::trace!(
+                            peer=%propagation_source,
+                            message=%fragment.message_id,
+                            fragment_index=%fragment.fragment_index,
+                            total_fragments=%fragment.total_fragments,
+                            fragment_len=%fragment.fragment_data.len(),
+                            topic=%fragment.topic_hash,
+                            "Ignoring large message fragment"
+                        );
+                    });
 
                 #[cfg(feature = "partial-messages")]
                 if let Some(partial_message) = rpc.partial_message {
