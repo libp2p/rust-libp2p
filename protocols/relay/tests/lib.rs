@@ -930,3 +930,67 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
         }
     }
 }
+
+#[tokio::test]
+async fn closing_listener_before_reservation_is_accepted_does_not_panic() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut client = build_client();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener_id = client.listen_on(client_addr).unwrap();
+
+    // Drive both nodes until the client is connected to the relay. The reservation request is
+    // issued on that connection, but the relay swarm is not polled afterwards and thus can not
+    // accept it yet.
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = e
+                    && peer_id == relay_peer_id
+                {
+                    break;
+                }
+            }
+            _ = relay.select_next_some() => {}
+        }
+    }
+
+    // Close the listener while the reservation request is still in flight.
+    assert!(client.remove_listener(listener_id));
+    loop {
+        if let SwarmEvent::ListenerClosed {
+            listener_id: id, ..
+        } = client.select_next_some().await
+        {
+            assert_eq!(id, listener_id);
+            break;
+        }
+    }
+
+    // Let the relay accept the reservation. The client must not panic when the (now stale)
+    // acceptance arrives, nor confirm an external address for the closed listener.
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ExternalAddrConfirmed { address } = e {
+                    panic!("unexpected external address confirmation for closed listener: {address}");
+                }
+            }
+            _ = relay.select_next_some() => {}
+            _ = &mut deadline => break,
+        }
+    }
+}
