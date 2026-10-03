@@ -105,6 +105,7 @@ impl Shared {
 
     pub(crate) fn on_connection_closed(&mut self, conn: ConnectionId) {
         self.connections.remove(&conn);
+        self.senders.remove(&conn);
     }
 
     pub(crate) fn on_dial_failure(&mut self, peer: PeerId, reason: String) {
@@ -169,5 +170,45 @@ impl Shared {
         self.senders.insert(connection, sender);
 
         receiver
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shared() -> Shared {
+        let (dial_sender, _dial_receiver) = mpsc::channel(0);
+        Shared::new(dial_sender)
+    }
+
+    #[test]
+    fn connection_close_prunes_senders() {
+        let mut shared = shared();
+        let peer = PeerId::random();
+        let conn = ConnectionId::new_unchecked(1);
+
+        shared.on_connection_established(conn, peer);
+        let _receiver = shared.receiver(peer, conn);
+        assert_eq!(shared.senders.len(), 1);
+
+        shared.on_connection_closed(conn);
+        assert!(shared.senders.is_empty());
+        assert!(shared.connections.is_empty());
+    }
+
+    #[test]
+    fn reconnect_churn_does_not_accumulate_senders() {
+        let mut shared = shared();
+        let peer = PeerId::random();
+
+        for i in 0..100 {
+            let conn = ConnectionId::new_unchecked(i);
+            shared.on_connection_established(conn, peer);
+            let _receiver = shared.receiver(peer, conn);
+            shared.on_connection_closed(conn);
+        }
+
+        assert!(shared.senders.is_empty());
     }
 }
