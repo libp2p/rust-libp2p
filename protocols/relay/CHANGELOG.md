@@ -1,3 +1,9 @@
+## 0.22.1
+
+- Drive all pending accept/deny futures of reservation requests on a connection instead of dropping
+  the previous one when a new request arrives.
+  See [PR 6655](https://github.com/libp2p/rust-libp2p/pull/6655).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.
