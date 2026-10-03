@@ -78,3 +78,37 @@ async fn dial_errors_are_propagated() {
     assert_eq!(e.kind(), io::ErrorKind::NotConnected);
     assert_eq!("Dial error: no addresses for peer.", e.to_string());
 }
+
+#[tokio::test]
+async fn buffered_accept_keeps_streams_that_arrive_before_they_are_taken() {
+    const STREAMS: usize = 16;
+
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|_| stream::Behaviour::new());
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|_| stream::Behaviour::new());
+
+    let mut control = swarm1.behaviour().new_control();
+    let mut incoming = swarm2
+        .behaviour()
+        .new_control()
+        .accept_with_buffer(PROTOCOL, STREAMS)
+        .unwrap();
+
+    swarm2.listen().with_memory_addr_external().await;
+    swarm1.connect(&mut swarm2).await;
+    let swarm2_peer_id = *swarm2.local_peer_id();
+    tokio::spawn(swarm1.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
+
+    // Nobody takes streams from `incoming` while they are opened.
+    let mut opened = Vec::new();
+    for _ in 0..STREAMS {
+        opened.push(control.open_stream(swarm2_peer_id, PROTOCOL).await.unwrap());
+    }
+
+    for _ in 0..STREAMS {
+        tokio::time::timeout(std::time::Duration::from_secs(5), incoming.next())
+            .await
+            .expect("every negotiated stream is delivered")
+            .unwrap();
+    }
+}
