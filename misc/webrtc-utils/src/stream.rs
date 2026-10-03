@@ -21,6 +21,7 @@
 
 use std::{
     io,
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -41,18 +42,67 @@ mod drop_listener;
 mod framed_dc;
 mod state;
 
-/// Maximum length of a message.
-///
-/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
-/// size to 16 KB to avoid monopolization."
-/// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
-pub const MAX_MSG_LEN: usize = 16 * 1024;
 /// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
 /// Overhead of the protobuf encoding, in bytes.
 const PROTO_OVERHEAD: usize = 5;
-/// Maximum length of data, in bytes.
-const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
+
+/// Default maximum length of a WebRTC data-channel message.
+///
+/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
+/// size to 16 KB to avoid monopolization."
+/// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
+pub const DEFAULT_MAX_MESSAGE_SIZE: NonZeroUsize =
+    NonZeroUsize::new(16 * 1024).expect("constant is non-zero");
+/// Smallest encoded message that can carry one byte of application data.
+pub const MIN_MESSAGE_SIZE: NonZeroUsize =
+    NonZeroUsize::new(VARINT_LEN + PROTO_OVERHEAD + 1).expect("constant is non-zero");
+/// Backwards-compatible default message-size value.
+pub const MAX_MSG_LEN: usize = DEFAULT_MAX_MESSAGE_SIZE.get();
+
+/// Per-connection WebRTC message-size policy.
+///
+/// The same value must be used by the framing codec, its write high-water mark and the
+/// transport's data-channel backpressure accounting. Keeping it in one value prevents those
+/// layers from silently disagreeing about a valid frame size.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StreamConfig {
+    max_message_size: NonZeroUsize,
+}
+
+impl StreamConfig {
+    /// Creates a stream configuration with the provided maximum encoded message size.
+    pub const fn new(max_message_size: NonZeroUsize) -> Self {
+        assert!(max_message_size.get() >= MIN_MESSAGE_SIZE.get());
+        Self { max_message_size }
+    }
+
+    /// Returns the smaller of two independently advertised limits.
+    pub const fn limited_by(self, remote_max_message_size: NonZeroUsize) -> Self {
+        Self::new(
+            if self.max_message_size.get() <= remote_max_message_size.get() {
+                self.max_message_size
+            } else {
+                remote_max_message_size
+            },
+        )
+    }
+
+    /// Returns the maximum encoded data-channel message size.
+    pub const fn max_message_size(self) -> usize {
+        self.max_message_size.get()
+    }
+
+    pub(crate) const fn max_data_size(self) -> usize {
+        self.max_message_size.get() - VARINT_LEN - PROTO_OVERHEAD
+    }
+}
+
+impl Default for StreamConfig {
+    fn default() -> Self {
+        Self::new(DEFAULT_MAX_MESSAGE_SIZE)
+    }
+}
 
 pub use drop_listener::DropListener;
 /// A stream backed by a WebRTC data channel.
@@ -63,6 +113,7 @@ pub struct Stream<T> {
     io: FramedDc<T>,
     state: State,
     read_buffer: Bytes,
+    config: StreamConfig,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
@@ -74,15 +125,21 @@ where
     /// Returns a new [`Stream`] and a [`DropListener`],
     /// which will notify the receiver when/if the stream is dropped.
     pub fn new(data_channel: T) -> (Self, DropListener<T>) {
+        Self::with_config(data_channel, StreamConfig::default())
+    }
+
+    /// Returns a new stream and drop listener using the supplied message-size policy.
+    pub fn with_config(data_channel: T, config: StreamConfig) -> (Self, DropListener<T>) {
         let (sender, receiver) = oneshot::channel();
 
         let stream = Self {
-            io: framed_dc::new(data_channel.clone()),
+            io: framed_dc::new(data_channel.clone(), config),
             state: State::Open,
             read_buffer: Bytes::default(),
+            config,
             drop_notifier: Some(sender),
         };
-        let listener = DropListener::new(framed_dc::new(data_channel), receiver);
+        let listener = DropListener::new(framed_dc::new(data_channel, config), receiver);
 
         (stream, listener)
     }
@@ -205,7 +262,7 @@ where
 
         ready!(self.io.poll_ready_unpin(cx))?;
 
-        let n = usize::min(buf.len(), MAX_DATA_LEN);
+        let n = usize::min(buf.len(), self.config.max_data_size());
 
         Pin::new(&mut self.io).start_send(Message {
             flag: None,
@@ -284,21 +341,30 @@ mod tests {
 
     #[test]
     fn max_data_len() {
+        let config = StreamConfig::default();
         // Largest possible message.
-        let message = [0; MAX_DATA_LEN];
+        let message = vec![0; config.max_data_size()];
 
         let protobuf = Message {
             flag: Some(Flag::Fin as i32),
             message: Some(message.to_vec()),
         };
 
-        let mut codec = codec();
+        let mut codec = codec(config);
 
         let mut dst = BytesMut::new();
         codec.encode(protobuf, &mut dst).unwrap();
 
         // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
         // maximum limit specified in the libp2p WebRTC specification.
-        assert_eq!(dst.len(), MAX_MSG_LEN);
+        assert_eq!(dst.len(), config.max_message_size());
+    }
+
+    #[test]
+    fn effective_limit_is_the_smaller_advertised_limit() {
+        let local = StreamConfig::new(NonZeroUsize::new(16 * 1024).unwrap());
+        let remote = NonZeroUsize::new(8 * 1024).unwrap();
+
+        assert_eq!(local.limited_by(remote).max_message_size(), remote.get());
     }
 }

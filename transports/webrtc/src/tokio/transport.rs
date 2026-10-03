@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_webrtc_utils::StreamConfig;
 use std::{
     io,
     net::{IpAddr, SocketAddr},
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
@@ -69,6 +71,12 @@ impl Transport {
             config: Config::new(id_keys, certificate),
             listeners: SelectAll::new(),
         }
+    }
+
+    /// Limits encoded WebRTC data-channel messages for connections created by this transport.
+    pub fn with_max_message_size(mut self, max_message_size: NonZeroUsize) -> Self {
+        self.config.stream_config = StreamConfig::new(max_message_size);
+        self
     }
 }
 
@@ -149,6 +157,7 @@ impl libp2p_core::Transport for Transport {
             let (peer_id, connection) = upgrade::outbound(
                 sock_addr,
                 config.inner,
+                config.stream_config,
                 udp_mux,
                 client_fingerprint.into_inner(),
                 server_fingerprint,
@@ -330,6 +339,7 @@ impl Stream for ListenStream {
                     let upgrade = upgrade::inbound(
                         new_addr.addr,
                         self.config.inner.clone(),
+                        self.config.stream_config,
                         self.udp_mux.udp_mux_handle(),
                         self.config.fingerprint.into_inner(),
                         new_addr.ufrag,
@@ -364,6 +374,7 @@ struct Config {
     inner: RTCConfiguration,
     fingerprint: Fingerprint,
     id_keys: identity::Keypair,
+    stream_config: StreamConfig,
 }
 
 impl Config {
@@ -378,6 +389,7 @@ impl Config {
                 ..RTCConfiguration::default()
             },
             fingerprint,
+            stream_config: StreamConfig::default(),
         }
     }
 }
