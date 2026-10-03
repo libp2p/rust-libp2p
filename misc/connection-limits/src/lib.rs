@@ -22,10 +22,11 @@ use std::{
     collections::{HashMap, HashSet},
     convert::Infallible,
     fmt,
+    net::Ipv4Addr,
     task::{Context, Poll},
 };
 
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
@@ -74,7 +75,8 @@ pub struct Behaviour {
     /// Peer IDs that bypass limit check, regardless of inbound or outbound.
     bypass_peer_id: HashSet<PeerId>,
 
-    pending_inbound_connections: HashSet<ConnectionId>,
+    /// Pending inbound connections, bucketed by remote source address.
+    pending_inbound_connections: HashMap<Source, HashSet<ConnectionId>>,
     pending_outbound_connections: HashSet<ConnectionId>,
     established_inbound_connections: HashSet<ConnectionId>,
     established_outbound_connections: HashSet<ConnectionId>,
@@ -125,6 +127,35 @@ fn check_limit(limit: Option<u32>, current: usize, kind: Kind) -> Result<(), Con
     Ok(())
 }
 
+/// Source key for pending inbound connections
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Source {
+    V4(Ipv4Addr),
+    V6(u64),
+    Memory(u64),
+    /// Shared bucket for all addresses that are neither IP-based nor `/memory/`
+    /// addresses, e.g. relayed `/p2p/..` addresses.
+    Other,
+}
+
+impl From<&Multiaddr> for Source {
+    fn from(remote_addr: &Multiaddr) -> Self {
+        match remote_addr.iter().next() {
+            Some(Protocol::Ip4(addr)) => Source::V4(addr),
+            Some(Protocol::Ip6(addr)) => {
+                // Only the first 58 bits matter: rotation within a /58 maps to one bucket.
+                let mut prefix = [0u8; 8];
+                prefix.copy_from_slice(&addr.octets()[..8]);
+                // Mask off the remaining 6 bits of the /64 so that every address
+                // inside a /58 prefix hashes to the same bucket.
+                Source::V6(u64::from_be_bytes(prefix) & !0x3f)
+            }
+            Some(Protocol::Memory(port)) => Source::Memory(port),
+            _ => Source::Other,
+        }
+    }
+}
+
 /// A connection limit has been exceeded.
 #[derive(Debug, Clone, Copy)]
 pub struct Exceeded {
@@ -161,7 +192,9 @@ enum Kind {
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Kind::PendingIncoming => write!(f, "pending incoming connections"),
+            Kind::PendingIncoming => {
+                write!(f, "pending incoming connections from the same address")
+            }
             Kind::PendingOutgoing => write!(f, "pending outgoing connections"),
             Kind::EstablishedIncoming => write!(f, "established incoming connections"),
             Kind::EstablishedOutgoing => write!(f, "established outgoing connections"),
@@ -176,7 +209,7 @@ impl std::error::Error for Exceeded {}
 /// The configurable connection limits.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionLimits {
-    max_pending_incoming: Option<u32>,
+    max_pending_incoming_per_source: Option<u32>,
     max_pending_outgoing: Option<u32>,
     max_established_incoming: Option<u32>,
     max_established_outgoing: Option<u32>,
@@ -185,9 +218,14 @@ pub struct ConnectionLimits {
 }
 
 impl ConnectionLimits {
-    /// Configures the maximum number of concurrently incoming connections being established.
-    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_incoming = limit;
+    /// Configures the maximum number of concurrently incoming connections being
+    /// established per remote address.
+    ///
+    /// IPv6 addresses are bucketed by their /58 prefix, `/memory/` addresses
+    /// per address. Remote addresses that are neither IP-based nor memory
+    /// addresses (e.g. relayed connections) share a single bucket.
+    pub fn with_max_pending_incoming_per_source(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_incoming_per_source = limit;
         self
     }
 
@@ -236,15 +274,22 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         _: &Multiaddr,
-        _: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
+        let source = Source::from(remote_addr);
         check_limit(
-            self.limits.max_pending_incoming,
-            self.pending_inbound_connections.len(),
+            self.limits.max_pending_incoming_per_source,
+            self.pending_inbound_connections
+                .get(&source)
+                .map(HashSet::len)
+                .unwrap_or_default(),
             Kind::PendingIncoming,
         )?;
 
-        self.pending_inbound_connections.insert(connection_id);
+        self.pending_inbound_connections
+            .entry(source)
+            .or_default()
+            .insert(connection_id);
 
         Ok(())
     }
@@ -254,9 +299,22 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
-        _: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.pending_inbound_connections.remove(&connection_id);
+        let source = Source::from(remote_addr);
+        match self.pending_inbound_connections.remove(&source) {
+            Some(mut bucket) => {
+                if !bucket.remove(&connection_id) {
+                    tracing::error!(%connection_id, ?source, "established connection was not pending");
+                }
+                if !bucket.is_empty() {
+                    self.pending_inbound_connections.insert(source, bucket);
+                }
+            }
+            None => {
+                tracing::error!(?source, %connection_id, "Failed to retrieve pending connection")
+            }
+        }
 
         if self.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
@@ -378,8 +436,20 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.pending_outbound_connections.remove(&connection_id);
             }
-            FromSwarm::ListenFailure(ListenFailure { connection_id, .. }) => {
-                self.pending_inbound_connections.remove(&connection_id);
+            FromSwarm::ListenFailure(ListenFailure {
+                connection_id,
+                send_back_addr,
+                ..
+            }) => {
+                let source = Source::from(send_back_addr);
+                // Never inserted (our own rejection or denial) or already removed.
+                let Some(bucket) = self.pending_inbound_connections.get_mut(&source) else {
+                    return;
+                };
+                bucket.remove(&connection_id);
+                if bucket.is_empty() {
+                    self.pending_inbound_connections.remove(&source);
+                }
             }
             _ => {}
         }
@@ -686,6 +756,156 @@ mod tests {
             .await;
 
         assert_eq!(Some(dialer_peer_id), Some(peer_id));
+    }
+
+    #[test]
+    fn max_pending_incoming_is_per_source() {
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(2)),
+        );
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let source_a: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
+        let source_b: Multiaddr = "/ip4/10.0.0.2/udp/1/quic-v1".parse().unwrap();
+
+        for id in 0..2 {
+            limits
+                .handle_pending_inbound_connection(
+                    ConnectionId::new_unchecked(id),
+                    &local,
+                    &source_a,
+                )
+                .expect("first two pending connections from a source are admitted");
+        }
+
+        let err = limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &source_a)
+            .expect_err("third pending connection from the same source is denied");
+        let exceeded = err
+            .downcast::<Exceeded>()
+            .expect("denied by this behaviour");
+        assert_eq!(exceeded.limit(), 2);
+        assert!(matches!(exceeded.kind, Kind::PendingIncoming));
+        assert!(
+            exceeded.to_string().contains("from the same address"),
+            "unexpected error message: {exceeded}"
+        );
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &source_b)
+            .expect("other sources are unaffected by a saturated source");
+    }
+
+    #[test]
+    fn ipv6_addresses_are_bucketed_per_58_prefix() {
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        // First 64 bits: 2001:0db8:0000:0000.
+        let source: Multiaddr = "/ip6/2001:db8::/udp/1/quic-v1".parse().unwrap();
+        // Differs only in bits 59..64 of the address, which a /58 mask discards.
+        let same_prefix: Multiaddr = "/ip6/2001:db8:0:3f::/udp/1/quic-v1".parse().unwrap();
+        // Differs in bit 58, which is part of the /58 prefix: a different bucket.
+        let other_prefix: Multiaddr = "/ip6/2001:db8:0:40::/udp/1/quic-v1".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &source)
+            .expect("first pending connection is admitted");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &same_prefix)
+            .expect_err("addresses within the same /58 share a bucket");
+        limits
+            .handle_pending_inbound_connection(
+                ConnectionId::new_unchecked(3),
+                &local,
+                &other_prefix,
+            )
+            .expect("addresses in a different /58 have their own bucket");
+    }
+
+    #[test]
+    fn pending_incoming_slot_released_on_established() {
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let source: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
+        let first = ConnectionId::new_unchecked(1);
+
+        limits
+            .handle_pending_inbound_connection(first, &local, &source)
+            .expect("first pending connection is admitted");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &source)
+            .expect_err("source is at its pending limit");
+
+        limits
+            .handle_established_inbound_connection(first, PeerId::random(), &local, &source)
+            .expect("established connection is admitted");
+        assert!(
+            limits.pending_inbound_connections.is_empty(),
+            "empty source buckets must be pruned"
+        );
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &source)
+            .expect("slot is free again after the connection established");
+    }
+
+    #[test]
+    fn memory_addresses_are_bucketed_per_address() {
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(2)),
+        );
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let memory_a: Multiaddr = "/memory/1".parse().unwrap();
+        let memory_b: Multiaddr = "/memory/2".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &memory_a)
+            .unwrap();
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &memory_a)
+            .unwrap();
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &memory_a)
+            .expect_err("per-address limit applies to memory addresses too");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(4), &local, &memory_b)
+            .expect("a different memory address has its own bucket");
+    }
+
+    #[test]
+    fn non_ip_non_memory_addresses_are_admitted_without_limit() {
+        let mut limits = super::Behaviour::new(ConnectionLimits::default());
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        // Remote address of an inbound relayed connection.
+        let relayed: Multiaddr = Protocol::P2p(PeerId::random()).into();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &relayed)
+            .expect("relayed connections are admitted when no limit is configured");
+    }
+
+    #[test]
+    fn non_ip_non_memory_addresses_share_a_bucket() {
+        let mut limits = super::Behaviour::new(
+            ConnectionLimits::default().with_max_pending_incoming_per_source(Some(1)),
+        );
+        let local: Multiaddr = "/ip4/127.0.0.1/tcp/4000".parse().unwrap();
+        let relayed_a: Multiaddr = Protocol::P2p(PeerId::random()).into();
+        let relayed_b: Multiaddr = Protocol::P2p(PeerId::random()).into();
+        let ip: Multiaddr = "/ip4/10.0.0.1/udp/1/quic-v1".parse().unwrap();
+
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(1), &local, &relayed_a)
+            .expect("first pending connection is admitted");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(2), &local, &relayed_b)
+            .expect_err("non-IP addresses share a single bucket");
+        limits
+            .handle_pending_inbound_connection(ConnectionId::new_unchecked(3), &local, &ip)
+            .expect("IP sources are unaffected by the shared non-IP bucket");
     }
 
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
