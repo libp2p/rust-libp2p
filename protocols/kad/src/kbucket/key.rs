@@ -30,11 +30,10 @@ use sha2::{
     Digest, Sha256,
     digest::common::array::{Array, typenum::U32},
 };
-use uint::*;
 
 use crate::record;
 
-construct_uint! {
+uint::construct_uint! {
     /// 256-bit unsigned integer.
     pub struct U256(4);
 }
