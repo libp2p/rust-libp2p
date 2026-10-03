@@ -1,7 +1,6 @@
 ## 0.51.0
-- Validate the default mesh parameters, the default `max_transmit_size` and all topic mesh
-  configurations in `ConfigBuilder::build`, not only topics with a custom max transmit size.
-  See [PR 6648](https://github.com/libp2p/rust-libp2p/pull/6648).
+- Look up the ids of a received IDONTWANT in a `HashSet` when removing them from the peer's send
+  queue, so the cost is O(queue + ids) instead of O(queue * ids).
 
 - Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
