@@ -1,7 +1,6 @@
 ## 0.51.0
-- Check the length of the current frame against `max_transmit_size` instead of the whole read
-  buffer, which could already contain the next frames.
-  See [PR 6645](https://github.com/libp2p/rust-libp2p/pull/6645).
+- Look up the ids of a received IDONTWANT in a `HashSet` when removing them from the peer's send
+  queue, so the cost is O(queue + ids) instead of O(queue * ids).
 
 - Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
