@@ -411,13 +411,18 @@ where
                 }
             }
 
-            match muxing.poll_outbound_unpin(cx)? {
-                Poll::Pending => {}
-                Poll::Ready(substream) => {
-                    if let Some((user_data, timeout, upgrade)) = requested_substreams
-                        .iter_mut()
-                        .find_map(SubstreamRequested::extract)
-                    {
+            // Do not ask the muxer to open a stream without a waiting request.
+            // Completed entries can remain until FuturesUnordered polls them again.
+            if let Some(request) = requested_substreams
+                .iter_mut()
+                .find(|request| matches!(request, SubstreamRequested::Waiting { .. }))
+            {
+                match muxing.poll_outbound_unpin(cx)? {
+                    Poll::Pending => {}
+                    Poll::Ready(substream) => {
+                        let (user_data, timeout, upgrade) = request
+                            .extract()
+                            .expect("the selected request is still waiting");
                         negotiating_out.push(StreamUpgrade::new_outbound(
                             substream,
                             user_data,
@@ -784,7 +789,10 @@ impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
 mod tests {
     use std::{
         convert::Infallible,
-        sync::{Arc, Weak},
+        sync::{
+            Arc, Weak,
+            atomic::{AtomicUsize, Ordering},
+        },
         time::Instant,
     };
 
@@ -859,8 +867,12 @@ mod tests {
     /// Regression test for "cannot extract twice".
     #[test]
     fn connection_poll_skips_done_substream_requested_entries() {
+        let opened = Arc::new(AtomicUsize::new(0));
         let mut connection = Connection::new(
-            StreamMuxerBox::new(ReadyOutboundStreamMuxer { remaining: 2 }),
+            StreamMuxerBox::new(ReadyOutboundStreamMuxer {
+                remaining: 3,
+                opened: opened.clone(),
+            }),
             MockConnectionHandler::new(Duration::from_secs(10)),
             None,
             0,
@@ -871,6 +883,32 @@ mod tests {
 
         let _ = connection.poll_noop_waker();
         let _ = connection.poll_noop_waker();
+
+        assert_eq!(opened.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn connection_poll_does_not_open_an_unrequested_outbound_stream() {
+        let opened = Arc::new(AtomicUsize::new(0));
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(ReadyOutboundStreamMuxer {
+                remaining: 1,
+                opened: opened.clone(),
+            }),
+            MockConnectionHandler::new(Duration::from_secs(10)),
+            None,
+            0,
+            Duration::ZERO,
+        );
+
+        assert!(connection.poll_noop_waker().is_pending());
+        assert_eq!(opened.load(Ordering::SeqCst), 0);
+
+        connection.handler.open_new_outbound();
+        let _ = connection.poll_noop_waker();
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(opened.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1119,6 +1157,7 @@ mod tests {
     /// A [`StreamMuxer`] which immediately returns outbound streams.
     struct ReadyOutboundStreamMuxer {
         remaining: usize,
+        opened: Arc<AtomicUsize>,
     }
 
     impl StreamMuxer for ReadyOutboundStreamMuxer {
@@ -1141,6 +1180,7 @@ mod tests {
             }
 
             self.remaining -= 1;
+            self.opened.fetch_add(1, Ordering::SeqCst);
 
             Poll::Ready(Ok(PendingSubstream { _weak: Weak::new() }))
         }
