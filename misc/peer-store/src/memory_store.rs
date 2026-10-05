@@ -220,6 +220,17 @@ impl<T> Store for MemoryStore<T> {
                 };
 
                 match info.error {
+                    DialError::LocalPeerId { .. } => {
+                        // The stored peer is the local peer. Remove the full record.
+                        if let Some(record) = self.records.remove(&peer) {
+                            for address in record.addresses() {
+                                self.push_event_and_wake(Event::PeerAddressRemoved {
+                                    peer_id: peer,
+                                    address: address.clone(),
+                                });
+                            }
+                        }
+                    }
                     DialError::WrongPeerId { obtained, address }
                         if self.remove_address_inner(&peer, address, false) =>
                     {
@@ -395,7 +406,9 @@ mod test {
 
     use libp2p::identify;
     use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
-    use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+    use libp2p_swarm::{
+        ConnectionId, DialError, DialFailure, FromSwarm, NetworkBehaviour, Swarm, SwarmEvent,
+    };
     use libp2p_swarm_test::SwarmExt;
 
     use super::{Event, MemoryStore};
@@ -469,6 +482,39 @@ mod test {
                 .expect("addr to exist")
                 == second_record
         );
+    }
+
+    #[test]
+    fn removes_peer_on_local_peer_id_dial_failure() {
+        let mut store: MemoryStore<&str> = MemoryStore::new(Default::default());
+        let peer = PeerId::random();
+        let addr1 = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
+        let addr2 = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
+
+        store.add_address(&peer, &addr1);
+        store.add_address(&peer, &addr2);
+        store.insert_custom_data(&peer, "custom data");
+        store.pending_events.clear();
+
+        let error = DialError::LocalPeerId {
+            address: addr1.clone(),
+        };
+        store.on_swarm_event(&FromSwarm::DialFailure(DialFailure {
+            peer_id: Some(peer),
+            error: &error,
+            connection_id: ConnectionId::new_unchecked(0),
+        }));
+
+        assert!(store.addresses_of_peer(&peer).is_none());
+        assert!(store.get_custom_data(&peer).is_none());
+        assert_eq!(store.pending_events.len(), 2);
+        for event in store.pending_events {
+            assert!(matches!(
+                event,
+                Event::PeerAddressRemoved { peer_id, address }
+                    if peer_id == peer && (address == addr1 || address == addr2)
+            ));
+        }
     }
 
     #[test]
