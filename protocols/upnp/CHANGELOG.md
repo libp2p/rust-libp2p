@@ -1,3 +1,8 @@
+## 0.7.1
+
+- update igd-next to 0.18.0.
+  See [PR 6664](https://github.com/libp2p/rust-libp2p/pull/6664).
+
 ## 0.7.0
 
 - Raise MSRV to 1.88.0.
