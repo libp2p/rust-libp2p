@@ -715,6 +715,7 @@ mod tests {
 
     use futures_timer::Delay;
     use libp2p_identity::Keypair;
+    use prost::Message as _;
     use quickcheck::*;
 
     use super::*;
