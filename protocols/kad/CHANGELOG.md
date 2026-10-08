@@ -1,3 +1,9 @@
+## 0.49.1
+
+- Don't lose a pending `ProtocolConfirmed` report when another protocol change of the remote arrives
+  before the handler is polled.
+  See [PR 6649](https://github.com/libp2p/rust-libp2p/pull/6649).
+
 ## 0.49.0
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on

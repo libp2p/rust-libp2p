@@ -828,10 +828,8 @@ fn compute_new_protocol_status(
     };
 
     if now_supported == current_status.supported {
-        return ProtocolStatus {
-            supported: now_supported,
-            reported: true,
-        };
+        // Nothing changed, but a status that has not been reported yet still needs to be.
+        return current_status;
     }
 
     if now_supported {
@@ -1083,7 +1081,7 @@ mod tests {
                 }
                 Some(current) => {
                     if current.supported == now_supported {
-                        assert!(new.reported);
+                        assert_eq!(new.reported, current.reported);
                     } else {
                         assert!(!new.reported);
                     }
@@ -1094,5 +1092,22 @@ mod tests {
         }
 
         quickcheck::quickcheck(prop as fn(_, _))
+    }
+
+    #[test]
+    fn unreported_status_stays_unreported_on_unrelated_protocol_change() {
+        // The first negotiated substream (or a first protocol report) marks
+        // the protocol as supported but not yet reported to the behaviour.
+        let status = compute_new_protocol_status(true, None);
+        assert!(!status.reported);
+
+        // Another change of the remote's protocols, which doesn't affect
+        // kademlia support, arrives before the handler is polled.
+        let status = compute_new_protocol_status(true, Some(status));
+
+        assert!(
+            !status.reported,
+            "ProtocolConfirmed must still be reported to the behaviour"
+        );
     }
 }
