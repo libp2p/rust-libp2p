@@ -1105,22 +1105,31 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        let pre_configured_topics = self.config.protocol.max_transmit_sizes.keys();
-        for topic in pre_configured_topics {
-            if self.config.protocol.max_transmit_size_for_topic(topic) < 100 {
-                return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
-            }
+        if self.config.protocol.default_max_transmit_size < 100
+            || self
+                .config
+                .protocol
+                .max_transmit_sizes
+                .values()
+                .any(|size| *size < 100)
+        {
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
+        }
 
-            let mesh_n = self.config.mesh_n_for_topic(topic);
-            let mesh_n_low = self.config.mesh_n_low_for_topic(topic);
-            let mesh_n_high = self.config.mesh_n_high_for_topic(topic);
-            let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic);
-
+        let topic_configuration = &self.config.topic_configuration;
+        for TopicMeshConfig {
+            mesh_n,
+            mesh_n_low,
+            mesh_n_high,
+            mesh_outbound_min,
+        } in std::iter::once(&topic_configuration.default_mesh_params)
+            .chain(topic_configuration.topic_mesh_params.values())
+        {
             if !(mesh_outbound_min <= mesh_n_low && mesh_n_low <= mesh_n && mesh_n <= mesh_n_high) {
                 return Err(ConfigBuilderError::MeshParametersInvalid);
             }
 
-            if mesh_outbound_min * 2 > mesh_n {
+            if mesh_outbound_min * 2 > *mesh_n {
                 return Err(ConfigBuilderError::MeshOutboundInvalid);
             }
         }
@@ -1214,6 +1223,53 @@ mod test {
 
     use super::*;
     use crate::{Topic, topic::IdentityHash};
+
+    #[test]
+    fn build_rejects_invalid_default_mesh_params() {
+        // mesh_n > mesh_n_high
+        assert!(matches!(
+            ConfigBuilder::default().mesh_n(20).build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        // mesh_outbound_min > mesh_n / 2
+        assert!(matches!(
+            ConfigBuilder::default().mesh_outbound_min(4).build(),
+            Err(ConfigBuilderError::MeshOutboundInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_invalid_topic_mesh_params() {
+        let topic = TopicHash::from_raw("topic");
+        assert!(matches!(
+            ConfigBuilder::default()
+                .set_topic_config(
+                    topic.clone(),
+                    TopicMeshConfig {
+                        mesh_n: 6,
+                        mesh_n_low: 8,
+                        mesh_n_high: 12,
+                        mesh_outbound_min: 2,
+                    },
+                )
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        assert!(matches!(
+            ConfigBuilder::default()
+                .mesh_n_high_for_topic(4, topic)
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_too_small_default_max_transmit_size() {
+        assert!(matches!(
+            ConfigBuilder::default().max_transmit_size(10).build(),
+            Err(ConfigBuilderError::MaxTransmissionSizeTooSmall)
+        ));
+    }
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

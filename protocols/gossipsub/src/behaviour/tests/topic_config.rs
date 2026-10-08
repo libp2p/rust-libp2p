@@ -250,21 +250,22 @@ fn test_mesh_subtraction_with_topic_config() {
     );
 }
 
-/// Tests that if a mesh reaches `mesh_n_high`,
-/// but is only composed of outbound peers, it is not reduced to `mesh_n`.
+/// Tests that if a mesh reaches `mesh_n_high`, it is reduced to `mesh_n` without removing
+/// outbound peers below the topic-specific `mesh_outbound_min`.
 #[test]
 fn test_mesh_subtraction_with_topic_config_min_outbound() {
     let topic = String::from("topic1");
     let topic_hash = TopicHash::from_raw(topic.clone());
 
-    let mesh_n = 5;
-    let mesh_n_high = 7;
+    let mesh_n = 6;
+    let mesh_n_high = 8;
+    let mesh_outbound_min = 3;
 
     let topic_config = TopicMeshConfig {
         mesh_n,
         mesh_n_high,
-        mesh_n_low: 3,
-        mesh_outbound_min: 7,
+        mesh_n_low: 4,
+        mesh_outbound_min,
     };
 
     let config = ConfigBuilder::default()
@@ -272,36 +273,41 @@ fn test_mesh_subtraction_with_topic_config_min_outbound() {
         .build()
         .unwrap();
 
-    let peer_no = 12;
-
-    // make all outbound connections.
+    // The first `mesh_outbound_min` peers are outbound connections.
     let (mut gs, peers, _, topics) = DefaultBehaviourTestBuilder::default()
-        .peer_no(peer_no)
+        .peer_no(mesh_n_high)
         .topics(vec![topic])
         .to_subscribe(true)
         .gs_config(config.clone())
-        .outbound(peer_no)
+        .outbound(mesh_outbound_min)
         .create_network();
 
     // graft all peers
-    for peer in peers {
-        gs.handle_graft(&peer, topics.clone());
+    for peer in &peers {
+        gs.handle_graft(peer, topics.clone());
     }
 
     assert_eq!(
         gs.mesh.get(&topics[0]).unwrap().len(),
-        peer_no,
-        "Initially mesh should contain all {peer_no} outbound peers"
+        mesh_n_high,
+        "Initially mesh should be {mesh_n_high}"
     );
 
     // run a heartbeat
     gs.heartbeat();
 
+    let mesh = gs.mesh.get(&topics[0]).unwrap();
     assert_eq!(
-        gs.mesh.get(&topics[0]).unwrap().len(),
-        mesh_n_high,
-        "After heartbeat, mesh should still be {mesh_n_high} as these are all outbound peers"
+        mesh.len(),
+        mesh_n,
+        "After heartbeat, mesh should be reduced to {mesh_n}"
     );
+    for outbound_peer in peers.iter().take(mesh_outbound_min) {
+        assert!(
+            mesh.contains(outbound_peer),
+            "Outbound peers must be kept to satisfy mesh_outbound_min"
+        );
+    }
 }
 
 /// Test behavior with multiple topics having different configs
