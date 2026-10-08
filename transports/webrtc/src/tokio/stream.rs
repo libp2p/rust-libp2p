@@ -25,7 +25,7 @@ use std::{
 };
 
 use futures::prelude::*;
-use libp2p_webrtc_utils::MAX_MSG_LEN;
+use libp2p_webrtc_utils::StreamConfig;
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 
@@ -42,11 +42,16 @@ pub(crate) type DropListener = libp2p_webrtc_utils::DropListener<Compat<PollData
 impl Stream {
     /// Returns a new `Substream` and a listener, which will notify the receiver when/if the
     /// substream is dropped.
-    pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
+    pub(crate) fn new(
+        data_channel: Arc<DataChannel>,
+        config: StreamConfig,
+    ) -> (Self, DropListener) {
         let mut data_channel = PollDataChannel::new(data_channel).compat();
-        data_channel.get_mut().set_read_buf_capacity(MAX_MSG_LEN);
+        data_channel
+            .get_mut()
+            .set_read_buf_capacity(config.max_message_size());
 
-        let (inner, drop_listener) = libp2p_webrtc_utils::Stream::new(data_channel);
+        let (inner, drop_listener) = libp2p_webrtc_utils::Stream::with_config(data_channel, config);
 
         (Self { inner }, drop_listener)
     }
