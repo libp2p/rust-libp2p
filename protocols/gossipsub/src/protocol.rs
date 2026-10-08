@@ -298,7 +298,11 @@ fn validate_rpc_limits(
     max_publish_messages: usize,
     max_control_message_size: usize,
 ) -> io::Result<bool> {
-    let message_length = buf.len();
+    let message_length = match unsigned_varint::decode::usize(buf) {
+        Ok((length, _)) => length,
+        Err(unsigned_varint::decode::Error::Insufficient) => return Ok(false),
+        Err(error) => return Err(io::Error::new(io::ErrorKind::InvalidData, error)),
+    };
     if message_length > max_message_size {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -910,5 +914,38 @@ mod tests {
             }
             _ => panic!("Expected message event"),
         }
+    }
+
+    #[test]
+    fn frame_limit_excludes_prefix_and_other_buffered_frames() {
+        let rpc = proto::Rpc {
+            publish: vec![proto::Message {
+                data: Some(vec![42; 128]),
+                topic: "test".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let limit = rpc.encoded_len();
+        let mut codec =
+            GossipsubCodec::new(limit, ValidationMode::Anonymous, HashMap::new(), 1, limit);
+        let mut frame = BytesMut::new();
+        codec.encode(rpc.clone(), &mut frame).unwrap();
+        assert!(frame.len() > limit);
+
+        let mut buf = frame.clone();
+        codec.encode(rpc, &mut buf).unwrap();
+        assert!(codec.decode(&mut buf).unwrap().is_some());
+        assert_eq!(buf, frame);
+        assert!(codec.decode(&mut buf).unwrap().is_some());
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn oversized_frame_prefix_is_rejected_before_payload_arrives() {
+        let mut codec = GossipsubCodec::new(127, ValidationMode::Anonymous, HashMap::new(), 1, 127);
+        // A varint declaring 128 bytes, without the payload.
+        let mut buf = BytesMut::from(&[0x80, 0x01][..]);
+        assert!(codec.decode(&mut buf).is_err());
     }
 }

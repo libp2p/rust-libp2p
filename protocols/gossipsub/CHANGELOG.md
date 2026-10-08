@@ -1,4 +1,7 @@
 ## 0.50.0
+- Enforce RPC size limits on each declared payload, excluding its prefix and subsequent buffered frames.
+  See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
+
 - Account for forwarded messages in `topic_mesg_sent_*` metrics.
   See [PR 6502](https://github.com/libp2p/rust-libp2p/pull/6502)
 

@@ -37,6 +37,7 @@ regex = "1.12.3"
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.8"
 tracing = { workspace = true }
+unsigned-varint = { workspace = true }
 
 # Metrics dependencies
 prometheus-client = { workspace = true, optional = true }
