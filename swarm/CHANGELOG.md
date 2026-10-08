@@ -1,5 +1,8 @@
 ## 0.48.0
 
+- Stagger public and relay dials after private addresses and classify localhost DNS names correctly.
+  See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
+
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
   See [PR 6102](https://github.com/libp2p/rust-libp2p/pull/6102)
 

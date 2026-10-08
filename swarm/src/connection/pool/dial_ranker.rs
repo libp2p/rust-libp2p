@@ -89,19 +89,24 @@ pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)
         PRIVATE_OTHER_DELAY,
         Duration::ZERO,
     ));
-    let relay_offset = if public.is_empty() {
-        Duration::ZERO
-    } else {
-        RELAY_DELAY
-    };
+    let public_offset = result
+        .iter()
+        .map(|(delay, _)| *delay)
+        .max()
+        .map_or(Duration::ZERO, |delay| delay + PRIVATE_TCP_DELAY);
     result.extend(group_delays(
         public,
         PUBLIC_TCP_DELAY,
         PUBLIC_QUIC_DELAY,
         PUBLIC_OTHER_DELAY,
-        Duration::ZERO,
+        public_offset,
     ));
 
+    let relay_offset = result
+        .iter()
+        .map(|(delay, _)| *delay)
+        .max()
+        .map_or(Duration::ZERO, |delay| delay + RELAY_DELAY);
     result.extend(group_delays(
         relay,
         PUBLIC_TCP_DELAY,
@@ -110,7 +115,7 @@ pub(crate) fn rank_dials(dials: Vec<PendingDial>) -> Vec<(Duration, PendingDial)
         relay_offset,
     ));
 
-    let max_delay = result.last().map(|d| d.0);
+    let max_delay = result.iter().map(|d| d.0).max();
     result.extend(other.into_iter().map(|d| {
         if let Some(max_delay) = max_delay {
             (max_delay + PUBLIC_OTHER_DELAY, d)
@@ -317,9 +322,13 @@ fn is_global_addr(a: &Multiaddr) -> bool {
         Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => Some(dns),
         _ => None,
     }) {
-        return dns == "localhost" || dns.ends_with(".localhost");
+        return !dns
+            .trim_end_matches('.')
+            .rsplit('.')
+            .next()
+            .is_some_and(|label| label.eq_ignore_ascii_case("localhost"));
     }
-    false
+    true
 }
 
 /// Returns `true` if the address is globally routable.
@@ -627,6 +636,38 @@ mod tests {
                 (t3, 2 * PUBLIC_TCP_DELAY),
             ]
         )
+    }
+
+    #[test]
+    fn private_dials_start_before_public_and_relay_dials() {
+        let private1: Multiaddr = "/ip4/192.168.1.1/tcp/1".parse().unwrap();
+        let private2: Multiaddr = "/ip4/192.168.1.2/tcp/2".parse().unwrap();
+        let public: Multiaddr = "/ip4/1.2.3.4/udp/1/quic-v1".parse().unwrap();
+        let relay: Multiaddr = "/ip4/1.2.3.5/tcp/1/p2p-circuit".parse().unwrap();
+        let ranked = rank_dials(make_dials(vec![relay, public, private2, private1]));
+
+        assert_eq!(ranked[0].0, Duration::ZERO);
+        assert_eq!(ranked[1].0, PRIVATE_TCP_DELAY);
+        assert!(ranked[2].0 > ranked[1].0);
+        assert!(ranked[3].0 > ranked[2].0);
+    }
+
+    #[test]
+    fn dns_dials_classify_localhost_as_private_and_public_names_as_other() {
+        for protocol in ["dns", "dns4", "dns6"] {
+            for local in ["localhost", "host.localhost", "LOCALHOST."] {
+                let local: Multiaddr = format!("/{protocol}/{local}/tcp/1").parse().unwrap();
+                let public: Multiaddr = "/ip4/1.2.3.4/tcp/1".parse().unwrap();
+                let dns: Multiaddr = format!("/{protocol}/example.com/tcp/1").parse().unwrap();
+                assert!(!is_global_addr(&local));
+                assert!(is_global_addr(&dns));
+                let ranked = rank_dials(make_dials(vec![dns.clone(), public, local.clone()]));
+                assert_eq!(ranked[0].1.addr, local);
+                assert_eq!(ranked[0].0, Duration::ZERO);
+                assert_eq!(ranked[2].1.addr, dns);
+                assert!(ranked[2].0 > ranked[1].0);
+            }
+        }
     }
 
     // Verifies that an empty input produces an empty output.
