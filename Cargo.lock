@@ -3087,7 +3087,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.49.0"
+version = "0.49.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3100,6 +3100,8 @@ dependencies = [
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-noise",
+ "libp2p-quic",
+ "libp2p-stream",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-yamux",
