@@ -155,11 +155,7 @@ opentelemetry = "0.32"
 opentelemetry-otlp = "0.32"
 opentelemetry_sdk = "0.32"
 unsigned-varint = { version = "0.8" }
-# Pinned to avoid wasm-bindgen >=0.2.109 which breaks gloo-timers 0.2.6 (used by futures-timer for wasm).
-# wasm-bindgen-futures pins wasm-bindgen exactly, so capping it caps wasm-bindgen.
-# Versions 0.4.59-0.4.61 are unusable because they pin yanked js-sys releases (0.3.86-0.3.88).
-# TODO: remove when futures-timer is updated.
-wasm-bindgen-futures = "=0.4.58"
+wasm-bindgen-futures = "0.4.79"
 web-time = "1.1"
 
 [patch.crates-io]
