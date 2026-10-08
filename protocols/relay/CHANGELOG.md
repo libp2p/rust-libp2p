@@ -1,5 +1,8 @@
 ## 0.22.0
 
+- Ignore late reservation acceptances after the final listener closes instead of panicking.
+  See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
+
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
   `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
   See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).

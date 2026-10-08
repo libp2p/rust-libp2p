@@ -283,10 +283,10 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                let (addr, status) = self
-                    .reservation_addresses
-                    .get_mut(&connection)
-                    .expect("Relay connection exist");
+                let Some((addr, status)) = self.reservation_addresses.get_mut(&connection) else {
+                    // The last listener may have closed while the handler request was in flight.
+                    return;
+                };
 
                 if !renewal && *status == ReservationStatus::Pending {
                     *status = ReservationStatus::Confirmed;
@@ -569,6 +569,50 @@ impl AsyncRead for Connection {
                     return Pin::new(substream).poll_read(cx, buf);
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn late_reservation_acceptance_after_final_listener_closes_is_ignored() {
+        for status in [ReservationStatus::Pending, ReservationStatus::Confirmed] {
+            let (_transport, mut behaviour) = new(PeerId::random());
+            let connection = ConnectionId::new_unchecked(1);
+            let listener_id = ListenerId::next();
+            let addr: Multiaddr = "/ip4/1.2.3.4/tcp/1/p2p-circuit".parse().unwrap();
+            behaviour
+                .listener_id_to_connection_id
+                .insert(listener_id, connection);
+            behaviour
+                .reservation_addresses
+                .insert(connection, (addr.clone(), status));
+
+            behaviour.on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
+                listener_id,
+                reason: Ok(()),
+            }));
+            if status == ReservationStatus::Confirmed {
+                assert!(matches!(
+                    behaviour.queued_actions.pop_front(),
+                    Some(ToSwarm::ExternalAddrExpired(expired)) if expired == addr
+                ));
+            }
+            for renewal in [false, true] {
+                behaviour.on_connection_handler_event(
+                    PeerId::random(),
+                    connection,
+                    Either::Left(handler::Event::ReservationReqAccepted {
+                        renewal,
+                        limit: None,
+                    }),
+                );
+            }
+            assert!(behaviour.reservation_addresses.is_empty());
+            assert!(behaviour.queued_actions.is_empty());
         }
     }
 }
