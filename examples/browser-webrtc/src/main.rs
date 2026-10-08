@@ -95,7 +95,7 @@ pub(crate) async fn serve(libp2p_transport: Multiaddr) {
     let server = Router::new()
         .route("/", get(get_index))
         .route("/index.html", get(get_index))
-        .route("/:path", get(get_static_file))
+        .route("/{path}", get(get_static_file))
         .with_state(Libp2pEndpoint(libp2p_transport))
         .layer(
             // allow cors

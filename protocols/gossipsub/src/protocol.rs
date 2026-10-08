@@ -99,7 +99,7 @@ impl Default for ProtocolConfig {
             ],
             default_max_transmit_size: 65536, // 64KB
             max_transmit_sizes: HashMap::new(),
-            max_publish_messages: 500,
+            max_publish_messages: 5000,
             max_control_message_size: 16384, // 16KB
         }
     }

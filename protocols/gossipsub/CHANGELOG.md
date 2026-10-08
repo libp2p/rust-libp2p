@@ -3,6 +3,9 @@
   buffer, which could already contain the next frames.
   See [PR 6645](https://github.com/libp2p/rust-libp2p/pull/6645).
 
+- Remove duplicate `Config` fields which are already present in `ProtocolConfig`.
+  See [PR 6669](https://github.com/libp2p/rust-libp2p/pull/6669)
+
 - Look up the ids of a received IDONTWANT in a `HashSet` when removing them from the peer's send
   queue, so the cost is O(queue + ids) instead of O(queue * ids).
 
