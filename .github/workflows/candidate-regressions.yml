@@ -1,0 +1,87 @@
+name: Shared candidate regressions
+
+on:
+  push:
+    branches: [fix/cannot-extract-twice]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    if: github.repository == 'caniko/rust-libp2p'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+      RUSTFLAGS: -Dwarnings
+      RUSTUP_TOOLCHAIN: 1.93.1
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record exact source and toolchain
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse HEAD HEAD^{tree}
+          sha256sum Cargo.lock
+          rustup toolchain install 1.93.1 --profile minimal --component clippy
+          rustc --version --verbose
+          cargo --version
+      - name: Prove regressions fail on the reviewed production source
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import subprocess
+
+          baseline = '0c6b55925053f4c5a859448a5828e076f9efabaa'
+          paths = [
+              'swarm/src/connection/pool/dial_ranker.rs',
+              'protocols/gossipsub/src/protocol.rs',
+              'protocols/upnp/src/behaviour.rs',
+              'protocols/relay/src/priv_client.rs',
+          ]
+          marker = '#[cfg(test)]\nmod tests {'
+          originals = {path: Path(path).read_text() for path in paths}
+          try:
+              for path, current in originals.items():
+                  old = subprocess.check_output(['git', 'show', f'{baseline}:{path}'], text=True)
+                  assert current.count(marker) == 1
+                  production = old.split(marker)[0]
+                  tests = marker + current.split(marker, 1)[1]
+                  Path(path).write_text(production + tests)
+              cases = [
+                  ('libp2p-swarm', 'private_dials_start_before_public_and_relay_dials'),
+                  ('libp2p-swarm', 'dns_dials_classify_localhost_as_private_and_public_names_as_other'),
+                  ('libp2p-gossipsub', 'frame_limit_excludes_prefix_and_other_buffered_frames'),
+                  ('libp2p-gossipsub', 'oversized_frame_prefix_is_rejected_before_payload_arrives'),
+                  ('libp2p-upnp', 'expired_pending_mapping_is_removed_without_confirmation'),
+                  ('libp2p-upnp', 'expired_failed_mapping_is_not_retried'),
+                  ('libp2p-upnp', 'non_owner_expiration_does_not_remove_an_active_mapping'),
+                  ('libp2p-relay', 'late_reservation_acceptance_after_final_listener_closes_is_ignored'),
+              ]
+              for crate, test in cases:
+                  result = subprocess.run(
+                      ['cargo', 'test', '--locked', '-p', crate, '--all-features', '--lib', test],
+                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                  )
+                  print(result.stdout, flush=True)
+                  assert result.returncode != 0, f'{test} unexpectedly passed on {baseline}'
+                  assert re.search(r'test result: FAILED\. 0 passed; 1 failed;', result.stdout), \
+                      f'{test} did not fail as an executed regression (compile errors do not count)'
+          finally:
+              for path, current in originals.items():
+                  Path(path).write_text(current)
+      - name: Test the complete affected crates, including stream lifetime regressions
+        run: |
+          git diff --exit-code
+          cargo test --locked --all-features -p libp2p-swarm -p libp2p-gossipsub -p libp2p-upnp -p libp2p-relay
+      - name: Check no-default-feature builds and lint all affected targets
+        run: |
+          cargo check --locked --no-default-features -p libp2p-swarm -p libp2p-gossipsub -p libp2p-upnp -p libp2p-relay
+          cargo clippy --locked --all-features --all-targets -p libp2p-swarm -p libp2p-gossipsub -p libp2p-upnp -p libp2p-relay -- -D warnings
+          git diff --exit-code
