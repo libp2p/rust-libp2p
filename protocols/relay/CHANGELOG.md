@@ -1,3 +1,9 @@
+## 0.22.1
+
+- Don't panic in the relay server when a reservation renewal is accepted after the previous
+  reservation on the same connection timed out.
+  See [PR 6636](https://github.com/libp2p/rust-libp2p/pull/6636).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.

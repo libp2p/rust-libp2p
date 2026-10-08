@@ -619,10 +619,11 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::ReservationReqAccepted { renewed } => {
                 // Ensure local eventual consistent reservation state matches handler (source of
-                // truth).
+                // truth). The entry may be gone: if the previous reservation timed out while
+                // the renewal was being accepted, the timeout removed it.
                 self.connections
-                    .get_mut(&event_source)
-                    .expect("valid connection")
+                    .entry(event_source)
+                    .or_default()
                     .insert(connection, Reservation::Active);
 
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
@@ -659,18 +660,11 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationTimedOut {} => {
-                match self.connections.entry(event_source) {
-                    hash_map::Entry::Occupied(mut peer) => {
-                        peer.get_mut().remove(&connection);
-                        if peer.get().is_empty() {
-                            peer.remove();
-                        }
-                    }
-                    hash_map::Entry::Vacant(_) => {
-                        unreachable!(
-                            "Expect to track timed out reservation with peer {:?} on connection {:?}",
-                            event_source, connection,
-                        );
+                // The entry may already be gone, see `ReservationReqAccepted`.
+                if let hash_map::Entry::Occupied(mut peer) = self.connections.entry(event_source) {
+                    peer.get_mut().remove(&connection);
+                    if peer.get().is_empty() {
+                        peer.remove();
                     }
                 }
 
