@@ -1,5 +1,9 @@
 ## 0.7.0
 
+- Cancel expired listeners' pending mappings and retries, ignore late confirmations, and verify mapping ownership before removal.
+  Retain backpressured removals and complete them before mapping a replacement listener on the same port.
+  See [PR 6427](https://github.com/libp2p/rust-libp2p/pull/6427).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

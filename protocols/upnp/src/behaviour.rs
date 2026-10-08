@@ -30,7 +30,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{Future, StreamExt, channel::oneshot};
+use futures::{Future, SinkExt, StreamExt, channel::oneshot};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
 use libp2p_core::{
@@ -74,6 +74,8 @@ pub(crate) enum GatewayRequest {
 enum AddRequestState {
     /// Gateway not yet found; AddMapping will be sent once it becomes available.
     WaitingForGateway,
+    /// A previous listener's mapping must be removed before this one can be added.
+    WaitingForRemoval,
     /// Request has been sent to the gateway, awaiting response.
     AwaitingResponse {
         /// Number of prior failed attempts for this port.
@@ -86,6 +88,12 @@ enum AddRequestState {
         /// When to retry.
         next_retry: Delay,
     },
+}
+
+#[derive(Debug)]
+enum RemoveRequestState {
+    Pending(u32),
+    AwaitingResponse(u32),
 }
 
 /// A [`Gateway`] event.
@@ -169,8 +177,8 @@ pub struct Behaviour {
     add_requests: HashMap<Mapping, AddRequestState>,
 
     /// In-flight RemoveMapping requests.
-    /// The value tracks the number of attempts so far.
-    remove_requests: HashMap<Mapping, u32>,
+    /// Retains requests that cannot yet fit in the gateway's channel.
+    remove_requests: HashMap<Mapping, RemoveRequestState>,
 
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<Event>,
@@ -226,7 +234,11 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                if self.mappings.contains_key(&(protocol, addr.port())) {
+                if self.mappings.contains_key(&(protocol, addr.port()))
+                    || self.add_requests.keys().any(|pending| {
+                        pending.protocol == protocol && pending.internal_addr.port() == addr.port()
+                    })
+                {
                     tracing::debug!(
                         multiaddress=%multiaddr,
                         "port from multiaddress is already mapped on the gateway"
@@ -249,6 +261,14 @@ impl NetworkBehaviour for Behaviour {
                             .insert(mapping, AddRequestState::WaitingForGateway);
                     }
                     GatewayState::Available(gateway) => {
+                        if self.remove_requests.keys().any(|pending| {
+                            pending.protocol == protocol
+                                && pending.internal_addr.port() == addr.port()
+                        }) {
+                            self.add_requests
+                                .insert(mapping, AddRequestState::WaitingForRemoval);
+                            return;
+                        }
                         let duration = MAPPING_DURATION;
                         if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                             mapping: mapping.clone(),
@@ -292,21 +312,33 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
+                let mapping = Mapping {
+                    listener_id,
+                    protocol,
+                    internal_addr: addr,
+                    multiaddr: multiaddr.clone(),
+                };
                 match &mut self.state {
                     GatewayState::Searching(_) => {
                         // Gateway not yet found; cancel the pending AddMapping if present.
-                        let mapping = Mapping {
-                            listener_id,
-                            protocol,
-                            internal_addr: addr,
-                            multiaddr: multiaddr.clone(),
-                        };
                         self.add_requests.remove(&mapping);
                     }
                     GatewayState::Available(gateway) => {
-                        if let Some((mapping, _state)) =
-                            self.mappings.remove(&(protocol, addr.port()))
+                        let pending = self.add_requests.remove(&mapping);
+                        let owns_mapping = self
+                            .mappings
+                            .get(&(protocol, addr.port()))
+                            .is_some_and(|(active, _)| active == &mapping);
+                        if owns_mapping {
+                            self.mappings.remove(&(protocol, addr.port()));
+                            self.pending_events.retain(|event| !matches!(event,
+                                Event::NewExternalAddr { local_addr, .. } if local_addr == multiaddr
+                            ));
+                        }
+                        if owns_mapping
+                            || matches!(pending, Some(AddRequestState::AwaitingResponse { .. }))
                         {
+                            // The gateway serializes requests, so this also removes a late add.
                             if let Err(err) = gateway
                                 .sender
                                 .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
@@ -316,8 +348,11 @@ impl NetworkBehaviour for Behaviour {
                                     "could not request port removal for multiaddress on the gateway: {}",
                                     err
                                 );
+                                self.remove_requests
+                                    .insert(mapping, RemoveRequestState::Pending(0));
                             } else {
-                                self.remove_requests.insert(mapping, 0);
+                                self.remove_requests
+                                    .insert(mapping, RemoveRequestState::AwaitingResponse(0));
                             }
                         }
                     }
@@ -412,10 +447,28 @@ impl NetworkBehaviour for Behaviour {
                     Poll::Pending => return Poll::Pending,
                 },
                 GatewayState::Available(ref mut gateway) => {
+                    for (mapping, state) in &mut self.remove_requests {
+                        if let RemoveRequestState::Pending(retry_count) = state
+                            && matches!(gateway.sender.poll_ready_unpin(cx), Poll::Ready(Ok(())))
+                            && gateway
+                                .sender
+                                .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
+                                .is_ok()
+                        {
+                            *state = RemoveRequestState::AwaitingResponse(*retry_count);
+                        }
+                    }
                     // Poll pending mapping requests.
                     if let Poll::Ready(Some(result)) = gateway.receiver.poll_next_unpin(cx) {
                         match result {
                             GatewayEvent::Mapped(mapping) => {
+                                if !matches!(
+                                    self.add_requests.get(&mapping),
+                                    Some(AddRequestState::AwaitingResponse { .. })
+                                ) {
+                                    // A canceled request's removal is already queued.
+                                    continue;
+                                }
                                 self.add_requests.remove(&mapping);
 
                                 let key = (mapping.protocol, mapping.internal_addr.port());
@@ -453,9 +506,9 @@ impl NetworkBehaviour for Behaviour {
                                 }
                             }
                             GatewayEvent::MapFailure(mapping, err) => {
-                                let retry_count = match self.add_requests.remove(&mapping) {
+                                let retry_count = match self.add_requests.get(&mapping) {
                                     Some(AddRequestState::AwaitingResponse { retry_count }) => {
-                                        retry_count
+                                        *retry_count
                                     }
                                     other => {
                                         tracing::warn!(
@@ -466,6 +519,7 @@ impl NetworkBehaviour for Behaviour {
                                         continue;
                                     }
                                 };
+                                self.add_requests.remove(&mapping);
 
                                 let key = (mapping.protocol, mapping.internal_addr.port());
                                 // Remove the Active entry if present (renewal failure).
@@ -528,7 +582,8 @@ impl NetworkBehaviour for Behaviour {
                                 self.remove_requests.remove(&mapping);
                             }
                             GatewayEvent::RemovalFailure(mapping, err) => {
-                                let Some(retry_count) = self.remove_requests.remove(&mapping)
+                                let Some(RemoveRequestState::AwaitingResponse(retry_count)) =
+                                    self.remove_requests.remove(&mapping)
                                 else {
                                     tracing::warn!(
                                         mapping=?mapping,
@@ -544,18 +599,11 @@ impl NetworkBehaviour for Behaviour {
                                         retry_count=%new_retry_count,
                                         "could not remove UPnP mapping for protocol, retrying: {err}"
                                     );
-                                    if let Err(err) = gateway
-                                        .sender
-                                        .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
-                                    {
-                                        tracing::debug!(
-                                            multiaddress=%mapping.multiaddr,
-                                            "could not request port removal for multiaddress on the gateway: {}",
-                                            err
-                                        );
-                                    } else {
-                                        self.remove_requests.insert(mapping, new_retry_count);
-                                    }
+                                    self.remove_requests.insert(
+                                        mapping,
+                                        RemoveRequestState::Pending(new_retry_count),
+                                    );
+                                    continue;
                                 } else {
                                     tracing::warn!(
                                         address=%mapping.internal_addr,
@@ -568,6 +616,24 @@ impl NetworkBehaviour for Behaviour {
                         }
                     }
 
+                    for (mapping, state) in &mut self.add_requests {
+                        if matches!(state, AddRequestState::WaitingForRemoval)
+                            && !self.remove_requests.keys().any(|pending| {
+                                pending.protocol == mapping.protocol
+                                    && pending.internal_addr.port() == mapping.internal_addr.port()
+                            })
+                            && matches!(gateway.sender.poll_ready_unpin(cx), Poll::Ready(Ok(())))
+                            && gateway
+                                .sender
+                                .try_send(GatewayRequest::AddMapping {
+                                    mapping: mapping.clone(),
+                                    duration: MAPPING_DURATION,
+                                })
+                                .is_ok()
+                        {
+                            *state = AddRequestState::AwaitingResponse { retry_count: 0 };
+                        }
+                    }
                     // Renew expired and request inactive mappings.
                     renew_mappings(&mut self.mappings, &mut self.add_requests, gateway, cx);
                     return Poll::Pending;
@@ -709,6 +775,217 @@ mod tests {
             protocol: PortMappingProtocol::TCP,
             internal_addr: SocketAddr::new(IpAddr::V4(ip), port),
             multiaddr,
+        }
+    }
+
+    #[test]
+    fn expired_pending_mapping_is_removed_without_confirmation() {
+        for renewal in [false, true] {
+            let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+            let mapping = build_mapping(ListenerId::next(), "192.168.1.100".parse().unwrap(), 9000);
+            let mut cx = Context::from_waker(Waker::noop());
+            behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                listener_id: mapping.listener_id,
+                addr: &mapping.multiaddr,
+            }));
+            assert!(matches!(
+                req_rx.poll_next_unpin(&mut cx),
+                Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+            ));
+            if renewal {
+                behaviour.mappings.insert(
+                    (mapping.protocol, mapping.internal_addr.port()),
+                    (
+                        mapping.clone(),
+                        Delay::new(Duration::from_secs(MAPPING_TIMEOUT)),
+                    ),
+                );
+            }
+            behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+                listener_id: mapping.listener_id,
+                addr: &mapping.multiaddr,
+            }));
+            assert!(behaviour.add_requests.is_empty());
+            assert!(
+                matches!(req_rx.poll_next_unpin(&mut cx), Poll::Ready(Some(GatewayRequest::RemoveMapping(ref removed))) if removed == &mapping)
+            );
+
+            event_tx
+                .try_send(GatewayEvent::Mapped(mapping.clone()))
+                .unwrap();
+            assert!(behaviour.poll(&mut cx).is_pending());
+            assert!(behaviour.mappings.is_empty());
+            assert!(behaviour.pending_events.is_empty());
+            event_tx.try_send(GatewayEvent::Removed(mapping)).unwrap();
+            drain_poll(&mut behaviour, &mut cx);
+            assert!(behaviour.remove_requests.is_empty());
+        }
+    }
+
+    #[test]
+    fn expired_failed_mapping_is_not_retried() {
+        let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+        let mapping = build_mapping(ListenerId::next(), "192.168.1.100".parse().unwrap(), 9000);
+        let mut cx = Context::from_waker(Waker::noop());
+        behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+            listener_id: mapping.listener_id,
+            addr: &mapping.multiaddr,
+        }));
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+        ));
+        event_tx
+            .try_send(GatewayEvent::MapFailure(
+                mapping.clone(),
+                Box::new(Error::other("mock")),
+            ))
+            .unwrap();
+        drain_poll(&mut behaviour, &mut cx);
+        behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+            listener_id: mapping.listener_id,
+            addr: &mapping.multiaddr,
+        }));
+        assert!(behaviour.add_requests.is_empty());
+        assert!(behaviour.poll(&mut cx).is_pending());
+        assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
+    }
+
+    #[test]
+    fn non_owner_expiration_does_not_remove_an_active_mapping() {
+        for confirmed in [false, true] {
+            let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+            let mapping = build_mapping(ListenerId::next(), "192.168.1.100".parse().unwrap(), 9000);
+            let mut cx = Context::from_waker(Waker::noop());
+            behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                listener_id: mapping.listener_id,
+                addr: &mapping.multiaddr,
+            }));
+            assert!(matches!(
+                req_rx.poll_next_unpin(&mut cx),
+                Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+            ));
+            if confirmed {
+                event_tx
+                    .try_send(GatewayEvent::Mapped(mapping.clone()))
+                    .unwrap();
+                drain_poll(&mut behaviour, &mut cx);
+            }
+
+            for (listener_id, addr) in [
+                (ListenerId::next(), mapping.multiaddr.clone()),
+                (
+                    mapping.listener_id,
+                    "/ip4/10.0.0.5/tcp/9000".parse().unwrap(),
+                ),
+            ] {
+                behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                    listener_id,
+                    addr: &addr,
+                }));
+                behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+                    listener_id,
+                    addr: &addr,
+                }));
+                if confirmed {
+                    assert_eq!(
+                        behaviour
+                            .mappings
+                            .get(&(mapping.protocol, 9000))
+                            .map(|(m, _)| m),
+                        Some(&mapping)
+                    );
+                } else {
+                    assert!(behaviour.add_requests.contains_key(&mapping));
+                }
+                assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
+            }
+        }
+    }
+
+    #[test]
+    fn replacement_waits_for_backpressured_removal_and_retry() {
+        for same_mapping in [false, true] {
+            let (mut behaviour, mut event_tx, mut req_rx) = build_behaviour_with_gateway();
+            let mapping = build_mapping(ListenerId::next(), "192.168.1.100".parse().unwrap(), 9000);
+            let replacement = if same_mapping {
+                mapping.clone()
+            } else {
+                build_mapping(ListenerId::next(), "10.0.0.5".parse().unwrap(), 9000)
+            };
+            let mut cx = Context::from_waker(Waker::noop());
+            behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                listener_id: mapping.listener_id,
+                addr: &mapping.multiaddr,
+            }));
+            assert!(matches!(
+                req_rx.poll_next_unpin(&mut cx),
+                Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+            ));
+            // Exhaust the real request channel's capacity while the add is in flight.
+            if let GatewayState::Available(gateway) = &mut behaviour.state {
+                while gateway
+                    .sender
+                    .try_send(GatewayRequest::AddMapping {
+                        mapping: mapping.clone(),
+                        duration: MAPPING_DURATION,
+                    })
+                    .is_ok()
+                {}
+            }
+            behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+                listener_id: mapping.listener_id,
+                addr: &mapping.multiaddr,
+            }));
+            behaviour.on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                listener_id: replacement.listener_id,
+                addr: &replacement.multiaddr,
+            }));
+            event_tx
+                .try_send(GatewayEvent::Mapped(mapping.clone()))
+                .unwrap();
+            assert!(behaviour.poll(&mut cx).is_pending());
+            assert!(behaviour.mappings.is_empty());
+            while let Poll::Ready(Some(request)) = req_rx.poll_next_unpin(&mut cx) {
+                assert!(
+                    matches!(request, GatewayRequest::AddMapping { mapping: ref added, .. } if added == &mapping)
+                );
+            }
+            assert!(behaviour.poll(&mut cx).is_pending());
+            assert!(
+                matches!(req_rx.poll_next_unpin(&mut cx), Poll::Ready(Some(GatewayRequest::RemoveMapping(ref removed))) if removed == &mapping)
+            );
+            assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
+            event_tx
+                .try_send(GatewayEvent::RemovalFailure(
+                    mapping.clone(),
+                    Box::new(Error::other("mock")),
+                ))
+                .unwrap();
+            assert!(behaviour.poll(&mut cx).is_pending());
+            assert!(
+                matches!(req_rx.poll_next_unpin(&mut cx), Poll::Ready(Some(GatewayRequest::RemoveMapping(ref removed))) if removed == &mapping)
+            );
+            assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
+            event_tx.try_send(GatewayEvent::Removed(mapping)).unwrap();
+            assert!(behaviour.poll(&mut cx).is_pending());
+            assert!(
+                matches!(req_rx.poll_next_unpin(&mut cx), Poll::Ready(Some(GatewayRequest::AddMapping { mapping: ref added, .. })) if added == &replacement)
+            );
+            event_tx
+                .try_send(GatewayEvent::Mapped(replacement.clone()))
+                .unwrap();
+            assert!(matches!(
+                behaviour.poll(&mut cx),
+                Poll::Ready(ToSwarm::ExternalAddrConfirmed(_))
+            ));
+            assert_eq!(
+                behaviour
+                    .mappings
+                    .get(&(replacement.protocol, 9000))
+                    .map(|(m, _)| m),
+                Some(&replacement)
+            );
         }
     }
 
@@ -856,16 +1133,18 @@ mod tests {
             listener_id,
             addr: &new_addr,
         }));
-        assert!(matches!(
-            req_rx.poll_next_unpin(&mut cx),
-            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
-        ));
+        assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
 
         // The gateway confirms the removal of old_ip's mapping.
         event_tx
             .try_send(GatewayEvent::Removed(old_mapping))
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
+
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+        ));
 
         // The gateway reports that mapping new_ip failed.
         let new_mapping = build_mapping(listener_id, new_ip, port);
@@ -926,16 +1205,18 @@ mod tests {
             listener_id,
             addr: &new_addr,
         }));
-        assert!(matches!(
-            req_rx.poll_next_unpin(&mut cx),
-            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
-        ));
+        assert!(req_rx.poll_next_unpin(&mut cx).is_pending());
 
         // The gateway confirms the removal of old_ip's mapping.
         event_tx
             .try_send(GatewayEvent::Removed(old_mapping))
             .expect("channel should have capacity");
         drain_poll(&mut behaviour, &mut cx);
+
+        assert!(matches!(
+            req_rx.poll_next_unpin(&mut cx),
+            Poll::Ready(Some(GatewayRequest::AddMapping { .. }))
+        ));
 
         // The gateway successfully maps new_ip.
         let new_mapping = build_mapping(listener_id, new_ip, port);
