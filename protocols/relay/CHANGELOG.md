@@ -1,3 +1,8 @@
+## 0.22.1
+
+- Don't drop the client's reservation when an outbound circuit request times out.
+  See [PR 6652](https://github.com/libp2p/rust-libp2p/pull/6652).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.
