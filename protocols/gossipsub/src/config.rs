@@ -125,8 +125,6 @@ pub struct Config {
     gossip_retransimission: u32,
     #[cfg(feature = "partial-messages")]
     max_metadata_length: usize,
-    max_publish_messages: usize,
-    max_control_message_size: usize,
     max_control_messages_sent: usize,
     max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
@@ -422,7 +420,7 @@ impl Config {
 
     /// The maximum number of publish messages we will process in a given RPC. The default is 5000.
     pub fn max_publish_messages(&self) -> usize {
-        self.max_publish_messages
+        self.protocol.max_publish_messages
     }
 
     /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
@@ -436,7 +434,7 @@ impl Config {
     /// Validates cumulative size by scanning protobuf bytes before decoding.
     /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&self) -> usize {
-        self.max_control_message_size
+        self.protocol.max_control_message_size
     }
 
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
@@ -552,9 +550,7 @@ impl Default for ConfigBuilder {
                 gossip_retransimission: 3,
                 #[cfg(feature = "partial-messages")]
                 max_metadata_length: 1000,
-                max_publish_messages: 5000,
                 max_control_messages_sent: 5000,
-                max_control_message_size: 16384, // 16KB
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -974,7 +970,6 @@ impl ConfigBuilder {
 
     /// The maximum number of publish messages we will process in a single RPC. The default is 5000.
     pub fn max_publish_messages(&mut self, max: usize) -> &mut Self {
-        self.config.max_publish_messages = max;
         self.config.protocol.max_publish_messages = max;
         self
     }
@@ -1076,7 +1071,6 @@ impl ConfigBuilder {
     /// Validates cumulative size by scanning protobuf bytes before decoding.
     /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&mut self, size: usize) -> &mut Self {
-        self.config.max_control_message_size = size;
         self.config.protocol.max_control_message_size = size;
         self
     }
@@ -1198,9 +1192,12 @@ impl std::fmt::Debug for Config {
         );
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
-        let _ = builder.field("max_messages_per_rpc", &self.max_publish_messages);
+        let _ = builder.field("max_publish_messages", &self.protocol.max_publish_messages);
         let _ = builder.field("max_control_messages_sent", &self.max_control_messages_sent);
-        let _ = builder.field("max_control_message_size", &self.max_control_message_size);
+        let _ = builder.field(
+            "max_control_message_size",
+            &self.protocol.max_control_message_size,
+        );
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
             &self.max_ihave_messages_heartbeat,
