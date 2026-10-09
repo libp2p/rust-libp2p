@@ -1,5 +1,8 @@
 ## 0.14.0
 
+- Support unreliable QUIC datagrams, enabled by default. Tune via `Config::datagram_receive_buffer_size` and `datagram_send_buffer_size`. Substreams now report their QUIC stream id via `StreamMuxer::substream_id`.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Prefer and advertise the X25519MLKEM768 key exchange group for QUIC.
   See [PR 6568](https://github.com/libp2p/rust-libp2p/pull/6568).
 

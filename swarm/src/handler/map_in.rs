@@ -76,6 +76,10 @@ where
         self.inner.connection_keep_alive()
     }
 
+    fn supports_datagrams(&self, protocol: &crate::StreamProtocol) -> bool {
+        self.inner.supports_datagrams(protocol)
+    }
+
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
