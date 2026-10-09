@@ -1,3 +1,8 @@
+## 0.49.0
+
+- Contain panics in the per-connection task and report the connection as closed.
+  See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
+
 ## 0.48.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.
