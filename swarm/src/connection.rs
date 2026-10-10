@@ -63,6 +63,22 @@ use crate::{
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
 };
 
+/// Maximum number of internal progress iterations per [`Connection::poll`] call.
+///
+/// When exhausted, the connection yields with a waker notification so the executor
+/// can schedule other tasks. Aligned with Tokio's default cooperative budget (128).
+const CONNECTION_POLL_ITERATION_BUDGET: u32 = 128;
+
+fn consume_poll_budget(budget: &mut u32, cx: &Context<'_>) -> bool {
+    *budget -= 1;
+    if *budget == 0 {
+        cx.waker().wake_by_ref();
+        true
+    } else {
+        false
+    }
+}
+
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// Connection identifier.
@@ -271,9 +287,16 @@ where
             ..
         } = self.get_mut();
 
+        let mut poll_budget = CONNECTION_POLL_ITERATION_BUDGET;
+
         loop {
             match requested_substreams.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(()))) => continue,
+                Poll::Ready(Some(Ok(()))) => {
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
+                }
                 Poll::Ready(Some(Err(info))) => {
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError {
@@ -281,6 +304,9 @@ where
                             error: StreamUpgradeError::Timeout,
                         },
                     ));
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(None) | Poll::Pending => {}
@@ -294,7 +320,10 @@ where
                     let (upgrade, user_data) = protocol.into_upgrade();
 
                     requested_substreams.push(SubstreamRequested::new(user_data, timeout, upgrade));
-                    continue; // Poll handler until exhausted.
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
+                    continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
@@ -307,6 +336,9 @@ where
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
                         remote_supported_protocols.extend(protocol_buffer.drain(..));
+                    }
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
                     }
                     continue;
                 }
@@ -321,6 +353,9 @@ where
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
                     }
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
             }
@@ -333,12 +368,18 @@ where
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
                         FullyNegotiatedOutbound { protocol, info },
                     ));
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(Some((info, Err(error)))) => {
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError { info, error },
                     ));
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
             }
@@ -351,24 +392,39 @@ where
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
                         FullyNegotiatedInbound { protocol, info },
                     ));
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(Some((info, Err(StreamUpgradeError::Apply(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
                     tracing::debug!("failed to upgrade inbound stream: {e}");
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
                     tracing::debug!("no protocol could be agreed upon for inbound stream");
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
                     tracing::debug!("inbound stream upgrade timed out");
+                    if consume_poll_budget(&mut poll_budget, cx) {
+                        return Poll::Pending;
+                    }
                     continue;
                 }
             }
@@ -428,6 +484,9 @@ where
 
                         // Go back to the top,
                         // handler can potentially make progress again.
+                        if consume_poll_budget(&mut poll_budget, cx) {
+                            return Poll::Pending;
+                        }
                         continue;
                     }
                 }
@@ -447,6 +506,9 @@ where
 
                         // Go back to the top,
                         // handler can potentially make progress again.
+                        if consume_poll_budget(&mut poll_budget, cx) {
+                            return Poll::Pending;
+                        }
                         continue;
                     }
                 }
@@ -463,6 +525,9 @@ where
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
                 // Go back to the top, handler can potentially make progress again.
+                if consume_poll_budget(&mut poll_budget, cx) {
+                    return Poll::Pending;
+                }
                 continue;
             }
 
@@ -783,7 +848,11 @@ impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
 mod tests {
     use std::{
         convert::Infallible,
-        sync::{Arc, Weak},
+        sync::{
+            Arc, Weak,
+            atomic::{AtomicUsize, Ordering},
+        },
+        task::{Context, RawWaker, RawWakerVTable, Waker},
         time::Instant,
     };
 
@@ -818,9 +887,9 @@ mod tests {
                 Duration::ZERO,
             );
 
-            let result = connection.poll_noop_waker();
+            while connection.poll_noop_waker().is_ready() {}
 
-            assert!(result.is_pending());
+            assert!(connection.poll_noop_waker().is_pending());
             assert_eq!(
                 Arc::weak_count(&alive_substream_counter),
                 max_negotiating_inbound_streams,
@@ -829,6 +898,62 @@ mod tests {
         }
 
         QuickCheck::new().quickcheck(prop as fn(_));
+    }
+
+    #[test]
+    fn poll_budget_yields_and_wakes() {
+        static WAKE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+        fn counting_waker() -> Waker {
+            unsafe fn clone(_: *const ()) -> RawWaker {
+                RawWaker::new(std::ptr::null(), &VTABLE)
+            }
+            unsafe fn wake(_: *const ()) {
+                WAKE_COUNT.fetch_add(1, Ordering::SeqCst);
+            }
+            unsafe fn wake_by_ref(_: *const ()) {
+                WAKE_COUNT.fetch_add(1, Ordering::SeqCst);
+            }
+            unsafe fn drop(_: *const ()) {}
+
+            static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+
+            unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }
+        }
+
+        WAKE_COUNT.store(0, Ordering::SeqCst);
+
+        let max_negotiating_inbound_streams = (CONNECTION_POLL_ITERATION_BUDGET + 64) as usize;
+        let alive_substream_counter = Arc::new(());
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(DummyStreamMuxer {
+                counter: alive_substream_counter.clone(),
+            }),
+            MockConnectionHandler::new(Duration::from_secs(10)),
+            None,
+            max_negotiating_inbound_streams,
+            Duration::ZERO,
+        );
+
+        let waker = counting_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(Pin::new(&mut connection).poll(&mut cx).is_pending());
+        assert!(
+            WAKE_COUNT.load(Ordering::SeqCst) >= 1,
+            "expected waker notification when poll budget is exhausted"
+        );
+        assert!(
+            Arc::weak_count(&alive_substream_counter) <= CONNECTION_POLL_ITERATION_BUDGET as usize,
+        );
+
+        while Pin::new(&mut connection).poll(&mut cx).is_ready() {}
+
+        assert!(Pin::new(&mut connection).poll(&mut cx).is_pending());
+        assert_eq!(
+            Arc::weak_count(&alive_substream_counter),
+            max_negotiating_inbound_streams,
+        );
     }
 
     #[test]
