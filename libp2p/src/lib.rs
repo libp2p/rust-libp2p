@@ -50,7 +50,6 @@ pub use libp2p_core::multihash;
 pub use libp2p_dcutr as dcutr;
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
-#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
 #[cfg(feature = "floodsub")]

@@ -21,15 +21,18 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`tokio::Transport`] based on [`hickory_resolver::TokioResolver`].
-//!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
 //! transport, except that [`libp2p_core::Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The [`tokio::Transport`] is enabled by default under the `tokio` feature.
+//! Which resolver backs the [`Transport`] is chosen by the compilation target:
+//!
+//! # Native targets
+//!
+//! Name resolution is performed by [hickory-resolver], which is enabled by default under
+//! the `tokio` feature.
 //! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
 //! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
@@ -49,71 +52,59 @@
 //! If the implementation requires different characteristics, one should
 //! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
-//! and provide a custom [`ResolverConfig`].
+//! and provide a custom `ResolverConfig`.
+//!
+//! # `wasm32` targets
+//!
+//! Name resolution are performed over
+//! [DNS-over-HTTPS](https://datatracker.ietf.org/doc/html/rfc8484) using the
+//! browser's `fetch` API and a JSON (`application/dns-json`) endpoint. The endpoint is
+//! configurable via `websys::Config` and defaults to Cloudflare.
+//!
+//! `/dnsaddr` is always resolved (browsers cannot look up TXT records, so this
+//! is the gap worth filling such as dialing `/dnsaddr/bootstrap.libp2p.io`).
+//! `/dns`, `/dns4` and `/dns6` are governed by `websys::DnsResolution`, which
+//! defaults to `Auto`: addresses containing a `/webrtc-direct` (or any future
+//! specific protocols) are resolved to `/ip4`/`/ip6` (that transport needs a
+//! numeric IP), while everything else is passed through unchanged, because the
+//! name-bound TLS transports (WebSocket, WebTransport) resolve hostnames
+//! natively and need the hostname preserved for SNI and certificate validation.
 //!
 //! [hickory-resolver]: https://docs.rs/hickory-resolver
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(feature = "tokio")]
-pub mod tokio {
-    use std::sync::Arc;
-
-    use hickory_resolver::{TokioResolver, net::runtime::TokioRuntimeProvider, system_conf};
-    use parking_lot::Mutex;
-
-    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-    /// using `tokio` for all async I/O.
-    pub type Transport<T> = crate::Transport<T, TokioResolver>;
-
-    impl<T> Transport<T> {
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
-        pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
-            let (cfg, opts) = system_conf::read_system_conf()
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            Ok(Self::custom(inner, cfg, opts))
-        }
-
-        /// Creates a [`Transport`] with a custom resolver configuration
-        /// and options.
-        pub fn custom(
-            inner: T,
-            cfg: hickory_resolver::config::ResolverConfig,
-            opts: hickory_resolver::config::ResolverOpts,
-        ) -> Transport<T> {
-            Transport {
-                inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioResolver::builder_with_config(cfg, TokioRuntimeProvider::default())
-                    .with_options(opts)
-                    .build()
-                    .expect("valid resolver config should build"),
-            }
-        }
-    }
-}
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
+#[cfg(target_arch = "wasm32")]
+pub mod websys;
 
 use std::{
-    error, fmt, io, iter,
-    net::{Ipv4Addr, Ipv6Addr},
+    error, fmt, io,
     ops::DerefMut,
     pin::Pin,
-    str,
     sync::Arc,
     task::{Context, Poll},
 };
 
 use futures::{future::BoxFuture, prelude::*};
-use hickory_resolver::{ConnectionProvider, lookup::Lookup, lookup_ip::LookupIp, proto::rr::RData};
-pub use hickory_resolver::{
-    config::{ResolverConfig, ResolverOpts},
-    net::NetError as ResolveError,
-};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
+pub use crate::native::tokio;
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::native::{ResolveError, Resolver, ResolverConfig, ResolverOpts};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::native::{next_unresolved, no_records_found, resolve};
+#[cfg(target_arch = "wasm32")]
+pub use crate::websys::{ResolveError, Resolver};
+#[cfg(target_arch = "wasm32")]
+use crate::websys::{next_unresolved, no_records_found, resolve};
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";
@@ -134,7 +125,8 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`] instead.
+/// You shouldn't need to use this type directly. Use `tokio::Transport` on
+/// non-`wasm32` targets and `websys::Transport` on `wasm32` targets instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -211,7 +203,7 @@ where
 
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
-        async move {
+        let dial = async move {
             let mut dial_errors: Vec<Error<T::Error>> = Vec::new();
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -224,15 +216,7 @@ where
             // dialing attempts as soon as there is another fully resolved
             // address.
             while let Some(addr) = unresolved.pop() {
-                if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| {
-                    matches!(
-                        p,
-                        Protocol::Dns(_)
-                            | Protocol::Dns4(_)
-                            | Protocol::Dns6(_)
-                            | Protocol::Dnsaddr(_)
-                    )
-                }) {
+                if let Some((i, name)) = next_unresolved(&addr, &resolver) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
                         dial_errors.push(Error::TooManyLookups);
@@ -329,13 +313,16 @@ where
             if !dial_errors.is_empty() {
                 Err(Error::Dial(dial_errors))
             } else {
-                Err(Error::ResolveError(
-                    ResolveError::from("No Matching Records Found"),
-                ))
+                Err(Error::ResolveError(no_records_found()))
             }
-        }
-        .boxed()
-        .right_future()
+        };
+
+        // Note that the lookups are driven by the browser's `fetch` API, whose futures are `!Send`
+        // `SendWrapper` makes the resulting future `Send` so it satisfies the bound on `Dial`.
+        #[cfg(target_arch = "wasm32")]
+        let dial = send_wrapper::SendWrapper::new(dial);
+
+        dial.boxed().right_future()
     }
 }
 
@@ -412,136 +399,9 @@ enum Resolved<'a> {
     Addrs(Vec<Multiaddr>),
 }
 
-/// Asynchronously resolves the domain name of a `Dns`, `Dns4`, `Dns6` or `Dnsaddr` protocol
-/// component. If the given protocol is of a different type, it is returned unchanged as a
-/// [`Resolved::One`].
-fn resolve<'a, E: 'a + Send, R: Resolver>(
-    proto: &Protocol<'a>,
-    resolver: &'a R,
-) -> BoxFuture<'a, Result<Resolved<'a>, Error<E>>> {
-    match proto {
-        Protocol::Dns(name) => resolver
-            .lookup_ip(name.clone().into_owned())
-            .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips.iter();
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
-                    if let Some(two) = ips.next() {
-                        Ok(Resolved::Many(
-                            iter::once(one)
-                                .chain(iter::once(two))
-                                .chain(ips)
-                                .map(Protocol::from)
-                                .collect(),
-                        ))
-                    } else {
-                        Ok(Resolved::One(Protocol::from(one)))
-                    }
-                }
-                Err(e) => Err(Error::ResolveError(e)),
-            })
-            .boxed(),
-        Protocol::Dns4(name) => resolver
-            .ipv4_lookup(name.clone().into_owned())
-            .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips
-                        .answers()
-                        .iter()
-                        .filter_map(|record| match &record.data {
-                            RData::A(ip) => Some(Ipv4Addr::from(*ip)),
-                            _ => None,
-                        });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
-                    if let Some(two) = ips.next() {
-                        Ok(Resolved::Many(
-                            iter::once(one)
-                                .chain(iter::once(two))
-                                .chain(ips)
-                                .map(Protocol::from)
-                                .collect(),
-                        ))
-                    } else {
-                        Ok(Resolved::One(Protocol::from(one)))
-                    }
-                }
-                Err(e) => Err(Error::ResolveError(e)),
-            })
-            .boxed(),
-        Protocol::Dns6(name) => resolver
-            .ipv6_lookup(name.clone().into_owned())
-            .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips
-                        .answers()
-                        .iter()
-                        .filter_map(|record| match &record.data {
-                            RData::AAAA(ip) => Some(Ipv6Addr::from(*ip)),
-                            _ => None,
-                        });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
-                    if let Some(two) = ips.next() {
-                        Ok(Resolved::Many(
-                            iter::once(one)
-                                .chain(iter::once(two))
-                                .chain(ips)
-                                .map(Protocol::from)
-                                .collect(),
-                        ))
-                    } else {
-                        Ok(Resolved::One(Protocol::from(one)))
-                    }
-                }
-                Err(e) => Err(Error::ResolveError(e)),
-            })
-            .boxed(),
-        Protocol::Dnsaddr(name) => {
-            let name = [DNSADDR_PREFIX, name].concat();
-            resolver
-                .txt_lookup(name)
-                .map(move |res| match res {
-                    Ok(txts) => {
-                        let mut addrs = Vec::new();
-                        for txt in txts
-                            .answers()
-                            .iter()
-                            .filter_map(|record| match &record.data {
-                                RData::TXT(txt) => Some(txt),
-                                _ => None,
-                            })
-                        {
-                            if let Some(chars) = txt.txt_data.first() {
-                                match parse_dnsaddr_txt(chars) {
-                                    Err(e) => {
-                                        // Skip over seemingly invalid entries.
-                                        tracing::debug!("Invalid TXT record: {:?}", e);
-                                    }
-                                    Ok(a) => {
-                                        addrs.push(a);
-                                    }
-                                }
-                            }
-                        }
-                        Ok(Resolved::Addrs(addrs))
-                    }
-                    Err(e) => Err(Error::ResolveError(e)),
-                })
-                .boxed()
-        }
-        proto => future::ready(Ok(Resolved::One(proto.clone()))).boxed(),
-    }
-}
-
 /// Parses a `<character-string>` of a `dnsaddr` TXT record.
-fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
-    let s = str::from_utf8(txt).map_err(invalid_data)?;
-    match s.strip_prefix("dnsaddr=") {
+fn parse_dnsaddr_txt(txt: &str) -> io::Result<Multiaddr> {
+    match txt.strip_prefix("dnsaddr=") {
         None => Err(invalid_data("Missing `dnsaddr=` prefix.")),
         Some(a) => Ok(Multiaddr::try_from(a).map_err(invalid_data)?),
     }
@@ -551,311 +411,19 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
     io::Error::new(io::ErrorKind::InvalidData, e)
 }
 
-#[doc(hidden)]
-pub trait Resolver {
-    fn lookup_ip(
-        &self,
-        name: String,
-    ) -> impl Future<Output = Result<LookupIp, ResolveError>> + Send;
-    fn ipv4_lookup(
-        &self,
-        name: String,
-    ) -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
-    fn ipv6_lookup(
-        &self,
-        name: String,
-    ) -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
-    fn txt_lookup(&self, name: String)
-    -> impl Future<Output = Result<Lookup, ResolveError>> + Send;
-}
-
-impl<C> Resolver for hickory_resolver::Resolver<C>
-where
-    C: ConnectionProvider,
-{
-    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError> {
-        self.lookup_ip(name).await
-    }
-
-    async fn ipv4_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.ipv4_lookup(name).await
-    }
-
-    async fn ipv6_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.ipv6_lookup(name).await
-    }
-
-    async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
-        self.txt_lookup(name).await
-    }
-}
-
-#[cfg(all(test, feature = "tokio"))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use futures::future::BoxFuture;
-    use hickory_resolver::config::QUAD9;
-    use libp2p_core::{
-        Endpoint, Transport,
-        multiaddr::{Multiaddr, Protocol},
-        transport::{PortUse, TransportError, TransportEvent},
-    };
-    use libp2p_identity::PeerId;
-
     use super::*;
 
-    fn test_tokio<T, F: Future<Output = ()>>(
-        transport: T,
-        test_fn: impl FnOnce(tokio::Transport<T>) -> F,
-    ) {
-        let config = ResolverConfig::udp_and_tcp(&QUAD9);
-        let opts = ResolverOpts::default();
-        let transport = tokio::Transport::custom(transport, config, opts);
-        let rt = ::tokio::runtime::Builder::new_current_thread()
-            .enable_io()
-            .enable_time()
-            .build()
-            .unwrap();
-        rt.block_on(test_fn(transport));
-    }
-
     #[test]
-    fn basic_resolve() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
-        #[derive(Clone)]
-        struct CustomTransport;
-
-        impl Transport for CustomTransport {
-            type Output = ();
-            type Error = std::io::Error;
-            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-            fn listen_on(
-                &mut self,
-                _: ListenerId,
-                _: Multiaddr,
-            ) -> Result<(), TransportError<Self::Error>> {
-                unreachable!()
-            }
-
-            fn remove_listener(&mut self, _: ListenerId) -> bool {
-                false
-            }
-
-            fn dial(
-                &mut self,
-                addr: Multiaddr,
-                _: DialOpts,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                // Check that all DNS components have been resolved, i.e. replaced.
-                assert!(!addr.iter().any(|p| matches!(
-                    p,
-                    Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
-                )));
-                Ok(Box::pin(future::ready(Ok(()))))
-            }
-
-            fn poll(
-                self: Pin<&mut Self>,
-                _: &mut Context<'_>,
-            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-                unreachable!()
-            }
-        }
-
-        async fn run<T, R>(mut transport: super::Transport<T, R>)
-        where
-            T: Transport + Clone + Send + Unpin + 'static,
-            T::Error: Send,
-            T::Dial: Send,
-            R: Clone + Send + Sync + Resolver + 'static,
-        {
-            let dial_opts = DialOpts {
-                role: Endpoint::Dialer,
-                port_use: PortUse::Reuse,
-            };
-
-            // Success due to existing A record for example.com.
-            let _ = transport
-                .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
+    fn parse_dnsaddr_txt_requires_prefix() {
+        let addr = parse_dnsaddr_txt("dnsaddr=/dns4/example.com/tcp/443/wss").unwrap();
+        assert_eq!(
+            addr,
+            "/dns4/example.com/tcp/443/wss"
+                .parse::<Multiaddr>()
                 .unwrap()
-                .await
-                .unwrap();
-
-            // Success due to existing AAAA record for example.com.
-            let _ = transport
-                .dial("/dns6/example.com/tcp/20000".parse().unwrap(), dial_opts)
-                .unwrap()
-                .await
-                .unwrap();
-
-            // Success due to pass-through, i.e. nothing to resolve.
-            let _ = transport
-                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap(), dial_opts)
-                .unwrap()
-                .await
-                .unwrap();
-
-            // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io.
-            let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap(), dial_opts)
-                .unwrap()
-                .await
-                .unwrap();
-
-            // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io having
-            // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
-            // i.e. a bootnode with such a peer ID.
-            let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), dial_opts)
-                .unwrap()
-                .await
-                .unwrap();
-
-            // Failure due to the DNS TXT records at _dnsaddr.libp2p.io not having
-            // an entry with a random `p2p` suffix.
-            match transport
-                .dial(
-                    format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
-                        .parse()
-                        .unwrap(),
-                    dial_opts,
-                )
-                .unwrap()
-                .await
-            {
-                Err(Error::ResolveError(_)) => {}
-                Err(e) => panic!("Unexpected error: {e:?}"),
-                Ok(_) => panic!("Unexpected success."),
-            }
-
-            // Failure due to no records.
-            match transport
-                .dial(
-                    "/dns4/example.invalid/tcp/20000".parse().unwrap(),
-                    dial_opts,
-                )
-                .unwrap()
-                .await
-            {
-                Err(Error::Dial(dial_errs)) => {
-                    assert_eq!(
-                        dial_errs.len(),
-                        1,
-                        "Expected exactly 1 error for 'no records' scenario, got {dial_errs:?}"
-                    );
-
-                    match &dial_errs[0] {
-                        Error::ResolveError(e) if e.is_no_records_found() => {}
-                        Error::ResolveError(e) => panic!("Unexpected DNS error: {e:?}"),
-                        other => {
-                            panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
-                        }
-                    }
-                }
-
-                Err(e) => panic!("Unexpected error: {e:?}"),
-                Ok(_) => panic!("Unexpected success."),
-            }
-        }
-
-        test_tokio(CustomTransport, run);
-    }
-
-    #[test]
-    fn aggregated_dial_errors() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
-        #[derive(Clone)]
-        struct AlwaysFailTransport;
-
-        impl libp2p_core::Transport for AlwaysFailTransport {
-            type Output = ();
-            type Error = std::io::Error;
-            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-            fn listen_on(
-                &mut self,
-                _id: ListenerId,
-                _addr: Multiaddr,
-            ) -> Result<(), TransportError<Self::Error>> {
-                unimplemented!()
-            }
-
-            fn remove_listener(&mut self, _id: ListenerId) -> bool {
-                false
-            }
-
-            fn dial(
-                &mut self,
-                addr: Multiaddr,
-                _: DialOpts,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                // Every dial attempt fails with an error that includes the address.
-                Ok(Box::pin(future::ready(Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    format!("No support for dialing {addr}"),
-                )))))
-            }
-
-            fn poll(
-                self: Pin<&mut Self>,
-                _cx: &mut Context<'_>,
-            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-                unimplemented!()
-            }
-        }
-
-        async fn run_test<T, R>(mut transport: super::Transport<T, R>)
-        where
-            T: Transport<Error = std::io::Error> + Clone + Send + Unpin + 'static,
-            T::Error: Send,
-            T::Dial: Send,
-            R: Clone + Send + Sync + Resolver + 'static,
-        {
-            let dial_opts = DialOpts {
-                role: Endpoint::Dialer,
-                port_use: PortUse::Reuse,
-            };
-
-            // This address requires DNS resolution, yielding two IP addresses,
-            // forcing two dial attempts. Both fail.
-            let addr: Multiaddr = "/dnsaddr/bootstrap.libp2p.io".parse().unwrap();
-            let dial_future = transport.dial(addr, dial_opts).unwrap();
-            let result = dial_future.await;
-
-            match result {
-                Err(Error::Dial(errs)) => {
-                    // We expect at least 2 errors, one per resolved IP.
-                    assert!(
-                        errs.len() >= 2,
-                        "Expected multiple dial errors, but got {}",
-                        errs.len()
-                    );
-                    for e in errs {
-                        match e {
-                            Error::Transport(io_err) => {
-                                assert_eq!(
-                                    io_err.kind(),
-                                    io::ErrorKind::Unsupported,
-                                    "Expected Unsupported dial error, got: {io_err:?}"
-                                );
-                            }
-                            _ => panic!("Expected Error::Transport(Unsupported), got: {e:?}"),
-                        }
-                    }
-                }
-                Err(e) => panic!("Expected aggregated dial errors, got {e:?}"),
-                Ok(_) => panic!("Dial unexpectedly succeeded"),
-            }
-        }
-
-        test_tokio(AlwaysFailTransport, run_test);
+        );
+        assert!(parse_dnsaddr_txt("/dns4/example.com").is_err());
     }
 }
