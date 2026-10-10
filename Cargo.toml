@@ -13,6 +13,7 @@ members = [
     "examples/ipfs-private",
     "examples/metrics",
     "examples/ping",
+    "examples/relay-client",
     "examples/relay-server",
     "examples/rendezvous",
     "examples/stream",
