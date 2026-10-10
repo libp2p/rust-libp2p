@@ -21,12 +21,17 @@
 
 //! Async functions driving pending and established connections in the form of a task.
 
-use std::{convert::Infallible, pin::Pin};
+use std::{
+    convert::Infallible,
+    panic::{AssertUnwindSafe, catch_unwind},
+    pin::Pin,
+    task::Poll,
+};
 
 use futures::{
     SinkExt, StreamExt,
     channel::{mpsc, oneshot},
-    future::{Either, Future, poll_fn},
+    future::{Either, Future, FutureExt, poll_fn},
 };
 use libp2p_core::muxing::StreamMuxerBox;
 
@@ -177,29 +182,68 @@ pub(crate) async fn new_for_established_connection<THandler>(
     THandler: ConnectionHandler,
 {
     loop {
-        match futures::future::select(
-            command_receiver.next(),
-            poll_fn(|cx| Pin::new(&mut connection).poll(cx)),
-        )
-        .await
-        {
+        let connection_poll = poll_fn(|cx| {
+            // A panic in the connection state machine must not unwind into
+            // the task. Report the connection as closed instead.
+            match catch_unwind(AssertUnwindSafe(|| Pin::new(&mut connection).poll(cx))) {
+                Ok(poll) => poll,
+                Err(panic) => {
+                    let message = panic
+                        .downcast_ref::<String>()
+                        .map(String::as_str)
+                        .or_else(|| panic.downcast_ref::<&str>().copied())
+                        .unwrap_or("unknown panic");
+                    tracing::error!(
+                        ?connection_id,
+                        %peer_id,
+                        panic_message = message,
+                        "Panic in connection state machine; closing the connection"
+                    );
+                    Poll::Ready(Err(ConnectionError::Panicked(message.to_string())))
+                }
+            }
+        });
+
+        match futures::future::select(command_receiver.next(), connection_poll).await {
             Either::Left((Some(command), _)) => match command {
                 Command::NotifyHandler(event) => connection.on_behaviour_event(event),
                 Command::Close => {
                     command_receiver.close();
                     let (remaining_events, closing_muxer) = connection.close();
 
-                    let _ = events
-                        .send_all(&mut remaining_events.map(|event| {
-                            Ok(EstablishedConnectionEvent::Notify {
-                                id: connection_id,
-                                event,
-                                peer_id,
-                            })
-                        }))
-                        .await;
+                    let closing = async {
+                        let _ = events
+                            .send_all(&mut remaining_events.map(|event| {
+                                Ok(EstablishedConnectionEvent::Notify {
+                                    id: connection_id,
+                                    event,
+                                    peer_id,
+                                })
+                            }))
+                            .await;
 
-                    let error = closing_muxer.await.err().map(ConnectionError::IO);
+                        closing_muxer.await
+                    };
+
+                    // A panic in the handler or muxer close must not unwind
+                    // into the task. Report the connection as closed instead.
+                    let error = match AssertUnwindSafe(closing).catch_unwind().await {
+                        Ok(result) => result.err().map(ConnectionError::IO),
+                        Err(panic) => {
+                            let message = panic
+                                .downcast_ref::<String>()
+                                .map(String::as_str)
+                                .or_else(|| panic.downcast_ref::<&str>().copied())
+                                .unwrap_or("unknown panic");
+                            tracing::error!(
+                                ?connection_id,
+                                %peer_id,
+                                panic_message = message,
+                                "Panic while closing the connection"
+                            );
+                            Some(ConnectionError::Panicked(message.to_string()))
+                        }
+                    };
 
                     let _ = events
                         .send(EstablishedConnectionEvent::Closed {
@@ -239,15 +283,32 @@ pub(crate) async fn new_for_established_connection<THandler>(
                         command_receiver.close();
                         let (remaining_events, _closing_muxer) = connection.close();
 
-                        let _ = events
-                            .send_all(&mut remaining_events.map(|event| {
-                                Ok(EstablishedConnectionEvent::Notify {
-                                    id: connection_id,
-                                    event,
-                                    peer_id,
-                                })
-                            }))
-                            .await;
+                        // A panic in the handler close must not prevent the
+                        // closed event from being reported.
+                        let drain = async {
+                            let _ = events
+                                .send_all(&mut remaining_events.map(|event| {
+                                    Ok(EstablishedConnectionEvent::Notify {
+                                        id: connection_id,
+                                        event,
+                                        peer_id,
+                                    })
+                                }))
+                                .await;
+                        };
+                        if let Err(panic) = AssertUnwindSafe(drain).catch_unwind().await {
+                            let message = panic
+                                .downcast_ref::<String>()
+                                .map(String::as_str)
+                                .or_else(|| panic.downcast_ref::<&str>().copied())
+                                .unwrap_or("unknown panic");
+                            tracing::error!(
+                                ?connection_id,
+                                %peer_id,
+                                panic_message = message,
+                                "Panic while draining handler events after a connection error"
+                            );
+                        }
 
                         // Terminate the task with the error, dropping the connection.
                         let _ = events

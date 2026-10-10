@@ -28,9 +28,10 @@ pub enum ConnectionError {
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
-
     /// The connection keep-alive timeout expired.
     KeepAliveTimeout,
+    /// The connection Panicked.
+    Panicked(String),
 }
 
 impl fmt::Display for ConnectionError {
@@ -39,6 +40,12 @@ impl fmt::Display for ConnectionError {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {err}"),
             ConnectionError::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
+            }
+            ConnectionError::Panicked(trace) => {
+                write!(
+                    f,
+                    "Connection error: the connection panicked internally: {trace}"
+                )
             }
         }
     }
@@ -49,6 +56,7 @@ impl std::error::Error for ConnectionError {
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
+            ConnectionError::Panicked(_trace) => None,
         }
     }
 }
