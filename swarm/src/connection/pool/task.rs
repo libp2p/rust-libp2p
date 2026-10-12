@@ -282,7 +282,7 @@ pub(crate) async fn new_for_established_connection<THandler>(
     // and contain it.
     let wrapped_drop = catch_unwind(AssertUnwindSafe(move || drop(wrapped)));
 
-    if let Err(panic) = wrapped_drop.and_then(|()| outcome) {
+    if let Err(panic) = wrapped_drop.and(outcome) {
         let message = panic
             .downcast_ref::<String>()
             .map(String::as_str)
