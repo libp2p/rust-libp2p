@@ -1,5 +1,7 @@
 ## 0.49.0
 
+- Rank DNS-only addresses in the "other" smart-dialing tier, keeping localhost in the private tier.
+
 - Contain panics in the per-connection task and report the connection as closed.
   See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
 
