@@ -6,6 +6,9 @@
 - Cap TTL from discovery responses.
   See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
 
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.18.0
 
 - Expose `PROTOCOL_NAME` constant for the protocol ID.

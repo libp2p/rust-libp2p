@@ -1,3 +1,7 @@
+## 0.58.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.57.0
 
 - Remove `wasm-bindgen` feature and make `wasm` support implicit.

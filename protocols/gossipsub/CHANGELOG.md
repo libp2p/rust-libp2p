@@ -9,6 +9,9 @@
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
   See [PR 6621](https://github.com/libp2p/rust-libp2p/pull/6621).
 
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.50.0
 - Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
   ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
