@@ -1,5 +1,7 @@
-## 0.48.1
+## 0.49.0
 
+- Contain panics in the per-connection task and report the connection as closed.
+  See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
 - Release the outbound slot of `OneShotHandler` when an outbound upgrade fails.
   See [PR 6651](https://github.com/libp2p/rust-libp2p/pull/6651).
 
