@@ -1,3 +1,9 @@
+## 0.22.1
+
+- Attach listen and dial requests through a relay the client is still dialing to that dial, instead
+  of starting a second dial that gets rejected.
+  See [PR 6656](https://github.com/libp2p/rust-libp2p/pull/6656).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.

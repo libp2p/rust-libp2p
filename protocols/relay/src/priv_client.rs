@@ -113,7 +113,10 @@ pub struct Behaviour {
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Infallible>>>,
 
-    pending_handler_commands: HashMap<ConnectionId, handler::In>,
+    pending_handler_commands: HashMap<ConnectionId, Vec<handler::In>>,
+
+    /// Connections to relays that are currently being dialed.
+    pending_relay_dials: HashMap<PeerId, ConnectionId>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -127,6 +130,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         listener_id_to_connection_id: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
+        pending_relay_dials: Default::default(),
     };
     (transport, behaviour)
 }
@@ -204,6 +208,13 @@ impl Behaviour {
         }
     }
 
+    fn take_pending_handler_commands(&mut self, connection_id: ConnectionId) -> Vec<handler::In> {
+        self.pending_relay_dials.retain(|_, c| *c != connection_id);
+        self.pending_handler_commands
+            .remove(&connection_id)
+            .unwrap_or_default()
+    }
+
     fn peer_for_connection(&self, connection_id: ConnectionId) -> Option<PeerId> {
         self.directly_connected_peers
             .iter()
@@ -222,14 +233,14 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+        let pending_handler_commands = self.take_pending_handler_commands(connection_id);
 
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
-        if let Some(event) = pending_handler_command {
+        for event in pending_handler_commands {
             handler.on_behaviour_event(event)
         }
 
@@ -244,7 +255,7 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+        let pending_handler_commands = self.take_pending_handler_commands(connection_id);
 
         if addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
@@ -252,7 +263,7 @@ impl NetworkBehaviour for Behaviour {
 
         let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
 
-        if let Some(event) = pending_handler_command {
+        for event in pending_handler_commands {
             handler.on_behaviour_event(event)
         }
 
@@ -278,7 +289,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ListenerClosed(listener_closed) => self.on_listener_closed(listener_closed),
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.reservation_addresses.remove(&connection_id);
-                self.pending_handler_commands.remove(&connection_id);
+                self.take_pending_handler_commands(connection_id);
             }
             _ => {}
         }
@@ -374,7 +385,9 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(vec![relay_addr.clone()])
                             .extend_addresses_through_behaviour()
                             .build();
-                        let relayed_connection_id = opts.connection_id();
+                        // Reuse an ongoing dial to the relay, a second dial would be rejected.
+                        let pending_dial = self.pending_relay_dials.get(&relay_peer_id).copied();
+                        let relayed_connection_id = pending_dial.unwrap_or(opts.connection_id());
 
                         self.listener_id_to_connection_id
                             .insert(listener_id, relayed_connection_id);
@@ -390,7 +403,16 @@ impl NetworkBehaviour for Behaviour {
                         );
 
                         self.pending_handler_commands
-                            .insert(relayed_connection_id, handler::In::Reserve { to_listener });
+                            .entry(relayed_connection_id)
+                            .or_default()
+                            .push(handler::In::Reserve { to_listener });
+                        if pending_dial.is_some() {
+                            // More messages from the transport might be ready.
+                            cx.waker().wake_by_ref();
+                            return Poll::Pending;
+                        }
+                        self.pending_relay_dials
+                            .insert(relay_peer_id, relayed_connection_id);
                         ToSwarm::Dial { opts }
                     }
                 }
@@ -420,15 +442,24 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(vec![relay_addr])
                             .extend_addresses_through_behaviour()
                             .build();
-                        let connection_id = opts.connection_id();
+                        // Reuse an ongoing dial to the relay, a second dial would be rejected.
+                        let pending_dial = self.pending_relay_dials.get(&relay_peer_id).copied();
+                        let connection_id = pending_dial.unwrap_or(opts.connection_id());
 
-                        self.pending_handler_commands.insert(
-                            connection_id,
-                            handler::In::EstablishCircuit {
+                        self.pending_handler_commands
+                            .entry(connection_id)
+                            .or_default()
+                            .push(handler::In::EstablishCircuit {
                                 to_dial: send_back,
                                 dst_peer_id,
-                            },
-                        );
+                            });
+                        if pending_dial.is_some() {
+                            // More messages from the transport might be ready.
+                            cx.waker().wake_by_ref();
+                            return Poll::Pending;
+                        }
+                        self.pending_relay_dials
+                            .insert(relay_peer_id, connection_id);
 
                         ToSwarm::Dial { opts }
                     }

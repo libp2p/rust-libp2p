@@ -930,3 +930,58 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
         }
     }
 }
+
+#[tokio::test]
+async fn concurrent_circuits_via_unconnected_relay() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config::default());
+    let relay_peer_id = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut dsts = Vec::new();
+    for _ in 0..2 {
+        let mut dst = build_client();
+        let dst_peer_id = *dst.local_peer_id();
+        let dst_addr = relay_addr
+            .clone()
+            .with(Protocol::P2p(relay_peer_id))
+            .with(Protocol::P2pCircuit)
+            .with(Protocol::P2p(dst_peer_id));
+        dst.listen_on(dst_addr.clone()).unwrap();
+        assert!(wait_for_dial(&mut dst, relay_peer_id).await);
+        wait_for_reservation(&mut dst, dst_addr.clone(), relay_peer_id, false).await;
+        tokio::spawn(async move {
+            dst.collect::<Vec<_>>().await;
+        });
+        dsts.push((dst_peer_id, dst_addr));
+    }
+
+    // `src` is not yet connected to the relay and dials both destinations at once.
+    let mut src = build_client();
+    for (_, addr) in &dsts {
+        src.dial(addr.clone()).unwrap();
+    }
+
+    let mut connected = std::collections::HashSet::new();
+    while connected.len() < 2 {
+        match src.select_next_some().await {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id != relay_peer_id => {
+                connected.insert(peer_id);
+            }
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. }
+                if peer_id != Some(relay_peer_id) =>
+            {
+                panic!("circuit to {peer_id:?} failed: {error}")
+            }
+            _ => {}
+        }
+    }
+}
