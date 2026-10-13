@@ -15,7 +15,7 @@ use std::{
 };
 
 use hashlink::LruCache;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
 use libp2p_swarm::{DialError, FromSwarm, behaviour::ConnectionEstablished};
 
 use super::Store;
@@ -134,6 +134,20 @@ impl<T> MemoryStore<T> {
         false
     }
 
+    /// Remove an address that was reported by the swarm as dialed.
+    ///
+    /// The swarm appends `/p2p/<peer>` to every address it dials, so the address is removed both
+    /// in the form it was reported and without the trailing `/p2p/<peer>` component.
+    ///
+    /// Returns `true` if any of the two forms was removed.
+    fn remove_dialed_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        let removed = self.remove_address_inner(peer, address, false);
+        match strip_p2p(peer, address) {
+            Some(stripped) => self.remove_address_inner(peer, &stripped, false) || removed,
+            None => removed,
+        }
+    }
+
     /// Get a reference to a peer's custom data.
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
         self.records.peek(peer).and_then(|r| r.get_custom_data())
@@ -204,7 +218,7 @@ impl<T> Store for MemoryStore<T> {
             }) if endpoint.is_dialer() => {
                 if self.config.remove_addr_on_dial_error {
                     for failed_addr in *failed_addresses {
-                        self.remove_address_inner(peer_id, failed_addr, false);
+                        self.remove_dialed_address(peer_id, failed_addr);
                     }
                 }
                 self.add_address_inner(peer_id, endpoint.get_remote_address(), false);
@@ -221,14 +235,15 @@ impl<T> Store for MemoryStore<T> {
 
                 match info.error {
                     DialError::WrongPeerId { obtained, address }
-                        if self.remove_address_inner(&peer, address, false) =>
+                        if self.remove_dialed_address(&peer, address) =>
                     {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
-                        self.add_address_inner(obtained, address, false);
+                        let address = strip_p2p(&peer, address).unwrap_or_else(|| address.clone());
+                        self.add_address_inner(obtained, &address, false);
                     }
                     DialError::Transport(errors) => {
                         for (addr, _) in errors {
-                            self.remove_address_inner(&peer, addr, false);
+                            self.remove_dialed_address(&peer, addr);
                         }
                     }
                     _ => {}
@@ -250,6 +265,15 @@ impl<T> Store for MemoryStore<T> {
                 Poll::Pending
             }
         }
+    }
+}
+
+/// Returns the address without its trailing `/p2p/<peer>` component, if present.
+fn strip_p2p(peer: &PeerId, address: &Multiaddr) -> Option<Multiaddr> {
+    let mut address = address.clone();
+    match address.pop() {
+        Some(Protocol::P2p(p)) if p == *peer => Some(address),
+        _ => None,
     }
 }
 
@@ -468,6 +492,42 @@ mod test {
                 .last()
                 .expect("addr to exist")
                 == second_record
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_address_on_dial_failure() {
+        let store: MemoryStore<()> = MemoryStore::new(Default::default());
+        let mut swarm = Swarm::new_ephemeral_tokio(|_| crate::Behaviour::new(store));
+
+        let peer = PeerId::random();
+        // Nobody listens on this address, dialing it fails.
+        let addr = Multiaddr::empty().with(Protocol::Memory(0xdead_beef_cafe));
+
+        // Addresses reported via `NewExternalAddrOfPeer` usually don't include the peer ID.
+        swarm.add_peer_address(peer, addr.clone());
+        assert!(matches!(
+            swarm.next_behaviour_event().await,
+            Event::PeerAddressAdded { .. }
+        ));
+
+        swarm
+            .dial(libp2p_swarm::dial_opts::DialOpts::peer_id(peer).build())
+            .unwrap();
+        swarm
+            .wait(|ev| match ev {
+                SwarmEvent::OutgoingConnectionError { .. } => Some(()),
+                _ => None,
+            })
+            .await;
+
+        assert!(
+            swarm.behaviour().address_of_peer(&peer).is_none(),
+            "address should be removed after the dial failed, got {:?}",
+            swarm
+                .behaviour()
+                .address_of_peer(&peer)
+                .map(|a| a.collect::<Vec<_>>())
         );
     }
 
