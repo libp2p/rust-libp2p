@@ -29,6 +29,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
@@ -52,7 +53,8 @@ fn xx() {
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
-        let (client, server) = futures_ringbuf::Endpoint::pair(100, 100);
+        let (client, server) = tokio::io::duplex(100);
+        let (client, server) = (client.compat(), server.compat());
 
         futures::executor::block_on(async move {
             let (

@@ -176,11 +176,19 @@ pub mod codec {
 #[cfg(test)]
 mod tests {
     use futures::AsyncWriteExt;
-    use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
+    use tokio::io::DuplexStream;
+    use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
     use crate::Codec;
+
+    /// Creates a pair of connected in-memory endpoints implementing the futures
+    /// `AsyncRead`/`AsyncWrite` traits.
+    fn endpoint_pair(buffer_size: usize) -> (Compat<DuplexStream>, Compat<DuplexStream>) {
+        let (a, b) = tokio::io::duplex(buffer_size);
+        (a.compat(), b.compat())
+    }
 
     #[tokio::test]
     async fn test_codec() {
@@ -194,7 +202,7 @@ mod tests {
         let mut codec: super::codec::Codec<TestRequest, TestResponse> =
             super::codec::Codec::default();
 
-        let (mut a, mut b) = Endpoint::pair(124, 124);
+        let (mut a, mut b) = endpoint_pair(124);
         codec
             .write_request(&protocol, &mut a, expected_request.clone())
             .await
@@ -209,7 +217,7 @@ mod tests {
 
         assert_eq!(actual_request, expected_request);
 
-        let (mut a, mut b) = Endpoint::pair(124, 124);
+        let (mut a, mut b) = endpoint_pair(124);
         codec
             .write_response(&protocol, &mut a, expected_response.clone())
             .await

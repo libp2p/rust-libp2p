@@ -13,23 +13,26 @@ use libp2p_core::{
     muxing::StreamMuxerExt,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
 };
+use tokio::io::DuplexStream;
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::future::{BoxFuture, Either, FutureExt};
 
 pub async fn connected_muxers_on_memory_ring_buffer<MC, M, E>() -> (M, M)
 where
-    MC: InboundConnectionUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
-        + OutboundConnectionUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
+    MC: InboundConnectionUpgrade<Compat<DuplexStream>, Error = E, Output = M>
+        + OutboundConnectionUpgrade<Compat<DuplexStream>, Error = E, Output = M>
         + Send
         + 'static
         + Default,
     <MC as UpgradeInfo>::Info: Send,
     <<MC as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <MC as InboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
-    <MC as OutboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
+    <MC as InboundConnectionUpgrade<Compat<DuplexStream>>>::Future: Send,
+    <MC as OutboundConnectionUpgrade<Compat<DuplexStream>>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let (alice, bob) = futures_ringbuf::Endpoint::pair(100, 100);
+    let (alice, bob) = tokio::io::duplex(100);
+    let (alice, bob) = (alice.compat(), bob.compat());
 
     let alice_upgrade = MC::default().upgrade_inbound(
         alice,
