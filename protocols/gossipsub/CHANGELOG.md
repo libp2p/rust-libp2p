@@ -3,6 +3,9 @@
   buffer, which could already contain the next frames.
   See [PR 6645](https://github.com/libp2p/rust-libp2p/pull/6645).
 
+- Validate the default mesh parameters, the default `max_transmit_size` and all topic mesh
+  configurations in `ConfigBuilder::build`, not only topics with a custom max transmit size.
+  See [PR 6648](https://github.com/libp2p/rust-libp2p/pull/6648).
 - Remove duplicate `Config` fields which are already present in `ProtocolConfig`.
   See [PR 6669](https://github.com/libp2p/rust-libp2p/pull/6669)
 
