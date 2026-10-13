@@ -22,9 +22,9 @@
 //! in a multistream-select protocol negotiation.
 
 use std::{
-    convert::TryFrom as _,
     mem,
     pin::Pin,
+    str::FromStr,
     task::{Context, Poll},
 };
 
@@ -51,7 +51,7 @@ where
 {
     let protocols = protocols
         .into_iter()
-        .filter_map(|n| match Protocol::try_from(n.as_ref()) {
+        .filter_map(|n| match Protocol::from_str(n.as_ref()) {
             Ok(p) => Some((n, p)),
             Err(e) => {
                 tracing::warn!(

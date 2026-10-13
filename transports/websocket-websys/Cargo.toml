@@ -30,3 +30,6 @@ all-features = true
 libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
+
+[lints]
+workspace = true

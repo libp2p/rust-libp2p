@@ -334,7 +334,7 @@ impl NetworkBehaviour for Behaviour {
         _connection_id: ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
-        libp2p_core::util::unreachable(event)
+        match event {}
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]

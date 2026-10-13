@@ -492,7 +492,7 @@ impl Handler {
             StreamUpgradeError::Timeout => outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
             StreamUpgradeError::NegotiationFailed => outbound_stop::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound_stop::Error::Io(e),
-            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
+            StreamUpgradeError::Apply(v) => match v {},
         };
 
         let stop_command = self

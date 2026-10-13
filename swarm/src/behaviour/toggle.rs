@@ -208,7 +208,7 @@ where
     ) {
         let out = match out {
             future::Either::Left(out) => out,
-            future::Either::Right(v) => libp2p_core::util::unreachable(v),
+            future::Either::Right(v) => match v {},
         };
 
         if let Either::Left(info) = info {
@@ -248,7 +248,7 @@ where
 
         let err = match err {
             Either::Left(e) => e,
-            Either::Right(v) => libp2p_core::util::unreachable(v),
+            Either::Right(v) => match v {},
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

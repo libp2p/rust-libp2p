@@ -118,7 +118,7 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        libp2p_core::util::unreachable(event)
+        match event {}
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {

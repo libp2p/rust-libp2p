@@ -130,7 +130,7 @@ impl ConnectionHandler for HandlerWithState {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        libp2p_core::util::unreachable(event)
+        match event {}
     }
 
     fn on_connection_event(

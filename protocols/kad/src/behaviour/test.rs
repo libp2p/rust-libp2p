@@ -164,7 +164,7 @@ fn bootstrap() {
         // considered. Given that no other node is aware of them, they would be
         // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
-        let num_group = rand::random_range(1..(num_total % K_VALUE.get()) + 2);
+        let num_group = rand::random_range(1..(num_total % K_VALUE) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from

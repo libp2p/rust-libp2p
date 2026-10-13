@@ -82,7 +82,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                libp2p_core::util::unreachable(error);
+                match error {};
             }
             _ => {}
         }
