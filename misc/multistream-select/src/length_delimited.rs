@@ -389,6 +389,7 @@ mod tests {
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
     use tokio::runtime::Runtime;
+    use tokio_util::compat::TokioAsyncReadCompatExt;
 
     use crate::length_delimited::LengthDelimited;
 
@@ -490,7 +491,9 @@ mod tests {
     #[test]
     fn writing_reading() {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
-            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+            let (client_connection, server_connection) = tokio::io::duplex(100);
+            let (client_connection, server_connection) =
+                (client_connection.compat(), server_connection.compat());
 
             let rt = Runtime::new().unwrap();
             rt.block_on(async move {

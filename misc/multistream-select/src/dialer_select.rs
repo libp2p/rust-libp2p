@@ -227,7 +227,9 @@ mod tests {
     #[test]
     fn select_proto_basic() {
         async fn run(version: Version) {
-            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+            let (client_connection, server_connection) = tokio::io::duplex(100);
+            let (client_connection, server_connection) =
+                (client_connection.compat(), server_connection.compat());
 
             let server = tokio::task::spawn(async move {
                 let protos = vec!["/proto1", "/proto2"];
@@ -355,8 +357,8 @@ mod tests {
 
     #[tokio::test]
     async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
-        let (client_connection, _server_connection) =
-            futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
+        let (client_connection, _server_connection) = tokio::io::duplex(1024 * 1024);
+        let client_connection = client_connection.compat();
 
         let client = tokio::task::spawn(async move {
             // Single protocol to allow for lazy (or optimistic) protocol negotiation.
