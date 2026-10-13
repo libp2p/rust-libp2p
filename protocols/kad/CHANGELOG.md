@@ -1,3 +1,9 @@
+## 0.49.1
+
+- Remove the evicted substream when the inbound substream limit is reached instead of marking it
+  cancelled, so the limit keeps being enforced on muxers that don't wake dropped streams (QUIC).
+  See [PR 6650](https://github.com/libp2p/rust-libp2p/pull/6650).
+
 ## 0.49.0
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on

@@ -119,8 +119,6 @@ enum InboundSubstreamState {
     PendingFlush(UniqueConnecId, KadInStreamSink<Stream>),
     /// The substream is being closed.
     Closing(KadInStreamSink<Stream>),
-    /// The substream was cancelled in favor of a new one.
-    Cancelled,
 
     Poisoned {
         phantom: PhantomData<QueryId>,
@@ -172,9 +170,6 @@ impl InboundSubstreamState {
             | InboundSubstreamState::PendingFlush(_, substream)
             | InboundSubstreamState::Closing(substream) => {
                 *self = InboundSubstreamState::Closing(substream);
-            }
-            InboundSubstreamState::Cancelled => {
-                *self = InboundSubstreamState::Cancelled;
             }
             InboundSubstreamState::Poisoned { .. } => unreachable!(),
         }
@@ -518,15 +513,26 @@ impl Handler {
             });
         }
 
-        if self.inbound_substreams.len() == MAX_NUM_STREAMS {
-            if let Some(s) = self.inbound_substreams.iter_mut().find(|s| {
+        if self.inbound_substreams.len() >= MAX_NUM_STREAMS {
+            // The older substream is removed rather than replaced in place, as a replaced
+            // substream would only be dropped from `inbound_substreams` once it is woken up,
+            // which e.g. never happens for QUIC streams.
+            let mut substreams = std::mem::take(&mut self.inbound_substreams)
+                .into_iter()
+                .collect::<Vec<_>>();
+            let reusable = substreams.iter().position(|s| {
                 matches!(
                     s,
                     // An inbound substream waiting to be reused.
                     InboundSubstreamState::WaitingMessage { first: false, .. }
                 )
-            }) {
-                *s = InboundSubstreamState::Cancelled;
+            });
+            if let Some(pos) = reusable {
+                substreams.swap_remove(pos);
+            }
+            self.inbound_substreams = substreams.into_iter().collect();
+
+            if reusable.is_some() {
                 tracing::debug!(
                     peer=?self.remote_peer_id,
                     "New inbound substream to peer exceeds inbound substream limit. \
@@ -1006,7 +1012,6 @@ impl futures::Stream for InboundSubstreamState {
                     }
                 },
                 InboundSubstreamState::Poisoned { .. } => unreachable!(),
-                InboundSubstreamState::Cancelled => return Poll::Ready(None),
             }
         }
     }
@@ -1094,5 +1099,99 @@ mod tests {
         }
 
         quickcheck::quickcheck(prop as fn(_, _))
+    }
+
+    #[tokio::test]
+    async fn inbound_substream_limit_is_enforced() {
+        use std::time::Duration;
+
+        use libp2p_core::{Transport as _, muxing::StreamMuxerBox, upgrade::OutboundUpgrade};
+        use libp2p_swarm::{Swarm, SwarmEvent};
+
+        use crate::{PROTOCOL_NAME, store::MemoryStore};
+
+        fn quic_swarm<B: libp2p_swarm::NetworkBehaviour>(
+            f: impl FnOnce(libp2p_identity::Keypair) -> B,
+        ) -> Swarm<B> {
+            let key = libp2p_identity::Keypair::generate_ed25519();
+            let id = key.public().to_peer_id();
+            let transport = libp2p_quic::tokio::Transport::new(libp2p_quic::Config::new(&key))
+                .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+                .boxed();
+            Swarm::new(
+                transport,
+                f(key),
+                id,
+                libp2p_swarm::Config::with_tokio_executor()
+                    .with_idle_connection_timeout(Duration::from_secs(60)),
+            )
+        }
+
+        let mut server = quic_swarm(|k| {
+            let id = k.public().to_peer_id();
+            let mut kad = crate::Behaviour::new(id, MemoryStore::new(id));
+            kad.set_mode(Some(Mode::Server));
+            kad
+        });
+        let client = quic_swarm(|_| libp2p_stream::Behaviour::new());
+        server
+            .listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap())
+            .unwrap();
+        let addr = loop {
+            if let SwarmEvent::NewListenAddr { address, .. } = server.select_next_some().await {
+                break address;
+            }
+        };
+        let server_id = *server.local_peer_id();
+        let mut client = client;
+        client.dial(addr.with_p2p(server_id).unwrap()).unwrap();
+        let control = client.behaviour().new_control();
+        tokio::spawn(async move {
+            loop {
+                server.select_next_some().await;
+            }
+        });
+        tokio::spawn(async move {
+            loop {
+                client.select_next_some().await;
+            }
+        });
+
+        let open = |mut control: libp2p_stream::Control| async move {
+            let stream = control.open_stream(server_id, PROTOCOL_NAME).await.unwrap();
+            ProtocolConfig::new(PROTOCOL_NAME)
+                .upgrade_outbound(stream, PROTOCOL_NAME)
+                .await
+                .unwrap()
+        };
+        let request = || KadRequestMsg::FindNode {
+            key: PeerId::random().to_bytes(),
+        };
+
+        // Fill the inbound substream limit with substreams waiting to be reused,
+        // then open more substreams, one after the other.
+        let mut streams = Vec::new();
+        for _ in 0..MAX_NUM_STREAMS + 10 {
+            let mut s = open(control.clone()).await;
+            s.send(request()).await.unwrap();
+            let _ = tokio::time::timeout(Duration::from_secs(2), s.next()).await;
+            streams.push(s);
+        }
+
+        // Count the substreams which are still served by the remote.
+        let mut num_alive = 0;
+        for s in &mut streams {
+            if s.send(request()).await.is_err() {
+                continue;
+            }
+            if let Ok(Some(Ok(_))) = tokio::time::timeout(Duration::from_secs(1), s.next()).await {
+                num_alive += 1;
+            }
+        }
+
+        assert_eq!(
+            num_alive, MAX_NUM_STREAMS,
+            "Expected the inbound substream limit to be enforced"
+        );
     }
 }
