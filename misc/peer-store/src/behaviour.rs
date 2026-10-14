@@ -7,8 +7,8 @@ use crate::store::Store;
 ///
 /// Usage:
 /// ```
-/// use libp2p_swarm::NetworkBehaviour;
 /// use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
+/// use libp2p_swarm::NetworkBehaviour;
 ///
 /// // `identify::Behaviour` broadcasts listen addresses of the peer,
 /// // `peer_store::Behaviour` will then capture the resulting

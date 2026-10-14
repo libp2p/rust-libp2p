@@ -393,8 +393,8 @@ impl<T> PeerRecord<T> {
 mod test {
     use std::{num::NonZero, str::FromStr};
 
-    use libp2p_identify as identify;
     use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
+    use libp2p_identify as identify;
     use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
