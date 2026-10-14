@@ -16,7 +16,8 @@ libp2p-identity = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 libp2p-identity = { workspace = true, features = ["rand", "serde"] }
-libp2p = { workspace = true, features = ["macros", "identify"] }
+libp2p-identify = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test", features = ["tokio"] }
 serde_json = { version = "1.0" }
 
