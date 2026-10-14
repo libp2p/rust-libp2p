@@ -5,7 +5,6 @@ version = "0.1.0"
 authors = ["drHuangMHT <DrHuangMHT@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
-publish = false
 rust-version.workspace = true
 
 [dependencies]

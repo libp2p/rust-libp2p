@@ -2834,6 +2834,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-mplex",
  "libp2p-noise",
+ "libp2p-peer-store",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
@@ -2841,6 +2842,7 @@ dependencies = [
  "libp2p-relay",
  "libp2p-rendezvous",
  "libp2p-request-response",
+ "libp2p-stream",
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-tls",
@@ -3448,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.6.0-alpha"
+version = "0.6.0"
 dependencies = [
  "futures",
  "libp2p-core",
