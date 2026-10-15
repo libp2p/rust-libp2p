@@ -930,3 +930,96 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
         }
     }
 }
+
+#[tokio::test]
+async fn deny_circuit_when_outbound_stop_capacity_is_exhausted() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config {
+        max_circuits: 100,
+        max_circuits_per_peer: 100,
+        reservation_duration: Duration::from_secs(3600),
+        ..relay::Config::default()
+    });
+    let relay_peer_id = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    // `dst` accepts the relayed `STOP` streams on its connection to the relay, but as it is not
+    // polled after the reservation, it never answers them. This keeps the relay's outbound `STOP`
+    // workers for the connection to `dst` busy.
+    let mut dst = build_client_with_config(
+        Config::with_tokio_executor().with_per_connection_event_buffer_size(64),
+    );
+    let dst_peer_id = *dst.local_peer_id();
+    let dst_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+    dst.listen_on(dst_addr.clone()).unwrap();
+    let mut reserved = false;
+    while !reserved {
+        tokio::select! {
+            e = dst.select_next_some() => {
+                if let SwarmEvent::Behaviour(ClientEvent::Relay(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                )) = e
+                {
+                    reserved = true;
+                }
+            }
+            _ = relay.select_next_some() => {}
+        }
+    }
+
+    // Request one circuit more than the relay handler can drive concurrently (10).
+    let mut src_1 = build_client();
+    let mut src_2 = build_client();
+    for src in [&mut src_1, &mut src_2] {
+        src.dial(relay_addr.clone().with(Protocol::P2p(relay_peer_id)))
+            .unwrap();
+        loop {
+            tokio::select! {
+                e = src.select_next_some() => {
+                    if let SwarmEvent::ConnectionEstablished { peer_id, .. } = e
+                        && peer_id == relay_peer_id
+                    {
+                        break;
+                    }
+                }
+                _ = relay.select_next_some() => {}
+            }
+        }
+    }
+    for _ in 0..6 {
+        src_1.dial(dst_addr.clone()).unwrap();
+    }
+    for _ in 0..5 {
+        src_2.dial(dst_addr.clone()).unwrap();
+    }
+
+    // The circuit exceeding the capacity must be denied right away instead of being leaked until
+    // the connection closes.
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(20));
+    loop {
+        tokio::select! {
+            e = relay.select_next_some() => {
+                if let SwarmEvent::Behaviour(RelayEvent::Relay(
+                    relay::Event::CircuitReqDenied { dst_peer_id: d, .. },
+                )) = e
+                {
+                    assert_eq!(d, dst_peer_id);
+                    break;
+                }
+            }
+            _ = src_1.select_next_some() => {}
+            _ = src_2.select_next_some() => {}
+            _ = &mut deadline => panic!("circuit exceeding the relay handler's capacity was never answered"),
+        }
+    }
+    drop(dst);
+}
