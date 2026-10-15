@@ -14,7 +14,8 @@ release = false
 libp2p-core = { workspace = true }
 futures = { workspace = true }
 futures-timer = { workspace = true }
-futures_ringbuf = "0.4"
+tokio = { workspace = true, features = ["io-util"] }
+tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 
 [lints]
