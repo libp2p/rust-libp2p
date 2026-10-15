@@ -3227,8 +3227,8 @@ name = "libp2p-peer-store"
 version = "0.1.0"
 dependencies = [
  "hashlink",
- "libp2p",
  "libp2p-core",
+ "libp2p-identify",
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
