@@ -298,7 +298,13 @@ fn validate_rpc_limits(
     max_publish_messages: usize,
     max_control_message_size: usize,
 ) -> io::Result<bool> {
-    let message_length = buf.len();
+    // `buf` holds all bytes read so far, which can include subsequent frames, so only the
+    // declared length of the current frame is checked against the limit.
+    let message_length = match prost::encoding::decode_varint(&mut &buf[..]) {
+        Ok(length) => usize::try_from(length).unwrap_or(usize::MAX),
+        // The length prefix is not complete yet.
+        Err(_) => 0,
+    };
     if message_length > max_message_size {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -877,6 +883,77 @@ mod tests {
         let result = codec.decode(&mut buf);
         let err = result.unwrap_err().source().unwrap().to_string();
         assert_eq!(err, "rpc control size exceeds max control message size");
+    }
+
+    #[test]
+    fn decode_back_to_back_rpcs_within_max_transmit_size() {
+        use asynchronous_codec::FramedRead;
+        use futures::{FutureExt, StreamExt, io::Cursor};
+
+        let max_transmit_size = 65536;
+        let rpc_with_data = |len: usize| proto::Rpc {
+            publish: vec![proto::Message {
+                data: Some(vec![0u8; len]),
+                topic: "topic".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // RPCs that are each below `max_transmit_size`, sent back to back on the same stream.
+        let mut codec = GossipsubCodec::new(
+            max_transmit_size,
+            ValidationMode::None,
+            HashMap::new(),
+            500,
+            16384,
+        );
+        let mut buf = BytesMut::new();
+        codec.encode(rpc_with_data(60_000), &mut buf).unwrap();
+        codec.encode(rpc_with_data(64_000), &mut buf).unwrap();
+        codec.encode(rpc_with_data(60_000), &mut buf).unwrap();
+
+        let mut framed = FramedRead::new(Cursor::new(buf.to_vec()), codec);
+        for expected_len in [60_000, 64_000, 60_000] {
+            let event = framed
+                .next()
+                .now_or_never()
+                .expect("cursor is always ready")
+                .expect("stream not finished")
+                .expect("each RPC is within the limit");
+            match event {
+                HandlerEvent::Message { rpc, .. } => {
+                    assert_eq!(rpc.messages[0].data.len(), expected_len)
+                }
+                _ => panic!("Expected message event"),
+            }
+        }
+    }
+
+    #[test]
+    fn reject_oversized_frame_without_buffering_it_fully() {
+        let max_transmit_size = 1024;
+        let mut codec = GossipsubCodec::new(
+            max_transmit_size,
+            ValidationMode::None,
+            HashMap::new(),
+            500,
+            16384,
+        );
+        let rpc = proto::Rpc {
+            publish: vec![proto::Message {
+                data: Some(vec![0u8; 4 * max_transmit_size]),
+                topic: "topic".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut encoded = BytesMut::new();
+        codec.encode(rpc, &mut encoded).unwrap();
+
+        // Only part of the oversized frame has been received so far.
+        let mut buf = BytesMut::from(&encoded[..2 * max_transmit_size]);
+        assert!(codec.decode(&mut buf).is_err());
     }
 
     #[test]
