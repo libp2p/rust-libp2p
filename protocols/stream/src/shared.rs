@@ -52,6 +52,7 @@ impl Shared {
     pub(crate) fn accept(
         &mut self,
         protocol: StreamProtocol,
+        buffer: usize,
     ) -> Result<IncomingStreams, AlreadyRegistered> {
         self.supported_inbound_protocols
             .retain(|_, sender| !sender.is_closed());
@@ -60,7 +61,7 @@ impl Shared {
             return Err(AlreadyRegistered);
         }
 
-        let (sender, receiver) = mpsc::channel(0);
+        let (sender, receiver) = mpsc::channel(buffer);
         self.supported_inbound_protocols
             .insert(protocol.clone(), sender);
 
@@ -85,7 +86,7 @@ impl Shared {
             Entry::Occupied(mut entry) => match entry.get_mut().try_send((remote, stream)) {
                 Ok(()) => {}
                 Err(e) if e.is_full() => {
-                    tracing::debug!(%protocol, "Channel is full, dropping inbound stream");
+                    tracing::warn!(%protocol, %remote, "Channel is full, dropping inbound stream");
                 }
                 Err(e) if e.is_disconnected() => {
                     tracing::debug!(%protocol, "Channel is gone, dropping inbound stream");

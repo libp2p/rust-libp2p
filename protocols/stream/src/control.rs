@@ -67,11 +67,28 @@ impl Control {
     /// Accept inbound streams for the provided protocol.
     ///
     /// To stop accepting streams, simply drop the returned [`IncomingStreams`] handle.
+    ///
+    /// The handle buffers no stream beyond the one being delivered: a stream that arrives
+    /// while the previous one has not been taken yet is dropped. Use
+    /// [`Control::accept_with_buffer`] when several peers may open streams at once.
     pub fn accept(
         &mut self,
         protocol: StreamProtocol,
     ) -> Result<IncomingStreams, AlreadyRegistered> {
-        Shared::lock(&self.shared).accept(protocol)
+        self.accept_with_buffer(protocol, 0)
+    }
+
+    /// Like [`Control::accept`], but up to `buffer` negotiated streams are queued for the
+    /// returned [`IncomingStreams`] before further ones are dropped.
+    ///
+    /// Inbound streams are handed over from within the swarm's poll and cannot wait for the
+    /// consumer, so a burst larger than the buffer is still dropped (and logged at `warn`).
+    pub fn accept_with_buffer(
+        &mut self,
+        protocol: StreamProtocol,
+        buffer: usize,
+    ) -> Result<IncomingStreams, AlreadyRegistered> {
+        Shared::lock(&self.shared).accept(protocol, buffer)
     }
 }
 

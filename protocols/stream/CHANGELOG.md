@@ -1,3 +1,10 @@
+## 0.5.0-alpha.1
+
+- Add `Control::accept_with_buffer` to queue inbound streams that arrive before the
+  `IncomingStreams` consumer takes them, instead of dropping them after negotiation.
+  Dropped inbound streams are now logged at `warn`.
+  See [PR 6637](https://github.com/libp2p/rust-libp2p/pull/6637).
+
 ## 0.5.0-alpha
 
 - Raise MSRV to 1.88.0.
