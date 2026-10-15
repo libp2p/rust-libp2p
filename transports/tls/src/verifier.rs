@@ -230,7 +230,7 @@ fn verify_tls13_signature(
     message: &[u8],
     signature: &[u8],
 ) -> Result<HandshakeSignatureValid, rustls::Error> {
-    certificate::parse(cert)?.verify_signature(signature_scheme, message, signature)?;
+    certificate::verify_tls13_signature(cert, signature_scheme, message, signature)?;
 
     Ok(HandshakeSignatureValid::assertion())
 }
