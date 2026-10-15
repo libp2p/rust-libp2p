@@ -478,6 +478,7 @@ impl Handler {
         FullyNegotiatedOutbound {
             protocol: stream,
             info: (),
+            ..
         }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         if let Some(sender) = self.pending_streams.pop_front() {

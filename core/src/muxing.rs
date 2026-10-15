@@ -52,6 +52,7 @@
 
 use std::{future::Future, pin::Pin};
 
+use bytes::Bytes;
 use futures::{
     AsyncRead, AsyncWrite,
     task::{Context, Poll},
@@ -111,6 +112,30 @@ pub trait StreamMuxer {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
+
+    /// Send an unreliable datagram. Inbound arrive via [`StreamMuxerEvent::Datagram`].
+    fn send_datagram(self: Pin<&mut Self>, data: Bytes) -> Result<(), SendDatagramError> {
+        let _ = data;
+        Err(SendDatagramError::Unsupported)
+    }
+
+    /// Largest [`StreamMuxer::send_datagram`] payload, or `None` if unsupported.
+    fn max_datagram_size(&self) -> Option<usize> {
+        None
+    }
+
+    /// Transport-assigned stream id, where one exists (QUIC, WebTransport).
+    ///
+    /// Keys a datagram flow to its control stream, see [libp2p/specs#680].
+    ///
+    /// [libp2p/specs#680]: https://github.com/libp2p/specs/pull/680
+    fn substream_id(substream: &Self::Substream) -> Option<u64>
+    where
+        Self: Sized,
+    {
+        let _ = substream;
+        None
+    }
 }
 
 /// An event produced by a [`StreamMuxer`].
@@ -118,6 +143,20 @@ pub trait StreamMuxer {
 pub enum StreamMuxerEvent {
     /// The address of the remote has changed.
     AddressChange(Multiaddr),
+    /// An unreliable datagram was received from the remote.
+    Datagram(Bytes),
+}
+
+/// Error returned by [`StreamMuxer::send_datagram`].
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum SendDatagramError {
+    #[error("datagrams are not supported by this muxer")]
+    Unsupported,
+    #[error("datagram of {size} bytes exceeds the {max} byte limit")]
+    TooLarge { size: usize, max: usize },
+    #[error("connection closed")]
+    ConnectionClosed,
 }
 
 /// Extension trait for [`StreamMuxer`].
@@ -162,6 +201,15 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Self: Unpin,
     {
         Pin::new(self).poll_close(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::send_datagram`]
+    /// for [`StreamMuxer`]s that are `Unpin`.
+    fn send_datagram_unpin(&mut self, data: Bytes) -> Result<(), SendDatagramError>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).send_datagram(data)
     }
 
     /// Returns a future for closing this [`StreamMuxer`].

@@ -115,6 +115,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (),
+                ..
             }) => {
                 let Command { id, params } = self
                     .requested_streams

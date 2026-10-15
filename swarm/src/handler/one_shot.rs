@@ -189,7 +189,9 @@ where
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::Datagram(_)
+            | ConnectionEvent::DatagramMaxSize(_) => {}
         }
     }
 }

@@ -1,5 +1,8 @@
 ## 0.14.0
 
+- Add `Negotiated::as_inner` to access the underlying stream after negotiation.
+  See [PR 6489](https://github.com/libp2p/rust-libp2p/pull/6489).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 

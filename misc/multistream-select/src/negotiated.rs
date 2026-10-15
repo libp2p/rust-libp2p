@@ -111,6 +111,14 @@ impl<TInner> Negotiated<TInner> {
         }
     }
 
+    /// Reference to the underlying I/O stream, once negotiation has completed.
+    pub fn as_inner(&self) -> Option<&TInner> {
+        match &self.state {
+            State::Completed { io } => Some(io),
+            _ => None,
+        }
+    }
+
     /// Polls the `Negotiated` for completion.
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), NegotiationError>>
     where

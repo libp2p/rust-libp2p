@@ -44,11 +44,21 @@ where
             FullyNegotiatedInbound {
                 protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
-            } => Either::Left(FullyNegotiatedInbound { protocol, info }),
+                stream_id,
+            } => Either::Left(FullyNegotiatedInbound {
+                protocol,
+                info,
+                stream_id,
+            }),
             FullyNegotiatedInbound {
                 protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
-            } => Either::Right(FullyNegotiatedInbound { protocol, info }),
+                stream_id,
+            } => Either::Right(FullyNegotiatedInbound {
+                protocol,
+                info,
+                stream_id,
+            }),
             _ => unreachable!(),
         }
     }
@@ -115,6 +125,13 @@ where
         match self {
             Either::Left(handler) => handler.connection_keep_alive(),
             Either::Right(handler) => handler.connection_keep_alive(),
+        }
+    }
+
+    fn supports_datagrams(&self, protocol: &crate::StreamProtocol) -> bool {
+        match self {
+            Either::Left(handler) => handler.supports_datagrams(protocol),
+            Either::Right(handler) => handler.supports_datagrams(protocol),
         }
     }
 
@@ -211,6 +228,22 @@ where
                 }
                 Either::Right(handler) => {
                     handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
+                }
+            },
+            ConnectionEvent::Datagram(datagram) => match self {
+                Either::Left(handler) => {
+                    handler.on_connection_event(ConnectionEvent::Datagram(datagram))
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(ConnectionEvent::Datagram(datagram))
+                }
+            },
+            ConnectionEvent::DatagramMaxSize(max) => match self {
+                Either::Left(handler) => {
+                    handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max))
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max))
                 }
             },
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => match self {

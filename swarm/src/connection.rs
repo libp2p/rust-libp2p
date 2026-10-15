@@ -43,7 +43,7 @@ use libp2p_core::{
     Endpoint,
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
+    muxing::{StreamMuxer, StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
     transport::PortUse,
     upgrade,
     upgrade::{NegotiationError, ProtocolError},
@@ -55,7 +55,7 @@ use web_time::Instant;
 use crate::{
     ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
     handler::{
-        AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError,
+        AddressChange, ConnectionEvent, ConnectionHandler, Datagram, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport,
         ProtocolsChange, UpgradeInfoSend,
     },
@@ -299,6 +299,15 @@ where
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
+                Poll::Ready(ConnectionHandlerEvent::SendDatagram(data)) => {
+                    if let Err(e) = muxing.send_datagram_unpin(data) {
+                        tracing::error!("failed to send datagram: {e}");
+                    }
+                    if let Some(max) = muxing.max_datagram_size() {
+                        handler.on_connection_event(ConnectionEvent::DatagramMaxSize(max));
+                    }
+                    continue;
+                }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
@@ -329,9 +338,14 @@ where
             // negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((info, Ok(protocol)))) => {
+                Poll::Ready(Some((info, Ok((protocol, negotiated, stream_id))))) => {
+                    let stream_id = datagram_stream_id(handler, negotiated, stream_id);
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-                        FullyNegotiatedOutbound { protocol, info },
+                        FullyNegotiatedOutbound {
+                            protocol,
+                            info,
+                            stream_id,
+                        },
                     ));
                     continue;
                 }
@@ -347,9 +361,14 @@ where
             // make any more progress, poll the negotiating inbound streams.
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((info, Ok(protocol)))) => {
+                Poll::Ready(Some((info, Ok((protocol, negotiated, stream_id))))) => {
+                    let stream_id = datagram_stream_id(handler, negotiated, stream_id);
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
-                        FullyNegotiatedInbound { protocol, info },
+                        FullyNegotiatedInbound {
+                            protocol,
+                            info,
+                            stream_id,
+                        },
                     ));
                     continue;
                 }
@@ -408,6 +427,21 @@ where
                         new_address: &address,
                     }));
                     return Poll::Ready(Ok(Event::AddressChange(address)));
+                }
+                Poll::Ready(StreamMuxerEvent::Datagram(data)) => {
+                    match decode_stream_id(&data) {
+                        Some((stream_id, prefix)) => {
+                            let payload = data.slice(prefix..);
+                            handler.on_connection_event(ConnectionEvent::Datagram(Datagram {
+                                stream_id,
+                                data: &payload,
+                            }));
+                        }
+                        None => {
+                            tracing::debug!("dropping datagram with truncated control-stream id")
+                        }
+                    }
+                    continue;
                 }
             }
 
@@ -542,10 +576,14 @@ impl IncomingInfo<'_> {
     }
 }
 
+/// A successfully negotiated stream, its negotiated protocol, and its
+/// transport-assigned id (where the transport has one, e.g. QUIC).
+type UpgradeOk<TOk> = (TOk, Option<StreamProtocol>, Option<u64>);
+
 struct StreamUpgrade<UserData, TOk, TErr> {
     user_data: Option<UserData>,
     timeout: Delay,
-    upgrade: BoxFuture<'static, Result<TOk, StreamUpgradeError<TErr>>>,
+    upgrade: BoxFuture<'static, Result<UpgradeOk<TOk>, StreamUpgradeError<TErr>>>,
 }
 
 impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
@@ -578,6 +616,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
             user_data: Some(user_data),
             timeout,
             upgrade: Box::pin(async move {
+                let stream_id = substream.transport_stream_id();
                 let (info, stream) = multistream_select::dialer_select_proto(
                     substream,
                     protocols,
@@ -586,12 +625,13 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                 .await
                 .map_err(to_stream_upgrade_error)?;
 
+                let negotiated = StreamProtocol::try_from_owned(info.as_ref().to_owned()).ok();
                 let output = upgrade
                     .upgrade_outbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
-                Ok(output)
+                Ok((output, negotiated, stream_id))
             }),
         }
     }
@@ -614,20 +654,48 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
             user_data: Some(open_info),
             timeout: Delay::new(timeout),
             upgrade: Box::pin(async move {
+                let stream_id = substream.transport_stream_id();
                 let (info, stream) =
                     multistream_select::listener_select_proto(substream, protocols)
                         .await
                         .map_err(to_stream_upgrade_error)?;
 
+                let negotiated = StreamProtocol::try_from_owned(info.as_ref().to_owned()).ok();
                 let output = upgrade
                     .upgrade_inbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
-                Ok(output)
+                Ok((output, negotiated, stream_id))
             }),
         }
     }
+}
+
+/// Transport stream id to tag onto a fully-negotiated stream: `Some` only when
+/// the handler owns datagrams for the negotiated protocol.
+fn datagram_stream_id<H: ConnectionHandler + ?Sized>(
+    handler: &H,
+    negotiated: Option<StreamProtocol>,
+    stream_id: Option<u64>,
+) -> Option<u64> {
+    let id = stream_id?;
+    handler.supports_datagrams(&negotiated?).then_some(id)
+}
+
+/// Decode a datagram's leading QUIC varint control-stream id (RFC 9000 s16) and
+/// its byte length, or `None` if truncated. Mirrors the `libp2p-datagram` encoder.
+fn decode_stream_id(datagram: &[u8]) -> Option<(u64, usize)> {
+    let first = *datagram.first()?;
+    let len = 1usize << (first >> 6);
+    if datagram.len() < len {
+        return None;
+    }
+    let mut value = u64::from(first & 0x3f);
+    for &b in &datagram[1..len] {
+        value = (value << 8) | u64::from(b);
+    }
+    Some((value, len))
 }
 
 fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
@@ -641,7 +709,7 @@ fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
 impl<UserData, TOk, TErr> Unpin for StreamUpgrade<UserData, TOk, TErr> {}
 
 impl<UserData, TOk, TErr> Future for StreamUpgrade<UserData, TOk, TErr> {
-    type Output = (UserData, Result<TOk, StreamUpgradeError<TErr>>);
+    type Output = (UserData, Result<UpgradeOk<TOk>, StreamUpgradeError<TErr>>);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.timeout.poll_unpin(cx) {
@@ -1215,7 +1283,9 @@ mod tests {
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
-                | ConnectionEvent::RemoteProtocolsChange(_) => {}
+                | ConnectionEvent::RemoteProtocolsChange(_)
+                | ConnectionEvent::Datagram(_)
+                | ConnectionEvent::DatagramMaxSize(_) => {}
             }
         }
 
