@@ -614,8 +614,11 @@ mod test {
             swarm2.connect(&mut swarm1).await;
 
             listen_addr.push(Protocol::P2p(swarm1_peer_id));
-            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
-
+            // NOTE: `connect()` drains the same event stream this test reads from and
+            // ignores anything that isn't `ConnectionEstablished`, so the connection-derived
+            // `PeerAddressAdded` may be consumed before we can observe it (a race inside
+            // `futures::future::select`). The store itself is updated synchronously during
+            // `connect()`, so assert on it instead of waiting for a possibly-lost event.
             assert!(
                 swarm2
                     .behaviour()
@@ -637,21 +640,9 @@ mod test {
             swarm1.behaviour_mut().identify.push([swarm2_peer_id]);
             tokio::spawn(swarm1.loop_on_next());
             // The address in store won't contain peer ID because it is from Identify.
-            // Identify reports the second listen address asynchronously, so keep driving
-            // swarm2 until it has been recorded instead of sampling the store exactly once.
-            // (`next_behaviour_event` panics after 10s without an event, so this cannot hang.)
-            loop {
-                let recorded = swarm2
-                    .behaviour()
-                    .peer_store
-                    .address_of_peer(&swarm1_peer_id)
-                    .expect("peer to exist")
-                    .any(|addr| *addr == new_listen_addr);
-                if recorded {
-                    break;
-                }
-                swarm2.next_behaviour_event().await;
-            }
+            // Nothing drains swarm2 now that `connect()` has returned, so waiting for
+            // this event cannot be swallowed the way the connection event can.
+            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&new_listen_addr)).await;
             let known_listen_addresses = swarm2
                 .behaviour()
                 .peer_store

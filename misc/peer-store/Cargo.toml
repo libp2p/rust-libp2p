@@ -3,6 +3,7 @@ name = "libp2p-peer-store"
 edition.workspace = true
 version = "0.1.0"
 authors = ["drHuangMHT <DrHuangMHT@outlook.com>"]
+description = "A libp2p peer store"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version.workspace = true

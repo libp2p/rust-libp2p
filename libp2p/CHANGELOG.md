@@ -2,8 +2,12 @@
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 
-- Add `peer-store` feature, re-exporting `libp2p-peer-store` as `libp2p::peer_store`.
 - Add `stream` feature, re-exporting `libp2p-stream` as `libp2p::stream`.
+
+## 0.57.1
+
+- Add `peer-store` feature, re-exporting `libp2p-peer-store` as `libp2p::peer_store`.
+  See [PR 6689](https://github.com/libp2p/rust-libp2p/pull/6689).
 
 ## 0.57.0
 
