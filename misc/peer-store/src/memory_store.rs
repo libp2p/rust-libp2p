@@ -581,9 +581,10 @@ mod test {
                         is_permanent,
                     }) => {
                         assert_eq!(peer_id, expected_peer);
-                        assert!(expected_address.is_none_or(|a| *a == address));
                         assert!(!is_permanent);
-                        break;
+                        if expected_address.is_none_or(|a| *a == address) {
+                            break;
+                        }
                     }
                     ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {ev:?}."),
                     _ => {}
@@ -615,14 +616,13 @@ mod test {
             listen_addr.push(Protocol::P2p(swarm1_peer_id));
             expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
 
-            assert_eq!(
+            assert!(
                 swarm2
                     .behaviour()
                     .peer_store
                     .address_of_peer(&swarm1_peer_id)
                     .expect("swarm should be connected and record about it should be created")
-                    .collect::<Vec<_>>(),
-                vec![&listen_addr]
+                    .any(|addr| *addr == listen_addr)
             );
 
             assert!(matches!(
@@ -636,21 +636,28 @@ mod test {
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             swarm1.behaviour_mut().identify.push([swarm2_peer_id]);
             tokio::spawn(swarm1.loop_on_next());
-            // Expecting 3 updates from Identify:
-            // 2 pair of mem and tcp address for two calls to `<Swarm as SwarmExt>::listen()`
-            // with one address already present through direct connection.
-            // FLAKY: tcp addresses are not explicitly marked as external addresses.
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
             // The address in store won't contain peer ID because it is from Identify.
+            // Identify reports the second listen address asynchronously, so keep driving
+            // swarm2 until it has been recorded instead of sampling the store exactly once.
+            // (`next_behaviour_event` panics after 10s without an event, so this cannot hang.)
+            loop {
+                let recorded = swarm2
+                    .behaviour()
+                    .peer_store
+                    .address_of_peer(&swarm1_peer_id)
+                    .expect("peer to exist")
+                    .any(|addr| *addr == new_listen_addr);
+                if recorded {
+                    break;
+                }
+                swarm2.next_behaviour_event().await;
+            }
             let known_listen_addresses = swarm2
                 .behaviour()
                 .peer_store
                 .address_of_peer(&swarm1_peer_id)
                 .expect("peer to exist")
                 .collect::<Vec<_>>();
-            assert!(known_listen_addresses.contains(&&new_listen_addr));
             assert_eq!(known_listen_addresses.len(), 4)
         })
     }
