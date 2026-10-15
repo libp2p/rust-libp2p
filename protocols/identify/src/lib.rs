@@ -39,7 +39,7 @@
 //! that negotiates and executes the protocol on every established connection, emitting
 //! [`Event`]s.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub use self::{
     behaviour::{Behaviour, Config, Event},
