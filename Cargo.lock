@@ -671,9 +671,9 @@ dependencies = [
 
 [[package]]
 name = "chacha20"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -2799,7 +2799,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libp2p"
-version = "0.57.0"
+version = "0.57.1"
 dependencies = [
  "bytes",
  "either",
@@ -2822,6 +2822,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-mplex",
  "libp2p-noise",
+ "libp2p-peer-store",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
@@ -2887,7 +2888,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.8.0"
+version = "0.7.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -2993,7 +2994,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.51.0"
+version = "0.50.0"
 dependencies = [
  "async-channel",
  "asynchronous-codec",
@@ -3143,7 +3144,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.18.1"
+version = "0.18.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3375,7 +3376,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.18.1"
+version = "0.18.0"
 dependencies = [
  "asynchronous-codec",
  "bimap",
@@ -3454,7 +3455,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.49.0"
+version = "0.48.0"
 dependencies = [
  "criterion",
  "either",
@@ -3558,7 +3559,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.7.1"
+version = "0.7.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -5031,7 +5032,7 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
 dependencies = [
- "chacha20 0.10.1",
+ "chacha20 0.10.2",
  "getrandom 0.4.3",
  "rand_core 0.10.1",
 ]
