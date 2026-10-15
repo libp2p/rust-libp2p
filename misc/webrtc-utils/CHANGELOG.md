@@ -1,5 +1,9 @@
 ## 0.5.0
 
+- Add `sdp::offer`, mirroring the existing `sdp::answer`. The offer template moved here
+  from `libp2p-webrtc`, where it was private.
+  See [PR 6572](https://github.com/libp2p/rust-libp2p/pull/6572).
+
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
