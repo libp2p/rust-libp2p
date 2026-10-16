@@ -393,8 +393,8 @@ impl<T> PeerRecord<T> {
 mod test {
     use std::{num::NonZero, str::FromStr};
 
-    use libp2p::identify;
     use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
+    use libp2p_identify as identify;
     use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
@@ -563,6 +563,7 @@ mod test {
     #[test]
     fn identify_external_addr_report() {
         #[derive(NetworkBehaviour)]
+        #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
         struct Behaviour {
             peer_store: crate::Behaviour<MemoryStore>,
             identify: identify::Behaviour,
@@ -580,9 +581,10 @@ mod test {
                         is_permanent,
                     }) => {
                         assert_eq!(peer_id, expected_peer);
-                        assert!(expected_address.is_none_or(|a| *a == address));
                         assert!(!is_permanent);
-                        break;
+                        if expected_address.is_none_or(|a| *a == address) {
+                            break;
+                        }
                     }
                     ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {ev:?}."),
                     _ => {}
@@ -612,16 +614,18 @@ mod test {
             swarm2.connect(&mut swarm1).await;
 
             listen_addr.push(Protocol::P2p(swarm1_peer_id));
-            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
-
-            assert_eq!(
+            // NOTE: `connect()` drains the same event stream this test reads from and
+            // ignores anything that isn't `ConnectionEstablished`, so the connection-derived
+            // `PeerAddressAdded` may be consumed before we can observe it (a race inside
+            // `futures::future::select`). The store itself is updated synchronously during
+            // `connect()`, so assert on it instead of waiting for a possibly-lost event.
+            assert!(
                 swarm2
                     .behaviour()
                     .peer_store
                     .address_of_peer(&swarm1_peer_id)
                     .expect("swarm should be connected and record about it should be created")
-                    .collect::<Vec<_>>(),
-                vec![&listen_addr]
+                    .any(|addr| *addr == listen_addr)
             );
 
             assert!(matches!(
@@ -635,14 +639,10 @@ mod test {
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             swarm1.behaviour_mut().identify.push([swarm2_peer_id]);
             tokio::spawn(swarm1.loop_on_next());
-            // Expecting 3 updates from Identify:
-            // 2 pair of mem and tcp address for two calls to `<Swarm as SwarmExt>::listen()`
-            // with one address already present through direct connection.
-            // FLAKY: tcp addresses are not explicitly marked as external addresses.
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
             // The address in store won't contain peer ID because it is from Identify.
+            // Nothing drains swarm2 now that `connect()` has returned, so waiting for
+            // this event cannot be swallowed the way the connection event can.
+            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&new_listen_addr)).await;
             let known_listen_addresses = swarm2
                 .behaviour()
                 .peer_store

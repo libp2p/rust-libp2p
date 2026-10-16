@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
