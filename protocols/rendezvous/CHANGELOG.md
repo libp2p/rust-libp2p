@@ -1,4 +1,4 @@
-## 0.18.1
+## 0.19.0
 
 - Cancel superseded registration timers.
   See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)

@@ -1,4 +1,4 @@
-## 0.6.0
+## 0.1.0
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 

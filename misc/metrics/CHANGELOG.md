@@ -1,9 +1,7 @@
-## 0.18.1
+## 0.19.0
 
 - Update `libp2p-swarm` to `0.49.0`.
   See [PR 6672](https://github.com/libp2p/rust-libp2p/pull/6672).
-
-
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 
