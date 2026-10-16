@@ -7,17 +7,18 @@ use crate::store::Store;
 ///
 /// Usage:
 /// ```
-/// use libp2p::swarm::NetworkBehaviour;
 /// use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
+/// use libp2p_swarm::NetworkBehaviour;
 ///
 /// // `identify::Behaviour` broadcasts listen addresses of the peer,
 /// // `peer_store::Behaviour` will then capture the resulting
 /// // `FromSwarm::NewExternalAddrOfPeer` and add the addresses
 /// // to address book.
 /// #[derive(NetworkBehaviour)]
+/// #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct ComposedBehaviour {
 ///     peer_store: Behaviour<MemoryStore>,
-///     identify: libp2p::identify::Behaviour,
+///     identify: libp2p_identify::Behaviour,
 /// }
 /// ```
 pub struct Behaviour<S: Store> {
