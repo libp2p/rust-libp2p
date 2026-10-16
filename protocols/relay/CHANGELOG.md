@@ -1,3 +1,8 @@
+## 0.22.1
+
+- Don't panic in the client when a reservation is accepted after its listener was closed.
+  See [PR 6653](https://github.com/libp2p/rust-libp2p/pull/6653).
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.
