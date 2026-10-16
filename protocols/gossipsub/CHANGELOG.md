@@ -1,4 +1,13 @@
 ## 0.51.0
+- Validate the default mesh parameters, the default `max_transmit_size` and all topic mesh
+  configurations in `ConfigBuilder::build`, not only topics with a custom max transmit size.
+  See [PR 6648](https://github.com/libp2p/rust-libp2p/pull/6648).
+- Remove duplicate `Config` fields which are already present in `ProtocolConfig`.
+  See [PR 6669](https://github.com/libp2p/rust-libp2p/pull/6669)
+
+- Look up the ids of a received IDONTWANT in a `HashSet` when removing them from the peer's send
+  queue, so the cost is O(queue + ids) instead of O(queue * ids).
+
 - Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
   See [PR 6621](https://github.com/libp2p/rust-libp2p/pull/6621).
@@ -22,7 +31,7 @@
   Introduce `max_control_message_size` (default 16KB) to limit total control bytes in an RPC.
   Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
   Rename `max_control_messages` to `max_control_messages_sent`.
-  See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
+  See [PR #6468](https://github.com/libp2p/rust-libp2p/pull/6468)
 
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).

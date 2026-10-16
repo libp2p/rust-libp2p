@@ -1,3 +1,9 @@
+## 0.18.1
+
+- Update `libp2p-swarm` to `0.49.0`.
+  See [PR 6672](https://github.com/libp2p/rust-libp2p/pull/6672).
+
+
 ## 0.18.0
 
 - Raise MSRV to 1.88.0.
