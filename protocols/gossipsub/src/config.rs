@@ -125,8 +125,6 @@ pub struct Config {
     gossip_retransimission: u32,
     #[cfg(feature = "partial-messages")]
     max_metadata_length: usize,
-    max_publish_messages: usize,
-    max_control_message_size: usize,
     max_control_messages_sent: usize,
     max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
@@ -422,7 +420,7 @@ impl Config {
 
     /// The maximum number of publish messages we will process in a given RPC. The default is 5000.
     pub fn max_publish_messages(&self) -> usize {
-        self.max_publish_messages
+        self.protocol.max_publish_messages
     }
 
     /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
@@ -436,7 +434,7 @@ impl Config {
     /// Validates cumulative size by scanning protobuf bytes before decoding.
     /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&self) -> usize {
-        self.max_control_message_size
+        self.protocol.max_control_message_size
     }
 
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
@@ -552,9 +550,7 @@ impl Default for ConfigBuilder {
                 gossip_retransimission: 3,
                 #[cfg(feature = "partial-messages")]
                 max_metadata_length: 1000,
-                max_publish_messages: 5000,
                 max_control_messages_sent: 5000,
-                max_control_message_size: 16384, // 16KB
                 max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
@@ -974,7 +970,6 @@ impl ConfigBuilder {
 
     /// The maximum number of publish messages we will process in a single RPC. The default is 5000.
     pub fn max_publish_messages(&mut self, max: usize) -> &mut Self {
-        self.config.max_publish_messages = max;
         self.config.protocol.max_publish_messages = max;
         self
     }
@@ -1076,7 +1071,6 @@ impl ConfigBuilder {
     /// Validates cumulative size by scanning protobuf bytes before decoding.
     /// Messages exceeding this limit will be rejected. The default is 16KB.
     pub fn max_control_message_size(&mut self, size: usize) -> &mut Self {
-        self.config.max_control_message_size = size;
         self.config.protocol.max_control_message_size = size;
         self
     }
@@ -1111,22 +1105,31 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        let pre_configured_topics = self.config.protocol.max_transmit_sizes.keys();
-        for topic in pre_configured_topics {
-            if self.config.protocol.max_transmit_size_for_topic(topic) < 100 {
-                return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
-            }
+        if self.config.protocol.default_max_transmit_size < 100
+            || self
+                .config
+                .protocol
+                .max_transmit_sizes
+                .values()
+                .any(|size| *size < 100)
+        {
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
+        }
 
-            let mesh_n = self.config.mesh_n_for_topic(topic);
-            let mesh_n_low = self.config.mesh_n_low_for_topic(topic);
-            let mesh_n_high = self.config.mesh_n_high_for_topic(topic);
-            let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic);
-
+        let topic_configuration = &self.config.topic_configuration;
+        for TopicMeshConfig {
+            mesh_n,
+            mesh_n_low,
+            mesh_n_high,
+            mesh_outbound_min,
+        } in std::iter::once(&topic_configuration.default_mesh_params)
+            .chain(topic_configuration.topic_mesh_params.values())
+        {
             if !(mesh_outbound_min <= mesh_n_low && mesh_n_low <= mesh_n && mesh_n <= mesh_n_high) {
                 return Err(ConfigBuilderError::MeshParametersInvalid);
             }
 
-            if mesh_outbound_min * 2 > mesh_n {
+            if mesh_outbound_min * 2 > *mesh_n {
                 return Err(ConfigBuilderError::MeshOutboundInvalid);
             }
         }
@@ -1189,9 +1192,12 @@ impl std::fmt::Debug for Config {
         );
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
-        let _ = builder.field("max_messages_per_rpc", &self.max_publish_messages);
+        let _ = builder.field("max_publish_messages", &self.protocol.max_publish_messages);
         let _ = builder.field("max_control_messages_sent", &self.max_control_messages_sent);
-        let _ = builder.field("max_control_message_size", &self.max_control_message_size);
+        let _ = builder.field(
+            "max_control_message_size",
+            &self.protocol.max_control_message_size,
+        );
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
             &self.max_ihave_messages_heartbeat,
@@ -1217,6 +1223,53 @@ mod test {
 
     use super::*;
     use crate::{Topic, topic::IdentityHash};
+
+    #[test]
+    fn build_rejects_invalid_default_mesh_params() {
+        // mesh_n > mesh_n_high
+        assert!(matches!(
+            ConfigBuilder::default().mesh_n(20).build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        // mesh_outbound_min > mesh_n / 2
+        assert!(matches!(
+            ConfigBuilder::default().mesh_outbound_min(4).build(),
+            Err(ConfigBuilderError::MeshOutboundInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_invalid_topic_mesh_params() {
+        let topic = TopicHash::from_raw("topic");
+        assert!(matches!(
+            ConfigBuilder::default()
+                .set_topic_config(
+                    topic.clone(),
+                    TopicMeshConfig {
+                        mesh_n: 6,
+                        mesh_n_low: 8,
+                        mesh_n_high: 12,
+                        mesh_outbound_min: 2,
+                    },
+                )
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        assert!(matches!(
+            ConfigBuilder::default()
+                .mesh_n_high_for_topic(4, topic)
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_too_small_default_max_transmit_size() {
+        assert!(matches!(
+            ConfigBuilder::default().max_transmit_size(10).build(),
+            Err(ConfigBuilderError::MaxTransmissionSizeTooSmall)
+        ));
+    }
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
