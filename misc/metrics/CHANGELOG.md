@@ -4,6 +4,9 @@
   See [PR 6672](https://github.com/libp2p/rust-libp2p/pull/6672).
 
 
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.18.0
 
 - Raise MSRV to 1.88.0.
