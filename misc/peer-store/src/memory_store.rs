@@ -649,6 +649,7 @@ mod test {
                 .address_of_peer(&swarm1_peer_id)
                 .expect("peer to exist")
                 .collect::<Vec<_>>();
+            assert!(known_listen_addresses.contains(&&new_listen_addr));
             assert_eq!(known_listen_addresses.len(), 4)
         })
     }
