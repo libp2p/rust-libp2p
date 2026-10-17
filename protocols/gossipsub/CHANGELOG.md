@@ -12,6 +12,11 @@
   `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
   See [PR 6621](https://github.com/libp2p/rust-libp2p/pull/6621).
 
+- Bound one length-prefixed RPC in the inbound size check instead of the whole read buffer.
+  Two RPCs that are each within `max_transmit_size` but arrive in one read no longer fail
+  the check and close the inbound substream.
+  See [PR 6695](https://github.com/libp2p/rust-libp2p/pull/6695).
+
 ## 0.50.0
 - Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
   ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).

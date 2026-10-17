@@ -1,3 +1,9 @@
+## 0.4.1
+
+- Add `consume_bounded_message_prefix`, which rejects a message whose length prefix exceeds
+  a limit before the message bytes arrive and narrows the buffer to that one message.
+  See [PR 6695](https://github.com/libp2p/rust-libp2p/pull/6695).
+
 ## 0.4.0
 
 - Raise MSRV to 1.88.0.
