@@ -28,7 +28,7 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use prost::Message;
-use prost_codec::{consume_message, consume_message_prefix, decode_field_tag};
+use prost_codec::{consume_bounded_message_prefix, consume_message, decode_field_tag};
 
 #[cfg(feature = "partial-messages")]
 use crate::extensions::partial_messages::PartialMessage;
@@ -298,16 +298,10 @@ fn validate_rpc_limits(
     max_publish_messages: usize,
     max_control_message_size: usize,
 ) -> io::Result<bool> {
-    let message_length = buf.len();
-    if message_length > max_message_size {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("message with {message_length}b exceeds maximum of {max_message_size}b",),
-        ));
-    }
-
-    // Consume length prefix and get message bytes from length-prefixed buffer for validation
-    if !consume_message_prefix(&mut buf)? {
+    // Consume the length prefix and bound the RPC it describes. The read buffer can be
+    // longer than one RPC, because a read may hold the tail of this RPC together with the
+    // start of the next one, so the buffer length says nothing about the size of either.
+    if !consume_bounded_message_prefix(&mut buf, max_message_size)? {
         return Ok(false);
     }
 
@@ -716,6 +710,7 @@ mod tests {
 
     use futures_timer::Delay;
     use libp2p_identity::Keypair;
+    use prost::Message as _;
     use quickcheck::*;
 
     use super::*;
@@ -915,5 +910,98 @@ mod tests {
             }
             _ => panic!("Expected message event"),
         }
+    }
+
+    /// One RPC that carries a single publish message with `data_len` bytes of data.
+    fn publish_rpc(data_len: usize) -> proto::Rpc {
+        proto::Rpc {
+            publish: vec![proto::Message {
+                data: Some(vec![0; data_len]),
+                topic: "test-topic".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn encode_frame(codec: &mut GossipsubCodec, rpc: proto::Rpc) -> BytesMut {
+        let mut buf = BytesMut::new();
+        codec.encode(rpc, &mut buf).unwrap();
+        buf
+    }
+
+    fn published_messages(event: HandlerEvent) -> Vec<RawMessage> {
+        let HandlerEvent::Message { rpc, .. } = event else {
+            panic!("expected a message event");
+        };
+        rpc.messages
+    }
+
+    #[test]
+    fn max_transmit_size_bounds_one_rpc_not_the_read_buffer() {
+        let max_transmit_size = 65536;
+        let mut codec = GossipsubCodec::new(
+            max_transmit_size,
+            ValidationMode::Anonymous,
+            HashMap::new(),
+            500,
+            5120,
+        );
+        let first = encode_frame(&mut codec, publish_rpc(64_900));
+        let second = encode_frame(&mut codec, publish_rpc(2_000));
+        let head = 700;
+        assert!(
+            first.len() <= max_transmit_size,
+            "the first RPC is within the limit"
+        );
+        assert!(
+            first.len() + head > max_transmit_size,
+            "the first RPC plus the start of the second one is over the limit"
+        );
+
+        // One read delivered the whole first RPC together with the start of the second one.
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&first);
+        buf.extend_from_slice(&second[..head]);
+
+        let messages = published_messages(codec.decode(&mut buf).unwrap().unwrap());
+        assert_eq!(messages.len(), 1, "the first RPC decodes on its own");
+        assert_eq!(
+            buf.len(),
+            head,
+            "the start of the second RPC stays buffered"
+        );
+
+        buf.extend_from_slice(&second[head..]);
+        let messages = published_messages(codec.decode(&mut buf).unwrap().unwrap());
+        assert_eq!(
+            messages.len(),
+            1,
+            "the second RPC decodes once it is complete"
+        );
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn max_transmit_size_rejects_an_oversized_rpc_from_its_length_prefix() {
+        let mut codec =
+            GossipsubCodec::new(1_000, ValidationMode::Anonymous, HashMap::new(), 500, 5120);
+        let rpc = publish_rpc(5_000);
+        let rpc_len = rpc.encoded_len();
+        let frame = encode_frame(&mut codec, rpc);
+        // Only the start of the oversized RPC has arrived.
+        let mut buf = BytesMut::from(&frame[..100]);
+
+        let err = codec
+            .decode(&mut buf)
+            .unwrap_err()
+            .source()
+            .unwrap()
+            .to_string();
+
+        assert_eq!(
+            err,
+            format!("message with {rpc_len}b exceeds maximum of 1000b")
+        );
     }
 }

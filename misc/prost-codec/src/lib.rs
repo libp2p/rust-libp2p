@@ -129,6 +129,37 @@ pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<bool> {
     Ok(true)
 }
 
+/// Consumes the varint length prefix from a length-prefixed buffer and bounds the message
+/// it describes by `max_message_len_bytes`.
+///
+/// Returns `Ok(true)` and narrows `buf` to the message bytes when the whole message is
+/// buffered, `Ok(false)` when the prefix or the message is still incomplete, and an
+/// `InvalidData` error when the prefix is malformed or the prefixed length exceeds
+/// `max_message_len_bytes`. The length check is the one [`Codec::decode`] applies. It covers
+/// the single message the prefix describes, not the whole buffer, which may also hold the
+/// first bytes of the next message. An oversized message is rejected as soon as its prefix
+/// is readable, before its bytes are buffered.
+pub fn consume_bounded_message_prefix(
+    buf: &mut &[u8],
+    max_message_len_bytes: usize,
+) -> io::Result<bool> {
+    let oversized = unsigned_varint::decode::usize(buf)
+        .ok()
+        .map(|(message_length, _)| message_length)
+        .filter(|message_length| *message_length > max_message_len_bytes);
+    oversized.map_or_else(
+        || consume_message_prefix(buf),
+        |message_length| {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "message with {message_length}b exceeds maximum of {max_message_len_bytes}b"
+                ),
+            ))
+        },
+    )
+}
+
 /// Decodes a protobuf field key (tag + wire type) and returns them.
 /// Advances the buffer past the key only (does NOT consume the field value).
 pub fn decode_field_tag(buf: &mut &[u8]) -> io::Result<(u32, WireType)> {
@@ -192,6 +223,38 @@ mod tests {
         let result = codec.decode(&mut BytesMut::new());
 
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn bounded_prefix_rejects_an_oversized_message_before_its_bytes_arrive() {
+        let src = varint_zeroes(100);
+        let mut buf = &src[..10];
+
+        let err = consume_bounded_message_prefix(&mut buf, 1).unwrap_err();
+
+        assert_eq!(err.to_string(), "message with 100b exceeds maximum of 1b");
+    }
+
+    #[test]
+    fn bounded_prefix_narrows_to_one_message_and_leaves_the_next_one() {
+        let src = [varint_zeroes(100).as_ref(), varint_zeroes(50).as_ref()].concat();
+        let mut buf = &src[..];
+
+        assert!(consume_bounded_message_prefix(&mut buf, 100).unwrap());
+
+        assert_eq!(
+            buf.len(),
+            100,
+            "narrowed to the first message, not the buffer"
+        );
+    }
+
+    #[test]
+    fn bounded_prefix_waits_for_an_incomplete_message_within_the_limit() {
+        let src = varint_zeroes(100);
+        let mut buf = &src[..50];
+
+        assert!(!consume_bounded_message_prefix(&mut buf, 100).unwrap());
     }
 
     #[test]
