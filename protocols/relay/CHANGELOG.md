@@ -1,7 +1,9 @@
-## 0.22.1
+## 0.23.0
 
 - Don't drop the client's reservation when an outbound circuit request times out.
   See [PR 6652](https://github.com/libp2p/rust-libp2p/pull/6652).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.22.0
 

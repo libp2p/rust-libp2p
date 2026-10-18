@@ -2799,7 +2799,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libp2p"
-version = "0.57.1"
+version = "0.58.0"
 dependencies = [
  "bytes",
  "either",
@@ -2830,6 +2830,7 @@ dependencies = [
  "libp2p-relay",
  "libp2p-rendezvous",
  "libp2p-request-response",
+ "libp2p-stream",
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-tls",
@@ -2850,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identity",
@@ -2862,7 +2863,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -2888,7 +2889,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -2931,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -2974,7 +2975,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2994,7 +2995,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.50.0"
+version = "0.51.0"
 dependencies = [
  "async-channel",
  "asynchronous-codec",
@@ -3028,7 +3029,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -3076,7 +3077,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3109,7 +3110,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "futures",
  "hickory-proto",
@@ -3128,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -3144,7 +3145,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3265,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3347,7 +3348,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.22.1"
+version = "0.23.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3376,7 +3377,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "asynchronous-codec",
  "bimap",
@@ -3400,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "anyhow",
  "cbor4ii",
@@ -3440,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.5.0-alpha"
+version = "0.1.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3455,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "criterion",
  "either",
@@ -3496,7 +3497,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-test"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3559,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "futures",
  "futures-timer",

@@ -1,3 +1,7 @@
+## 0.17.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.16.0
 
 - Update to rand 0.10. `client::Behaviour<R>` and `server::Behaviour<R>`
