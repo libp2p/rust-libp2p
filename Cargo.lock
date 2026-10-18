@@ -2960,7 +2960,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "futures",
  "hickory-resolver",

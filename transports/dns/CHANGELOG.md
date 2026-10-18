@@ -1,3 +1,8 @@
+## 0.45.1
+
+- Return an error instead of panicking when a lookup succeeds but the answer contains no `A`/`AAAA` record, e.g. a `NOERROR` response with an empty ANSWER section.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.45.0
 
 - Update `hickory` dependencies to `v0.26`.
