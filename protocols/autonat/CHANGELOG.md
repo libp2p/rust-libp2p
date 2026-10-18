@@ -1,8 +1,10 @@
-## 0.16.1
+## 0.17.0
 
 - Only apply the multicast scope check of `only_global_ips` to multicast IPv6 addresses.
   Global unicast addresses such as `2001:4860::1` were treated as non-global before.
   See [PR 6646](https://github.com/libp2p/rust-libp2p/pull/6646).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.16.0
 
