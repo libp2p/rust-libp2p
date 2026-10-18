@@ -2906,7 +2906,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "either",
  "fnv",
