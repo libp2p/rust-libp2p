@@ -1,8 +1,10 @@
-## 0.22.1
+## 0.23.0
 
 - Drive all pending accept/deny futures of reservation requests on a connection instead of dropping
   the previous one when a new request arrives.
   See [PR 6655](https://github.com/libp2p/rust-libp2p/pull/6655).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.22.0
 

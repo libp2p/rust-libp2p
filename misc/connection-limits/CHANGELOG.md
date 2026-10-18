@@ -3,6 +3,9 @@
 - Replace `ConnectionLimits::with_max_pending_incoming` with `with_max_pending_incoming_per_source`,
   which limits pending incoming connections per remote source instead of globally.
   See [PR 6657](https://github.com/libp2p/rust-libp2p/pull/6657).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.7.0
 
 - Raise MSRV to 1.88.0.

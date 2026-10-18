@@ -105,6 +105,9 @@ pub use libp2p_rendezvous as rendezvous;
 #[cfg(feature = "request-response")]
 #[doc(inline)]
 pub use libp2p_request_response as request_response;
+#[cfg(feature = "stream")]
+#[doc(inline)]
+pub use libp2p_stream as stream;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
 #[cfg(feature = "tcp")]
