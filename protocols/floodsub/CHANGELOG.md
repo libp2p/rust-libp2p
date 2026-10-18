@@ -1,3 +1,7 @@
+## 0.49.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.48.0
 
 - Replace the duplicate-message cuckoo filter with a bounded cache, removing the `rand` 0.7.3 dependency.

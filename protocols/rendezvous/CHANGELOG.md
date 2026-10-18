@@ -1,10 +1,13 @@
-## 0.18.1
+## 0.19.0
 
 - Cancel superseded registration timers.
   See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)
 
 - Cap TTL from discovery responses.
   See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
+
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.18.0
 
