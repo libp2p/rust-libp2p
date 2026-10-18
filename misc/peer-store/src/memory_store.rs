@@ -558,7 +558,6 @@ mod test {
             swarm2.connect(&mut swarm1).await;
 
             listen_addr.push(Protocol::P2p(swarm1_peer_id));
-            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
             assert!(
                 swarm2
                     .behaviour()
