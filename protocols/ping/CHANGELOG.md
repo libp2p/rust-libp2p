@@ -1,3 +1,7 @@
+## 0.49.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.48.0
 
 - Raise MSRV to 1.88.0.
