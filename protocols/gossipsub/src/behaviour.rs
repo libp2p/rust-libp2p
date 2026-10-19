@@ -1764,6 +1764,15 @@ where
             .peer_score
             .below_threshold(peer_id, |ts| ts.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
+            if !self.mesh.contains_key(&topic_hash) {
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "PRUNE: Received prune for unknown topic from peer"
+                );
+                continue;
+            }
+
             if self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true) {
                 #[cfg(feature = "metrics")]
                 if let Some(m) = self.metrics.as_mut() {
