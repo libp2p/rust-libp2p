@@ -44,7 +44,13 @@ use libp2p_core::{
 };
 use rw_stream_sink::RwStreamSink;
 
-/// A Websocket transport.
+/// A Websocket transport whose output implements [`AsyncRead`] and [`AsyncWrite`].
+///
+/// This is a convenience wrapper around [`framed::Config`] that converts the
+/// [`Stream`](futures::Stream)/[`Sink`](futures::Sink) of frame payloads into a byte stream.
+/// For most use cases, this is the transport you want.
+///
+/// If you need direct access to individual Websocket frames, use [`framed::Config`] instead.
 ///
 /// DO NOT wrap this transport with a DNS transport if you want Secure Websockets to work.
 ///
