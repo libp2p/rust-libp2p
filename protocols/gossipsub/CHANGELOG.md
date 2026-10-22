@@ -1,6 +1,6 @@
 ## 0.51.0
 - Do not cache or score messages for topics the node is not subscribed to.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6711](https://github.com/libp2p/rust-libp2p/pull/6711).
 
 - Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
   and remove an IP from the peer score table once no peer uses it.
