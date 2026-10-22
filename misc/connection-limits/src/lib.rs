@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     convert::Infallible,
     fmt,
     net::Ipv4Addr,
@@ -408,10 +408,12 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 self.established_inbound_connections.remove(&connection_id);
                 self.established_outbound_connections.remove(&connection_id);
-                self.established_per_peer
-                    .entry(peer_id)
-                    .or_default()
-                    .remove(&connection_id);
+                if let Entry::Occupied(mut connections) = self.established_per_peer.entry(peer_id) {
+                    connections.get_mut().remove(&connection_id);
+                    if connections.get().is_empty() {
+                        connections.remove();
+                    }
+                }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
