@@ -1,4 +1,7 @@
 ## 0.51.0
+- Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
+  and remove an IP from the peer score table once no peer uses it.
+
 - Fix unbounded growth of global backoff storage from PRUNE control messages naming topics
   the node has not joined.
   See [GHSA-vrx6-jcp8-vm7m](https://github.com/libp2p/rust-libp2p-ghsa-vrx6-jcp8-vm7m/).
