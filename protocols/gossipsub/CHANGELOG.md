@@ -1,6 +1,11 @@
 ## 0.51.0
+- Do not cache or score messages for topics the node is not subscribed to.
+  As a result, the `topic_msg_recv_counts`, `topic_msg_recv_bytes` and  `topic_msg_last_recv_bytes` metrics are no longer recorded for unsubscribed topics; the `*_unfiltered` variants still are.
+  See [PR 6711](https://github.com/libp2p/rust-libp2p/pull/6711).
+
 - Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
   and remove an IP from the peer score table once no peer uses it.
+  See [PR 6710](https://github.com/libp2p/rust-libp2p/pull/6710).
 
 - Fix unbounded growth of global backoff storage from PRUNE control messages naming topics
   the node has not joined.
