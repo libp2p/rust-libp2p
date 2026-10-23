@@ -930,3 +930,71 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
         }
     }
 }
+
+#[tokio::test]
+async fn timed_out_outbound_circuit_does_not_drop_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config::default());
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut src = build_client();
+    let src_peer_id = *src.local_peer_id();
+    let src_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(src_peer_id));
+    src.listen_on(src_addr.clone()).unwrap();
+    assert!(wait_for_dial(&mut src, relay_peer_id).await);
+    wait_for_reservation(&mut src, src_addr.clone(), relay_peer_id, false).await;
+
+    let mut dst = build_client();
+    let dst_peer_id = *dst.local_peer_id();
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+    dst.listen_on(dst_addr.clone()).unwrap();
+    assert!(wait_for_dial(&mut dst, relay_peer_id).await);
+    wait_for_reservation(&mut dst, dst_addr.clone(), relay_peer_id, false).await;
+
+    // From now on `dst` is not polled anymore. Its connection handler still receives the relayed
+    // `STOP` request, but the circuit is never accepted, thus the `CONNECT` request of `src` times
+    // out.
+    src.dial(dst_addr).unwrap();
+    loop {
+        match src.select_next_some().await {
+            SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(dst_peer_id) => {
+                break;
+            }
+            SwarmEvent::ListenerClosed { .. } | SwarmEvent::ExternalAddrExpired { .. } => {
+                panic!("reservation of `src` was dropped by a failed outbound circuit")
+            }
+            _ => {}
+        }
+    }
+
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            e = src.select_next_some() => match e {
+                SwarmEvent::ListenerClosed { .. } | SwarmEvent::ExternalAddrExpired { .. } => {
+                    panic!("reservation of `src` was dropped by a failed outbound circuit: {e:?}")
+                }
+                _ => {}
+            },
+            _ = &mut deadline => break,
+        }
+    }
+    drop(dst);
+}
