@@ -365,8 +365,8 @@ pub struct Handler {
     /// The point in time when this connection started idleing.
     idle_at: Option<Instant>,
 
-    /// Future handling inbound reservation request.
-    reservation_request_future: Option<ReservationRequestFuture>,
+    /// Futures accepting or denying inbound reservation requests.
+    reservation_request_futures: Futures<ReservationRequestResult>,
     /// Timeout for the currently active reservation.
     active_reservation: Option<Delay>,
 
@@ -414,7 +414,7 @@ impl Handler {
             config,
             queued_events: Default::default(),
             idle_at: None,
-            reservation_request_future: Default::default(),
+            reservation_request_futures: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             circuits: Default::default(),
@@ -499,9 +499,9 @@ impl Handler {
     }
 }
 
-enum ReservationRequestFuture {
-    Accepting(BoxFuture<'static, Result<(), inbound_hop::Error>>),
-    Denying(BoxFuture<'static, (proto::Status, Result<(), inbound_hop::Error>)>),
+enum ReservationRequestResult {
+    Accepted(Result<(), inbound_hop::Error>),
+    Denied(proto::Status, Result<(), inbound_hop::Error>),
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
@@ -529,33 +529,23 @@ impl ConnectionHandler for Handler {
                 inbound_reservation_req,
                 addrs,
             } => {
-                if self
-                    .reservation_request_future
-                    .replace(ReservationRequestFuture::Accepting(
-                        inbound_reservation_req.accept(addrs).err_into().boxed(),
-                    ))
-                    .is_some()
-                {
-                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
-                }
+                self.reservation_request_futures.push(
+                    inbound_reservation_req
+                        .accept(addrs)
+                        .map(ReservationRequestResult::Accepted)
+                        .boxed(),
+                );
             }
             In::DenyReservationReq {
                 inbound_reservation_req,
                 status,
             } => {
-                if self
-                    .reservation_request_future
-                    .replace(ReservationRequestFuture::Denying(
-                        inbound_reservation_req
-                            .deny(status)
-                            .err_into()
-                            .map(move |result| (status, result))
-                            .boxed(),
-                    ))
-                    .is_some()
-                {
-                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
-                }
+                self.reservation_request_futures.push(
+                    inbound_reservation_req
+                        .deny(status)
+                        .map(move |result| ReservationRequestResult::Denied(status, result))
+                        .boxed(),
+                );
             }
             In::NegotiateOutboundConnect {
                 circuit_id,
@@ -846,49 +836,27 @@ impl ConnectionHandler for Handler {
             ));
         }
 
-        // Progress reservation request.
-        match self.reservation_request_future.as_mut() {
-            Some(ReservationRequestFuture::Accepting(fut)) => {
-                if let Poll::Ready(result) = fut.poll_unpin(cx) {
-                    self.reservation_request_future = None;
-
-                    match result {
-                        Ok(()) => {
-                            let renewed = self
-                                .active_reservation
-                                .replace(Delay::new(self.config.reservation_duration))
-                                .is_some();
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqAccepted { renewed },
-                            ));
-                        }
-                        Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqAcceptFailed { error },
-                            ));
-                        }
-                    }
+        // Progress reservation requests.
+        if let Poll::Ready(Some(result)) = self.reservation_request_futures.poll_next_unpin(cx) {
+            let event = match result {
+                ReservationRequestResult::Accepted(Ok(())) => {
+                    let renewed = self
+                        .active_reservation
+                        .replace(Delay::new(self.config.reservation_duration))
+                        .is_some();
+                    Event::ReservationReqAccepted { renewed }
                 }
-            }
-            Some(ReservationRequestFuture::Denying(fut)) => {
-                if let Poll::Ready((status, result)) = fut.poll_unpin(cx) {
-                    self.reservation_request_future = None;
-
-                    match result {
-                        Ok(()) => {
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqDenied { status },
-                            ));
-                        }
-                        Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::ReservationReqDenyFailed { error },
-                            ));
-                        }
-                    }
+                ReservationRequestResult::Accepted(Err(error)) => {
+                    Event::ReservationReqAcceptFailed { error }
                 }
-            }
-            None => {}
+                ReservationRequestResult::Denied(status, Ok(())) => {
+                    Event::ReservationReqDenied { status }
+                }
+                ReservationRequestResult::Denied(_, Err(error)) => {
+                    Event::ReservationReqDenyFailed { error }
+                }
+            };
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
 
         // Check keep alive status.
