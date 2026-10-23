@@ -425,9 +425,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
             .map(move |res| match res {
                 Ok(ips) => {
                     let mut ips = ips.iter();
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                    let Some(one) = ips.next() else {
+                        return Err(Error::ResolveError(ResolveError::from(
+                            "No Matching Records Found",
+                        )));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -454,9 +456,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                             RData::A(ip) => Some(Ipv4Addr::from(*ip)),
                             _ => None,
                         });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                    let Some(one) = ips.next() else {
+                        return Err(Error::ResolveError(ResolveError::from(
+                            "No Matching Records Found",
+                        )));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -483,9 +487,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                             RData::AAAA(ip) => Some(Ipv6Addr::from(*ip)),
                             _ => None,
                         });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                    let Some(one) = ips.next() else {
+                        return Err(Error::ResolveError(ResolveError::from(
+                            "No Matching Records Found",
+                        )));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -857,5 +863,98 @@ mod tests {
         }
 
         test_tokio(AlwaysFailTransport, run_test);
+    }
+
+    /// A DNS server may answer `NOERROR` with an empty ANSWER section while
+    /// placing a matching record in another section. The resolver then returns
+    /// `Ok` with no usable answer, which must not panic the dial.
+    #[test]
+    fn no_panic_on_response_without_answers() {
+        use hickory_resolver::{
+            config::NameServerConfig,
+            proto::{
+                op::{Message, OpCode},
+                rr::{Record, rdata::A},
+            },
+        };
+
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_port = socket.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 512];
+            while let Ok((n, from)) = socket.recv_from(&mut buf) {
+                let request = Message::from_vec(&buf[..n]).unwrap();
+                let mut response = Message::response(request.metadata.id, OpCode::Query);
+                response.metadata.recursion_desired = request.metadata.recursion_desired;
+                response.metadata.recursion_available = true;
+                for query in &request.queries {
+                    response.add_query(query.clone());
+                    response.add_additional(Record::from_rdata(
+                        query.name().clone(),
+                        60,
+                        RData::A(A(Ipv4Addr::LOCALHOST)),
+                    ));
+                }
+                let _ = socket.send_to(&response.to_vec().unwrap(), from);
+            }
+        });
+
+        #[derive(Clone)]
+        struct NeverDialTransport;
+
+        impl libp2p_core::Transport for NeverDialTransport {
+            type Output = ();
+            type Error = std::io::Error;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(
+                &mut self,
+                _id: ListenerId,
+                _addr: Multiaddr,
+            ) -> Result<(), TransportError<Self::Error>> {
+                unimplemented!()
+            }
+
+            fn remove_listener(&mut self, _id: ListenerId) -> bool {
+                false
+            }
+
+            fn dial(
+                &mut self,
+                addr: Multiaddr,
+                _: DialOpts,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                Err(TransportError::MultiaddrNotSupported(addr))
+            }
+
+            fn poll(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                unimplemented!()
+            }
+        }
+
+        let mut name_server = NameServerConfig::udp(Ipv4Addr::LOCALHOST.into());
+        name_server.connections[0].port = server_port;
+        let config = ResolverConfig::from_parts(None, vec![], vec![name_server]);
+        let mut transport =
+            tokio::Transport::custom(NeverDialTransport, config, ResolverOpts::default());
+
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+        let dial_opts = DialOpts {
+            role: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
+        };
+        for addr in ["/dns4/example.test./tcp/1", "/dns/example.test./tcp/1"] {
+            let dial = transport.dial(addr.parse().unwrap(), dial_opts).unwrap();
+            let result = rt.block_on(rt.spawn(dial)).expect("dial must not panic");
+            assert!(result.is_err(), "{addr}");
+        }
     }
 }
