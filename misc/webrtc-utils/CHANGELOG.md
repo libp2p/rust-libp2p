@@ -1,5 +1,8 @@
 ## 0.5.0
 
+- Add `Fingerprint::from_sdp_format`, the inverse of `Fingerprint::to_sdp_format`.
+  See [PR 6571](https://github.com/libp2p/rust-libp2p/pull/6571).
+
 - Revert migration to `quick-protobuf`, migrate back to `prost`.
   See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
