@@ -1,4 +1,6 @@
 ## 0.51.0
+- Remove the partial message state of a disconnected peer that never subscribed to a topic, and
+  remove the state of a topic once no peer has any.
 - Do not cache or score messages for topics the node is not subscribed to.
   As a result, the `topic_msg_recv_counts`, `topic_msg_recv_bytes` and  `topic_msg_last_recv_bytes` metrics are no longer recorded for unsubscribed topics; the `*_unfiltered` variants still are.
   See [PR 6711](https://github.com/libp2p/rust-libp2p/pull/6711).

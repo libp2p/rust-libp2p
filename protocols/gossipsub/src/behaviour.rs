@@ -3320,14 +3320,15 @@ where
                     m.dec_topic_peers(topic);
                 }
 
-                #[cfg(feature = "partial-messages")]
-                self.partial_messages_extension.peer_disconnected(peer_id);
-
                 // remove from fanout
                 self.fanout
                     .get_mut(topic)
                     .map(|peers| peers.remove(&peer_id));
             }
+
+            // A peer that never subscribed can still have partial message state.
+            #[cfg(feature = "partial-messages")]
+            self.partial_messages_extension.peer_disconnected(peer_id);
 
             // Forget px and outbound status for this peer
             self.px_peers.remove(&peer_id);
