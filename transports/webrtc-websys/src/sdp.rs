@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use libp2p_webrtc_utils::Fingerprint;
+use libp2p_webrtc_utils::{Fingerprint, StreamConfig};
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.
@@ -8,12 +8,14 @@ pub(crate) fn answer(
     addr: SocketAddr,
     server_fingerprint: Fingerprint,
     client_ufrag: &str,
+    config: StreamConfig,
 ) -> RtcSessionDescriptionInit {
     let answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
     answer_obj.set_sdp(&libp2p_webrtc_utils::sdp::answer(
         addr,
         server_fingerprint,
         client_ufrag,
+        config,
     ));
     answer_obj
 }
