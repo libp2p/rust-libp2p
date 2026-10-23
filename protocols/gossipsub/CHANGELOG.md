@@ -1,4 +1,7 @@
 ## 0.51.0
+- Remove the partial message state of a disconnected peer that never subscribed to a topic, and
+  remove the state of a topic once no peer has any.
+
 - Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
   and remove an IP from the peer score table once no peer uses it.
 
