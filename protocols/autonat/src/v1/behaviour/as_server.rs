@@ -89,6 +89,7 @@ pub(crate) struct AsServer<'a> {
             InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
+            ConnectionId,
         ),
     >,
 }
@@ -133,8 +134,23 @@ impl HandleInnerEvent for AsServer<'_> {
                             addrs
                         );
 
-                        self.ongoing_inbound
-                            .insert(peer, (probe_id, request_id, addrs.clone(), channel));
+                        let opts = DialOpts::peer_id(peer)
+                            .condition(PeerCondition::Always)
+                            .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
+                            .addresses(addrs.clone())
+                            .allocate_new_port()
+                            .build();
+
+                        self.ongoing_inbound.insert(
+                            peer,
+                            (
+                                probe_id,
+                                request_id,
+                                addrs.clone(),
+                                channel,
+                                opts.connection_id(),
+                            ),
+                        );
                         self.throttled_clients.push((peer, Instant::now()));
 
                         VecDeque::from([
@@ -145,16 +161,7 @@ impl HandleInnerEvent for AsServer<'_> {
                                     addresses: addrs.clone(),
                                 },
                             )),
-                            ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer)
-                                    .condition(PeerCondition::Always)
-                                    .override_dial_concurrency_factor(
-                                        NonZeroU8::new(1).expect("1 > 0"),
-                                    )
-                                    .addresses(addrs)
-                                    .allocate_new_port()
-                                    .build(),
-                            },
+                            ToSwarm::Dial { opts },
                         ])
                     }
                     Err((status_text, error)) => {
@@ -193,7 +200,7 @@ impl HandleInnerEvent for AsServer<'_> {
                 );
 
                 let probe_id = match self.ongoing_inbound.get(&peer) {
-                    Some((_, rq_id, _, _)) if *rq_id == request_id => {
+                    Some((_, rq_id, _, _, _)) if *rq_id == request_id => {
                         self.ongoing_inbound.remove(&peer).unwrap().0
                     }
                     _ => self.probe_id.next(),
@@ -218,7 +225,7 @@ impl AsServer<'_> {
         peer: &PeerId,
         address: &Multiaddr,
     ) -> Option<InboundProbeEvent> {
-        let (_, _, addrs, _) = self.ongoing_inbound.get(peer)?;
+        let (_, _, addrs, _, _) = self.ongoing_inbound.get(peer)?;
 
         // Check if the dialed address was among the requested addresses.
         if !addrs.contains(address) {
@@ -231,7 +238,7 @@ impl AsServer<'_> {
             "Dial-back to peer succeeded"
         );
 
-        let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
+        let (probe_id, _, _, channel, _) = self.ongoing_inbound.remove(peer).unwrap();
         let response = DialResponse {
             result: Ok(address.clone()),
             status_text: None,
@@ -248,9 +255,15 @@ impl AsServer<'_> {
     pub(crate) fn on_outbound_dial_error(
         &mut self,
         peer: Option<PeerId>,
+        connection_id: ConnectionId,
         error: &DialError,
     ) -> Option<InboundProbeEvent> {
-        let (probe_id, _, _, channel) = peer.and_then(|p| self.ongoing_inbound.remove(&p))?;
+        // Ignore failures of dials that are not our dial-back.
+        let (_, _, _, _, dial_back) = self.ongoing_inbound.get(&peer?)?;
+        if *dial_back != connection_id {
+            return None;
+        }
+        let (probe_id, _, _, channel, _) = peer.and_then(|p| self.ongoing_inbound.remove(&p))?;
 
         match peer {
             Some(p) => tracing::debug!(
