@@ -1,3 +1,8 @@
+## 0.3.1
+
+- Enable rsa for wasm32-unknown-unknown targets.
+  See [PR 6137](https://github.com/libp2p/rust-libp2p/pull/6137)
+
 ## 0.3.0
 
 - **secp256k1**: `PublicKey::verify` now enforces low-S signatures.
