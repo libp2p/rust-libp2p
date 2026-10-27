@@ -1688,3 +1688,59 @@ fn get_closest_peers_should_return_up_to_k_peers() {
         }))
     }
 }
+
+#[test]
+fn received_record_keeps_expiration_without_local_record_ttl() {
+    let (_, mut sender) = build_node();
+    let mut cfg = Config::new(PROTOCOL_NAME);
+    cfg.set_record_ttl(None);
+    let (receiver_addr, receiver) = build_node_with_config(cfg);
+    let receiver_id = *receiver.local_peer_id();
+
+    sender
+        .behaviour_mut()
+        .add_address(&receiver_id, receiver_addr);
+
+    let mut record = Record::new(random_multihash(), vec![1, 2, 3]);
+    record.expires = Some(Instant::now() + Duration::from_secs(60));
+    let key = record.key.clone();
+    let qid =
+        sender
+            .behaviour_mut()
+            .put_record_to(record, std::iter::once(receiver_id), Quorum::One);
+
+    let mut swarms = [sender, receiver];
+    let rt = Runtime::new().unwrap();
+    rt.block_on(poll_fn(|ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::PutRecord(res),
+                        ..
+                    }))) => {
+                        assert_eq!(id, qid);
+                        assert!(res.is_ok());
+                        return Poll::Ready(());
+                    }
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+        Poll::Pending
+    }));
+
+    let stored = swarms[1]
+        .behaviour_mut()
+        .store
+        .get(&key)
+        .expect("record to be stored")
+        .into_owned();
+    assert!(
+        stored.expires.is_some(),
+        "the expiration set by the sender must be kept if no local record TTL is configured"
+    );
+}
