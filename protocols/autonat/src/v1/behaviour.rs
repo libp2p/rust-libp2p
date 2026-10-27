@@ -680,6 +680,9 @@ impl GlobalIp for std::net::Ipv6Addr {
         // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope,
         // Ipv6MulticastScope::Global))`.
         fn is_multicast_scope_global(addr: &std::net::Ipv6Addr) -> Option<bool> {
+            if !addr.is_multicast() {
+                return None;
+            }
             match addr.segments()[0] & 0x000f {
                 14 => Some(true),         // Global multicast scope.
                 1..=5 | 8 => Some(false), // Local multicast scope.
@@ -691,6 +694,36 @@ impl GlobalIp for std::net::Ipv6Addr {
             Some(true) => true,
             None => is_unicast_global(self),
             _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn global_ipv6_unicast_addresses_are_global() {
+        for addr in [
+            "/ip6/2001:4860:4860::8888/tcp/1",
+            "/ip6/2a01:4f8::1/tcp/1",
+            "/ip6/2003:e0::1/tcp/1",
+            "/ip6/2606:4700:4700::1111/tcp/1",
+        ] {
+            let addr: Multiaddr = addr.parse().unwrap();
+            assert!(addr.is_global_ip(), "{addr} is global");
+        }
+
+        for addr in [
+            "/ip6/::1/tcp/1",
+            "/ip6/fe80::1/tcp/1",
+            "/ip6/fd00::1/tcp/1",
+            "/ip6/fd0e::1/tcp/1",
+            "/ip6/2001:db8::1/tcp/1",
+            "/ip6/ff02::1/tcp/1",
+        ] {
+            let addr: Multiaddr = addr.parse().unwrap();
+            assert!(!addr.is_global_ip(), "{addr} is not global");
         }
     }
 }
