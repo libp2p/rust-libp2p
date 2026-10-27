@@ -1,7 +1,7 @@
 ## 0.17.0
 
 - v1: Only fail an inbound probe when the dial-back itself fails, not on any failed dial to the peer.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6727](https://github.com/libp2p/rust-libp2p/pull/6727).
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 
