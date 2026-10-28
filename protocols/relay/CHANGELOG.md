@@ -1,5 +1,8 @@
 ## 0.23.0
 
+- Don't panic in the client when a reservation is accepted after its listener was closed.
+  See [PR 6653](https://github.com/libp2p/rust-libp2p/pull/6653).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.22.0
