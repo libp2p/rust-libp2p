@@ -45,12 +45,39 @@ pub(crate) struct PollDataChannel {
     /// cause the application developer to drop the stream which resets it.
     overloaded: Rc<AtomicBool>,
 
-    // Store the closures for proper garbage collection.
-    // These are wrapped in an [`Rc`] so we can implement [`Clone`].
-    _on_open_closure: Rc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
-    _on_write_closure: Rc<Closure<dyn FnMut(Event)>>,
-    _on_close_closure: Rc<Closure<dyn FnMut(Event)>>,
-    _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
+    /// Owns the JavaScript callbacks for the shared lifetime of all clones.
+    _event_handlers: Rc<EventHandlers>,
+}
+
+/// Keeps the event callbacks alive and detaches them when the final stream clone is dropped.
+#[derive(Debug)]
+struct EventHandlers {
+    inner: RtcDataChannel,
+    _on_open_closure: Closure<dyn FnMut(RtcDataChannelEvent)>,
+    _on_write_closure: Closure<dyn FnMut(Event)>,
+    _on_close_closure: Closure<dyn FnMut(Event)>,
+    _on_message_closure: Closure<dyn FnMut(MessageEvent)>,
+}
+
+impl Drop for EventHandlers {
+    fn drop(&mut self) {
+        // The browser may queue an event after Rust drops a stream. Detach each handler before
+        // wasm-bindgen releases its Closure so a queued event cannot invoke a dropped closure.
+        self.inner.set_onopen(None);
+        self.inner.set_onbufferedamountlow(None);
+        self.inner.set_onclose(None);
+        self.inner.set_onmessage(None);
+    }
+}
+
+/// Wakes outside the Web API callback that triggered the event.
+///
+/// Calling `wake` synchronously from an `RtcDataChannel` callback can re-enter the executor
+/// while wasm-bindgen still mutably borrows that callback closure.
+fn defer_wake(waker: Rc<AtomicWaker>) {
+    wasm_bindgen_futures::spawn_local(async move {
+        waker.wake();
+    });
 }
 
 impl PollDataChannel {
@@ -61,7 +88,7 @@ impl PollDataChannel {
 
             move |_: RtcDataChannelEvent| {
                 tracing::trace!("DataChannel opened");
-                open_waker.wake();
+                defer_wake(open_waker.clone());
             }
         });
         inner.set_onopen(Some(on_open_closure.as_ref().unchecked_ref()));
@@ -73,7 +100,7 @@ impl PollDataChannel {
 
             move |_: Event| {
                 tracing::trace!("DataChannel available for writing (again)");
-                write_waker.wake();
+                defer_wake(write_waker.clone());
             }
         });
         inner.set_onbufferedamountlow(Some(on_write_closure.as_ref().unchecked_ref()));
@@ -84,7 +111,7 @@ impl PollDataChannel {
 
             move |_: Event| {
                 tracing::trace!("DataChannel closed");
-                close_waker.wake();
+                defer_wake(close_waker.clone());
             }
         });
         inner.set_onclose(Some(on_close_closure.as_ref().unchecked_ref()));
@@ -112,23 +139,26 @@ impl PollDataChannel {
                 }
 
                 read_buffer.extend_from_slice(&data.to_vec());
-                new_data_waker.wake();
+                defer_wake(new_data_waker.clone());
             }
         });
         inner.set_onmessage(Some(on_message_closure.as_ref().unchecked_ref()));
 
         Self {
-            inner,
+            inner: inner.clone(),
             new_data_waker,
             read_buffer,
             open_waker,
             write_waker,
             close_waker,
             overloaded,
-            _on_open_closure: Rc::new(on_open_closure),
-            _on_write_closure: Rc::new(on_write_closure),
-            _on_close_closure: Rc::new(on_close_closure),
-            _on_message_closure: Rc::new(on_message_closure),
+            _event_handlers: Rc::new(EventHandlers {
+                inner,
+                _on_open_closure: on_open_closure,
+                _on_write_closure: on_write_closure,
+                _on_close_closure: on_close_closure,
+                _on_message_closure: on_message_closure,
+            }),
         }
     }
 
