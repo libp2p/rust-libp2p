@@ -115,10 +115,7 @@ where
             .inner
             .dial(addr, opts)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
-        Ok(Timeout {
-            inner: dial,
-            timer: Delay::new(self.outgoing_timeout),
-        })
+        Ok(Timeout::new(dial, self.outgoing_timeout))
     }
 
     fn poll(
@@ -129,10 +126,7 @@ where
         let timeout = *this.incoming_timeout;
         this.inner.poll(cx).map(|event| {
             event
-                .map_upgrade(move |inner_fut| Timeout {
-                    inner: inner_fut,
-                    timer: Delay::new(timeout),
-                })
+                .map_upgrade(move |inner_fut| Timeout::new(inner_fut, timeout))
                 .map_err(TransportTimeoutError::Other)
         })
     }
@@ -147,7 +141,20 @@ where
 pub struct Timeout<InnerFut> {
     #[pin]
     inner: InnerFut,
-    timer: Delay,
+    timeout: Duration,
+    /// The timer is only started once the future is polled for the first time, s.t. futures that
+    /// are created upfront but polled later (e.g. queued dials) get the full timeout.
+    timer: Option<Delay>,
+}
+
+impl<InnerFut> Timeout<InnerFut> {
+    fn new(inner: InnerFut, timeout: Duration) -> Self {
+        Timeout {
+            inner,
+            timeout,
+            timer: None,
+        }
+    }
 }
 
 impl<InnerFut> Future for Timeout<InnerFut>
@@ -170,7 +177,10 @@ where
             Poll::Ready(Err(err)) => return Poll::Ready(Err(TransportTimeoutError::Other(err))),
         }
 
-        match Pin::new(&mut this.timer).poll(cx) {
+        let timeout = *this.timeout;
+        let timer = this.timer.get_or_insert_with(|| Delay::new(timeout));
+
+        match Pin::new(timer).poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
         }
