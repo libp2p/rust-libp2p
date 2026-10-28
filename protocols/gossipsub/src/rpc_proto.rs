@@ -74,4 +74,43 @@ mod test {
         let old_message = compat_pb::Message::decode(&new_message1b[..]).unwrap();
         assert_eq!(old_message.topic_ids, vec![topic1.into_string()]);
     }
+
+    #[test]
+    fn test_large_message_types_roundtrip() {
+        let topic = Topic::new("t1").hash();
+
+        let preamble = super::proto::ControlPreamble {
+            message_id: Some(rand::random::<[u8; 32]>().to_vec()),
+            message_size: Some(rand::random::<u64>()),
+            topic_id: Some(topic.clone().into_string()),
+        };
+        let decoded = super::proto::ControlPreamble::decode(&preamble.encode_to_vec()[..]).unwrap();
+        assert_eq!(preamble, decoded);
+
+        let imreceiving = super::proto::ControlImReceiving {
+            message_id: Some(rand::random::<[u8; 32]>().to_vec()),
+        };
+        let decoded =
+            super::proto::ControlImReceiving::decode(&imreceiving.encode_to_vec()[..]).unwrap();
+        assert_eq!(imreceiving, decoded);
+
+        let fragment = super::proto::LargeMessageFragment {
+            message_id: Some(rand::random::<[u8; 32]>().to_vec()),
+            fragment_index: Some(3),
+            total_fragments: Some(7),
+            fragment_data: Some(rand::random::<[u8; 32]>().to_vec()),
+            topic_id: Some(topic.into_string()),
+        };
+        let decoded =
+            super::proto::LargeMessageFragment::decode(&fragment.encode_to_vec()[..]).unwrap();
+        assert_eq!(fragment, decoded);
+
+        let extensions = super::proto::ControlExtensions {
+            partial_messages: None,
+            large_message_handling: Some(true),
+        };
+        let decoded =
+            super::proto::ControlExtensions::decode(&extensions.encode_to_vec()[..]).unwrap();
+        assert_eq!(extensions, decoded);
+    }
 }
