@@ -63,6 +63,8 @@ pub struct Stream<T> {
     io: FramedDc<T>,
     state: State,
     read_buffer: Bytes,
+    /// An inbound FIN sharing a frame with data is applied after the data has been read.
+    pending_inbound_flag: Option<Flag>,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
@@ -80,6 +82,7 @@ where
             io: framed_dc::new(data_channel.clone()),
             state: State::Open,
             read_buffer: Bytes::default(),
+            pending_inbound_flag: None,
             drop_notifier: Some(sender),
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
@@ -135,25 +138,56 @@ where
                 return Poll::Ready(Ok(n));
             }
 
+            if let Some(flag) = self.pending_inbound_flag.take() {
+                debug_assert_eq!(flag, Flag::Fin);
+                let Self {
+                    read_buffer,
+                    state,
+                    ..
+                } = &mut *self;
+                state.handle_inbound_flag(flag, read_buffer);
+
+                return Poll::Ready(Ok(0));
+            }
+
             let Self {
                 read_buffer,
                 io,
+                pending_inbound_flag,
                 state,
                 ..
             } = &mut *self;
 
             match ready!(io_poll_next(io, cx))? {
                 Some((flag, message)) => {
-                    if let Some(flag) = flag {
-                        state.handle_inbound_flag(flag, read_buffer);
-                    }
-
-                    debug_assert!(read_buffer.is_empty());
-                    match message {
-                        Some(msg) if !msg.is_empty() => {
-                            *read_buffer = msg.into();
+                    match (flag, message) {
+                        (Some(Flag::Fin), Some(message)) if !message.is_empty() => {
+                            *read_buffer = message.into();
+                            *pending_inbound_flag = Some(Flag::Fin);
                         }
-                        _ => {
+                        (Some(Flag::Fin), _) => {
+                            state.handle_inbound_flag(Flag::Fin, read_buffer);
+                            return Poll::Ready(Ok(0));
+                        }
+                        (Some(Flag::StopSending), message) => {
+                            state.handle_inbound_flag(Flag::StopSending, read_buffer);
+
+                            if let Some(message) = message.filter(|message| !message.is_empty()) {
+                                *read_buffer = message.into();
+                            } else {
+                                // STOP_SENDING only closes the write half. Keep waiting for data
+                                // from the peer instead of reporting EOF for the control frame.
+                                continue;
+                            }
+                        }
+                        (Some(Flag::Reset), _) => {
+                            state.handle_inbound_flag(Flag::Reset, read_buffer);
+                            return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
+                        }
+                        (None, Some(message)) if !message.is_empty() => {
+                            *read_buffer = message.into();
+                        }
+                        (None, _) => {
                             tracing::debug!("poll_read buffer is empty, received None");
                             return Poll::Ready(Ok(0));
                         }
@@ -278,6 +312,7 @@ where
 mod tests {
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
+    use futures::{executor::block_on, io::Cursor};
 
     use super::*;
     use crate::stream::framed_dc::codec;
@@ -300,5 +335,63 @@ mod tests {
         // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
         // maximum limit specified in the libp2p WebRTC specification.
         assert_eq!(dst.len(), MAX_MSG_LEN);
+    }
+
+    #[test]
+    fn stop_sending_does_not_close_read_half() {
+        let mut stream = stream_with_messages([
+            Message {
+                flag: Some(Flag::StopSending as i32),
+                message: None,
+            },
+            Message {
+                flag: None,
+                message: Some(b"payload".to_vec()),
+            },
+        ]);
+
+        let mut buf = [0; 7];
+        block_on(stream.read_exact(&mut buf)).unwrap();
+
+        assert_eq!(&buf, b"payload");
+        assert!(matches!(stream.state, State::WriteClosed));
+    }
+
+    #[test]
+    fn reset_is_reported_immediately() {
+        let mut stream = stream_with_messages([Message {
+            flag: Some(Flag::Reset as i32),
+            message: None,
+        }]);
+
+        let error = block_on(stream.read(&mut [0; 1])).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::ConnectionReset);
+    }
+
+    #[test]
+    fn fin_payload_is_read_before_eof() {
+        let mut stream = stream_with_messages([Message {
+            flag: Some(Flag::Fin as i32),
+            message: Some(b"payload".to_vec()),
+        }]);
+
+        let mut buf = [0; 7];
+        block_on(stream.read_exact(&mut buf)).unwrap();
+        let eof = block_on(stream.read(&mut [0; 1])).unwrap();
+
+        assert_eq!(&buf, b"payload");
+        assert_eq!(eof, 0);
+    }
+
+    fn stream_with_messages(messages: impl IntoIterator<Item = Message>) -> Stream<Cursor<Vec<u8>>> {
+        let mut codec = codec();
+        let mut encoded = BytesMut::new();
+
+        for message in messages {
+            codec.encode(message, &mut encoded).unwrap();
+        }
+
+        Stream::new(Cursor::new(encoded.to_vec())).0
     }
 }
