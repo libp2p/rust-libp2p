@@ -250,3 +250,19 @@ impl AsyncWrite for PollDataChannel {
         Poll::Pending
     }
 }
+
+impl Drop for PollDataChannel {
+    fn drop(&mut self) {
+        // Check if we are the final reference to this closure
+        if Rc::strong_count(&self._on_message_closure) > 1 {
+            return;
+        }
+        // If not, we unset all event handlers to make sure they aren't called after this stream is
+        // dropped.
+        self.inner.set_onopen(None);
+        self.inner.set_onbufferedamountlow(None);
+        self.inner.set_onclose(None);
+        self.inner.set_onmessage(None);
+        self.inner.set_onerror(None);
+    }
+}

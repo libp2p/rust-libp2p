@@ -1,3 +1,8 @@
+## 0.5.1
+
+- Add Drop impl to `PollDataChannel` that unsets event handlers when the stream
+  gets dropped.
+
 ## 0.5.0
 
 - Require `getrandom/js` feature only under `wasm` target.
