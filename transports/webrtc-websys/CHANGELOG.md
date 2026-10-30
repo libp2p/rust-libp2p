@@ -1,7 +1,7 @@
 ## 0.5.1
 
-- Add Drop impl to `PollDataChannel` that unsets event handlers when the stream
-  gets dropped.
+- Unset `RtcDataChannel`'s event handlers when the last handle to a stream's
+  data channel is dropped.
 
 ## 0.5.0
 

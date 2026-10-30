@@ -20,8 +20,9 @@ use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataC
 /// [`AsyncWrite`].
 #[derive(Debug, Clone)]
 pub(crate) struct PollDataChannel {
-    /// The [`RtcDataChannel`] being wrapped.
-    inner: RtcDataChannel,
+    /// The [`RtcDataChannel`] being wrapped, itself wrapped in an [`Rc`] so we can implement
+    /// [`Clone`].
+    inner: Rc<ChannelWrapper>,
 
     new_data_waker: Rc<AtomicWaker>,
     read_buffer: Rc<Mutex<BytesMut>>,
@@ -44,13 +45,26 @@ pub(crate) struct PollDataChannel {
     /// Failing these will (very likely),
     /// cause the application developer to drop the stream which resets it.
     overloaded: Rc<AtomicBool>,
+}
+
+#[derive(Debug)]
+struct ChannelWrapper {
+    channel: RtcDataChannel,
 
     // Store the closures for proper garbage collection.
-    // These are wrapped in an [`Rc`] so we can implement [`Clone`].
-    _on_open_closure: Rc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
-    _on_write_closure: Rc<Closure<dyn FnMut(Event)>>,
-    _on_close_closure: Rc<Closure<dyn FnMut(Event)>>,
-    _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
+    _on_open_closure: Closure<dyn FnMut(RtcDataChannelEvent)>,
+    _on_write_closure: Closure<dyn FnMut(Event)>,
+    _on_close_closure: Closure<dyn FnMut(Event)>,
+    _on_message_closure: Closure<dyn FnMut(MessageEvent)>,
+}
+
+impl Drop for ChannelWrapper {
+    fn drop(&mut self) {
+        self.channel.set_onopen(None);
+        self.channel.set_onbufferedamountlow(None);
+        self.channel.set_onclose(None);
+        self.channel.set_onmessage(None);
+    }
 }
 
 impl PollDataChannel {
@@ -118,28 +132,30 @@ impl PollDataChannel {
         inner.set_onmessage(Some(on_message_closure.as_ref().unchecked_ref()));
 
         Self {
-            inner,
+            inner: Rc::new(ChannelWrapper {
+                channel: inner,
+                _on_open_closure: on_open_closure,
+                _on_write_closure: on_write_closure,
+                _on_close_closure: on_close_closure,
+                _on_message_closure: on_message_closure,
+            }),
             new_data_waker,
             read_buffer,
             open_waker,
             write_waker,
             close_waker,
             overloaded,
-            _on_open_closure: Rc::new(on_open_closure),
-            _on_write_closure: Rc::new(on_write_closure),
-            _on_close_closure: Rc::new(on_close_closure),
-            _on_message_closure: Rc::new(on_message_closure),
         }
     }
 
     /// Returns the [RtcDataChannelState] of the [RtcDataChannel]
     fn ready_state(&self) -> RtcDataChannelState {
-        self.inner.ready_state()
+        self.inner.channel.ready_state()
     }
 
     /// Returns the current [RtcDataChannel] BufferedAmount
     fn buffered_amount(&self) -> usize {
-        self.inner.buffered_amount() as usize
+        self.inner.channel.buffered_amount() as usize
     }
 
     /// Whether the data channel is ready for reading or writing.
@@ -219,6 +235,7 @@ impl AsyncWrite for PollDataChannel {
 
         if this
             .inner
+            .channel
             .send_with_u8_array(&buf[..bytes_to_send])
             .is_err()
         {
@@ -243,26 +260,10 @@ impl AsyncWrite for PollDataChannel {
         }
 
         if self.ready_state() != RtcDataChannelState::Closing {
-            self.inner.close();
+            self.inner.channel.close();
         }
 
         self.close_waker.register(cx.waker());
         Poll::Pending
-    }
-}
-
-impl Drop for PollDataChannel {
-    fn drop(&mut self) {
-        // Check if we are the final reference to this closure
-        if Rc::strong_count(&self._on_message_closure) > 1 {
-            return;
-        }
-        // If not, we unset all event handlers to make sure they aren't called after this stream is
-        // dropped.
-        self.inner.set_onopen(None);
-        self.inner.set_onbufferedamountlow(None);
-        self.inner.set_onclose(None);
-        self.inner.set_onmessage(None);
-        self.inner.set_onerror(None);
     }
 }
