@@ -1,3 +1,8 @@
+## 0.5.1
+
+- Switch to a fallible binding for `createDataChannel`, allowing for graceful
+  recovery from closed connections.
+
 ## 0.5.0
 
 - Require `getrandom/js` feature only under `wasm` target.
