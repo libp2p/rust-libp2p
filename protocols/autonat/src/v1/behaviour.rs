@@ -709,6 +709,7 @@ mod tests {
             "/ip6/2a01:4f8::1/tcp/1",
             "/ip6/2003:e0::1/tcp/1",
             "/ip6/2606:4700:4700::1111/tcp/1",
+            "/ip6/ff0e::1/tcp/1",
         ] {
             let addr: Multiaddr = addr.parse().unwrap();
             assert!(addr.is_global_ip(), "{addr} is global");
