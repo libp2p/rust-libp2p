@@ -3,6 +3,10 @@
   task, instead of in the behaviour.
   See [PR 6760](https://github.com/libp2p/rust-libp2p/pull/6760).
 
+- Cap the number of control messages per type per RPC at `max_control_messages`
+  (default 500), truncating the excess after decoding.
+  See [PR 6765](https://github.com/libp2p/rust-libp2p/pull/6765).
+
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
 - Do not cache or score messages for topics the node is not subscribed to.

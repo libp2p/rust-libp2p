@@ -437,6 +437,12 @@ impl Config {
         self.protocol.max_control_message_size
     }
 
+    /// The maximum number of control messages per type to accept in a single RPC.
+    /// Excess entries are truncated after decoding. The default is 500.
+    pub fn max_control_messages(&self) -> usize {
+        self.protocol.max_control_messages
+    }
+
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
     /// If the message is not received within this window, a broken promise is declared and
     /// the router may apply behavioural penalties. The default is 3 seconds.
@@ -1075,6 +1081,13 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum number of control messages per type to accept in a single RPC.
+    /// Excess entries are truncated after decoding. The default is 500.
+    pub fn max_control_messages(&mut self, max_control_messages: usize) -> &mut Self {
+        self.config.protocol.max_control_messages = max_control_messages;
+        self
+    }
+
     /// The topic configuration sets mesh parameter sizes for a given topic. Notes on default
     /// below.
     ///
@@ -1198,6 +1211,7 @@ impl std::fmt::Debug for Config {
             "max_control_message_size",
             &self.protocol.max_control_message_size,
         );
+        let _ = builder.field("max_control_messages", &self.protocol.max_control_messages);
         let _ = builder.field(
             "max_ihave_messages_heartbeat",
             &self.max_ihave_messages_heartbeat,
