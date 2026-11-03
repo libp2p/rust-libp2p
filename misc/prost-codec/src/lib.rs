@@ -115,12 +115,25 @@ impl From<Error> for io::Error {
 
 /// Consumes the varint length prefix from a length-prefixed buffer.
 /// Advances the buffer past the prefix, positioning it at the message bytes.
-pub fn consume_message_prefix(buf: &mut &[u8]) -> io::Result<bool> {
+///
+/// The `max_message_length` limit is applied to the length declared by the
+/// prefix, i.e. to the single length-delimited message. Bytes of subsequent
+/// messages that may follow in `buf` are not taken into account.
+///
+/// Returns `Ok(false)` if the prefix or the message body is not complete yet,
+/// leaving `buf` untouched.
+pub fn consume_message_prefix(buf: &mut &[u8], max_message_length: usize) -> io::Result<bool> {
     let (message_length, remaining) = match unsigned_varint::decode::usize(buf) {
         Ok((len, remaining)) => (len, remaining),
         Err(unsigned_varint::decode::Error::Insufficient) => return Ok(false),
         Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
     };
+    if message_length > max_message_length {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("message with {message_length}b exceeds maximum of {max_message_length}b"),
+        ));
+    }
     if remaining.len() < message_length {
         return Ok(false);
     }
@@ -192,6 +205,34 @@ mod tests {
         let result = codec.decode(&mut BytesMut::new());
 
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn consume_message_prefix_enforces_max_message_length() {
+        let src = varint_zeroes(100);
+
+        // Declared length within the limit, body present: consumes the message.
+        let mut buf: &[u8] = &src;
+        assert!(consume_message_prefix(&mut buf, 100).unwrap());
+        assert_eq!(buf.len(), 100);
+
+        // Declared length over the limit: error.
+        let mut buf: &[u8] = &src;
+        assert!(consume_message_prefix(&mut buf, 99).is_err());
+
+        // Declared length over the limit, body not yet arrived: error as soon as
+        // the prefix is parsed, without waiting for the declared payload.
+        let mut partial = varint_zeroes(100);
+        partial.truncate(5);
+        let mut buf: &[u8] = &partial;
+        assert!(consume_message_prefix(&mut buf, 99).is_err());
+
+        // Incomplete body within the limit: `Ok(false)` and buffer untouched.
+        let mut partial = varint_zeroes(100);
+        partial.truncate(50);
+        let mut buf: &[u8] = &partial;
+        assert!(!consume_message_prefix(&mut buf, 100).unwrap());
+        assert_eq!(buf.len(), 50);
     }
 
     #[test]
