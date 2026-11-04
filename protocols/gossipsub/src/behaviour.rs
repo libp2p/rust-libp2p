@@ -1764,6 +1764,15 @@ where
             .peer_score
             .below_threshold(peer_id, |ts| ts.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
+            if !self.mesh.contains_key(&topic_hash) {
+                tracing::debug!(
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "PRUNE: Received prune for unknown topic from peer"
+                );
+                continue;
+            }
+
             if self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true) {
                 #[cfg(feature = "metrics")]
                 if let Some(m) = self.metrics.as_mut() {
@@ -1973,10 +1982,13 @@ where
             }
         }
 
-        // Check the validity of the message
-        // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
-        // and instead continually penalize peers that repeatedly send this message.
-        if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
+        // Check the validity of the message and that we are subscribed to its topic. Peers get
+        // penalized if this message is invalid. We don't add it to the duplicate cache and
+        // instead continually penalize peers that repeatedly send this message. Messages for
+        // topics we are not subscribed to are not cached or scored either.
+        if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source)
+            || !self.mesh.contains_key(&message.topic)
+        {
             return;
         }
 
@@ -2012,26 +2024,14 @@ where
         // Add the message to our memcache
         self.mcache.put(&msg_id, raw_message.clone());
 
-        // Dispatch the message to the user if we are subscribed to any of the topics
-        #[allow(
-            clippy::map_entry,
-            reason = "False positive, see rust-lang/rust-clippy#14449."
-        )]
-        if self.mesh.contains_key(&message.topic) {
-            tracing::debug!("Sending received message to user");
-            self.events
-                .push_back(ToSwarm::GenerateEvent(Event::Message {
-                    propagation_source: *propagation_source,
-                    message_id: msg_id.clone(),
-                    message,
-                }));
-        } else {
-            tracing::debug!(
-                topic=%message.topic,
-                "Received message on a topic we are not subscribed to"
-            );
-            return;
-        }
+        // Dispatch the message to the user
+        tracing::debug!("Sending received message to user");
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::Message {
+                propagation_source: *propagation_source,
+                message_id: msg_id.clone(),
+                message,
+            }));
 
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
@@ -3320,14 +3320,15 @@ where
                     m.dec_topic_peers(topic);
                 }
 
-                #[cfg(feature = "partial-messages")]
-                self.partial_messages_extension.peer_disconnected(peer_id);
-
                 // remove from fanout
                 self.fanout
                     .get_mut(topic)
                     .map(|peers| peers.remove(&peer_id));
             }
+
+            // A peer that never subscribed can still have partial message state.
+            #[cfg(feature = "partial-messages")]
+            self.partial_messages_extension.peer_disconnected(peer_id);
 
             // Forget px and outbound status for this peer
             self.px_peers.remove(&peer_id);

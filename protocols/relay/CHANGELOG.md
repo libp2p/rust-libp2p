@@ -1,3 +1,7 @@
+## 0.23.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.

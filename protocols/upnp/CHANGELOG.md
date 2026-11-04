@@ -1,7 +1,10 @@
-## 0.7.1
+## 0.8.0
 
 - update igd-next to 0.18.0.
   See [PR 6664](https://github.com/libp2p/rust-libp2p/pull/6664).
+
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.7.0
 

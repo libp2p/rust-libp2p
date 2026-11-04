@@ -1,3 +1,7 @@
+## 0.50.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.49.0
 
 - Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on

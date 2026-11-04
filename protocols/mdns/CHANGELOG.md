@@ -1,3 +1,7 @@
+## 0.50.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.49.0
 
 - Fix mDNS to only advertise listening addresses that match the interface IP.

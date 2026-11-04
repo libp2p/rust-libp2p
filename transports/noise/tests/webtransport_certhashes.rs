@@ -4,6 +4,7 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use multihash::Multihash;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 
 const SHA_256_MH: u64 = 0x12;
 
@@ -126,7 +127,8 @@ fn handshake_with_certhashes(
     let client_id = identity::Keypair::generate_ed25519();
     let server_id = identity::Keypair::generate_ed25519();
 
-    let (client, server) = futures_ringbuf::Endpoint::pair(100, 100);
+    let (client, server) = tokio::io::duplex(100);
+    let (client, server) = (client.compat(), server.compat());
 
     futures::executor::block_on(async move {
         let mut client_config = noise::Config::new(&client_id)?;
