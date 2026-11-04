@@ -192,6 +192,7 @@ pub struct Behaviour {
             InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
+            ConnectionId,
         ),
     >,
 
@@ -384,8 +385,18 @@ impl Behaviour {
         }
     }
 
-    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
-        if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id,
+            error,
+            connection_id,
+        }: DialFailure,
+    ) {
+        if let Some(event) = self
+            .as_server()
+            .on_outbound_dial_error(peer_id, connection_id, error)
+        {
             self.pending_actions
                 .push_back(ToSwarm::GenerateEvent(Event::InboundProbe(event)));
         }
