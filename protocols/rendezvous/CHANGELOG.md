@@ -1,5 +1,8 @@
 ## 0.19.0
 
+- Let a peer at its registration limit renew an existing registration, and stop the total registration limit from admitting one extra registration.
+  See [PR 6738](https://github.com/libp2p/rust-libp2p/pull/6738).
+
 - Cancel superseded registration timers.
   See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)
 
