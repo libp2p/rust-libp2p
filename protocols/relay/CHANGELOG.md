@@ -3,6 +3,9 @@
 - Drive all pending accept/deny futures of reservation requests on a connection instead of dropping
   the previous one when a new request arrives.
   See [PR 6655](https://github.com/libp2p/rust-libp2p/pull/6655).
+- Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
+  instead of keeping it pending until the connection closes.
+  See [PR 6647](https://github.com/libp2p/rust-libp2p/pull/6647).
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 
