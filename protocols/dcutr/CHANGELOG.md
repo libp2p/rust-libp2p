@@ -1,5 +1,8 @@
 ## 0.16.0
 
+- Stop tracking direct connection attempts once they succeed, fail or their relayed connection closes, so the state no longer grows with every hole-punch.
+  See [PR 6740](https://github.com/libp2p/rust-libp2p/pull/6740).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.15.0
