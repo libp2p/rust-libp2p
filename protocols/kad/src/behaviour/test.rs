@@ -1688,3 +1688,43 @@ fn get_closest_peers_should_return_up_to_k_peers() {
         }))
     }
 }
+
+#[test]
+fn bootstrap_timeout_counts_the_query_started_next() {
+    let mut cfg = Config::new(PROTOCOL_NAME);
+    cfg.set_query_timeout(Duration::ZERO);
+    let local_id = PeerId::random();
+    let mut kad = Behaviour::with_config(local_id, MemoryStore::new(local_id), cfg);
+
+    let targets = (0..3)
+        .map(|_| kbucket::Key::from(PeerId::random()))
+        .collect::<Vec<_>>();
+    let info = QueryInfo::Bootstrap {
+        peer: PeerId::random(),
+        remaining: Some(targets.into_iter()),
+        step: ProgressStep::first(),
+    };
+    let target = kbucket::Key::from(PeerId::random());
+    let known_peer = kbucket::Key::from(PeerId::random());
+    kad.queries.add_iter_closest(target, vec![known_peer], info);
+
+    // The first poll hands out the only known peer, afterwards the query waits and times out.
+    let timed_out = loop {
+        match kad.queries.poll(Instant::now()) {
+            QueryPoolState::Timeout(query) => break query,
+            QueryPoolState::Waiting(_) => {}
+            _ => panic!("expected the query to time out"),
+        }
+    };
+
+    let Some(Event::OutboundQueryProgressed {
+        result: QueryResult::Bootstrap(Err(BootstrapError::Timeout { num_remaining, .. })),
+        ..
+    }) = kad.query_timeout(timed_out)
+    else {
+        panic!("expected a bootstrap timeout");
+    };
+
+    // Same count as the success path: the queued queries, including the one started next.
+    assert_eq!(num_remaining, Some(3));
+}

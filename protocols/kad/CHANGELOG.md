@@ -1,5 +1,8 @@
 ## 0.50.0
 
+- Report the same `num_remaining` in `BootstrapError::Timeout` as in `BootstrapOk`, instead of one less.
+  See [PR 6741](https://github.com/libp2p/rust-libp2p/pull/6741).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.49.0
