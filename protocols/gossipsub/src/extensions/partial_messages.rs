@@ -144,9 +144,10 @@ impl State {
 
     /// Called by the [`Behaviour`](crate::Behaviour) when a peer has disconnected.
     pub(crate) fn peer_disconnected(&mut self, peer_id: PeerId) {
-        for topic_peers in self.peer_subscriptions.values_mut() {
+        self.peer_subscriptions.retain(|_, topic_peers| {
             topic_peers.remove(&peer_id);
-        }
+            !topic_peers.is_empty()
+        });
     }
 
     /// Called by the [`Behaviour`](crate::Behaviour) when a remote peer subscribed to the
@@ -178,6 +179,9 @@ impl State {
             return;
         };
         topic.remove(&peer_id);
+        if topic.is_empty() {
+            self.peer_subscriptions.remove(topic_hash);
+        }
     }
 
     /// Called by the [`Behaviour`](crate::Behaviour) during heartbeat.

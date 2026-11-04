@@ -103,7 +103,16 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*};
-use hickory_resolver::{ConnectionProvider, lookup::Lookup, lookup_ip::LookupIp, proto::rr::RData};
+use hickory_resolver::{
+    ConnectionProvider,
+    lookup::Lookup,
+    lookup_ip::LookupIp,
+    net::NoRecords,
+    proto::{
+        op::{Query, ResponseCode},
+        rr::RData,
+    },
+};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
     net::NetError as ResolveError,
@@ -423,11 +432,11 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
         Protocol::Dns(name) => resolver
             .lookup_ip(name.clone().into_owned())
             .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips.iter();
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                Ok(lookup) => {
+                    let mut ips = lookup.iter();
+                    let Some(one) = ips.next() else {
+                        return Err(no_records(lookup.query()));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -446,17 +455,17 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
         Protocol::Dns4(name) => resolver
             .ipv4_lookup(name.clone().into_owned())
             .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips
+                Ok(lookup) => {
+                    let mut ips = lookup
                         .answers()
                         .iter()
                         .filter_map(|record| match &record.data {
                             RData::A(ip) => Some(Ipv4Addr::from(*ip)),
                             _ => None,
                         });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                    let Some(one) = ips.next() else {
+                        return Err(no_records(lookup.query()));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -475,17 +484,17 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
         Protocol::Dns6(name) => resolver
             .ipv6_lookup(name.clone().into_owned())
             .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips
+                Ok(lookup) => {
+                    let mut ips = lookup
                         .answers()
                         .iter()
                         .filter_map(|record| match &record.data {
                             RData::AAAA(ip) => Some(Ipv6Addr::from(*ip)),
                             _ => None,
                         });
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                    let Some(one) = ips.next() else {
+                        return Err(no_records(lookup.query()));
+                    };
                     if let Some(two) = ips.next() {
                         Ok(Resolved::Many(
                             iter::once(one)
@@ -545,6 +554,12 @@ fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
         None => Err(invalid_data("Missing `dnsaddr=` prefix.")),
         Some(a) => Ok(Multiaddr::try_from(a).map_err(invalid_data)?),
     }
+}
+
+/// Hickory can return `Ok` without a usable record, e.g. when the queried record is only in the
+/// authority section of a NOERROR response.
+fn no_records<E>(query: &Query) -> Error<E> {
+    Error::ResolveError(NoRecords::new(query.clone(), ResponseCode::NoError).into())
 }
 
 fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
@@ -857,5 +872,62 @@ mod tests {
         }
 
         test_tokio(AlwaysFailTransport, run_test);
+    }
+
+    #[test]
+    fn empty_lookup_is_resolve_error() {
+        use hickory_resolver::proto::rr::{Name, RecordType};
+        use libp2p_core::transport::dummy::DummyTransport;
+
+        #[derive(Clone)]
+        struct EmptyResolver;
+
+        fn empty(name: String, record_type: RecordType) -> Lookup {
+            let name = Name::from_ascii(name).unwrap();
+            Lookup::new_with_max_ttl(Query::query(name, record_type), [])
+        }
+
+        impl Resolver for EmptyResolver {
+            async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError> {
+                Ok(empty(name, RecordType::A).into())
+            }
+
+            async fn ipv4_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty(name, RecordType::A))
+            }
+
+            async fn ipv6_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty(name, RecordType::AAAA))
+            }
+
+            async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                Ok(empty(name, RecordType::TXT))
+            }
+        }
+
+        let mut transport = super::Transport {
+            inner: Arc::new(Mutex::new(DummyTransport::<()>::new())),
+            resolver: EmptyResolver,
+        };
+        let dial_opts = DialOpts {
+            role: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
+        };
+
+        for addr in [
+            "/dns/example.com/tcp/20000",
+            "/dns4/example.com/tcp/20000",
+            "/dns6/example.com/tcp/20000",
+        ] {
+            let dial = transport.dial(addr.parse().unwrap(), dial_opts).unwrap();
+            match futures::executor::block_on(dial) {
+                Err(Error::Dial(errs)) => match errs.as_slice() {
+                    [Error::ResolveError(e)] => assert!(e.is_no_records_found(), "{addr}: {e:?}"),
+                    errs => panic!("{addr}: expected one ResolveError, got {errs:?}"),
+                },
+                Err(e) => panic!("{addr}: expected Dial error, got {e:?}"),
+                Ok(_) => panic!("{addr}: dial unexpectedly succeeded"),
+            }
+        }
     }
 }
