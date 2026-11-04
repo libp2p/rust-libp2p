@@ -1,5 +1,8 @@
 ## 0.23.0
 
+- Deny circuit requests from a peer that already has `max_circuits_per_peer` circuits, instead of allowing one more.
+  See [PR 6739](https://github.com/libp2p/rust-libp2p/pull/6739).
+
 - Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
   instead of keeping it pending until the connection closes.
   See [PR 6647](https://github.com/libp2p/rust-libp2p/pull/6647).
