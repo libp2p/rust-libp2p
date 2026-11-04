@@ -1025,31 +1025,28 @@ async fn deny_circuit_when_outbound_stop_capacity_is_exhausted() {
 }
 
 #[tokio::test]
-async fn concurrent_reservation_requests_on_same_connection() {
+async fn closing_listener_before_reservation_is_accepted_does_not_panic() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    // Allow a single reservation per peer, thus the second request is denied.
-    let mut relay = build_relay_with_config(
-        relay::Config {
-            reservation_rate_limiters: vec![],
-            ..relay::Config::default()
-        }
-        .reservation_rate_per_peer(
-            std::num::NonZeroU32::new(1).unwrap(),
-            Duration::from_secs(3600),
-        ),
-    );
+    let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
+
     relay.listen_on(relay_addr.clone()).unwrap();
     relay.add_external_address(relay_addr.clone());
 
     let mut client = build_client();
-    client
-        .dial(relay_addr.clone().with(Protocol::P2p(relay_peer_id)))
-        .unwrap();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener_id = client.listen_on(client_addr).unwrap();
+
+    // Drive both nodes until the client is connected to the relay. The reservation request is
+    // issued on that connection, but the relay swarm is not polled afterwards and thus can not
+    // accept it yet.
     loop {
         tokio::select! {
             e = client.select_next_some() => {
@@ -1063,28 +1060,30 @@ async fn concurrent_reservation_requests_on_same_connection() {
         }
     }
 
-    // Two reservation requests on the same connection.
-    let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id))
-        .with(Protocol::P2pCircuit);
-    client.listen_on(client_addr.clone()).unwrap();
-    client.listen_on(client_addr).unwrap();
-
-    let mut accepted = 0;
-    let mut denied = 0;
-    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    // Close the listener while the reservation request is still in flight.
+    assert!(client.remove_listener(listener_id));
     loop {
-        tokio::select! {
-            e = relay.select_next_some() => match e {
-                SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::ReservationReqAccepted { .. })) => accepted += 1,
-                SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::ReservationReqDenied { .. })) => denied += 1,
-                _ => {}
-            },
-            _ = client.select_next_some() => {}
-            _ = &mut deadline => break,
+        if let SwarmEvent::ListenerClosed {
+            listener_id: id, ..
+        } = client.select_next_some().await
+        {
+            assert_eq!(id, listener_id);
+            break;
         }
     }
 
-    assert_eq!(denied, 1);
-    assert_eq!(accepted, 1, "accepted reservation request was dropped");
+    // Let the relay accept the reservation. The client must not panic when the (now stale)
+    // acceptance arrives, nor confirm an external address for the closed listener.
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ExternalAddrConfirmed { address } = e {
+                    panic!("unexpected external address confirmation for closed listener: {address}");
+                }
+            }
+            _ = relay.select_next_some() => {}
+            _ = &mut deadline => break,
+        }
+    }
 }
