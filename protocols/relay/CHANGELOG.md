@@ -1,5 +1,7 @@
 ## 0.23.0
 
+- Don't panic in the client when a reservation is accepted after its listener was closed.
+  See [PR 6653](https://github.com/libp2p/rust-libp2p/pull/6653).
 - Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
   instead of keeping it pending until the connection closes.
   See [PR 6647](https://github.com/libp2p/rust-libp2p/pull/6647).
