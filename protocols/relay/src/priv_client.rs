@@ -297,12 +297,11 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                let (addr, status) = self
-                    .reservation_addresses
-                    .get_mut(&connection)
-                    .expect("Relay connection exist");
-
-                if !renewal && *status == ReservationStatus::Pending {
+                // The entry is gone if the listener was closed while the request was in flight.
+                if let Some((addr, status)) = self.reservation_addresses.get_mut(&connection)
+                    && !renewal
+                    && *status == ReservationStatus::Pending
+                {
                     *status = ReservationStatus::Confirmed;
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));
