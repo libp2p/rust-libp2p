@@ -1,4 +1,24 @@
 ## 0.51.0
+- Remove the partial message state of a disconnected peer that never subscribed to a topic, and
+  remove the state of a topic once no peer has any.
+- Do not cache or score messages for topics the node is not subscribed to.
+  As a result, the `topic_msg_recv_counts`, `topic_msg_recv_bytes` and  `topic_msg_last_recv_bytes` metrics are no longer recorded for unsubscribed topics; the `*_unfiltered` variants still are.
+  See [PR 6711](https://github.com/libp2p/rust-libp2p/pull/6711).
+
+- Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
+  and remove an IP from the peer score table once no peer uses it.
+  See [PR 6710](https://github.com/libp2p/rust-libp2p/pull/6710).
+
+- Fix unbounded growth of global backoff storage from PRUNE control messages naming topics
+  the node has not joined.
+  See [GHSA-vrx6-jcp8-vm7m](https://github.com/libp2p/rust-libp2p-ghsa-vrx6-jcp8-vm7m/).
+  Backported from `libp2p-gossipsub v0.50.1`.
+
+- Apply `max_transmit_size` to the single RPC its length prefix describes instead of the whole
+  read buffer, so two valid RPCs arriving in one read no longer fail the check and close the
+  inbound substream.
+  See [PR 6695](https://github.com/libp2p/rust-libp2p/pull/6695).
+
 - Validate the default mesh parameters, the default `max_transmit_size` and all topic mesh
   configurations in `ConfigBuilder::build`, not only topics with a custom max transmit size.
   See [PR 6648](https://github.com/libp2p/rust-libp2p/pull/6648).
