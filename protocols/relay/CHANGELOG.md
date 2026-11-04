@@ -1,5 +1,9 @@
 ## 0.23.0
 
+- Drive all pending accept/deny futures of reservation requests on a connection instead of dropping
+  the previous one when a new request arrives.
+  See [PR 6655](https://github.com/libp2p/rust-libp2p/pull/6655).
+
 - Don't panic in the client when a reservation is accepted after its listener was closed.
   See [PR 6653](https://github.com/libp2p/rust-libp2p/pull/6653).
 - Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
