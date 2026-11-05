@@ -1,3 +1,10 @@
+## 0.44.1
+
+- Start the timer of `TransportTimeout` when the dial / upgrade future is first polled instead of
+  when it is created. Dials queued by the `Swarm` (dial concurrency factor, smart dialing) were
+  otherwise timed out before they even started.
+  See [PR 6697](https://github.com/libp2p/rust-libp2p/pull/6697).
+
 ## 0.44.0
 
 - Raise MSRV to 1.88.0.

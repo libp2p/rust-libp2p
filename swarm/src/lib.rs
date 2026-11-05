@@ -2360,6 +2360,72 @@ mod tests {
         }
     }
 
+    /// Dials that are queued because of the dial concurrency factor must get the full
+    /// transport timeout once they are started.
+    #[tokio::test]
+    async fn queued_dial_is_not_timed_out_before_it_starts() {
+        const TIMEOUT: Duration = Duration::from_millis(500);
+
+        let new_swarm = |config: Config| -> Swarm<
+            CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>,
+        > {
+            let id_keys = identity::Keypair::generate_ed25519();
+            let local_public_key = id_keys.public();
+            let transport = transport::MemoryTransport::default()
+                .upgrade(upgrade::Version::V1)
+                .authenticate(plaintext::Config::new(&id_keys))
+                .multiplex(yamux::Config::default())
+                .timeout(TIMEOUT)
+                .boxed();
+            let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
+            Swarm::new(transport, behaviour, local_public_key.into(), config)
+        };
+
+        // A listener that accepts the connection but never answers, i.e. dials to it time out.
+        let mut black_hole = transport::MemoryTransport::default();
+        let black_hole_port = rand::random::<u64>().saturating_add(1);
+        black_hole
+            .listen_on(
+                transport::ListenerId::next(),
+                multiaddr![Memory(black_hole_port)],
+            )
+            .unwrap();
+
+        let mut listener = new_swarm(Config::with_tokio_executor());
+        let listener_peer_id = *listener.local_peer_id();
+        listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
+        let listener_address = match listener.next().await.unwrap() {
+            SwarmEvent::NewListenAddr { address, .. } => address,
+            e => panic!("Unexpected network event: {e:?}"),
+        };
+        tokio::spawn(async move { while listener.next().await.is_some() {} });
+
+        let mut dialer = new_swarm(
+            Config::with_tokio_executor().with_dial_concurrency_factor(NonZeroU8::new(1).unwrap()),
+        );
+        dialer
+            .dial(
+                DialOpts::peer_id(listener_peer_id)
+                    .addresses(vec![multiaddr![Memory(black_hole_port)], listener_address])
+                    .build(),
+            )
+            .unwrap();
+
+        loop {
+            match dialer.next().await.unwrap() {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    assert_eq!(peer_id, listener_peer_id);
+                    break;
+                }
+                SwarmEvent::OutgoingConnectionError { error, .. } => {
+                    panic!("Unexpected dial error: {error}")
+                }
+                _ => {}
+            }
+        }
+        drop(black_hole);
+    }
+
     #[test]
     fn dial_error_prints_sources() {
         // This constitutes a fairly typical error for chained transports.
