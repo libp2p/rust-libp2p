@@ -153,6 +153,8 @@ where
                         Some(msg) if !msg.is_empty() => {
                             *read_buffer = msg.into();
                         }
+                        // Acknowledges our `FIN` message
+                        _ if flag == Some(Flag::FinAck) => {}
                         _ => {
                             tracing::debug!("poll_read buffer is empty, received None");
                             return Poll::Ready(Ok(0));
