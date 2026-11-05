@@ -107,27 +107,28 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let Some(peer_id) = peer_id else {
+        // The failed dial is over, a retry registers a new one.
+        let Some(relayed_connection_id) = self
+            .direct_to_relayed_connections
+            .remove(&failed_direct_connection)
+        else {
             return;
         };
 
-        let Some(relayed_connection_id) = self
-            .direct_to_relayed_connections
-            .get(&failed_direct_connection)
-        else {
+        let Some(peer_id) = peer_id else {
             return;
         };
 
         let Some(attempt) = self
             .outgoing_direct_connection_attempts
-            .get(&(*relayed_connection_id, peer_id))
+            .get(&(relayed_connection_id, peer_id))
         else {
             return;
         };
 
         if *attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
             self.queued_events.push_back(ToSwarm::NotifyHandler {
-                handler: NotifyHandler::One(*relayed_connection_id),
+                handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect),
             })
@@ -162,6 +163,11 @@ impl Behaviour {
             if connections.is_empty() {
                 self.direct_connections.remove(&peer_id);
             }
+        } else {
+            self.direct_to_relayed_connections
+                .retain(|_, relayed_connection_id| *relayed_connection_id != connection_id);
+            self.outgoing_direct_connection_attempts
+                .retain(|(relayed_connection_id, _), _| *relayed_connection_id != connection_id);
         }
     }
 }
@@ -230,7 +236,8 @@ impl NetworkBehaviour for Behaviour {
             .insert(connection_id);
 
         // Whether this is a connection requested by this behaviour.
-        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        if let Some(relayed_connection_id) =
+            self.direct_to_relayed_connections.remove(&connection_id)
         {
             if role_override == Endpoint::Listener {
                 assert!(
@@ -385,4 +392,77 @@ impl Candidates {
 
 fn is_relayed(addr: &Multiaddr) -> bool {
     addr.iter().any(|p| p == Protocol::P2pCircuit)
+}
+
+#[cfg(test)]
+mod tests {
+    use libp2p_identity::Keypair;
+    use libp2p_swarm::{ConnectionError, DialError};
+
+    use super::*;
+
+    fn negotiate_inbound_connect(behaviour: &mut Behaviour, relayed: ConnectionId) -> ConnectionId {
+        let remote = PeerId::from(Keypair::generate_ed25519().public());
+        behaviour.on_connection_handler_event(
+            remote,
+            relayed,
+            Either::Left(handler::relayed::Event::InboundConnectNegotiated {
+                remote_addrs: vec!["/ip4/1.2.3.4/tcp/4001".parse().unwrap()],
+            }),
+        );
+        match behaviour.queued_events.pop_back() {
+            Some(ToSwarm::Dial { opts }) => opts.connection_id(),
+            _ => panic!("expected a dial"),
+        }
+    }
+
+    #[test]
+    fn failed_direct_dial_is_forgotten() {
+        let mut behaviour = Behaviour::new(PeerId::from(Keypair::generate_ed25519().public()));
+        let relayed = ConnectionId::new_unchecked(1);
+        let direct = negotiate_inbound_connect(&mut behaviour, relayed);
+        assert_eq!(behaviour.direct_to_relayed_connections.len(), 1);
+
+        behaviour.on_swarm_event(FromSwarm::DialFailure(DialFailure {
+            peer_id: None,
+            error: &DialError::Aborted,
+            connection_id: direct,
+        }));
+
+        assert!(behaviour.direct_to_relayed_connections.is_empty());
+    }
+
+    #[test]
+    fn closing_relayed_connection_forgets_its_direct_dials() {
+        let mut behaviour = Behaviour::new(PeerId::from(Keypair::generate_ed25519().public()));
+        let relayed = ConnectionId::new_unchecked(1);
+        let other_relayed = ConnectionId::new_unchecked(2);
+        negotiate_inbound_connect(&mut behaviour, relayed);
+        negotiate_inbound_connect(&mut behaviour, other_relayed);
+        let peer = PeerId::from(Keypair::generate_ed25519().public());
+        behaviour
+            .outgoing_direct_connection_attempts
+            .insert((relayed, peer), 1);
+
+        let endpoint = ConnectedPoint::Listener {
+            local_addr: "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit".parse().unwrap(),
+            send_back_addr: "/ip4/1.2.3.4/tcp/4001".parse().unwrap(),
+        };
+        behaviour.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+            peer_id: peer,
+            connection_id: relayed,
+            endpoint: &endpoint,
+            cause: None::<&ConnectionError>,
+            remaining_established: 0,
+        }));
+
+        assert_eq!(behaviour.direct_to_relayed_connections.len(), 1);
+        assert!(
+            behaviour
+                .direct_to_relayed_connections
+                .values()
+                .all(|r| *r == other_relayed)
+        );
+        assert!(behaviour.outgoing_direct_connection_attempts.is_empty());
+    }
 }
