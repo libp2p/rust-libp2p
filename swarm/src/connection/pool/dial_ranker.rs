@@ -314,10 +314,13 @@ fn is_global_addr(a: &Multiaddr) -> bool {
         return false; // link-local, not globally routable
     }
     if let Some(dns) = a.iter().find_map(|p| match p {
-        Protocol::Dns(dns) | Protocol::Dns4(dns) | Protocol::Dns6(dns) => Some(dns),
+        Protocol::Dns(dns)
+        | Protocol::Dns4(dns)
+        | Protocol::Dns6(dns)
+        | Protocol::Dnsaddr(dns) => Some(dns),
         _ => None,
     }) {
-        return dns == "localhost" || dns.ends_with(".localhost");
+        return dns != "localhost" && !dns.ends_with(".localhost");
     }
     false
 }
@@ -635,5 +638,33 @@ mod tests {
         let dials = make_dials(vec![]);
         let output = rank_dials(dials);
         assert!(output.is_empty())
+    }
+
+    #[test]
+    fn test_dns_addresses_are_ranked_as_other() {
+        let dns: Multiaddr = "/dns4/bootstrap.example.com/tcp/4001".parse().unwrap();
+        let dnsaddr: Multiaddr = "/dnsaddr/bootstrap.example.com".parse().unwrap();
+        let localhost: Multiaddr = "/dns/localhost/tcp/4001".parse().unwrap();
+        let public: Multiaddr = "/ip4/1.2.3.4/tcp/4001".parse().unwrap();
+
+        let output: Vec<_> = rank_dials(make_dials(vec![
+            dns.clone(),
+            dnsaddr.clone(),
+            localhost.clone(),
+            public.clone(),
+        ]))
+        .into_iter()
+        .map(|(delay, dial)| (dial.addr, delay))
+        .collect();
+
+        assert_eq!(
+            output,
+            vec![
+                (localhost, Duration::ZERO),
+                (public, Duration::ZERO),
+                (dns, PUBLIC_OTHER_DELAY),
+                (dnsaddr, PUBLIC_OTHER_DELAY),
+            ]
+        );
     }
 }
