@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 #![recursion_limit = "256"]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod syn_ext;
 

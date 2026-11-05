@@ -25,7 +25,7 @@
 //!
 //! See `examples` directory for more.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod bandwidth;
 #[cfg(feature = "dcutr")]
