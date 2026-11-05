@@ -39,6 +39,14 @@ pub(crate) static PARAMS_XX: LazyLock<NoiseParams> = LazyLock::new(|| {
         .expect("Invalid protocol name")
 });
 
+/// Hybrid XX: X25519 auth plus an ML-KEM-768 (FIPS 203) ephemeral KEM.
+#[cfg(feature = "mlkem-hfs")]
+pub(crate) static PARAMS_XX_HFS: LazyLock<NoiseParams> = LazyLock::new(|| {
+    "Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256"
+        .parse()
+        .expect("Invalid protocol name")
+});
+
 pub(crate) fn noise_params_into_builder<'b>(
     params: NoiseParams,
     prologue: &'b [u8],
@@ -206,6 +214,12 @@ impl snow::resolvers::CryptoResolver for Resolver {
         {
             snow::resolvers::RingResolver.resolve_cipher(choice)
         }
+    }
+
+    // ring has no KEM; take it from the pure-Rust `DefaultResolver`.
+    #[cfg(feature = "mlkem-hfs")]
+    fn resolve_kem(&self, choice: &snow::params::KemChoice) -> Option<Box<dyn snow::types::Kem>> {
+        snow::resolvers::DefaultResolver.resolve_kem(choice)
     }
 }
 
