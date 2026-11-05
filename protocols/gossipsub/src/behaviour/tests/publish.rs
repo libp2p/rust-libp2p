@@ -20,7 +20,7 @@
 
 //! Tests for publishing and fanout functionality.
 
-use super::DefaultBehaviourTestBuilder;
+use super::{DefaultBehaviourTestBuilder, add_peer};
 use crate::{
     IdentTopic as Topic,
     config::{Config, ConfigBuilder},
@@ -187,6 +187,45 @@ fn test_fanout() {
     assert!(
         gs.mcache.get(&msg_id).is_some(),
         "Message cache should contain published message"
+    );
+}
+
+/// Test that publishing to a fanout topic with less than `mesh_n` peers keeps the existing
+/// fanout peers.
+#[test]
+fn test_fanout_publish_keeps_existing_fanout_peers() {
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
+
+    let fanout_topic = String::from("test_fanout");
+    // Less peers than `mesh_n`, so every publish tries to top up the fanout.
+    let (mut gs, peers, _queues, topic_hashes) = DefaultBehaviourTestBuilder::default()
+        .peer_no(2)
+        .topics(vec![fanout_topic.clone()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+    assert!(gs.unsubscribe(&Topic::new(fanout_topic.clone())));
+
+    let topic_hash = TopicHash::from_raw(fanout_topic.clone());
+    gs.publish(Topic::new(fanout_topic.clone()), vec![1; 42])
+        .unwrap();
+    assert_eq!(gs.fanout[&topic_hash], peers.iter().copied().collect());
+
+    // No new peers: the fanout must not be emptied.
+    gs.publish(Topic::new(fanout_topic.clone()), vec![2; 42])
+        .unwrap();
+    assert_eq!(gs.fanout[&topic_hash], peers.iter().copied().collect());
+
+    // A new peer joins the topic: it is added to the fanout next to the existing peers.
+    let (new_peer, _queue) = add_peer(&mut gs, &topic_hashes, false, false);
+    gs.publish(Topic::new(fanout_topic.clone()), vec![3; 42])
+        .unwrap();
+    assert_eq!(
+        gs.fanout[&topic_hash],
+        peers.iter().copied().chain([new_peer]).collect()
     );
 }
 

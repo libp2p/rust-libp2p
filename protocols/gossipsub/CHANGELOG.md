@@ -1,4 +1,8 @@
 ## 0.51.0
+- Keep existing fanout peers when topping up the fanout on publish. Previously the fanout was
+  replaced by the newly selected peers, which emptied it when no new peers were available.
+  See [PR 6730](https://github.com/libp2p/rust-libp2p/pull/6730).
+
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
 - Do not cache or score messages for topics the node is not subscribed to.

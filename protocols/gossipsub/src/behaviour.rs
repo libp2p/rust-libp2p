@@ -840,7 +840,9 @@ where
                     tracing::debug!("RANDOM PEERS: Got {:?} peers", new_peers.len());
                     tracing::debug!(?new_peers, "Peers added to fanout");
                     self.fanout
-                        .insert(topic_hash.clone(), new_peers.clone().into_iter().collect());
+                        .entry(topic_hash.clone())
+                        .or_default()
+                        .extend(new_peers.iter().copied());
                     recipients.extend(new_peers);
                 }
                 self.fanout_last_pub
