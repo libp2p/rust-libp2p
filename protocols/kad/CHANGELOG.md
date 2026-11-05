@@ -1,5 +1,9 @@
 ## 0.50.0
 
+- Keep the expiration of a received record if no local record TTL is configured,
+  instead of storing the record forever.
+  See [PR 6728](https://github.com/libp2p/rust-libp2p/pull/6728).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.49.0
