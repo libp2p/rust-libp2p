@@ -26,6 +26,10 @@ openssl x509 -outform der -in certificate.crt -out rsa_pkcs1_sha384.der
 openssl x509 -req -in req.pem -signkey privateKey.key -sha512 -out certificate.crt -extensions p2p_ext -extfile ./openssl.cfg
 openssl x509 -outform der -in certificate.crt -out rsa_pkcs1_sha512.der
 
+# RSA fixtures with a *valid* libp2p extension signature over a fixed key
+# (rsa_fixture_{pkcs1,pss}_{sha256,sha384,sha512}.der) are produced by
+# gen_rsa_fixtures.py (run: python3 -I gen_rsa_fixtures.py).
+
 #RSA-PSS TODO
 # openssl genpkey -algorithm rsa-pss -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:3 -out privateKey.key
 # # -sigopt rsa_pss_saltlen:20
