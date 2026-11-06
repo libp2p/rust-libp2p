@@ -1,5 +1,8 @@
 ## 0.49.0
 
+- Report protocols that were removed from a connection even when the new set of protocols contains duplicates.
+  See [PR #6746](https://github.com/libp2p/rust-libp2p/pull/6746).
+
 - Contain panics in the per-connection task and report the connection as closed.
   See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
 
