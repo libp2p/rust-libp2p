@@ -2,6 +2,7 @@
 
 - Switch to a fallible binding for `createDataChannel`, allowing for graceful
   recovery from closed connections.
+  See [PR 6732](https://github.com/libp2p/rust-libp2p/pull/6732)
 
 ## 0.5.0
 
