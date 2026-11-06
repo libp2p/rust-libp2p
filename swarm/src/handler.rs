@@ -431,7 +431,6 @@ impl<'a> ProtocolsChange<'a> {
             *v = false;
         }
 
-        let mut new_protocol_count = 0; // We can only iterate `new_protocols` once, so keep track of its length separately.
         for new_protocol in new_protocols {
             existing_protocols
                 .entry(AsStrHashEq(new_protocol))
@@ -441,10 +440,10 @@ impl<'a> ProtocolsChange<'a> {
                     buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
                     true
                 });
-            new_protocol_count += 1;
         }
 
-        if new_protocol_count == existing_protocols.len() && buffer.is_empty() {
+        // Nothing to report if no protocol was added and every existing protocol was visited.
+        if buffer.is_empty() && existing_protocols.values().all(|&visited| visited) {
             return SmallVec::new();
         }
 
@@ -903,6 +902,27 @@ mod test {
 
         assert_eq!(added_changes, protocol_set_of("d e f"));
         assert_eq!(removed_changes, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_duplicates_in_new_protocols() {
+        let mut buffer = Vec::new();
+        let mut existing = HashMap::from([(AsStrHashEq("/a"), true), (AsStrHashEq("/b"), true)]);
+
+        // `b` is gone, but the duplicate `a` makes the number of new protocols match the number of
+        // existing ones.
+        let changes = ProtocolsChange::from_full_sets(&mut existing, ["/a", "/a"], &mut buffer);
+
+        let removed = changes
+            .into_iter()
+            .flat_map(|c| match c {
+                ProtocolsChange::Added(_) => panic!("unexpected added"),
+                ProtocolsChange::Removed(r) => r.cloned(),
+            })
+            .collect::<HashSet<_>>();
+
+        assert_eq!(removed, protocol_set_of("b"));
+        assert_eq!(existing.len(), 1);
     }
 
     #[test]
