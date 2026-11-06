@@ -1,6 +1,7 @@
 use std::{
     cmp::min,
     io,
+    panic::AssertUnwindSafe,
     pin::Pin,
     rc::Rc,
     sync::{
@@ -55,9 +56,13 @@ pub(crate) struct PollDataChannel {
 
 impl PollDataChannel {
     pub(crate) fn new(inner: RtcDataChannel) -> Self {
+        // Under `panic = "unwind"`, wasm-bindgen catches panics in callbacks and requires them to
+        // be `UnwindSafe`. `Rc<AtomicWaker>` is not, because `AtomicWaker` is not `RefUnwindSafe`.
+        // The callbacks use the wakers only for `AtomicWaker::wake`, which takes the waker out
+        // before calling it, so a panic cannot leave the `AtomicWaker` in an inconsistent state.
         let open_waker = Rc::new(AtomicWaker::new());
         let on_open_closure = Closure::new({
-            let open_waker = open_waker.clone();
+            let open_waker = AssertUnwindSafe(open_waker.clone());
 
             move |_: RtcDataChannelEvent| {
                 tracing::trace!("DataChannel opened");
@@ -69,7 +74,7 @@ impl PollDataChannel {
         let write_waker = Rc::new(AtomicWaker::new());
         inner.set_buffered_amount_low_threshold(0);
         let on_write_closure = Closure::new({
-            let write_waker = write_waker.clone();
+            let write_waker = AssertUnwindSafe(write_waker.clone());
 
             move |_: Event| {
                 tracing::trace!("DataChannel available for writing (again)");
@@ -80,7 +85,7 @@ impl PollDataChannel {
 
         let close_waker = Rc::new(AtomicWaker::new());
         let on_close_closure = Closure::new({
-            let close_waker = close_waker.clone();
+            let close_waker = AssertUnwindSafe(close_waker.clone());
 
             move |_: Event| {
                 tracing::trace!("DataChannel closed");
@@ -96,7 +101,7 @@ impl PollDataChannel {
         let overloaded = Rc::new(AtomicBool::new(false));
 
         let on_message_closure = Closure::<dyn FnMut(_)>::new({
-            let new_data_waker = new_data_waker.clone();
+            let new_data_waker = AssertUnwindSafe(new_data_waker.clone());
             let read_buffer = read_buffer.clone();
             let overloaded = overloaded.clone();
 
