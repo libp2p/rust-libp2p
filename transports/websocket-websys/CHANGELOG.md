@@ -2,7 +2,7 @@
 
 - Fix compilation with `panic = "unwind"` (e.g. `wasm32-unknown-emscripten`) and `wasm-bindgen`
   0.2.109 or later.
-  See [PR 6671](https://github.com/libp2p/rust-libp2p/pull/6671).
+  See [PR 6747](https://github.com/libp2p/rust-libp2p/pull/6747).
 
 ## 0.6.0
 

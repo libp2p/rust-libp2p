@@ -3,7 +3,7 @@
 - Require `wasm-bindgen-futures` 0.4.80 or later instead of exactly 0.4.58. The exact pin held all
   dependents at `wasm-bindgen` 0.2.108; they now need `wasm-bindgen` 0.2.130 or later, and a
   matching `wasm-bindgen-cli`.
-  See [PR 6671](https://github.com/libp2p/rust-libp2p/pull/6671).
+  See [PR 6747](https://github.com/libp2p/rust-libp2p/pull/6747).
 
 - Contain panics in the per-connection task and report the connection as closed.
   See [PR #6672](https://github.com/libp2p/rust-libp2p/pull/6672).
