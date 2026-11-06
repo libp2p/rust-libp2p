@@ -5,7 +5,6 @@ use base64::{
     engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
 };
 use libp2p_identity::{DecodingError, Keypair, PublicKey, SigningError};
-use rand::RngCore;
 
 const SCHEME: &str = "libp2p-PeerID";
 
@@ -48,7 +47,7 @@ impl PeerIdAuthClient {
     /// Generate a fresh random `challenge-server` value (base64url-encoded 32 random bytes).
     pub fn generate_challenge() -> String {
         let mut bytes = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        rand::fill(&mut bytes);
         BASE64.encode(bytes)
     }
 
