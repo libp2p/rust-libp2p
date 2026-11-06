@@ -28,7 +28,7 @@ async fn outbound_inner(
 
     // Create stream for Noise handshake
     // Must create data channel before Offer is created for it to be included in the SDP
-    let (channel, listener) = rtc_peer_connection.new_handshake_stream();
+    let (channel, listener) = rtc_peer_connection.new_handshake_stream()?;
     drop(listener);
 
     let ufrag = libp2p_webrtc_utils::sdp::random_ufrag();
