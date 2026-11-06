@@ -21,12 +21,16 @@
 
 //! Async functions driving pending and established connections in the form of a task.
 
-use std::{convert::Infallible, pin::Pin};
+use std::{
+    convert::Infallible,
+    panic::{AssertUnwindSafe, catch_unwind},
+    pin::Pin,
+};
 
 use futures::{
     SinkExt, StreamExt,
     channel::{mpsc, oneshot},
-    future::{Either, Future, poll_fn},
+    future::{Either, Future, FutureExt, poll_fn},
 };
 use libp2p_core::muxing::StreamMuxerBox;
 
@@ -176,47 +180,51 @@ pub(crate) async fn new_for_established_connection<THandler>(
 ) where
     THandler: ConnectionHandler,
 {
-    loop {
-        match futures::future::select(
-            command_receiver.next(),
-            poll_fn(|cx| Pin::new(&mut connection).poll(cx)),
-        )
-        .await
-        {
-            Either::Left((Some(command), _)) => match command {
-                Command::NotifyHandler(event) => connection.on_behaviour_event(event),
-                Command::Close => {
-                    command_receiver.close();
-                    let (remaining_events, closing_muxer) = connection.close();
+    let mut events_fallback = events.clone();
+    let mut closed_sent = false;
 
-                    let _ = events
-                        .send_all(&mut remaining_events.map(|event| {
-                            Ok(EstablishedConnectionEvent::Notify {
+    let task = async {
+        loop {
+            match futures::future::select(
+                command_receiver.next(),
+                poll_fn(|cx| Pin::new(&mut connection).poll(cx)),
+            )
+            .await
+            {
+                Either::Left((Some(command), _)) => match command {
+                    Command::NotifyHandler(event) => connection.on_behaviour_event(event),
+                    Command::Close => {
+                        command_receiver.close();
+                        let (remaining_events, closing_muxer) = connection.close();
+
+                        let _ = events
+                            .send_all(&mut remaining_events.map(|event| {
+                                Ok(EstablishedConnectionEvent::Notify {
+                                    id: connection_id,
+                                    event,
+                                    peer_id,
+                                })
+                            }))
+                            .await;
+
+                        let error = closing_muxer.await.err().map(ConnectionError::IO);
+
+                        closed_sent = true;
+                        let _ = events
+                            .send(EstablishedConnectionEvent::Closed {
                                 id: connection_id,
-                                event,
                                 peer_id,
+                                error,
                             })
-                        }))
-                        .await;
+                            .await;
+                        return;
+                    }
+                },
 
-                    let error = closing_muxer.await.err().map(ConnectionError::IO);
+                // The manager has disappeared; abort.
+                Either::Left((None, _)) => return,
 
-                    let _ = events
-                        .send(EstablishedConnectionEvent::Closed {
-                            id: connection_id,
-                            peer_id,
-                            error,
-                        })
-                        .await;
-                    return;
-                }
-            },
-
-            // The manager has disappeared; abort.
-            Either::Left((None, _)) => return,
-
-            Either::Right((event, _)) => {
-                match event {
+                Either::Right((event, _)) => match event {
                     Ok(connection::Event::Handler(event)) => {
                         let _ = events
                             .send(EstablishedConnectionEvent::Notify {
@@ -249,7 +257,7 @@ pub(crate) async fn new_for_established_connection<THandler>(
                             }))
                             .await;
 
-                        // Terminate the task with the error, dropping the connection.
+                        closed_sent = true;
                         let _ = events
                             .send(EstablishedConnectionEvent::Closed {
                                 id: connection_id,
@@ -259,8 +267,42 @@ pub(crate) async fn new_for_established_connection<THandler>(
                             .await;
                         return;
                     }
-                }
+                },
             }
+        }
+    };
+
+    // Run the loop inside catch_unwind. A panic in the connection handler,
+    // muxer or transport does not unwind the task. The task still sends
+    // ConnectionClosed.
+    let mut wrapped = Box::pin(AssertUnwindSafe(task).catch_unwind());
+    let outcome = (&mut wrapped).await;
+
+    // The poisoned connection can panic on drop, so drop before the send
+    // and contain it.
+    let wrapped_drop = catch_unwind(AssertUnwindSafe(move || drop(wrapped)));
+
+    if let Err(panic) = wrapped_drop.and(outcome) {
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .unwrap_or("unknown panic");
+        tracing::error!(
+            ?connection_id,
+            %peer_id,
+            panic_message = message,
+            "Panic in the connection task; closing the connection"
+        );
+
+        if !closed_sent {
+            let _ = events_fallback
+                .send(EstablishedConnectionEvent::Closed {
+                    id: connection_id,
+                    peer_id,
+                    error: Some(ConnectionError::Panicked(message.to_string())),
+                })
+                .await;
         }
     }
 }

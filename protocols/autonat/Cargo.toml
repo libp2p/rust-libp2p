@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.16.0"
+version = "0.17.0"
 authors = [
     "David Craven <david@craven.ch>",
     "Elena Frank <elena.frank@protonmail.com>",
@@ -30,7 +30,7 @@ prost = { workspace = true }
 tracing = { workspace = true }
 prost-codec = { workspace = true }
 rand = { workspace = true }
-rand_core = { version = "0.6", optional = true }
+rand_core = { version = "0.10", optional = true }
 thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]

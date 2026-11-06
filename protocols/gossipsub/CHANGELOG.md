@@ -1,4 +1,45 @@
+## 0.51.0
+- Remove the partial message state of a disconnected peer that never subscribed to a topic, and
+  remove the state of a topic once no peer has any.
+- Do not cache or score messages for topics the node is not subscribed to.
+  As a result, the `topic_msg_recv_counts`, `topic_msg_recv_bytes` and  `topic_msg_last_recv_bytes` metrics are no longer recorded for unsubscribed topics; the `*_unfiltered` variants still are.
+  See [PR 6711](https://github.com/libp2p/rust-libp2p/pull/6711).
+
+- Do not retain the score state of a disconnected peer that has no topic stats and no penalties,
+  and remove an IP from the peer score table once no peer uses it.
+  See [PR 6710](https://github.com/libp2p/rust-libp2p/pull/6710).
+
+- Fix unbounded growth of global backoff storage from PRUNE control messages naming topics
+  the node has not joined.
+  See [GHSA-vrx6-jcp8-vm7m](https://github.com/libp2p/rust-libp2p-ghsa-vrx6-jcp8-vm7m/).
+  Backported from `libp2p-gossipsub v0.50.1`.
+
+- Apply `max_transmit_size` to the single RPC its length prefix describes instead of the whole
+  read buffer, so two valid RPCs arriving in one read no longer fail the check and close the
+  inbound substream.
+  See [PR 6695](https://github.com/libp2p/rust-libp2p/pull/6695).
+
+- Validate the default mesh parameters, the default `max_transmit_size` and all topic mesh
+  configurations in `ConfigBuilder::build`, not only topics with a custom max transmit size.
+  See [PR 6648](https://github.com/libp2p/rust-libp2p/pull/6648).
+- Remove duplicate `Config` fields which are already present in `ProtocolConfig`.
+  See [PR 6669](https://github.com/libp2p/rust-libp2p/pull/6669)
+
+- Look up the ids of a received IDONTWANT in a `HashSet` when removing them from the peer's send
+  queue, so the cost is O(queue + ids) instead of O(queue * ids).
+
+- Reject messages carrying a `key` field in `ValidationMode::Anonymous`, aligning with the
+  `StrictNoSign` policy which forbids `from`, `seqno`, `signature` and `key` on the envelope.
+  See [PR 6621](https://github.com/libp2p/rust-libp2p/pull/6621).
+
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.50.0
+- Fix unbounded growth of per-peer `connected_peer.topics` from GRAFT control messages
+  ([GHSA-g3g5-x568-qvqx](https://github.com/libp2p/rust-libp2p/security/advisories/GHSA-g3g5-x568-qvqx)).
+  Backported from `libp2p-gossipsub v0.49.5`.
+
 - Change default `TopicSubscriptionFilter` from `AllowAllSubscriptionFilter` to `MaxCountSubscriptionFilter<AllowAllSubscriptionFilter>`
   with default limits of `100` for both `max_subscribed_topics` and `max_subscriptions_per_request`,
   providing built-in protection against excessive subscription requests.
@@ -13,7 +54,7 @@
   Introduce `max_control_message_size` (default 16KB) to limit total control bytes in an RPC.
   Rename `max_ihave_messages` to `max_ihave_messages_heartbeat`.
   Rename `max_control_messages` to `max_control_messages_sent`.
-  See [PR #6486](https://github.com/libp2p/rust-libp2p/pull/6486)
+  See [PR #6468](https://github.com/libp2p/rust-libp2p/pull/6468)
 
 - Send all topic subscriptions in a single hello RPC when connecting to a new peer, aligning with the GossipSub spec and other implementations (Go, Nim, JS).
   See [PR 6385](https://github.com/libp2p/rust-libp2p/pull/6385).

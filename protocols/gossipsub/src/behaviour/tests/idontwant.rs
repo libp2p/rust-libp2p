@@ -239,3 +239,94 @@ fn clear_stale_idontwant() {
     let peer = gs.connected_peers.get_mut(&peers[2]).unwrap();
     assert!(peer.dont_send.is_empty());
 }
+
+/// Queues a message with the given id for `peer`.
+fn queue_message(gs: &mut super::Behaviour, peer: &PeerId, id: &MessageId) {
+    let topic = gs.connected_peers[peer]
+        .topics
+        .iter()
+        .next()
+        .unwrap()
+        .clone();
+    let message = RawMessage {
+        source: None,
+        data: vec![1],
+        sequence_number: None,
+        topic,
+        signature: None,
+        key: None,
+        validated: true,
+    };
+    gs.connected_peers
+        .get_mut(peer)
+        .unwrap()
+        .messages
+        .try_push(RpcOut::Publish {
+            message_id: id.clone(),
+            message,
+            timeout: futures_timer::Delay::new(std::time::Duration::from_secs(60)),
+        })
+        .unwrap();
+}
+
+/// Delivers an RPC from `peer` with one IDONTWANT per entry of `idontwants`.
+fn receive_idontwant(gs: &mut super::Behaviour, peer: &PeerId, idontwants: Vec<Vec<MessageId>>) {
+    let rpc = RpcIn {
+        messages: vec![],
+        subscriptions: vec![],
+        #[cfg(feature = "partial-messages")]
+        partial_message: None,
+        control_msgs: idontwants
+            .into_iter()
+            .map(|message_ids| ControlAction::IDontWant(IDontWant { message_ids }))
+            .collect(),
+    };
+    gs.on_connection_handler_event(
+        *peer,
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc,
+            invalid_messages: vec![],
+        },
+    );
+}
+
+/// Pops everything from `queue` and returns the ids of the queued messages.
+fn queued_message_ids(queue: &mut crate::queue::Queue) -> Vec<MessageId> {
+    let mut ids = vec![];
+    while let Some(rpc) = queue.try_pop() {
+        if let RpcOut::Publish { message_id, .. } = rpc {
+            ids.push(message_id);
+        }
+    }
+    ids
+}
+
+/// Test that the ids of all IDONTWANT messages in an RPC are removed from the send queue.
+#[test]
+fn idontwant_removes_queued_messages() {
+    let (mut gs, peers, mut queues, _topic_hashes) = DefaultBehaviourTestBuilder::default()
+        .peer_no(1)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .peer_kind(PeerKind::Gossipsubv1_2)
+        .create_network();
+
+    let ids: Vec<_> = (0..3u8).map(|i| MessageId::new(&[i])).collect();
+    for id in &ids {
+        queue_message(&mut gs, &peers[0], id);
+    }
+
+    receive_idontwant(
+        &mut gs,
+        &peers[0],
+        vec![vec![ids[0].clone()], vec![ids[1].clone()]],
+    );
+
+    let mut queue = queues.remove(&peers[0]).unwrap();
+    assert_eq!(queued_message_ids(&mut queue), vec![ids[2].clone()]);
+    let peer = &gs.connected_peers[&peers[0]];
+    assert!(peer.dont_send.contains_key(&ids[0]));
+    assert!(peer.dont_send.contains_key(&ids[1]));
+}

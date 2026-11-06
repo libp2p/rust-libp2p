@@ -73,7 +73,7 @@ impl Behaviour {
             events: Default::default(),
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
-                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
+                iter::once((crate::PROTOCOL_NAME, ProtocolSupport::Outbound)),
                 libp2p_request_response::Config::default(),
             ),
             keypair,
@@ -393,7 +393,8 @@ impl Behaviour {
                     let peer_id = registration.record.peer_id();
                     let addresses = registration.record.addresses();
                     let namespace = registration.namespace.clone();
-                    let ttl = registration.ttl;
+                    // Max TTL allowed, 1 year to avoid overflows.
+                    let ttl = registration.ttl.min(31_556_952);
 
                     // Emit events for all newly discovered addresses.
                     let new_addr_events = addresses

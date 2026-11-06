@@ -1,3 +1,16 @@
+## 0.23.0
+
+- Deny circuit requests from a peer that already has `max_circuits_per_peer` circuits, instead of allowing one more.
+  See [PR 6739](https://github.com/libp2p/rust-libp2p/pull/6739).
+
+- Don't panic in the client when a reservation is accepted after its listener was closed.
+  See [PR 6653](https://github.com/libp2p/rust-libp2p/pull/6653).
+- Deny a circuit request when the handler has no capacity left for another outbound `STOP` stream,
+  instead of keeping it pending until the connection closes.
+  See [PR 6647](https://github.com/libp2p/rust-libp2p/pull/6647).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.22.0
 
 - Avoid panic when dst has connections without reservations.
@@ -19,6 +32,8 @@
   See [PR 6154](https://github.com/libp2p/rust-libp2p/pull/6154).
 - Expire external address when a relay listener is closed without a replacement reservation.
   See [PR 6285](https://github.com/libp2p/rust-libp2p/pull/6285).
+- Reset reservation state on listener close.
+  See [PR 6461](https://github.com/libp2p/rust-libp2p/pull/6461).
 
 ## 0.21.1
 - reduce allocations by replacing `get_or_insert` with `get_or_insert_with`

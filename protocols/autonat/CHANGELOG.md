@@ -1,3 +1,14 @@
+## 0.17.0
+
+- v1: Only fail an inbound probe when the dial-back itself fails, not on any failed dial to the peer.
+  See [PR 6727](https://github.com/libp2p/rust-libp2p/pull/6727).
+
+- Only apply the multicast scope check of `only_global_ips` to multicast IPv6 addresses.
+  Global unicast addresses such as `2001:4860::1` were treated as non-global before.
+  See [PR 6646](https://github.com/libp2p/rust-libp2p/pull/6646).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.16.0
 
 - Update to rand 0.10. `client::Behaviour<R>` and `server::Behaviour<R>`

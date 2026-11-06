@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     pin::Pin,
     sync::{Arc, Mutex, atomic::AtomicUsize},
     task::{Context, Poll, Waker},
@@ -89,6 +89,9 @@ impl Queue {
         if message_ids.is_empty() {
             return 0;
         }
+
+        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
+        let message_ids: HashSet<&MessageId> = message_ids.iter().collect();
 
         let mut count = 0;
         self.non_priority.retain(|message| match message {

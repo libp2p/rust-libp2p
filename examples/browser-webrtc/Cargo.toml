@@ -28,7 +28,7 @@ libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "tok
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 rust-embed = { version = "8.12", features = ["include-exclude", "interpolate-folder-path"] }
 tokio = { workspace = true, features = ["macros", "net", "rt", "signal"] }
-tokio-util = { version = "0.7", features = ["compat"] }
+tokio-util = { workspace = true, features = ["compat"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["cors"] }
 mime_guess = "2.0"

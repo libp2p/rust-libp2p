@@ -1965,7 +1965,7 @@ fn test_ihave_not_sent_to_partial_peers() {
     let (mut gs, peers, mut queues, topics) = DefaultBehaviourTestBuilder::default()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test-topic".into()])
-        .to_subscribe(false)
+        .to_subscribe(true)
         .gs_config(config)
         .create_network();
     // Graft all initial peers to fill the mesh
