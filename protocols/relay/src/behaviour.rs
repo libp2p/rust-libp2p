@@ -692,7 +692,7 @@ impl NetworkBehaviour for Behaviour {
                 );
 
                 let action = if self.circuits.num_circuits_of_peer(event_source)
-                    > self.config.max_circuits_per_peer
+                    >= self.config.max_circuits_per_peer
                     || self.circuits.len() >= self.config.max_circuits
                     || !self
                         .config
@@ -711,13 +711,11 @@ impl NetworkBehaviour for Behaviour {
                             status: proto::Status::ResourceLimitExceeded,
                         }),
                     }
-                } else if let Some((dst_conn, status)) = self
+                } else if let Some((dst_conn, _)) = self
                     .connections
                     .get(&inbound_circuit_req.dst())
-                    .and_then(|cs| cs.iter().next())
+                    .and_then(|cs| cs.iter().find(|(_, status)| status.is_active()))
                 {
-                    assert_eq!(*status, Reservation::Active);
-
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,

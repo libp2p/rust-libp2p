@@ -184,10 +184,11 @@ impl SecretKey {
     /// Generate a new Ed25519 secret key.
     #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
-        use rand::RngCore as _;
+        use rand::Rng;
 
-        let mut secret = ed25519::SecretKey::default();
-        rand::rngs::OsRng.fill_bytes(&mut secret);
+        let mut secret = [0u8; 32];
+        let mut rng = rand::make_rng::<rand::rngs::StdRng>();
+        rng.fill_bytes(&mut secret);
         SecretKey(secret)
     }
 

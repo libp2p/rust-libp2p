@@ -88,11 +88,11 @@ impl Handler {
             endpoint,
             queued_events: Default::default(),
             inbound_stream: futures_bounded::FuturesSet::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 1,
             ),
             outbound_stream: futures_bounded::FuturesSet::new(
-                || futures_bounded::Delay::tokio(Duration::from_secs(10)),
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(10)),
                 1,
             ),
             holepunch_candidates,

@@ -29,7 +29,7 @@ use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::{SeedableRng, seq::IndexedMutRandom};
 use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
 

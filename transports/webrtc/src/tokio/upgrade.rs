@@ -44,6 +44,7 @@ use webrtc::{
 use crate::tokio::{Connection, error::Error, sdp, sdp::random_ufrag, stream::Stream};
 
 /// Creates a new outbound WebRTC connection.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
@@ -78,6 +79,7 @@ pub(crate) async fn outbound(
 }
 
 /// Creates a new inbound WebRTC connection.
+#[allow(clippy::result_large_err)]
 pub(crate) async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
@@ -112,6 +114,7 @@ pub(crate) async fn inbound(
     Ok((peer_id, Connection::new(peer_connection).await))
 }
 
+#[allow(clippy::result_large_err)]
 async fn new_outbound_connection(
     addr: SocketAddr,
     config: RTCConfiguration,
@@ -129,6 +132,7 @@ async fn new_outbound_connection(
     Ok((connection, ufrag))
 }
 
+#[allow(clippy::result_large_err)]
 async fn new_inbound_connection(
     addr: SocketAddr,
     config: RTCConfiguration,
@@ -205,6 +209,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::from_certificate(&cert_bytes)
 }
 
+#[allow(clippy::result_large_err)]
 async fn create_noise_data_channel(
     conn: &RTCPeerConnection,
 ) -> Result<oneshot::Receiver<Arc<DataChannel>>, Error> {
@@ -227,6 +232,7 @@ async fn create_noise_data_channel(
     Ok(rx)
 }
 
+#[allow(clippy::result_large_err)]
 async fn await_noise_data_channel_open(
     rx: oneshot::Receiver<Arc<DataChannel>>,
 ) -> Result<Stream, Error> {

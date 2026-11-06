@@ -45,7 +45,7 @@ pub fn make_client_config(
 ) -> Result<rustls::ClientConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut provider = rustls::crypto::ring::default_provider();
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
     provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
 
     let cert_resolver = Arc::new(
@@ -73,7 +73,7 @@ pub fn make_server_config(
 ) -> Result<rustls::ServerConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut provider = rustls::crypto::ring::default_provider();
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
     provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
 
     let cert_resolver = Arc::new(
@@ -90,4 +90,22 @@ pub fn make_server_config(
     crypto.key_log = Arc::new(rustls::KeyLogFile::new());
 
     Ok(crypto)
+}
+
+#[cfg(test)]
+mod tests {
+    use rustls::NamedGroup;
+
+    use super::*;
+
+    #[test]
+    fn prefers_x25519_mlkem768() {
+        let keypair = Keypair::generate_ed25519();
+        let config = make_client_config(&keypair, None).unwrap();
+
+        assert_eq!(
+            config.crypto_provider().kx_groups[0].name(),
+            NamedGroup::X25519MLKEM768
+        );
+    }
 }

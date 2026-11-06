@@ -367,7 +367,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             .into_iter()
             .fold(vec![], |mut collected_messages, (peer_id, mut queue)| {
                 while !queue.is_empty() {
-                    if let Some(RpcOut::Forward { message, .. }) = queue.try_pop() {
+                    if let Some(RpcOut::Publish { message, .. }) = queue.try_pop() {
                         collected_messages.push((peer_id, message));
                     }
                 }
@@ -1980,7 +1980,7 @@ fn test_opportunistic_grafting() {
     let (mut gs, peers, _queues, topics) = DefaultBehaviourTestBuilder::default()
         .peer_no(5)
         .topics(vec!["test".into()])
-        .to_subscribe(false)
+        .to_subscribe(true)
         .gs_config(config)
         .explicit(0)
         .outbound(0)

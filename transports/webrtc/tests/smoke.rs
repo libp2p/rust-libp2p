@@ -41,7 +41,6 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
-use rand::{RngCore, thread_rng};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -86,7 +85,7 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 
     let transport = webrtc::tokio::Transport::new(
         keypair,
-        webrtc::tokio::Certificate::generate(&mut thread_rng()).unwrap(),
+        webrtc::tokio::Certificate::generate(&mut rand::rng()).unwrap(),
     )
     .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
     .boxed();
@@ -245,7 +244,7 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
                 }
 
                 let mut data = vec![0; BUFFER_SIZE];
-                rand::thread_rng().fill_bytes(&mut data);
+                rand::fill(&mut data);
 
                 let mut received = Vec::new();
 

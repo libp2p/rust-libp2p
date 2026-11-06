@@ -54,7 +54,7 @@ impl AlwaysResolvesCert {
     ) -> Result<Self, rustls::Error> {
         let certified_key = rustls::sign::CertifiedKey::new(
             vec![cert],
-            rustls::crypto::ring::sign::any_ecdsa_type(key)?,
+            rustls::crypto::aws_lc_rs::sign::any_ecdsa_type(key)?,
         );
         Ok(Self(Arc::new(certified_key)))
     }
@@ -579,6 +579,24 @@ mod tests {
         let cert = parse_unverified(cert).unwrap();
 
         assert!(cert.signature_scheme().is_err());
+    }
+
+    #[test]
+    fn parse_rejects_expired_certificate() {
+        // Regression for GHSA-5hq8-qhww-jm7q: expired cert must error, not panic.
+        let identity = identity::Keypair::generate_ed25519();
+        let signing = rcgen::KeyPair::generate_for(P2P_SIGNATURE_ALGORITHM).unwrap();
+
+        let mut params = rcgen::CertificateParams::default();
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.not_before = rcgen::date_time_ymd(1970, 1, 1);
+        params.not_after = rcgen::date_time_ymd(1975, 1, 1);
+        params
+            .custom_extensions
+            .push(make_libp2p_extension(&identity, &signing).unwrap());
+        let cert: rustls::pki_types::CertificateDer = params.self_signed(&signing).unwrap().into();
+
+        assert!(parse(&cert).is_err());
     }
 
     #[test]

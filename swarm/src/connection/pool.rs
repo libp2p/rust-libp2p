@@ -18,6 +18,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+
 use std::{
     collections::HashMap,
     convert::Infallible,
@@ -31,7 +32,7 @@ use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{BoxFuture, Either, poll_fn},
+    future::{Either, poll_fn},
     prelude::*,
     ready,
     stream::{FuturesUnordered, SelectAll},
@@ -49,11 +50,13 @@ use crate::{
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
+        pool::concurrent_dial::{PendingDial, SmartDial},
     },
     transport::TransportError,
 };
 
-mod concurrent_dial;
+pub(crate) mod concurrent_dial;
+pub(crate) mod dial_ranker;
 mod task;
 
 enum ExecSwitch {
@@ -142,6 +145,9 @@ where
 
     /// How long a connection should be kept alive once it starts idling.
     idle_connection_timeout: Duration,
+
+    /// Enables smart dialing.
+    smart_dial: bool,
 }
 
 #[derive(Debug)]
@@ -333,6 +339,7 @@ where
             no_established_connections_waker: None,
             established_connection_events: Default::default(),
             new_connection_dropped_listeners: Default::default(),
+            smart_dial: config.smart_dial,
         }
     }
 
@@ -413,15 +420,7 @@ where
     /// that establishes and negotiates the connection.
     pub(crate) fn add_outgoing(
         &mut self,
-        dials: Vec<
-            BoxFuture<
-                'static,
-                (
-                    Multiaddr,
-                    Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
-                ),
-            >,
-        >,
+        dials: Vec<PendingDial>,
         peer: Option<PeerId>,
         role_override: Endpoint,
         port_use: PortUse,
@@ -435,15 +434,27 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor.spawn(
-            task::new_for_pending_outgoing_connection(
-                connection_id,
-                ConcurrentDial::new(dials, concurrency_factor),
-                abort_receiver,
-                self.pending_connection_events_tx.clone(),
-            )
-            .instrument(span),
-        );
+        if self.smart_dial {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    SmartDial::new(dials),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        } else {
+            self.executor.spawn(
+                task::new_for_pending_outgoing_connection(
+                    connection_id,
+                    ConcurrentDial::new(dials, concurrency_factor),
+                    abort_receiver,
+                    self.pending_connection_events_tx.clone(),
+                )
+                .instrument(span),
+            );
+        }
 
         let endpoint = PendingPoint::Dialer {
             role_override,
@@ -984,6 +995,8 @@ pub(crate) struct PoolConfig {
     pub(crate) per_connection_event_buffer_size: usize,
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub(crate) dial_concurrency_factor: NonZeroU8,
+    /// Ranker that determines the ranking of outgoing connection attempts.
+    pub(crate) smart_dial: bool,
     /// How long a connection should be kept alive once it is idling.
     pub(crate) idle_connection_timeout: Duration,
     /// The configured override for substream protocol upgrades, if any.
@@ -1005,6 +1018,7 @@ impl PoolConfig {
             idle_connection_timeout: Duration::from_secs(10),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
+            smart_dial: false,
         }
     }
 

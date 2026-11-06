@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     pin::Pin,
     sync::{Arc, Mutex, atomic::AtomicUsize},
     task::{Context, Poll, Waker},
@@ -75,7 +75,6 @@ impl Queue {
                 self.control.try_push(message)
             }
             RpcOut::Publish { .. }
-            | RpcOut::Forward { .. }
             | RpcOut::IHave(_)
             | RpcOut::TestExtension
             | RpcOut::IWant(_) => self.non_priority.try_push(message),
@@ -91,11 +90,12 @@ impl Queue {
             return 0;
         }
 
+        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
+        let message_ids: HashSet<&MessageId> = message_ids.iter().collect();
+
         let mut count = 0;
         self.non_priority.retain(|message| match message {
-            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. }
-                if message_ids.contains(message_id) =>
-            {
+            RpcOut::Publish { message_id, .. } if message_ids.contains(message_id) => {
                 count += 1;
                 false
             }

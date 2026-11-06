@@ -3,7 +3,7 @@ name = "libp2p-identify"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Nodes identification protocol for libp2p"
-version = "0.48.0"
+version = "0.49.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,10 +20,10 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 prost-codec = { workspace = true }
 prost = { workspace = true }
-smallvec = "1.15.1"
+smallvec = "1.15"
 thiserror = { workspace = true }
 tracing = { workspace = true }
-either = "1.16.0"
+either = "1.16"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

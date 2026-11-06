@@ -336,15 +336,9 @@ pub struct Extensions {
 #[derive(Debug)]
 pub enum RpcOut {
     /// Publish a Gossipsub message on network.`timeout` limits the duration the message
-    /// can wait to be sent before it is abandoned.
+    /// can wait to be sent before it is abandoned. This can be both a message originating
+    /// from this node, or a forwarded message.
     Publish {
-        message_id: MessageId,
-        message: RawMessage,
-        timeout: Delay,
-    },
-    /// Forward a Gossipsub message on network. `timeout` limits the duration the message
-    /// can wait to be sent before it is abandoned.
-    Forward {
         message_id: MessageId,
         message: RawMessage,
         timeout: Delay,
@@ -407,12 +401,6 @@ impl From<RpcOut> for proto::Rpc {
             RpcOut::Publish { message, .. } => proto::Rpc {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
-                control: None,
-                partial: None,
-            },
-            RpcOut::Forward { message, .. } => proto::Rpc {
-                publish: vec![message.into()],
-                subscriptions: Vec::new(),
                 control: None,
                 partial: None,
             },
