@@ -846,6 +846,81 @@ where
         id
     }
 
+    /// Performs a lookup for a record in the DHT, restricting the query to a
+    /// fixed set of `peers`.
+    ///
+    /// Unlike [`Behaviour::get_record`], which seeds its query from the local
+    /// routing table's closest peers and then expands iteratively toward the
+    /// key, this query contacts **only** the given `peers` and never any node
+    /// discovered mid-walk. It is the `GET` counterpart of
+    /// [`Behaviour::put_record_to`]: where `put_record_to` writes to a fixed
+    /// peer set, `get_record_from` reads from one.
+    ///
+    /// The local store is consulted exactly as in [`Behaviour::get_record`]: a
+    /// local hit is emitted immediately as a [`GetRecordOk::FoundRecord`] with
+    /// `peer` set to `None`.
+    ///
+    /// The result of this operation is delivered in a
+    /// [`Event::OutboundQueryProgressed`] with `result` [`QueryResult::GetRecord`].
+    ///
+    /// > **Note**: Like [`Behaviour::put_record_to`], this is not a regular
+    /// > Kademlia DHT operation. It deliberately bypasses the iterative
+    /// > closest-peer walk to operate on a caller-chosen peer set, e.g. for an
+    /// > S/Kademlia node-disjoint lookup where each of several disjoint peer
+    /// > groups is queried as an independent, non-converging path.
+    pub fn get_record_from<I>(&mut self, key: record::Key, peers: I) -> QueryId
+    where
+        I: IntoIterator<Item = PeerId>,
+    {
+        let record = if let Some(record) = self.store.get(&key) {
+            if record.is_expired(Instant::now()) {
+                self.store.remove(&key);
+                None
+            } else {
+                Some(PeerRecord {
+                    peer: None,
+                    record: record.into_owned(),
+                })
+            }
+        } else {
+            None
+        };
+
+        let step = ProgressStep::first();
+
+        let info = if record.is_some() {
+            QueryInfo::GetRecord {
+                key,
+                step: step.next(),
+                found_a_record: true,
+                cache_candidates: BTreeMap::new(),
+            }
+        } else {
+            QueryInfo::GetRecord {
+                key,
+                step,
+                found_a_record: false,
+                cache_candidates: BTreeMap::new(),
+            }
+        };
+        let id = self.queries.add_fixed(peers, info);
+
+        // No queries were actually done for the results yet.
+        let stats = QueryStats::empty();
+
+        if let Some(record) = record {
+            self.queued_events
+                .push_back(ToSwarm::GenerateEvent(Event::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
+                    step,
+                    stats,
+                }));
+        }
+
+        id
+    }
+
     /// Stores a record in the DHT, locally as well as at the nodes
     /// closest to the key as per the xor distance metric.
     ///
