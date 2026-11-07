@@ -1,5 +1,7 @@
 ## 0.10.0-alpha
 
+- Add `Transport::with_max_message_size` to configure the WebRTC data-channel framing limit.
+
 - Update webrtc-rs to `v0.17` and fix libp2p noise data channel negotiation.
   See [PR 6429](https://github.com/libp2p/rust-libp2p/pull/6429)
 

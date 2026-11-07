@@ -36,6 +36,7 @@ use futures::{
     stream::FuturesUnordered,
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_webrtc_utils::StreamConfig;
 use webrtc::{
     data::data_channel::DataChannel as DetachedDataChannel, data_channel::RTCDataChannel,
     peer_connection::RTCPeerConnection,
@@ -66,13 +67,14 @@ pub struct Connection {
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     drop_listeners: FuturesUnordered<stream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
+    stream_config: StreamConfig,
 }
 
 impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub(crate) async fn new(rtc_conn: RTCPeerConnection) -> Self {
+    pub(crate) async fn new(rtc_conn: RTCPeerConnection, stream_config: StreamConfig) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(
@@ -88,6 +90,7 @@ impl Connection {
             close_fut: None,
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
+            stream_config,
         }
     }
 
@@ -159,7 +162,7 @@ impl StreamMuxer for Connection {
             Some(detached) => {
                 tracing::trace!(stream=%detached.stream_identifier(), "Incoming stream");
 
-                let (stream, drop_listener) = Stream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached, self.stream_config);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
@@ -233,7 +236,7 @@ impl StreamMuxer for Connection {
 
                 tracing::trace!(stream=%detached.stream_identifier(), "Outbound stream");
 
-                let (stream, drop_listener) = Stream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached, self.stream_config);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
