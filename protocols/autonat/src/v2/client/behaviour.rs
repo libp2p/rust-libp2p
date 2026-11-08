@@ -108,11 +108,8 @@ where
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.address_candidates
                     .entry(addr.clone())
-                    .and_modify(|info| info.score = info.score.saturating_add(1))
-                    .or_insert(AddressInfo {
-                        score: 1,
-                        status: TestStatus::Untested,
-                    });
+                    .or_default()
+                    .score += 1;
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.address_candidates.remove(addr);
