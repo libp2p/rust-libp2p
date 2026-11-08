@@ -15,7 +15,7 @@ pub enum NoProviderSpecified {}
 /// Represents the Tokio runtime environment.
 pub enum Tokio {}
 
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(target_arch = "wasm32")]
 /// Represents the WasmBindgen environment for WebAssembly.
 pub enum WasmBindgen {}
 
@@ -37,7 +37,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
     /// Configures the SwarmBuilder for WebAssembly using WasmBindgen.
     /// This method is available when the `wasm-bindgen` feature is enabled.
-    #[cfg(feature = "wasm-bindgen")]
+    #[cfg(target_arch = "wasm32")]
     pub fn with_wasm_bindgen(self) -> SwarmBuilder<WasmBindgen, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,

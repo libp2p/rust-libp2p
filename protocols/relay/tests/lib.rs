@@ -27,7 +27,7 @@ use futures::{
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
-    transport::{choice::OrTransport, Boxed, MemoryTransport, Transport},
+    transport::{Boxed, MemoryTransport, Transport, choice::OrTransport},
     upgrade,
 };
 use libp2p_identity as identity;
@@ -35,7 +35,7 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{dial_opts::DialOpts, Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
@@ -185,6 +185,77 @@ async fn new_reservation_to_same_relay_replaces_old() {
 }
 
 #[tokio::test]
+async fn closing_relay_listener_expires_external_address() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
+
+    let listener_id = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for connection to relay.
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+
+    // Wait for reservation to be accepted.
+    wait_for_reservation(
+        &mut client,
+        client_addr_with_peer_id.clone(),
+        relay_peer_id,
+        false, // No renewal.
+    )
+    .await;
+
+    // Now remove the relay listener.
+    assert!(client.remove_listener(listener_id));
+
+    // Expect the listener to close and the external address to expire.
+    let mut listener_closed = false;
+    let mut external_addr_expired = false;
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::ListenerClosed {
+                listener_id: closed_id,
+                addresses,
+                ..
+            } => {
+                assert_eq!(closed_id, listener_id);
+                assert_eq!(addresses, vec![client_addr_with_peer_id.clone()]);
+                listener_closed = true;
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                assert_eq!(address, client_addr_with_peer_id);
+                external_addr_expired = true;
+            }
+            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            SwarmEvent::ExpiredListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+        if listener_closed && external_addr_expired {
+            break;
+        }
+    }
+
+    assert!(listener_closed);
+    assert!(external_addr_expired);
+}
+
+#[tokio::test]
 async fn connect() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -244,7 +315,7 @@ async fn connection_established_to(
             } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
-                break
+                break;
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::OutboundCircuitEstablished { .. },
@@ -405,6 +476,87 @@ async fn propagate_connect_error_to_unknown_peer_to_dialer() {
 }
 
 #[tokio::test]
+async fn deny_circuit_to_connected_peer_without_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut dst = build_client();
+    let dst_peer_id = *dst.local_peer_id();
+    dst.dial(relay_addr.clone()).unwrap();
+
+    let mut relay_saw_dst = false;
+    let mut dst_connected = false;
+    while !(relay_saw_dst && dst_connected) {
+        tokio::select! {
+            event = relay.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event
+                    && peer_id == dst_peer_id {
+                        relay_saw_dst = true;
+                    }
+            }
+            event = dst.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event
+                    &&  peer_id == relay_peer_id {
+                        dst_connected = true;
+                    }
+            }
+        }
+    }
+
+    let mut src = build_client();
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    let opts = DialOpts::from(dst_addr.clone());
+    let circuit_connection_id = opts.connection_id();
+
+    src.dial(opts).unwrap();
+
+    let (failed_address, error) = loop {
+        tokio::select! {
+            _ = relay.select_next_some() => {}
+            _ = dst.select_next_some() => {}
+            event = src.select_next_some() => {
+                if let SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    error: DialError::Transport(mut errors),
+                    ..
+                } = event
+                    && connection_id == circuit_connection_id {
+                        assert_eq!(errors.len(), 1);
+                        break errors.remove(0);
+                    }
+            }
+        }
+    };
+
+    // This is a bit wonky but we need to get the source error
+    let error = error
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ConnectError>()
+        .unwrap();
+
+    assert_eq!(failed_address, dst_addr);
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ConnectError::NoReservation
+    ));
+}
+
+#[tokio::test]
 async fn reuse_connection() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -440,6 +592,297 @@ async fn reuse_connection() {
         false, // No renewal.
     )
     .await;
+}
+
+#[tokio::test]
+async fn relay_auto_enables_on_external_address() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay.add_external_address(relay_addr.clone());
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn relay_auto_disables_on_external_address_removal() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    // Wait for auto-enable.
+    loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged {
+                status: relay::Status::Enable,
+            })) => break,
+            SwarmEvent::NewListenAddr { .. } => {}
+            e => panic!("{e:?}"),
+        }
+    }
+
+    relay.remove_external_address(&relay_addr);
+
+    let status = loop {
+        match relay.select_next_some().await {
+            SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => {
+                break status;
+            }
+            SwarmEvent::Behaviour(RelayEvent::Ping(_)) => {}
+            e => panic!("{e:?}"),
+        }
+    };
+
+    assert_eq!(status, relay::Status::Disable);
+}
+
+#[tokio::test]
+async fn relay_manual_status_overrides_auto() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    match relay.select_next_some().await {
+        SwarmEvent::NewListenAddr { .. } => {}
+        e => panic!("{e:?}"),
+    }
+
+    relay.add_external_address(relay_addr.clone());
+
+    relay.behaviour_mut().relay.set_status(None);
+
+    let status = match relay.select_next_some().await {
+        SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::StatusChanged { status })) => status,
+        e => panic!("{e:?}"),
+    };
+
+    assert_eq!(status, relay::Status::Enable);
+}
+
+#[tokio::test]
+async fn disabled_relay_rejects_reservation() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+
+    relay
+        .behaviour_mut()
+        .relay
+        .set_status(Some(relay::Status::Disable));
+
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener = client.listen_on(client_addr).unwrap();
+
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+
+    let error = client
+        .wait(|e| match e {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                reason: Err(e),
+                ..
+            } if listener_id == listener => Some(e),
+            _ => None,
+        })
+        .await;
+
+    assert!(error.source().is_some());
+}
+
+#[tokio::test]
+async fn reservation_after_listener_close_emits_fresh_acceptance() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut client = build_client();
+    let client_peer_id = *client.local_peer_id();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
+
+    let first_listener = client.listen_on(client_addr.clone()).unwrap();
+    assert!(wait_for_dial(&mut client, relay_peer_id).await);
+    wait_for_reservation(
+        &mut client,
+        client_addr_with_peer_id.clone(),
+        relay_peer_id,
+        false,
+    )
+    .await;
+
+    assert!(client.remove_listener(first_listener));
+
+    let mut first_listener_closed = false;
+    let mut first_addr_expired = false;
+    loop {
+        match client.select_next_some().await {
+            SwarmEvent::ListenerClosed { listener_id, .. } if listener_id == first_listener => {
+                first_listener_closed = true;
+            }
+            SwarmEvent::ExternalAddrExpired { address } if address == client_addr_with_peer_id => {
+                first_addr_expired = true;
+            }
+            SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
+            _ => {}
+        }
+        if first_listener_closed && first_addr_expired {
+            break;
+        }
+    }
+
+    let _second_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    wait_for_reservation(
+        &mut client,
+        client_addr_with_peer_id.clone(),
+        relay_peer_id,
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn deny_circuit_once_max_circuits_per_peer_is_reached() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config {
+        max_circuits_per_peer: 1,
+        reservation_duration: Duration::from_secs(3600),
+        ..relay::Config::default()
+    });
+    let relay_peer_id = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut dst_1 = build_client();
+    let mut dst_2 = build_client();
+    let mut dst_addrs = Vec::new();
+    for dst in [&mut dst_1, &mut dst_2] {
+        let dst_addr = relay_addr
+            .clone()
+            .with(Protocol::P2p(relay_peer_id))
+            .with(Protocol::P2pCircuit)
+            .with(Protocol::P2p(*dst.local_peer_id()));
+        dst.listen_on(dst_addr.clone()).unwrap();
+        let mut reserved = false;
+        while !reserved {
+            tokio::select! {
+                e = dst.select_next_some() => {
+                    if let SwarmEvent::Behaviour(ClientEvent::Relay(
+                        relay::client::Event::ReservationReqAccepted { .. },
+                    )) = e
+                    {
+                        reserved = true;
+                    }
+                }
+                _ = relay.select_next_some() => {}
+            }
+        }
+        dst_addrs.push(dst_addr);
+    }
+
+    let mut src = build_client();
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(20));
+
+    // The first circuit of `src` is within the limit of 1.
+    src.dial(dst_addrs[0].clone()).unwrap();
+    loop {
+        tokio::select! {
+            e = relay.select_next_some() => {
+                if let SwarmEvent::Behaviour(RelayEvent::Relay(
+                    relay::Event::CircuitReqAccepted { .. },
+                )) = e
+                {
+                    break;
+                }
+            }
+            _ = src.select_next_some() => {}
+            _ = dst_1.select_next_some() => {}
+            _ = dst_2.select_next_some() => {}
+            _ = &mut deadline => panic!("first circuit was never accepted"),
+        }
+    }
+
+    // `src` now has as many circuits as `max_circuits_per_peer` allows, so another one is denied.
+    src.dial(dst_addrs[1].clone()).unwrap();
+    loop {
+        tokio::select! {
+            e = relay.select_next_some() => match e {
+                SwarmEvent::Behaviour(RelayEvent::Relay(
+                    relay::Event::CircuitReqDenied { .. },
+                )) => break,
+                SwarmEvent::Behaviour(RelayEvent::Relay(
+                    relay::Event::CircuitReqAccepted { .. },
+                )) => panic!("circuit above max_circuits_per_peer was accepted"),
+                _ => {}
+            },
+            _ = src.select_next_some() => {}
+            _ = dst_1.select_next_some() => {}
+            _ = dst_2.select_next_some() => {}
+            _ = &mut deadline => panic!("second circuit was never answered"),
+        }
+    }
 }
 
 fn build_relay() -> Swarm<Relay> {
@@ -566,10 +1009,167 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
             } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
-                return false
+                return false;
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{e:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn deny_circuit_when_outbound_stop_capacity_is_exhausted() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config {
+        max_circuits: 100,
+        max_circuits_per_peer: 100,
+        reservation_duration: Duration::from_secs(3600),
+        ..relay::Config::default()
+    });
+    let relay_peer_id = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    // `dst` accepts the relayed `STOP` streams on its connection to the relay, but as it is not
+    // polled after the reservation, it never answers them. This keeps the relay's outbound `STOP`
+    // workers for the connection to `dst` busy.
+    let mut dst = build_client_with_config(
+        Config::with_tokio_executor().with_per_connection_event_buffer_size(64),
+    );
+    let dst_peer_id = *dst.local_peer_id();
+    let dst_addr = relay_addr
+        .clone()
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+    dst.listen_on(dst_addr.clone()).unwrap();
+    let mut reserved = false;
+    while !reserved {
+        tokio::select! {
+            e = dst.select_next_some() => {
+                if let SwarmEvent::Behaviour(ClientEvent::Relay(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                )) = e
+                {
+                    reserved = true;
+                }
+            }
+            _ = relay.select_next_some() => {}
+        }
+    }
+
+    // Request one circuit more than the relay handler can drive concurrently (10).
+    let mut src_1 = build_client();
+    let mut src_2 = build_client();
+    for src in [&mut src_1, &mut src_2] {
+        src.dial(relay_addr.clone().with(Protocol::P2p(relay_peer_id)))
+            .unwrap();
+        loop {
+            tokio::select! {
+                e = src.select_next_some() => {
+                    if let SwarmEvent::ConnectionEstablished { peer_id, .. } = e
+                        && peer_id == relay_peer_id
+                    {
+                        break;
+                    }
+                }
+                _ = relay.select_next_some() => {}
+            }
+        }
+    }
+    for _ in 0..6 {
+        src_1.dial(dst_addr.clone()).unwrap();
+    }
+    for _ in 0..5 {
+        src_2.dial(dst_addr.clone()).unwrap();
+    }
+
+    // The circuit exceeding the capacity must be denied right away instead of being leaked until
+    // the connection closes.
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(20));
+    loop {
+        tokio::select! {
+            e = relay.select_next_some() => {
+                if let SwarmEvent::Behaviour(RelayEvent::Relay(
+                    relay::Event::CircuitReqDenied { dst_peer_id: d, .. },
+                )) = e
+                {
+                    assert_eq!(d, dst_peer_id);
+                    break;
+                }
+            }
+            _ = src_1.select_next_some() => {}
+            _ = src_2.select_next_some() => {}
+            _ = &mut deadline => panic!("circuit exceeding the relay handler's capacity was never answered"),
+        }
+    }
+    drop(dst);
+}
+
+#[tokio::test]
+async fn closing_listener_before_reservation_is_accepted_does_not_panic() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut client = build_client();
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+
+    let listener_id = client.listen_on(client_addr).unwrap();
+
+    // Drive both nodes until the client is connected to the relay. The reservation request is
+    // issued on that connection, but the relay swarm is not polled afterwards and thus can not
+    // accept it yet.
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = e
+                    && peer_id == relay_peer_id
+                {
+                    break;
+                }
+            }
+            _ = relay.select_next_some() => {}
+        }
+    }
+
+    // Close the listener while the reservation request is still in flight.
+    assert!(client.remove_listener(listener_id));
+    loop {
+        if let SwarmEvent::ListenerClosed {
+            listener_id: id, ..
+        } = client.select_next_some().await
+        {
+            assert_eq!(id, listener_id);
+            break;
+        }
+    }
+
+    // Let the relay accept the reservation. The client must not panic when the (now stale)
+    // acceptance arrives, nor confirm an external address for the closed listener.
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ExternalAddrConfirmed { address } = e {
+                    panic!("unexpected external address confirmation for closed listener: {address}");
+                }
+            }
+            _ = relay.select_next_some() => {}
+            _ = &mut deadline => break,
         }
     }
 }

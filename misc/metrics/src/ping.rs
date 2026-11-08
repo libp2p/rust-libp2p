@@ -23,7 +23,7 @@ use prometheus_client::{
     metrics::{
         counter::Counter,
         family::Family,
-        histogram::{exponential_buckets, Histogram},
+        histogram::{Histogram, exponential_buckets},
     },
     registry::{Registry, Unit},
 };

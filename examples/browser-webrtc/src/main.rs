@@ -4,21 +4,20 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{
+    Router,
     extract::{Path, State},
-    http::{header::CONTENT_TYPE, Method, StatusCode},
+    http::{Method, StatusCode, header::CONTENT_TYPE},
     response::{Html, IntoResponse},
     routing::get,
-    Router,
 };
 use futures::StreamExt;
 use libp2p::{
-    core::{muxing::StreamMuxerBox, Transport},
+    core::{Transport, muxing::StreamMuxerBox},
     multiaddr::{Multiaddr, Protocol},
     ping,
     swarm::SwarmEvent,
 };
 use libp2p_webrtc as webrtc;
-use rand::thread_rng;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -33,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
         .with_other_transport(|id_keys| {
             Ok(webrtc::tokio::Transport::new(
                 id_keys.clone(),
-                webrtc::tokio::Certificate::generate(&mut thread_rng())?,
+                webrtc::tokio::Certificate::generate(&mut rand::rng())?,
             )
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
         })?
@@ -96,7 +95,7 @@ pub(crate) async fn serve(libp2p_transport: Multiaddr) {
     let server = Router::new()
         .route("/", get(get_index))
         .route("/index.html", get(get_index))
-        .route("/:path", get(get_static_file))
+        .route("/{path}", get(get_static_file))
         .with_state(Libp2pEndpoint(libp2p_transport))
         .layer(
             // allow cors

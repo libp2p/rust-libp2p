@@ -62,11 +62,11 @@ use std::{
 
 use handler::Handler;
 pub use handler::{Config, Failure};
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm, behaviour::FromSwarm,
 };
 
 pub use self::protocol::PROTOCOL_NAME;

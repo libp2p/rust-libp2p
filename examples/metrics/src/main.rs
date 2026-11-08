@@ -31,11 +31,11 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use opentelemetry::{trace::TracerProvider as _, KeyValue};
+use opentelemetry::{KeyValue, trace::TracerProvider as _};
 use opentelemetry_otlp::SpanExporter;
-use opentelemetry_sdk::{runtime, trace::TracerProvider};
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use prometheus_client::registry::Registry;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod http_service;
 
@@ -93,15 +93,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    let provider = TracerProvider::builder()
-        .with_batch_exporter(
-            SpanExporter::builder().with_tonic().build()?,
-            runtime::Tokio,
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(SpanExporter::builder().with_tonic().build()?)
+        .with_resource(
+            opentelemetry_sdk::Resource::builder_empty()
+                .with_attribute(KeyValue::new("service.name", "libp2p"))
+                .build(),
         )
-        .with_resource(opentelemetry_sdk::Resource::new(vec![KeyValue::new(
-            "service.name",
-            "libp2p",
-        )]))
         .build();
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(EnvFilter::from_default_env()))

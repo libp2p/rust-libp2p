@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{hash_map::Entry, VecDeque},
+    collections::{VecDeque, hash_map::Entry},
     error, fmt, io,
     num::NonZeroU64,
     pin::Pin,
@@ -406,7 +406,7 @@ impl<T> Drop for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{transport::PortUse, Endpoint};
+    use crate::{Endpoint, transport::PortUse};
 
     #[test]
     fn parse_memory_addr_works() {
@@ -463,21 +463,27 @@ mod tests {
         let listener_id_3 = ListenerId::next();
         transport.listen_on(listener_id_3, addr_2.clone()).unwrap();
 
-        assert!(transport
-            .listen_on(ListenerId::next(), addr_1.clone())
-            .is_err());
-        assert!(transport
-            .listen_on(ListenerId::next(), addr_2.clone())
-            .is_err());
+        assert!(
+            transport
+                .listen_on(ListenerId::next(), addr_1.clone())
+                .is_err()
+        );
+        assert!(
+            transport
+                .listen_on(ListenerId::next(), addr_2.clone())
+                .is_err()
+        );
 
         assert!(
             transport.remove_listener(listener_id_2),
             "Listener doesn't exist."
         );
         assert!(transport.listen_on(ListenerId::next(), addr_1).is_ok());
-        assert!(transport
-            .listen_on(ListenerId::next(), addr_2.clone())
-            .is_err());
+        assert!(
+            transport
+                .listen_on(ListenerId::next(), addr_2.clone())
+                .is_err()
+        );
 
         assert!(
             transport.remove_listener(listener_id_3),
@@ -489,30 +495,34 @@ mod tests {
     #[test]
     fn port_not_in_use() {
         let mut transport = MemoryTransport::default();
-        assert!(transport
-            .dial(
-                "/memory/810172461024613".parse().unwrap(),
-                DialOpts {
-                    role: Endpoint::Dialer,
-                    port_use: PortUse::New
-                }
-            )
-            .is_err());
+        assert!(
+            transport
+                .dial(
+                    "/memory/810172461024613".parse().unwrap(),
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::New
+                    }
+                )
+                .is_err()
+        );
         transport
             .listen_on(
                 ListenerId::next(),
                 "/memory/810172461024613".parse().unwrap(),
             )
             .unwrap();
-        assert!(transport
-            .dial(
-                "/memory/810172461024613".parse().unwrap(),
-                DialOpts {
-                    role: Endpoint::Dialer,
-                    port_use: PortUse::New
-                }
-            )
-            .is_ok());
+        assert!(
+            transport
+                .dial(
+                    "/memory/810172461024613".parse().unwrap(),
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::New
+                    }
+                )
+                .is_ok()
+        );
     }
 
     #[test]

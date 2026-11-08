@@ -24,10 +24,10 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
 use crate::{
-    error::ConfigBuilderError,
-    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
-    types::{Message, MessageId, PeerKind},
     TopicHash,
+    error::ConfigBuilderError,
+    protocol::{FLOODSUB_PROTOCOL, ProtocolConfig, ProtocolId},
+    types::{Message, MessageId, PeerKind},
 };
 
 /// The types of message validation that can be employed by gossipsub.
@@ -43,8 +43,8 @@ pub enum ValidationMode {
     /// This setting permits messages that have no author, sequence number or signature. If any of
     /// these fields exist in the message these are validated.
     Permissive,
-    /// This setting requires the author, sequence number and signature fields of a message to be
-    /// empty. Any message that contains these fields is considered invalid.
+    /// This setting requires the author, key, sequence number and signature fields of a message to
+    /// be empty. Any message that contains these fields is considered invalid.
     Anonymous,
     /// This setting does not check the author, sequence number or signature fields of incoming
     /// messages. If these fields contain data, they are simply ignored.
@@ -123,9 +123,10 @@ pub struct Config {
     opportunistic_graft_ticks: u64,
     opportunistic_graft_peers: usize,
     gossip_retransimission: u32,
-    max_messages_per_rpc: Option<usize>,
-    max_ihave_length: usize,
-    max_ihave_messages: usize,
+    #[cfg(feature = "partial-messages")]
+    max_metadata_length: usize,
+    max_control_messages_sent: usize,
+    max_ihave_messages_heartbeat: usize,
     iwant_followup_time: Duration,
     connection_handler_queue_len: usize,
     connection_handler_publish_duration: Duration,
@@ -410,25 +411,30 @@ impl Config {
         self.opportunistic_graft_peers
     }
 
-    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
-    /// no limit. The default is None.
-    pub fn max_messages_per_rpc(&self) -> Option<usize> {
-        self.max_messages_per_rpc
+    /// The maximum number of metadata messages to send per peer during heartbeat gossip.
+    /// The default is 1000.
+    #[cfg(feature = "partial-messages")]
+    pub fn max_metadata_length(&self) -> usize {
+        self.max_metadata_length
     }
 
-    /// The maximum number of messages to include in an IHAVE message.
-    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
-    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
-    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
-    pub fn max_ihave_length(&self) -> usize {
-        self.max_ihave_length
+    /// The maximum number of publish messages we will process in a given RPC. The default is 5000.
+    pub fn max_publish_messages(&self) -> usize {
+        self.protocol.max_publish_messages
     }
 
-    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
-    /// within a heartbeat.
-    pub fn max_ihave_messages(&self) -> usize {
-        self.max_ihave_messages
+    /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
+    /// This limits the number of IHAVE messages sent during gossip and IWANT requests received.
+    /// The default is 5000.
+    pub fn max_control_messages_sent(&self) -> usize {
+        self.max_control_messages_sent
+    }
+
+    /// The maximum total byte size of all control messages and subscriptions in an RPC.
+    /// Validates cumulative size by scanning protobuf bytes before decoding.
+    /// Messages exceeding this limit will be rejected. The default is 16KB.
+    pub fn max_control_message_size(&self) -> usize {
+        self.protocol.max_control_message_size
     }
 
     /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
@@ -475,6 +481,12 @@ impl Config {
     /// By default it is false.
     pub fn idontwant_on_publish(&self) -> bool {
         self.idontwant_on_publish
+    }
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    pub fn max_ihave_messages_heartbeat(&self) -> usize {
+        self.max_ihave_messages_heartbeat
     }
 }
 
@@ -536,9 +548,10 @@ impl Default for ConfigBuilder {
                 opportunistic_graft_ticks: 60,
                 opportunistic_graft_peers: 2,
                 gossip_retransimission: 3,
-                max_messages_per_rpc: None,
-                max_ihave_length: 5000,
-                max_ihave_messages: 10,
+                #[cfg(feature = "partial-messages")]
+                max_metadata_length: 1000,
+                max_control_messages_sent: 5000,
+                max_ihave_messages_heartbeat: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 connection_handler_queue_len: 5000,
                 connection_handler_publish_duration: Duration::from_secs(5),
@@ -955,27 +968,32 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
-    /// no limit. The default is None.
-    pub fn max_messages_per_rpc(&mut self, max: Option<usize>) -> &mut Self {
-        self.config.max_messages_per_rpc = max;
+    /// The maximum number of publish messages we will process in a single RPC. The default is 5000.
+    pub fn max_publish_messages(&mut self, max: usize) -> &mut Self {
+        self.config.protocol.max_publish_messages = max;
         self
     }
 
-    /// The maximum number of messages to include in an IHAVE message.
-    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
-    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
-    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
-    pub fn max_ihave_length(&mut self, max_ihave_length: usize) -> &mut Self {
-        self.config.max_ihave_length = max_ihave_length;
+    /// The maximum number of metadata messages to send per peer during heartbeat gossip.
+    /// The default is 1000.
+    #[cfg(feature = "partial-messages")]
+    pub fn max_metadata_gossip(&mut self, max_metadata_length: usize) -> &mut Self {
+        self.config.max_metadata_length = max_metadata_length;
         self
     }
 
     /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
     /// within a heartbeat.
-    pub fn max_ihave_messages(&mut self, max_ihave_messages: usize) -> &mut Self {
-        self.config.max_ihave_messages = max_ihave_messages;
+    pub fn max_ihave_messages_heartbeat(&mut self, max_ihave_messages: usize) -> &mut Self {
+        self.config.max_ihave_messages_heartbeat = max_ihave_messages;
+        self
+    }
+
+    /// The maximum number of control messages (IHAVE/IWANT) we will send/receive to/from a peer.
+    /// This limits the number of IHAVE messages sent during gossip and IWANT requests received.
+    /// The default is 5000.
+    pub fn max_control_messages_sent(&mut self, max_control_messages: usize) -> &mut Self {
+        self.config.max_control_messages_sent = max_control_messages;
         self
     }
 
@@ -1049,6 +1067,14 @@ impl ConfigBuilder {
         self
     }
 
+    /// The maximum total byte size of all control messages and subscriptions in an RPC.
+    /// Validates cumulative size by scanning protobuf bytes before decoding.
+    /// Messages exceeding this limit will be rejected. The default is 16KB.
+    pub fn max_control_message_size(&mut self, size: usize) -> &mut Self {
+        self.config.protocol.max_control_message_size = size;
+        self
+    }
+
     /// The topic configuration sets mesh parameter sizes for a given topic. Notes on default
     /// below.
     ///
@@ -1079,22 +1105,31 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        let pre_configured_topics = self.config.protocol.max_transmit_sizes.keys();
-        for topic in pre_configured_topics {
-            if self.config.protocol.max_transmit_size_for_topic(topic) < 100 {
-                return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
-            }
+        if self.config.protocol.default_max_transmit_size < 100
+            || self
+                .config
+                .protocol
+                .max_transmit_sizes
+                .values()
+                .any(|size| *size < 100)
+        {
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
+        }
 
-            let mesh_n = self.config.mesh_n_for_topic(topic);
-            let mesh_n_low = self.config.mesh_n_low_for_topic(topic);
-            let mesh_n_high = self.config.mesh_n_high_for_topic(topic);
-            let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic);
-
+        let topic_configuration = &self.config.topic_configuration;
+        for TopicMeshConfig {
+            mesh_n,
+            mesh_n_low,
+            mesh_n_high,
+            mesh_outbound_min,
+        } in std::iter::once(&topic_configuration.default_mesh_params)
+            .chain(topic_configuration.topic_mesh_params.values())
+        {
             if !(mesh_outbound_min <= mesh_n_low && mesh_n_low <= mesh_n && mesh_n <= mesh_n_high) {
                 return Err(ConfigBuilderError::MeshParametersInvalid);
             }
 
-            if mesh_outbound_min * 2 > mesh_n {
+            if mesh_outbound_min * 2 > *mesh_n {
                 return Err(ConfigBuilderError::MeshOutboundInvalid);
             }
         }
@@ -1157,9 +1192,16 @@ impl std::fmt::Debug for Config {
         );
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
-        let _ = builder.field("max_messages_per_rpc", &self.max_messages_per_rpc);
-        let _ = builder.field("max_ihave_length", &self.max_ihave_length);
-        let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
+        let _ = builder.field("max_publish_messages", &self.protocol.max_publish_messages);
+        let _ = builder.field("max_control_messages_sent", &self.max_control_messages_sent);
+        let _ = builder.field(
+            "max_control_message_size",
+            &self.protocol.max_control_message_size,
+        );
+        let _ = builder.field(
+            "max_ihave_messages_heartbeat",
+            &self.max_ihave_messages_heartbeat,
+        );
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
         let _ = builder.field(
             "idontwant_message_size_threshold",
@@ -1180,7 +1222,54 @@ mod test {
     use libp2p_core::UpgradeInfo;
 
     use super::*;
-    use crate::{topic::IdentityHash, Topic};
+    use crate::{Topic, topic::IdentityHash};
+
+    #[test]
+    fn build_rejects_invalid_default_mesh_params() {
+        // mesh_n > mesh_n_high
+        assert!(matches!(
+            ConfigBuilder::default().mesh_n(20).build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        // mesh_outbound_min > mesh_n / 2
+        assert!(matches!(
+            ConfigBuilder::default().mesh_outbound_min(4).build(),
+            Err(ConfigBuilderError::MeshOutboundInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_invalid_topic_mesh_params() {
+        let topic = TopicHash::from_raw("topic");
+        assert!(matches!(
+            ConfigBuilder::default()
+                .set_topic_config(
+                    topic.clone(),
+                    TopicMeshConfig {
+                        mesh_n: 6,
+                        mesh_n_low: 8,
+                        mesh_n_high: 12,
+                        mesh_outbound_min: 2,
+                    },
+                )
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+        assert!(matches!(
+            ConfigBuilder::default()
+                .mesh_n_high_for_topic(4, topic)
+                .build(),
+            Err(ConfigBuilderError::MeshParametersInvalid)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_too_small_default_max_transmit_size() {
+        assert!(matches!(
+            ConfigBuilder::default().max_transmit_size(10).build(),
+            Err(ConfigBuilderError::MaxTransmissionSizeTooSmall)
+        ));
+    }
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

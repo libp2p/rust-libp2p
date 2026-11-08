@@ -72,7 +72,7 @@ use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::record::{self, store::RecordStore, ProviderRecord, Record};
+use crate::record::{self, ProviderRecord, Record, store::RecordStore};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -111,10 +111,10 @@ impl<T> PeriodicJob<T> {
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
     fn check_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
-        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
-            if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
-                return true;
-            }
+        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state
+            && (now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending())
+        {
+            return true;
         }
         false
     }
@@ -339,23 +339,23 @@ impl AddProviderJob {
 mod tests {
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
-    use rand::Rng;
+    use rand::RngExt;
 
     use super::*;
     use crate::record::store::MemoryStore;
 
     fn rand_put_record_job() -> PutRecordJob {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let id = PeerId::random();
-        let replicate_interval = Duration::from_secs(rng.gen_range(1..60));
-        let publish_interval = Some(replicate_interval * rng.gen_range(1..10));
-        let record_ttl = Some(Duration::from_secs(rng.gen_range(1..600)));
+        let replicate_interval = Duration::from_secs(rng.random_range(1..60));
+        let publish_interval = Some(replicate_interval * rng.random_range(1..10));
+        let record_ttl = Some(Duration::from_secs(rng.random_range(1..600)));
         PutRecordJob::new(id, replicate_interval, publish_interval, record_ttl)
     }
 
     fn rand_add_provider_job() -> AddProviderJob {
-        let mut rng = rand::thread_rng();
-        let interval = Duration::from_secs(rng.gen_range(1..60));
+        let mut rng = rand::rng();
+        let interval = Duration::from_secs(rng.random_range(1..60));
         AddProviderJob::new(interval)
     }
 

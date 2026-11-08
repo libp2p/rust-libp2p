@@ -175,7 +175,7 @@ where
                         Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Right(err))),
                         Poll::Pending => Poll::Pending,
-                    }
+                    };
                 }
             };
 

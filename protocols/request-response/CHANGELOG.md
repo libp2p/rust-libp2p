@@ -1,3 +1,19 @@
+## 0.31.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
+## 0.30.0
+
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
+
+- refactor: `Codec` no longer requires `#[async_trait]`
+  See [PR 6292](https://github.com/libp2p/rust-libp2p/pull/6292)
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.29.0
 
 - fix: public cbor/json codec module

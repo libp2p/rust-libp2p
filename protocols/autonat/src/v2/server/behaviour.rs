@@ -5,24 +5,24 @@ use std::{
 };
 
 use either::Either;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm, NetworkBehaviour,
+    ToSwarm,
     dial_opts::{DialOpts, PeerCondition},
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
-    NetworkBehaviour, ToSwarm,
+    dummy,
 };
-use rand_core::{OsRng, RngCore};
+use rand::{SeedableRng, rngs::StdRng};
 
 use crate::v2::server::handler::{
-    dial_back,
+    Handler, dial_back,
     dial_request::{self, DialBackCommand, DialBackStatus},
-    Handler,
 };
 
-pub struct Behaviour<R = OsRng>
+pub struct Behaviour<R = StdRng>
 where
-    R: Clone + Send + RngCore + 'static,
+    R: Send + rand::Rng + SeedableRng + 'static,
 {
     dialing_dial_back: HashMap<ConnectionId, DialBackCommand>,
     pending_events: VecDeque<
@@ -34,15 +34,15 @@ where
     rng: R,
 }
 
-impl Default for Behaviour<OsRng> {
+impl Default for Behaviour<StdRng> {
     fn default() -> Self {
-        Self::new(OsRng)
+        Self::new(rand::make_rng::<StdRng>())
     }
 }
 
 impl<R> Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     pub fn new(rng: R) -> Self {
         Self {
@@ -55,7 +55,7 @@ where
 
 impl<R> NetworkBehaviour for Behaviour<R>
 where
-    R: RngCore + Send + Clone + 'static,
+    R: rand::Rng + Send + SeedableRng + 'static,
 {
     type ConnectionHandler = Handler<R>;
 
@@ -71,7 +71,7 @@ where
         Ok(Either::Right(dial_request::Handler::new(
             peer,
             remote_addr.clone(),
-            self.rng.clone(),
+            self.rng.fork(),
         )))
     }
 
@@ -90,13 +90,12 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event {
-            if let Some(DialBackCommand { back_channel, .. }) =
+        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event
+            && let Some(DialBackCommand { back_channel, .. }) =
                 self.dialing_dial_back.remove(&connection_id)
-            {
-                let dial_back_status = DialBackStatus::DialErr;
-                let _ = back_channel.send(Err(dial_back_status));
-            }
+        {
+            let dial_back_status = DialBackStatus::DialErr;
+            let _ = back_channel.send(Err(dial_back_status));
         }
     }
 

@@ -26,7 +26,7 @@ use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
     autonat,
-    core::{multiaddr::Protocol, Multiaddr},
+    core::{Multiaddr, multiaddr::Protocol},
     identify, identity, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,

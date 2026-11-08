@@ -40,6 +40,10 @@ pub enum PublishError {
     /// Messages could not be sent because the queues for all peers were full. The usize represents
     /// the number of peers that were attempted.
     AllQueuesFull(usize),
+
+    /// An Error while trying to publish a partial message.
+    #[cfg(feature = "partial-messages")]
+    Partial(crate::extensions::partial_messages::PartialError),
 }
 
 impl std::fmt::Display for PublishError {
@@ -99,14 +103,17 @@ pub enum ValidationError {
     /// The PeerId was invalid
     InvalidPeerId,
     /// Signature existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     SignaturePresent,
     /// Sequence number existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     SequenceNumberPresent,
     /// Message source existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    /// [`crate::ValidationMode::Anonymous`].
     MessageSourcePresent,
+    /// Message key existed when validation has been sent to
+    /// [`crate::ValidationMode::Anonymous`].
+    KeyPresent,
     /// The data transformation failed.
     TransformFailed,
     /// Message size was too large for topic
@@ -152,9 +159,17 @@ impl std::fmt::Display for ConfigBuilderError {
             Self::MaxTransmissionSizeTooSmall => {
                 write!(f, "Maximum transmission size is too small")
             }
-            Self::HistoryLengthTooSmall => write!(f, "History length less than history gossip length"),
-            Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
-            Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
+            Self::HistoryLengthTooSmall => {
+                write!(f, "History length less than history gossip length")
+            }
+            Self::MeshParametersInvalid => write!(
+                f,
+                "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"
+            ),
+            Self::MeshOutboundInvalid => write!(
+                f,
+                "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"
+            ),
             Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
             Self::InvalidProtocol => write!(f, "Invalid protocol"),
         }

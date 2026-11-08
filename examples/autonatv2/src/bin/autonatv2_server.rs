@@ -3,15 +3,15 @@ use std::{error::Error, net::Ipv4Addr, time::Duration};
 use cfg_if::cfg_if;
 use clap::Parser;
 use libp2p::{
-    autonat,
+    Multiaddr, SwarmBuilder, autonat,
     futures::StreamExt,
     identify, identity,
     multiaddr::Protocol,
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, SwarmBuilder,
+    tcp, yamux,
 };
-use rand::rngs::OsRng;
+use rand::rngs::StdRng;
 
 #[derive(Debug, Parser)]
 #[command(name = "libp2p autonatv2 server")]
@@ -24,13 +24,24 @@ struct Opt {
 async fn main() -> Result<(), Box<dyn Error>> {
     cfg_if! {
         if #[cfg(feature = "jaeger")] {
+            use opentelemetry::trace::TracerProvider as _;
+            use opentelemetry::KeyValue;
+            use opentelemetry_otlp::SpanExporter;
+            use opentelemetry_sdk::trace::SdkTracerProvider;
             use tracing_subscriber::layer::SubscriberExt;
-            use opentelemetry_sdk::runtime::Tokio;
-            let tracer = opentelemetry_jaeger::new_agent_pipeline()
-                .with_endpoint("jaeger:6831")
-                .with_service_name("autonatv2")
-                .install_batch(Tokio)?;
-            let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+            let provider = SdkTracerProvider::builder()
+                .with_batch_exporter(
+                    SpanExporter::builder().with_tonic().build()?,
+                )
+                .with_resource(
+                    opentelemetry_sdk::Resource::builder_empty()
+                        .with_attribute(KeyValue::new("service.name", "autonatv2"))
+                        .build(),
+                )
+                .build();
+            let telemetry = tracing_opentelemetry::layer()
+                .with_tracer(provider.tracer("autonatv2"));
             let subscriber = tracing_subscriber::Registry::default()
                 .with(telemetry);
         } else {
@@ -80,7 +91,7 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(key: identity::PublicKey) -> Self {
         Self {
-            autonat: autonat::v2::server::Behaviour::new(OsRng),
+            autonat: autonat::v2::server::Behaviour::new(rand::make_rng::<StdRng>()),
             identify: identify::Behaviour::new(identify::Config::new("/ipfs/0.1.0".into(), key)),
         }
     }

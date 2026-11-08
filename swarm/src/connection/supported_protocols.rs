@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{handler::ProtocolsChange, StreamProtocol};
+use crate::{StreamProtocol, handler::ProtocolsChange};
 
 #[derive(Default, Clone, Debug)]
 pub struct SupportedProtocols {

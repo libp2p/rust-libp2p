@@ -128,7 +128,7 @@ impl<R> LengthDelimited<R> {
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "Failed to write buffered frame.",
-                    )))
+                    )));
                 }
                 Poll::Ready(Ok(n)) => this.write_buffer.advance(n),
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
@@ -198,7 +198,7 @@ where
                         .poll_read(cx, &mut this.read_buffer[*pos..])
                     {
                         Poll::Ready(Ok(0)) => {
-                            return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())))
+                            return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                         }
                         Poll::Ready(Ok(n)) => *pos += n,
                         Poll::Pending => return Poll::Pending,
@@ -249,7 +249,7 @@ where
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Maximum frame size exceeded.",
-                ))
+                ));
             }
         };
 
@@ -389,6 +389,7 @@ mod tests {
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
     use tokio::runtime::Runtime;
+    use tokio_util::compat::TokioAsyncReadCompatExt;
 
     use crate::length_delimited::LengthDelimited;
 
@@ -490,7 +491,9 @@ mod tests {
     #[test]
     fn writing_reading() {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
-            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+            let (client_connection, server_connection) = tokio::io::duplex(100);
+            let (client_connection, server_connection) =
+                (client_connection.compat(), server_connection.compat());
 
             let rt = Runtime::new().unwrap();
             rt.block_on(async move {

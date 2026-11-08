@@ -1,16 +1,16 @@
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
+pub(crate) use native::{Instant, RedisClient, build_swarm, init_logger, sleep};
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
-pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
+pub(crate) use wasm::{Instant, RedisClient, build_swarm, init_logger, sleep};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
     use std::time::Duration;
 
-    use anyhow::{bail, Context, Result};
-    use futures::{future::BoxFuture, FutureExt};
+    use anyhow::{Context, Result, bail};
+    use futures::{FutureExt, future::BoxFuture};
     use libp2p::{
         identity::Keypair,
         noise,
@@ -142,7 +142,7 @@ pub(crate) mod native {
                     .with_other_transport(|key| {
                         Ok(webrtc::tokio::Transport::new(
                             key.clone(),
-                            webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
+                            webrtc::tokio::Certificate::generate(&mut rand::rng())?,
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
@@ -164,12 +164,12 @@ pub(crate) mod native {
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
-            let mut conn = self.0.get_async_connection().await?;
+            let mut conn = self.0.get_multiplexed_async_connection().await?;
             Ok(conn.blpop(key, timeout as f64).await?)
         }
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
-            let mut conn = self.0.get_async_connection().await?;
+            let mut conn = self.0.get_multiplexed_async_connection().await?;
             conn.rpush(key, value).await.map_err(Into::into)
         }
     }
@@ -179,14 +179,15 @@ pub(crate) mod native {
 pub(crate) mod wasm {
     use std::time::Duration;
 
-    use anyhow::{bail, Context, Result};
+    use anyhow::{Context, Result, bail};
     use futures::future::{BoxFuture, FutureExt};
     use libp2p::{
+        Transport as _,
         core::upgrade::Version,
         identity::Keypair,
         noise,
         swarm::{NetworkBehaviour, Swarm},
-        websocket_websys, webtransport_websys, yamux, Transport as _,
+        websocket_websys, webtransport_websys, yamux,
     };
     use libp2p_mplex as mplex;
     use libp2p_webrtc_websys as webrtc_websys;

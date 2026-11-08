@@ -1,3 +1,24 @@
+## 0.16.0
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
+## 0.15.0
+
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
+
+## 0.14.1
+
+- Replace `lru::LruCache` with `hashlink::LruCache`.
+  See [PR #6138](https://github.com/libp2p/rust-libp2p/pull/6138)
+
 ## 0.14.0
 
 <!-- Update to libp2p-swarm v0.47.0 -->

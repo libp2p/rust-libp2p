@@ -19,13 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     pin::Pin,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{Arc, Mutex, atomic::AtomicUsize},
     task::{Context, Poll, Waker},
 };
 
-use crate::{types::RpcOut, MessageId};
+use crate::{MessageId, types::RpcOut};
 
 const CONTROL_MSGS_LIMIT: usize = 20_000;
 
@@ -62,7 +62,10 @@ impl Queue {
     /// which will only happen for control and non priority messages.
     pub(crate) fn try_push(&mut self, message: RpcOut) -> Result<(), Box<RpcOut>> {
         match message {
-            RpcOut::Subscribe(_) | RpcOut::Unsubscribe(_) => {
+            RpcOut::Extensions(_)
+            | RpcOut::Subscribe { .. }
+            | RpcOut::SubscribeMany(_)
+            | RpcOut::Unsubscribe(_) => {
                 self.priority
                     .try_push(message)
                     .expect("Shared is unbounded");
@@ -72,24 +75,29 @@ impl Queue {
                 self.control.try_push(message)
             }
             RpcOut::Publish { .. }
-            | RpcOut::Forward { .. }
             | RpcOut::IHave(_)
+            | RpcOut::TestExtension
             | RpcOut::IWant(_) => self.non_priority.try_push(message),
+            #[cfg(feature = "partial-messages")]
+            RpcOut::PartialMessage(_) => self.non_priority.try_push(message),
         }
     }
 
     /// Remove pending low priority Publish and Forward messages.
     /// Returns the number of messages removed.
     pub(crate) fn remove_data_messages(&mut self, message_ids: &[MessageId]) -> usize {
+        if message_ids.is_empty() {
+            return 0;
+        }
+
+        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
+        let message_ids: HashSet<&MessageId> = message_ids.iter().collect();
+
         let mut count = 0;
         self.non_priority.retain(|message| match message {
-            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. } => {
-                if message_ids.contains(message_id) {
-                    count += 1;
-                    false
-                } else {
-                    true
-                }
+            RpcOut::Publish { message_id, .. } if message_ids.contains(message_id) => {
+                count += 1;
+                false
             }
             _ => true,
         });

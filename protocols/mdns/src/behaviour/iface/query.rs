@@ -54,23 +54,23 @@ impl MdnsPacket {
     ) -> Result<Option<MdnsPacket>, hickory_proto::ProtoError> {
         let packet = Message::from_vec(buf)?;
 
-        if packet.query().is_none() {
+        if packet.queries.is_empty() {
             return Ok(Some(MdnsPacket::Response(MdnsResponse::new(&packet, from))));
         }
 
         if packet
-            .queries()
+            .queries
             .iter()
             .any(|q| q.name().to_utf8() == SERVICE_NAME_FQDN)
         {
             return Ok(Some(MdnsPacket::Query(MdnsQuery {
                 from,
-                query_id: packet.header().id(),
+                query_id: packet.metadata.id,
             })));
         }
 
         if packet
-            .queries()
+            .queries
             .iter()
             .any(|q| q.name().to_utf8() == META_QUERY_SERVICE_FQDN)
         {
@@ -78,7 +78,7 @@ impl MdnsPacket {
             // one with SERVICE_NAME and one with META_QUERY_SERVICE?
             return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                 from,
-                query_id: packet.header().id(),
+                query_id: packet.metadata.id,
             })));
         }
 
@@ -154,18 +154,18 @@ impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
     pub(crate) fn new(packet: &Message, from: SocketAddr) -> MdnsResponse {
         let peers = packet
-            .answers()
+            .answers
             .iter()
             .filter_map(|record| {
-                if record.name().to_string() != SERVICE_NAME_FQDN {
+                if record.name.to_string() != SERVICE_NAME_FQDN {
                     return None;
                 }
 
-                let RData::PTR(record_value) = record.data() else {
+                let RData::PTR(record_value) = &record.data else {
                     return None;
                 };
 
-                MdnsPeer::new(packet, record_value, record.ttl())
+                MdnsPeer::new(packet, record_value, record.ttl)
             })
             .collect();
 
@@ -184,7 +184,14 @@ impl MdnsResponse {
                 let new_expiration = now + peer.ttl();
 
                 peer.addresses().iter().filter_map(move |address| {
-                    let new_addr = _address_translation(address, &observed)?;
+                    let new_addr = if observed_is_link_local(&observed) {
+                        address.clone()
+                    } else {
+                        match _address_translation(address, &observed) {
+                            Some(a) => a,
+                            None => return None,
+                        }
+                    };
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
@@ -236,20 +243,20 @@ impl MdnsPeer {
     pub(crate) fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
-            .additionals()
+            .additionals
             .iter()
             .filter_map(|add_record| {
-                if add_record.name() != record_value {
+                if &add_record.name != record_value {
                     return None;
                 }
 
-                if let RData::TXT(ref txt) = add_record.data() {
+                if let RData::TXT(txt) = &add_record.data {
                     Some(txt)
                 } else {
                     None
                 }
             })
-            .flat_map(|txt| txt.iter())
+            .flat_map(|txt| txt.txt_data.iter())
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
                 let addr = dns::decode_character_string(txt).ok()?;
@@ -311,6 +318,15 @@ impl fmt::Debug for MdnsPeer {
     }
 }
 
+/// Returns `true` when the first component of `observed` is an IPv6 link-local
+/// address (fe80::/10).  mDNS multicast on an IPv6-only LAN always originates
+pub(crate) fn observed_is_link_local(observed: &Multiaddr) -> bool {
+    match observed.iter().next() {
+        Some(Protocol::Ip6(addr)) => addr.is_unicast_link_local(),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{super::dns::build_query_response, *};
@@ -328,20 +344,20 @@ mod tests {
         let packets = build_query_response(
             0xf8f8,
             peer_id,
-            vec![&addr1, &addr2].into_iter(),
+            vec![&addr1, &addr2],
             Duration::from_secs(60),
         );
 
         for bytes in packets {
             let packet = Message::from_vec(&bytes).expect("unable to parse packet");
             let record_value = packet
-                .answers()
+                .answers
                 .iter()
                 .filter_map(|record| {
-                    if record.name().to_utf8() != SERVICE_NAME_FQDN {
+                    if record.name.to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let RData::PTR(record_value) = record.data() else {
+                    let RData::PTR(record_value) = &record.data else {
                         return None;
                     };
                     Some(record_value)
@@ -351,6 +367,75 @@ mod tests {
 
             let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
+        }
+    }
+}
+
+mod tests_ipv6 {
+    #[allow(unused_imports)]
+    use super::{super::dns::build_query_response, *};
+
+    #[test]
+    fn test_observed_is_link_local() {
+        let ll: Multiaddr = "/ip6/fe80::1/udp/5353".parse().unwrap();
+        assert!(observed_is_link_local(&ll));
+
+        let ula: Multiaddr = "/ip6/fd12::1/udp/5353".parse().unwrap();
+        assert!(!observed_is_link_local(&ula));
+
+        let v4: Multiaddr = "/ip4/192.168.1.1/udp/5353".parse().unwrap();
+        assert!(!observed_is_link_local(&v4));
+    }
+
+    /// Regression test for https://github.com/libp2p/rust-libp2p/issues/6474
+    #[test]
+    fn test_extract_discovered_ipv6_lan_preserves_ula_address() {
+        use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+
+        let peer_id = PeerId::random();
+        let local_peer_id = PeerId::random();
+
+        let mut announced_addr: Multiaddr = "/ip6/fd12::1/udp/4001/quic-v1"
+            .parse()
+            .expect("bad multiaddress");
+        announced_addr.push(Protocol::P2p(peer_id));
+
+        let packets = build_query_response(
+            0x1234,
+            peer_id,
+            vec![&announced_addr],
+            Duration::from_secs(300),
+        );
+
+        for bytes in packets {
+            let packet = Message::from_vec(&bytes).expect("unable to parse packet");
+
+            let link_local_src = SocketAddr::V6(SocketAddrV6::new(
+                "fe80::abcd:ef01".parse::<Ipv6Addr>().unwrap(),
+                5353,
+                0,
+                0,
+            ));
+            let response = MdnsResponse::new(&packet, link_local_src);
+
+            let discovered: Vec<_> = response
+                .extract_discovered(Instant::now(), local_peer_id)
+                .collect();
+
+            assert!(
+                !discovered.is_empty(),
+                "expected at least one discovered address"
+            );
+
+            for (pid, addr, _) in &discovered {
+                assert_eq!(*pid, peer_id);
+                let addr_str = addr.to_string();
+                assert!(addr_str.contains("fd12"), "expected ULA in {addr_str}");
+                assert!(
+                    !addr_str.contains("fe80"),
+                    "fe80 must not appear in {addr_str}"
+                );
+            }
         }
     }
 }

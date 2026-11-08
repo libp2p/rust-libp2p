@@ -33,10 +33,10 @@ use crate::{
 };
 
 pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
-    let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(io, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     let proto::StopMessage {
-        type_pb,
+        r#type,
         peer,
         limit,
         status: _,
@@ -45,8 +45,11 @@ pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
         .await
         .ok_or(Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
-    match type_pb {
-        proto::StopMessageType::CONNECT => {
+    let msg_type = proto::StopMessageType::try_from(r#type)
+        .map_err(|_| ProtocolViolation::UnexpectedType(r#type.to_string()))?;
+
+    match msg_type {
+        proto::StopMessageType::Connect => {
             let src_peer_id = PeerId::from_bytes(&peer.ok_or(ProtocolViolation::MissingPeer)?.id)
                 .map_err(|_| ProtocolViolation::ParsePeerId)?;
             Ok(Circuit {
@@ -55,7 +58,7 @@ pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
                 limit: limit.map(Into::into),
             })
         }
-        proto::StopMessageType::STATUS => {
+        proto::StopMessageType::Status => {
             Err(Error::Protocol(ProtocolViolation::UnexpectedTypeStatus))
         }
     }
@@ -69,8 +72,8 @@ pub(crate) enum Error {
     Io(#[from] io::Error),
 }
 
-impl From<quick_protobuf_codec::Error> for Error {
-    fn from(error: quick_protobuf_codec::Error) -> Self {
+impl From<prost_codec::Error> for Error {
+    fn from(error: prost_codec::Error) -> Self {
         Self::Protocol(ProtocolViolation::Codec(error))
     }
 }
@@ -78,17 +81,19 @@ impl From<quick_protobuf_codec::Error> for Error {
 #[derive(Debug, Error)]
 pub(crate) enum ProtocolViolation {
     #[error(transparent)]
-    Codec(#[from] quick_protobuf_codec::Error),
+    Codec(#[from] prost_codec::Error),
     #[error("Failed to parse peer id.")]
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
     MissingPeer,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
+    #[error("Unexpected message type '{0}'")]
+    UnexpectedType(String),
 }
 
 pub(crate) struct Circuit {
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::StopMessage>>,
+    substream: Framed<Stream, prost_codec::Codec<proto::StopMessage>>,
     src_peer_id: PeerId,
     limit: Option<protocol::Limit>,
 }
@@ -104,10 +109,10 @@ impl Circuit {
 
     pub(crate) async fn accept(mut self) -> Result<(Stream, Bytes), Error> {
         let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::STATUS,
+            r#type: proto::StopMessageType::Status as i32,
             peer: None,
             limit: None,
-            status: Some(proto::Status::OK),
+            status: Some(proto::Status::Ok as i32),
         };
 
         self.send(msg).await?;
@@ -128,10 +133,10 @@ impl Circuit {
 
     pub(crate) async fn deny(mut self, status: proto::Status) -> Result<(), Error> {
         let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::STATUS,
+            r#type: proto::StopMessageType::Status as i32,
             peer: None,
             limit: None,
-            status: Some(status),
+            status: Some(status as i32),
         };
 
         self.send(msg).await?;

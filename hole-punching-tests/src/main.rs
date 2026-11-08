@@ -30,13 +30,14 @@ use anyhow::{Context, Result};
 use either::Either;
 use futures::stream::StreamExt;
 use libp2p::{
+    Swarm,
     core::{
         multiaddr::{Multiaddr, Protocol},
         transport::ListenerId,
     },
     dcutr, identify, noise, ping, relay,
-    swarm::{dial_opts::DialOpts, ConnectionId, NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Swarm,
+    swarm::{ConnectionId, NetworkBehaviour, SwarmEvent, dial_opts::DialOpts},
+    tcp, yamux,
 };
 use redis::AsyncCommands;
 
@@ -277,7 +278,7 @@ fn quic_addr(addr: IpAddr) -> Multiaddr {
 }
 
 struct RedisClient {
-    inner: redis::aio::Connection,
+    inner: redis::aio::MultiplexedConnection,
 }
 
 impl RedisClient {
@@ -285,7 +286,7 @@ impl RedisClient {
         let client = redis::Client::open(format!("redis://{host}:{port}/"))
             .context("Bad redis server URL")?;
         let connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .context("Failed to connect to redis server")?;
 

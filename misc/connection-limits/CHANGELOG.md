@@ -1,3 +1,20 @@
+## 0.8.0
+
+- Remove the entry of a peer from the established connections per peer once its last connection
+  closes, and do not create one for a connection that was never established.
+  See [PR 6709](https://github.com/libp2p/rust-libp2p/pull/6709).
+
+- Replace `ConnectionLimits::with_max_pending_incoming` with `with_max_pending_incoming_per_source`,
+  which limits pending incoming connections per remote source instead of globally.
+  See [PR 6657](https://github.com/libp2p/rust-libp2p/pull/6657).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
+## 0.7.0
+
+- Raise MSRV to 1.88.0.
+  See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
 ## 0.6.0
 
 - Allow setting Peer IDs for bypassing limit check.

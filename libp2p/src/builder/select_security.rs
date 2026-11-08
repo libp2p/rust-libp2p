@@ -24,7 +24,7 @@
 use std::iter::{Chain, Map};
 
 use either::Either;
-use futures::{future, future::MapOk, TryFutureExt};
+use futures::{TryFutureExt, future, future::MapOk};
 use libp2p_core::{
     either::EitherFuture,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},

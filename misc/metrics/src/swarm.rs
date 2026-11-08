@@ -29,7 +29,7 @@ use prometheus_client::{
     metrics::{
         counter::Counter,
         family::Family,
-        histogram::{exponential_buckets, Histogram},
+        histogram::{Histogram, exponential_buckets},
     },
     registry::{Registry, Unit},
 };
@@ -371,6 +371,7 @@ struct ConnectionClosedLabels {
 enum ConnectionError {
     Io,
     KeepAliveTimeout,
+    Panicked,
 }
 
 impl From<&libp2p_swarm::ConnectionError> for ConnectionError {
@@ -378,6 +379,7 @@ impl From<&libp2p_swarm::ConnectionError> for ConnectionError {
         match value {
             libp2p_swarm::ConnectionError::IO(_) => ConnectionError::Io,
             libp2p_swarm::ConnectionError::KeepAliveTimeout => ConnectionError::KeepAliveTimeout,
+            libp2p_swarm::ConnectionError::Panicked(_) => ConnectionError::Panicked,
         }
     }
 }

@@ -70,7 +70,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use multistream_select::{dialer_select_proto, Version};
+//! use multistream_select::{Version, dialer_select_proto};
 //! use tokio::{net::TcpStream, runtime::Runtime};
 //! use tokio_util::compat::TokioAsyncReadCompatExt;
 //!
@@ -97,8 +97,8 @@ mod negotiated;
 mod protocol;
 
 pub use self::{
-    dialer_select::{dialer_select_proto, DialerSelectFuture},
-    listener_select::{listener_select_proto, ListenerSelectFuture},
+    dialer_select::{DialerSelectFuture, dialer_select_proto},
+    listener_select::{ListenerSelectFuture, listener_select_proto},
     negotiated::{Negotiated, NegotiatedComplete, NegotiationError},
     protocol::ProtocolError,
 };

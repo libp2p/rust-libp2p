@@ -33,16 +33,15 @@ use std::{
 };
 
 use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
 
 use crate::{
+    Stream,
     handler::{
         AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend},
-    Stream,
 };
 
 /// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same type.
@@ -96,13 +95,13 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            if let Some(i) = info.take(&key) {
-                h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                    info: i,
-                    error,
-                }));
-            }
+        if let Some(h) = self.handlers.get_mut(&key)
+            && let Some(i) = info.take(&key)
+        {
+            h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+                info: i,
+                error,
+            }));
         }
     }
 }
@@ -255,7 +254,7 @@ where
 
         // Not always polling handlers in the same order
         // should give anyone the chance to make progress.
-        let pos = rand::thread_rng().gen_range(0..self.handlers.len());
+        let pos = rand::random_range(0..self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {
             if let Poll::Ready(e) = h.poll(cx) {

@@ -21,24 +21,36 @@
 use std::{
     collections::{HashMap, HashSet},
     iter,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 
 use bimap::BiMap;
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use futures::{
+    FutureExt, StreamExt,
+    future::{AbortHandle, Abortable, Aborted, BoxFuture},
+    stream::FuturesUnordered,
+};
+use hashlink::LruCache;
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm, behaviour::FromSwarm,
 };
 
 use crate::{
-    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
     MAX_TTL, MIN_TTL,
+    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
 };
+
+/// Default maximum active registrations per peer.
+pub const MAX_REGISTRATION_PEER: usize = 32;
+/// Default maximum active registrations in total.
+pub const MAX_REGISTRATIONS_TOTAL: usize = 10_000;
+/// Default size of the cache that stores client cookies.
+pub const COOKIES_CACHE_SIZE: usize = 10_000;
 
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
@@ -49,6 +61,9 @@ pub struct Behaviour {
 pub struct Config {
     min_ttl: Ttl,
     max_ttl: Ttl,
+    max_registrations_per_peer: usize,
+    max_registrations_total: usize,
+    max_cookies: usize,
 }
 
 impl Config {
@@ -61,6 +76,21 @@ impl Config {
         self.max_ttl = max_ttl;
         self
     }
+
+    pub fn with_max_registration_per_peer(mut self, max: usize) -> Self {
+        self.max_registrations_per_peer = max;
+        self
+    }
+
+    pub fn with_max_registration_total(mut self, max: usize) -> Self {
+        self.max_registrations_total = max;
+        self
+    }
+
+    pub fn with_max_stored_cookies(mut self, max: usize) -> Self {
+        self.max_cookies = max;
+        self
+    }
 }
 
 impl Default for Config {
@@ -68,6 +98,9 @@ impl Default for Config {
         Self {
             min_ttl: MIN_TTL,
             max_ttl: MAX_TTL,
+            max_registrations_per_peer: MAX_REGISTRATION_PEER,
+            max_registrations_total: MAX_REGISTRATIONS_TOTAL,
+            max_cookies: COOKIES_CACHE_SIZE,
         }
     }
 }
@@ -78,7 +111,7 @@ impl Behaviour {
         Self {
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
-                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Inbound)),
+                iter::once((crate::PROTOCOL_NAME, ProtocolSupport::Inbound)),
                 libp2p_request_response::Config::default(),
             ),
 
@@ -188,13 +221,13 @@ impl NetworkBehaviour for Behaviour {
                         if let Some((event, response)) =
                             handle_request(peer_id, request, &mut self.registrations)
                         {
-                            if let Some(resp) = response {
-                                if let Err(resp) = self.inner.send_response(channel, resp) {
-                                    tracing::debug!(
-                                        %peer_id,
-                                        "Failed to send response, peer disconnected {resp:?}"
-                                    );
-                                }
+                            if let Some(resp) = response
+                                && let Err(resp) = self.inner.send_response(channel, resp)
+                            {
+                                tracing::debug!(
+                                    %peer_id,
+                                    "Failed to send response, peer disconnected {resp:?}"
+                                );
                             }
 
                             return Poll::Ready(ToSwarm::GenerateEvent(event));
@@ -279,9 +312,7 @@ fn handle_request(
 
                     Some((event, Some(response)))
                 }
-                Err(TtlOutOfRange::TooLong { .. }) | Err(TtlOutOfRange::TooShort { .. }) => {
-                    let error = ErrorCode::InvalidTtl;
-
+                Err(error) => {
                     let response = Message::RegisterResponse(Err(error));
 
                     let event = Event::PeerNotRegistered {
@@ -351,21 +382,13 @@ impl RegistrationId {
 #[derive(Debug, PartialEq)]
 struct ExpiredRegistration(Registration);
 
-pub struct Registrations {
+struct Registrations {
+    config: Config,
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
-    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
-    min_ttl: Ttl,
-    max_ttl: Ttl,
-    next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TtlOutOfRange {
-    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
-    TooLong { bound: Ttl, requested: Ttl },
-    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
-    TooShort { bound: Ttl, requested: Ttl },
+    cookies: LruCache<Cookie, HashSet<RegistrationId>>,
+    next_expiry: FuturesUnordered<BoxFuture<'static, Result<RegistrationId, Aborted>>>,
+    abort_handles: HashMap<RegistrationId, AbortHandle>,
 }
 
 impl Default for Registrations {
@@ -375,49 +398,47 @@ impl Default for Registrations {
 }
 
 impl Registrations {
-    pub fn with_config(config: Config) -> Self {
+    fn with_config(config: Config) -> Self {
         Self {
             registrations_for_peer: Default::default(),
             registrations: Default::default(),
-            min_ttl: config.min_ttl,
-            max_ttl: config.max_ttl,
-            cookies: Default::default(),
-            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
+            cookies: LruCache::new(config.max_cookies),
+            config,
+            next_expiry: FuturesUnordered::from_iter(vec![
+                futures::future::pending::<Result<RegistrationId, Aborted>>().boxed(),
+            ]),
+            abort_handles: Default::default(),
         }
     }
 
-    pub fn add(
-        &mut self,
-        new_registration: NewRegistration,
-    ) -> Result<Registration, TtlOutOfRange> {
+    fn add(&mut self, new_registration: NewRegistration) -> Result<Registration, ErrorCode> {
         let ttl = new_registration.effective_ttl();
-        if ttl > self.max_ttl {
-            return Err(TtlOutOfRange::TooLong {
-                bound: self.max_ttl,
-                requested: ttl,
-            });
-        }
-        if ttl < self.min_ttl {
-            return Err(TtlOutOfRange::TooShort {
-                bound: self.min_ttl,
-                requested: ttl,
-            });
+        if ttl > self.config.max_ttl || ttl < self.config.min_ttl {
+            return Err(ErrorCode::InvalidTtl);
         }
 
+        let peer = new_registration.record.peer_id();
         let namespace = new_registration.namespace;
+        let key = (peer, namespace.clone());
+
+        // Renewing an existing registration replaces it, so it doesn't count against the limits.
+        if let Some(existing_id) = self.registrations_for_peer.get_by_left(&key).copied() {
+            self.remove_registration(&existing_id);
+        } else if self
+            .registrations_for_peer
+            .left_values()
+            .filter(|(p, _)| p == &peer)
+            .count()
+            >= self.config.max_registrations_per_peer
+            || self.registrations_for_peer.len() >= self.config.max_registrations_total
+        {
+            return Err(ErrorCode::Unavailable);
+        }
+
         let registration_id = RegistrationId::new();
 
-        if let Some(old_registration) = self
-            .registrations_for_peer
-            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
-        {
-            self.registrations.remove(old_registration);
-        }
-
-        self.registrations_for_peer.insert(
-            (new_registration.record.peer_id(), namespace.clone()),
-            registration_id,
-        );
+        self.registrations_for_peer
+            .insert((peer, namespace.clone()), registration_id);
 
         let registration = Registration {
             namespace,
@@ -427,26 +448,43 @@ impl Registrations {
         self.registrations
             .insert(registration_id, registration.clone());
 
-        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl))
-            .map(move |_| registration_id)
-            .boxed();
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        self.abort_handles.insert(registration_id, abort_handle);
 
-        self.next_expiry.push(next_expiry);
+        let next_expiry = Abortable::new(
+            futures_timer::Delay::new(Duration::from_secs(ttl)).map(move |_| registration_id),
+            abort_registration,
+        );
+
+        self.next_expiry.push(next_expiry.boxed());
 
         Ok(registration)
     }
 
-    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
+    fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
         let reggo_to_remove = self
             .registrations_for_peer
             .remove_by_left(&(peer_id, namespace));
 
         if let Some((_, reggo_to_remove)) = reggo_to_remove {
-            self.registrations.remove(&reggo_to_remove);
+            self.remove_registration(&reggo_to_remove);
         }
     }
 
-    pub fn get(
+    fn remove_registration(&mut self, id: &RegistrationId) {
+        if let Some(handle) = self.abort_handles.remove(id) {
+            handle.abort();
+        }
+        self.registrations.remove(id);
+        self.cookies.retain(|_, registrations| {
+            registrations.remove(id);
+
+            // retain all cookies where there are still registrations left
+            !registrations.is_empty()
+        });
+    }
+
+    fn get(
         &mut self,
         discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
@@ -459,7 +497,7 @@ impl Registrations {
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
             // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
-                return Err(CookieNamespaceMismatch)
+                return Err(CookieNamespaceMismatch);
             }
             // every other combination is fine
             _ => {}
@@ -510,9 +548,17 @@ impl Registrations {
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
         loop {
-            let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
-                "This stream should never finish because it is initialised with a pending future",
-            );
+            let expired_registration = match ready!(self.next_expiry.poll_next_unpin(cx)) {
+                // A timer for a registration that was replaced or unregistered. Nothing to clean
+                // up.
+                Some(Err(_)) => continue,
+                Some(Ok(registration_id)) => registration_id,
+                None => unreachable!(
+                    "This stream should never finish because it is initialised with a pending future"
+                ),
+            };
+
+            self.abort_handles.remove(&expired_registration);
 
             // clean up our cookies
             self.cookies.retain(|_, registrations| {
@@ -536,9 +582,8 @@ impl Registrations {
     }
 }
 
-#[derive(Debug, thiserror::Error, Eq, PartialEq)]
-#[error("The provided cookie is not valid for a DISCOVER request for the given namespace")]
-pub struct CookieNamespaceMismatch;
+#[derive(Debug, Eq, PartialEq)]
+struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
@@ -646,10 +691,8 @@ mod tests {
 
     #[tokio::test]
     async fn given_two_registration_ttls_one_expires_one_lives() {
-        let mut registrations = Registrations::with_config(Config {
-            min_ttl: 0,
-            max_ttl: 4,
-        });
+        let mut registrations =
+            Registrations::with_config(Config::default().with_min_ttl(0).with_max_ttl(4));
 
         let start_time = SystemTime::now();
 
@@ -682,10 +725,8 @@ mod tests {
 
     #[tokio::test]
     async fn given_peer_unregisters_before_expiry_do_not_emit_registration_expired() {
-        let mut registrations = Registrations::with_config(Config {
-            min_ttl: 1,
-            max_ttl: 10,
-        });
+        let mut registrations =
+            Registrations::with_config(Config::default().with_min_ttl(1).with_max_ttl(10));
         let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
         let namespace = dummy_registration.namespace.clone();
         let peer_id = dummy_registration.record.peer_id();
@@ -704,10 +745,8 @@ mod tests {
     #[tokio::test]
     async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry()
     {
-        let mut registrations = Registrations::with_config(Config {
-            min_ttl: 0,
-            max_ttl: 10,
-        });
+        let mut registrations =
+            Registrations::with_config(Config::default().with_min_ttl(0).with_max_ttl(10));
         let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
 
         registrations.add(dummy_registration.clone()).unwrap();
@@ -721,10 +760,8 @@ mod tests {
 
     #[tokio::test]
     async fn cookies_are_cleaned_up_if_registrations_expire() {
-        let mut registrations = Registrations::with_config(Config {
-            min_ttl: 1,
-            max_ttl: 10,
-        });
+        let mut registrations =
+            Registrations::with_config(Config::default().with_min_ttl(1).with_max_ttl(10));
 
         registrations
             .add(new_dummy_registration_with_ttl("foo", 2))
@@ -760,6 +797,48 @@ mod tests {
 
         let (discover2, _) = registrations.get(None, Some(cookie), None).unwrap();
         assert_eq!(discover2.count(), 1);
+    }
+
+    #[test]
+    fn peer_at_registration_limit_can_renew_existing_registration() {
+        let alice = identity::Keypair::generate_ed25519();
+        let mut registrations = Registrations::with_config(
+            Config::default()
+                .with_max_registration_per_peer(2)
+                .with_max_registration_total(10),
+        );
+        registrations
+            .add(new_registration("foo", alice.clone(), None))
+            .unwrap();
+        registrations
+            .add(new_registration("bar", alice.clone(), None))
+            .unwrap();
+
+        registrations
+            .add(new_registration("foo", alice.clone(), None))
+            .expect("renewing an existing registration must not hit the limit");
+
+        assert_eq!(
+            registrations
+                .add(new_registration("baz", alice, None))
+                .unwrap_err(),
+            ErrorCode::Unavailable
+        );
+    }
+
+    #[test]
+    fn total_registration_limit_is_not_exceeded() {
+        let mut registrations =
+            Registrations::with_config(Config::default().with_max_registration_total(2));
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
+
+        assert_eq!(
+            registrations
+                .add(new_dummy_registration("foo"))
+                .unwrap_err(),
+            ErrorCode::Unavailable
+        );
     }
 
     fn new_dummy_registration(namespace: &'static str) -> NewRegistration {

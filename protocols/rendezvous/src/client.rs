@@ -29,7 +29,7 @@ use futures::{
     future::{BoxFuture, FutureExt},
     stream::{FuturesUnordered, StreamExt},
 };
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr, PeerRecord};
+use libp2p_core::{Endpoint, Multiaddr, PeerRecord, transport::PortUse};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
@@ -73,7 +73,7 @@ impl Behaviour {
             events: Default::default(),
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
-                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
+                iter::once((crate::PROTOCOL_NAME, ProtocolSupport::Outbound)),
                 libp2p_request_response::Config::default(),
             ),
             keypair,
@@ -82,7 +82,7 @@ impl Behaviour {
             discovered_peers: Default::default(),
             registered_namespaces: Default::default(),
             expiring_registrations: FuturesUnordered::from_iter(vec![
-                futures::future::pending().boxed()
+                futures::future::pending().boxed(),
             ]),
             external_addresses: Default::default(),
         }
@@ -393,7 +393,8 @@ impl Behaviour {
                     let peer_id = registration.record.peer_id();
                     let addresses = registration.record.addresses();
                     let namespace = registration.namespace.clone();
-                    let ttl = registration.ttl;
+                    // Max TTL allowed, 1 year to avoid overflows.
+                    let ttl = registration.ttl.min(31_556_952);
 
                     // Emit events for all newly discovered addresses.
                     let new_addr_events = addresses
