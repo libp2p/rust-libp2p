@@ -112,8 +112,8 @@ where
     }
 
     /// The certificate resolver to hand to a TLS-serving transport.
-    pub fn certificate_resolver(&self) -> Arc<dyn rustls::server::ResolvesServerCert> {
-        Arc::new(self.resolver.clone())
+    pub fn certificate_resolver(&self) -> AutoTlsCertResolver {
+        self.resolver.clone()
     }
 
     fn start_issuance(&mut self) {
