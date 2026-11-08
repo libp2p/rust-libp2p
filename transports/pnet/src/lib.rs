@@ -87,10 +87,10 @@ impl PreSharedKey {
 fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
     if s.len() == KEY_SIZE * 2 {
         let mut r = [0u8; KEY_SIZE];
-        for i in 0..KEY_SIZE {
+        for (i, byte) in r.iter_mut().enumerate() {
             // A pair that cuts through a multi-byte character is not a hex digit either.
             let pair = s.get(i * 2..i * 2 + 2).unwrap_or("\u{FFFD}");
-            r[i] = u8::from_str_radix(pair, 16).map_err(KeyParseError::InvalidKeyChar)?;
+            *byte = u8::from_str_radix(pair, 16).map_err(KeyParseError::InvalidKeyChar)?;
         }
         Ok(r)
     } else {
