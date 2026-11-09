@@ -33,6 +33,7 @@ use libp2p_quic as quic;
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
+use tracing_test::traced_test;
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
@@ -444,6 +445,52 @@ async fn test_local_listener_reuse() {
     let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
     assert_eq!(send_back_addr, a_listen_addr);
+}
+
+/// Under [`quic::InboundAddressValidation::Always`] the listener must send a
+/// Retry packet before the handshake starts. quinn's client handles the Retry
+/// transparently, so the connection still succeeds.
+#[cfg(feature = "tokio")]
+#[tokio::test]
+#[traced_test]
+async fn inbound_address_validation_always() {
+    let (a_peer_id, mut a_transport) = create_transport::<quic::tokio::Provider>(|config| {
+        config.inbound_address_validation = quic::InboundAddressValidation::Always;
+    });
+    let (b_peer_id, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, a_addr).await;
+
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+    assert!(
+        logs_contain("Sent Retry to validate inbound address"),
+        "the handshake must only start after a Retry round trip"
+    );
+}
+
+/// Loopback is exempt from address validation: the default configuration must
+/// never send a Retry to a local connection.
+#[cfg(feature = "tokio")]
+#[tokio::test]
+#[traced_test]
+async fn inbound_address_validation_default_rate() {
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+
+    // Well within the default burst of 4 per source; loopback is exempt anyway.
+    for _ in 0..5 {
+        connect(&mut a_transport, &mut b_transport, a_addr.clone()).await;
+    }
+
+    assert!(
+        !logs_contain("Sent Retry to validate inbound address"),
+        "loopback connections must never be validated"
+    );
 }
 
 async fn smoke<P: Provider>() {
