@@ -1226,12 +1226,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn max_buffer_behaviour() {
-        use tracing_subscriber::EnvFilter;
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         fn prop(cfg: Config, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
             let mut codec = Codec::new();
@@ -1365,12 +1361,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn close_on_error() {
-        use tracing_subscriber::EnvFilter;
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         fn prop(cfg: Config, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
 
