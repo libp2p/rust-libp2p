@@ -36,7 +36,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 quickcheck = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
 tokio-util = { workspace = true, features = ["compat"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

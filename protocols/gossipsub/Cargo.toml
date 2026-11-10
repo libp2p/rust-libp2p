@@ -45,7 +45,7 @@ prometheus-client = { workspace = true, optional = true }
 libp2p-core = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 [target.'cfg(target_family="wasm")'.dependencies]

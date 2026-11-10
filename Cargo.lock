@@ -1745,9 +1745,9 @@ dependencies = [
 
 [[package]]
 name = "futures-bounded"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b604752cefc5aa3ab98992a107a8bd99465d2825c1584e0b60cb6957b21e19d7"
+checksum = "c2c93f4727951884ba6185c9a38379d94aba63c11c5cd14f2664062b99efb85a"
 dependencies = [
  "futures-timer",
  "futures-util",
@@ -2941,7 +2941,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3040,7 +3040,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3056,7 +3056,7 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3109,7 +3109,7 @@ dependencies = [
  "sha2 0.11.1",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3132,7 +3132,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3189,7 +3189,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "uint",
  "web-time",
 ]
@@ -3210,7 +3210,7 @@ dependencies = [
  "socket2 0.6.5",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3269,6 +3269,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tracing-test",
  "unsigned-varint",
 ]
 
@@ -3305,7 +3306,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "x25519-dalek 3.0.0",
  "zeroize",
 ]
@@ -3347,6 +3348,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3382,7 +3384,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3429,7 +3431,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3457,7 +3459,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3481,7 +3483,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "web-time",
 ]
 
@@ -3504,7 +3506,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3537,7 +3539,7 @@ dependencies = [
  "rand 0.10.3",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3566,7 +3568,7 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "trybuild",
  "wasm-bindgen-futures",
  "web-time",
@@ -3609,7 +3611,7 @@ dependencies = [
  "socket2 0.6.5",
  "tokio",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
@@ -3679,7 +3681,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "webrtc",
 ]
 
@@ -4140,7 +4142,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
+ "tracing-test",
  "unsigned-varint",
 ]
 
@@ -4840,9 +4842,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.25.1"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1784dc11a05f5a8f57c4a62915686be140f24f70301290b997e317241fa9ffc2"
+checksum = "6d150ad7bf80e60f45769d18a0a8c01028ab8f56355f33ed7bfce3a31f82e696"
 dependencies = [
  "dtoa",
  "itoa",
@@ -5227,9 +5229,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7acd809e80afa754c63f586955699d8990efe1c4b6613183ee5f027a11fbc8b5"
+checksum = "db7f3d75b5a3301746bff39a767bf4c5c42506b08513527308b3875bfb64a031"
 dependencies = [
  "arcstr",
  "async-lock",
@@ -6815,6 +6817,27 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracing-test"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19a4c448db514d4f24c5ddb9f73f2ee71bfb24c526cf0c570ba142d1119e0051"
+dependencies = [
+ "tracing-core",
+ "tracing-subscriber",
+ "tracing-test-macro",
+]
+
+[[package]]
+name = "tracing-test-macro"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad06847b7afb65c7866a36664b75c40b895e318cea4f71299f013fb22965329d"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

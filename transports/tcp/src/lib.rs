@@ -770,11 +770,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn communicating_between_dialer_and_listener() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(ListenerId::next(), addr).unwrap();
@@ -838,11 +835,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn wildcard_expansion() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(ListenerId::next(), addr).unwrap();
@@ -905,11 +899,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn port_reuse_dialing() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn listener<T: Provider>(
             addr: Multiaddr,
             mut ready_tx: mpsc::Sender<Multiaddr>,
@@ -1010,11 +1001,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn port_reuse_listening() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new());
             tcp.listen_on(ListenerId::next(), addr).unwrap();
@@ -1057,11 +1045,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn listen_port_0() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(ListenerId::next(), addr).unwrap();
@@ -1085,11 +1070,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn listen_invalid_addr() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         fn test(addr: Multiaddr) {
             let mut tcp = tokio::Transport::default();
             assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
@@ -1099,11 +1081,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn test_remove_listener() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();
             let listener_id = ListenerId::next();

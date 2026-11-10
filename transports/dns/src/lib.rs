@@ -634,11 +634,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn basic_resolve() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         #[derive(Clone)]
         struct CustomTransport;
 
@@ -781,11 +778,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn aggregated_dial_errors() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         #[derive(Clone)]
         struct AlwaysFailTransport;
 
