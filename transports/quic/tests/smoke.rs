@@ -33,20 +33,18 @@ use libp2p_quic as quic;
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
-use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn tokio_smoke() {
     smoke::<quic::tokio::Provider>().await
 }
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn endpoint_reuse() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
@@ -70,10 +68,8 @@ async fn endpoint_reuse() {
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn ipv4_dial_ipv6() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
@@ -90,12 +86,9 @@ async fn ipv4_dial_ipv6() {
 /// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn wrapped_with_delay() {
     use libp2p_core::transport::DialOpts;
-
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
 
@@ -264,11 +257,8 @@ async fn tcp_and_quic() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[cfg(feature = "tokio")]
 #[test]
+#[tracing_test::traced_test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
     quickcheck::QuickCheck::new()
@@ -279,15 +269,12 @@ fn concurrent_connections_and_streams_tokio() {
 #[expect(deprecated)]
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn draft_29_support() {
     use std::task::Poll;
 
     use futures::{future::poll_fn, select};
     use libp2p_core::transport::TransportError;
-
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
 
     let (_, mut a_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
@@ -361,10 +348,8 @@ async fn draft_29_support() {
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn backpressure() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
 
     let (mut stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
@@ -387,10 +372,8 @@ async fn backpressure() {
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn read_after_peer_dropped_stream() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (mut stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
 
     let data = vec![0; 10];
@@ -409,10 +392,8 @@ async fn read_after_peer_dropped_stream() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 #[should_panic]
+#[tracing_test::traced_test]
 async fn write_after_peer_dropped_stream() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
     drop(stream_a);
     futures_timer::Delay::new(Duration::from_millis(100)).await;
@@ -466,10 +447,6 @@ async fn test_local_listener_reuse() {
 }
 
 async fn smoke<P: Provider>() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let (a_peer_id, mut a_transport) = create_default_transport::<P>();
     let (b_peer_id, mut b_transport) = create_default_transport::<P>();
 

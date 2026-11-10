@@ -34,7 +34,7 @@ tokio-util = { workspace = true, features = ["compat"] }
 rand = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 serde = { version = "1.0", features = ["derive"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
