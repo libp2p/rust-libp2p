@@ -69,7 +69,7 @@ mod transport;
 use std::net::SocketAddr;
 
 pub use config::Config;
-pub use connection::{Connecting, Connection, Stream};
+pub use connection::{Connecting, Connection, Incoming, Stream};
 pub use provider::Provider;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
@@ -101,6 +101,11 @@ pub enum Error {
     /// Error when holepunching for a remote is already in progress
     #[error("Already punching hole for {0}).")]
     HolePunchInProgress(SocketAddr),
+
+    /// A connection future was polled in an unexpected state, e.g. after it had
+    /// already completed.
+    #[error("invalid state: {0}")]
+    InvalidState(&'static str),
 }
 
 /// Dialing a remote peer failed.
