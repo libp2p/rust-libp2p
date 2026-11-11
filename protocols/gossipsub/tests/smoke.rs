@@ -31,7 +31,6 @@ use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{SeedableRng, seq::IndexedMutRandom};
 use tokio::{runtime::Runtime, time};
-use tracing_subscriber::EnvFilter;
 
 struct Graph {
     nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
@@ -132,11 +131,8 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
 }
 
 #[test]
+#[tracing_test::traced_test]
 fn multi_hop_propagation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {
             return TestResult::discard();

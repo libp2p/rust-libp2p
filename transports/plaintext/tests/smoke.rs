@@ -24,14 +24,10 @@ use libp2p_identity as identity;
 use libp2p_plaintext as plaintext;
 use quickcheck::QuickCheck;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use tracing_subscriber::EnvFilter;
 
 #[test]
+#[tracing_test::traced_test]
 fn variable_msg_length() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();
         let msg_to_receive = msg;

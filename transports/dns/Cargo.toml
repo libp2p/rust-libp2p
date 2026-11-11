@@ -22,7 +22,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["rt", "time"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 [features]
 tokio = ["hickory-resolver/tokio"]
