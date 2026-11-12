@@ -20,9 +20,11 @@
 
 //! Tests for publishing and fanout functionality.
 
+use std::time::Duration;
+
 use super::DefaultBehaviourTestBuilder;
 use crate::{
-    IdentTopic as Topic,
+    IdentTopic as Topic, MessageId, PublishError,
     config::{Config, ConfigBuilder},
     topic::TopicHash,
     transform::DataTransform,
@@ -242,4 +244,40 @@ fn test_flood_publish() {
         gs.mcache.get(&msg_id).is_some(),
         "Message cache should contain published message"
     );
+}
+
+#[test]
+fn test_publish_after_duplicate_cache_expiry() {
+    let duplicate_cache_time = Duration::from_millis(300);
+    let config = ConfigBuilder::default()
+        .duplicate_cache_time(duplicate_cache_time)
+        // content-addressed ids, so publishing the same data yields the same id
+        .message_id_fn(|message| MessageId::from(message.data.clone()))
+        .build()
+        .unwrap();
+
+    let publish_topic = String::from("test_publish");
+    let (mut gs, _, _, _) = DefaultBehaviourTestBuilder::default()
+        .peer_no(5)
+        .topics(vec![publish_topic.clone()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+
+    let publish_data = vec![0; 42];
+    gs.publish(Topic::new(publish_topic.clone()), publish_data.clone())
+        .unwrap();
+
+    assert!(
+        matches!(
+            gs.publish(Topic::new(publish_topic.clone()), publish_data.clone()),
+            Err(PublishError::Duplicate)
+        ),
+        "Publishing the same message within the duplicate cache time should fail"
+    );
+
+    std::thread::sleep(duplicate_cache_time + Duration::from_millis(1));
+
+    gs.publish(Topic::new(publish_topic), publish_data)
+        .expect("Publishing should succeed once the message expired from the duplicate cache");
 }

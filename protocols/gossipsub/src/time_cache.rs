@@ -162,7 +162,9 @@ where
     }
 
     pub(crate) fn contains_key(&self, key: &Key) -> bool {
-        self.map.contains_key(key)
+        self.map
+            .get(key)
+            .is_some_and(|e| e.expires > Instant::now())
     }
 }
 
@@ -226,5 +228,21 @@ mod test {
 
         // should be removed from the cache
         assert!(cache.insert("t"));
+    }
+
+    #[test]
+    fn expired_entries_are_not_contained() {
+        let mut cache = DuplicateCache::new(Duration::from_millis(100));
+
+        cache.insert("t");
+        assert!(cache.contains(&"t"));
+
+        // sleep until cache expiry, without inserting anything that would prune the cache
+        std::thread::sleep(Duration::from_millis(101));
+
+        assert!(!cache.contains(&"t"));
+        // re-inserting the expired key is treated as new
+        assert!(cache.insert("t"));
+        assert!(cache.contains(&"t"));
     }
 }
