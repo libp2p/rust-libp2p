@@ -118,7 +118,7 @@ impl Behaviour {
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
         self.registered_namespaces
-            .retain(|(rz_node, ns), _| rz_node.ne(&rendezvous_node) && ns.ne(&namespace));
+            .retain(|(rz_node, ns), _| rz_node.ne(&rendezvous_node) || ns.ne(&namespace));
 
         self.inner
             .send_request(&rendezvous_node, Unregister(namespace));
@@ -451,5 +451,46 @@ impl Behaviour {
             .get(peer)
             .map(|addrs| addrs.values().flatten())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use libp2p_identity::Keypair;
+
+    use super::*;
+
+    #[test]
+    fn unregister_only_forgets_the_given_namespace_at_the_given_node() {
+        let mut behaviour = Behaviour::new(Keypair::generate_ed25519());
+        let node_a = PeerId::random();
+        let node_b = PeerId::random();
+        let ns_1 = Namespace::from_static("one");
+        let ns_2 = Namespace::from_static("two");
+
+        for node in [node_a, node_b] {
+            for ns in [&ns_1, &ns_2] {
+                behaviour
+                    .registered_namespaces
+                    .insert((node, ns.clone()), 60);
+            }
+        }
+
+        behaviour.unregister(ns_1.clone(), node_a);
+
+        let mut remaining = behaviour
+            .registered_namespaces
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        remaining.sort_by_key(|(node, ns)| (node.to_string(), ns.to_string()));
+        let mut expected = vec![
+            (node_a, ns_2.clone()),
+            (node_b, ns_1.clone()),
+            (node_b, ns_2.clone()),
+        ];
+        expected.sort_by_key(|(node, ns)| (node.to_string(), ns.to_string()));
+
+        assert_eq!(remaining, expected);
     }
 }
