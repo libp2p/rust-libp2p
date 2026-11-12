@@ -12,6 +12,8 @@ message Message {
     // The sender abruptly terminates the sending part of the stream. The
     // receiver can discard any data that it already received on that stream.
     RESET = 2;
+    // The sender acknowledges a FIN it received.
+    FIN_ACK = 3;
   }
 
   optional Flag flag=1;

@@ -29,6 +29,8 @@ pub mod message {
         /// The sender abruptly terminates the sending part of the stream. The
         /// receiver can discard any data that it already received on that stream.
         Reset = 2,
+        /// The sender acknowledges a FIN it received.
+        FinAck = 3,
     }
     impl Flag {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -40,6 +42,7 @@ pub mod message {
                 Self::Fin => "FIN",
                 Self::StopSending => "STOP_SENDING",
                 Self::Reset => "RESET",
+                Self::FinAck => "FIN_ACK",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -48,6 +51,7 @@ pub mod message {
                 "FIN" => Some(Self::Fin),
                 "STOP_SENDING" => Some(Self::StopSending),
                 "RESET" => Some(Self::Reset),
+                "FIN_ACK" => Some(Self::FinAck),
                 _ => None,
             }
         }
