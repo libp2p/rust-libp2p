@@ -1,5 +1,8 @@
 ## 0.19.0
 
+- Fix `Behaviour::unregister` forgetting registrations in other namespaces and at other rendezvous nodes.
+  See [PR #6745](https://github.com/libp2p/rust-libp2p/pull/6745).
+
 - Let a peer at its registration limit renew an existing registration, and stop the total registration limit from admitting one extra registration.
   See [PR 6738](https://github.com/libp2p/rust-libp2p/pull/6738).
 
