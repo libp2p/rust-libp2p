@@ -6,7 +6,7 @@
 - Fix a `cannot extract twice` panic in `Connection::poll`: pairing a new outbound
   stream now skips substream requests that were already extracted but not yet
   removed from `requested_substreams`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6762](https://github.com/libp2p/rust-libp2p/pull/6762).
 
 ## 0.48.0
 
