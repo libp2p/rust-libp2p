@@ -1866,7 +1866,7 @@ where
             .map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
-        record.expires = record.expires.or(expiration).min(expiration);
+        record.expires = record.expires.into_iter().chain(expiration).min();
 
         if let Some(job) = self.put_record_job.as_mut() {
             // Ignore the record in the next run of the replication
