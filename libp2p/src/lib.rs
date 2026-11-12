@@ -30,7 +30,7 @@
 
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub use bytes;
 pub use futures;

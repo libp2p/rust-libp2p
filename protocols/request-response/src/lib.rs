@@ -64,7 +64,7 @@
 //! advertised during inbound respectively outbound protocol negotiation
 //! on the substreams.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "cbor")]
 pub mod cbor;

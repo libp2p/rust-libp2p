@@ -20,7 +20,7 @@
 
 //! Implementation of the [floodsub](https://github.com/libp2p/specs/blob/master/pubsub/README.md) protocol.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use libp2p_identity::PeerId;
 

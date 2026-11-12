@@ -49,7 +49,7 @@
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod handler;
 mod protocol;

@@ -29,7 +29,7 @@
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits define how to upgrade
 //!   each individual substream to use a protocol. See the `upgrade` module.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod proto {
     #![allow(unreachable_pub)]
