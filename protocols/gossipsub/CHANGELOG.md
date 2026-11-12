@@ -3,7 +3,7 @@
   are open, rather than dropping the IP when the first of those connections closes. This closes a
   bypass where a peer could shed the penalty by opening a second connection from the same IP and
   closing it.
-  See [PR 6762](https://github.com/libp2p/rust-libp2p/pull/6762).
+  See [PR 6767](https://github.com/libp2p/rust-libp2p/pull/6767).
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
 - Do not cache or score messages for topics the node is not subscribed to.
