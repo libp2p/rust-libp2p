@@ -1697,7 +1697,7 @@ where
                 mut remaining,
                 mut step,
             } => {
-                let num_remaining = remaining.as_ref().map(|r| r.len().saturating_sub(1) as u32);
+                let num_remaining = remaining.as_ref().map(|r| r.len() as u32);
 
                 // Continue with the next bootstrap query if `remaining` is not empty.
                 if let Some((target, remaining)) =
