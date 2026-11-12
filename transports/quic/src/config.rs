@@ -18,12 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{sync::Arc, time::Duration};
+use std::{num::NonZeroU32, sync::Arc, time::Duration};
 
 use quinn::{
     MtuDiscoveryConfig, VarInt,
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
 };
+
+/// When to send a QUIC Retry packet to an inbound connection whose source
+/// address has not been validated yet, as described in RFC 9000 section 8.1.2.
+#[derive(Debug, Clone, Copy)]
+pub enum InboundAddressValidation {
+    Disabled,
+    Always,
+    /// Validate a source address once it has spent its budget of unvalidated connection attempts.
+    RateLimited {
+        /// Unvalidated attempts granted up front to each source address.
+        burst: NonZeroU32,
+        refill_per_second: f64,
+    },
+}
 
 /// Config for the transport.
 #[derive(Clone)]
@@ -31,6 +45,9 @@ pub struct Config {
     /// Timeout for the initial handshake when establishing a connection.
     /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
+    /// When to send a Retry packet to inbound connections
+    /// with an unvalidated source address.
+    pub inbound_address_validation: InboundAddressValidation,
     /// Maximum duration of inactivity in ms to accept before timing out the connection.
     pub max_idle_timeout: u32,
     /// Period of inactivity before sending a keep-alive packet.
@@ -89,6 +106,10 @@ impl Config {
             server_tls_config,
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
+            inbound_address_validation: InboundAddressValidation::RateLimited {
+                burst: NonZeroU32::new(4).expect("4 is non-zero"),
+                refill_per_second: 0.1,
+            },
             max_idle_timeout: 10 * 1000,
             max_concurrent_stream_limit: 256,
             keep_alive_interval: Duration::from_secs(5),
@@ -137,6 +158,7 @@ impl From<Config> for QuinnConfig {
             max_stream_data,
             support_draft_29,
             handshake_timeout: _,
+            inbound_address_validation: _,
             keypair,
             mtu_discovery_config,
         } = config;
