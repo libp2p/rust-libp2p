@@ -18,16 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, time::Duration};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, Mutex},
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use futures::{
     io::{AsyncRead, AsyncWrite},
     stream::StreamExt,
 };
 use libp2p_core::{
+    Endpoint,
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
-    transport::{Boxed, MemoryTransport, Transport, choice::OrTransport},
+    transport::{Boxed, MemoryTransport, PortUse, Transport, choice::OrTransport},
     upgrade,
 };
 use libp2p_identity as identity;
@@ -35,7 +42,11 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
+use libp2p_swarm::{
+    Config, ConnectionDenied, ConnectionId, DialError, FromSwarm, NetworkBehaviour,
+    NotifyHandler, Swarm, SwarmEvent, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dial_opts::DialOpts,
+};
 use libp2p_swarm_test::SwarmExt;
 
 #[tokio::test]
@@ -287,6 +298,65 @@ async fn connect() {
         connection_established_to(&mut dst, relay_peer_id, src_peer_id),
     )
     .await;
+}
+
+/// An accepted circuit request must notify the *destination* peer's connection handler, i.e.
+/// `ToSwarm::NotifyHandler::One` must be accompanied by the peer that owns that connection.
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn circuit_request_notifies_destination_peer() {
+    let record = Arc::new(Mutex::new(Recording::default()));
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_recording_relay(record.clone());
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    tokio::spawn(async move {
+        relay.collect::<Vec<_>>().await;
+    });
+
+    let mut dst = build_client();
+    let dst_peer_id = *dst.local_peer_id();
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    dst.listen_on(dst_addr.clone()).unwrap();
+
+    assert!(wait_for_dial(&mut dst, relay_peer_id).await);
+    wait_for_reservation(
+        &mut dst,
+        dst_addr.clone(),
+        relay_peer_id,
+        false, // No renewal.
+    )
+    .await;
+
+    // Only the notifications caused by the circuit request are of interest here.
+    record.lock().unwrap().notified.clear();
+
+    let mut src = build_client();
+    let src_peer_id = *src.local_peer_id();
+
+    src.dial(dst_addr).unwrap();
+
+    futures::future::join(
+        connection_established_to(&mut src, relay_peer_id, dst_peer_id),
+        connection_established_to(&mut dst, relay_peer_id, src_peer_id),
+    )
+    .await;
+
+    let record = record.lock().unwrap();
+    let dst_connection = record.connections[&dst_peer_id];
+
+    assert!(
+        record.notified.contains(&(dst_peer_id, dst_connection)),
+        "expected the relay to notify the destination peer on its own connection, got {:?}",
+        record.notified
+    );
 }
 
 async fn connection_established_to(
@@ -861,6 +931,148 @@ fn build_relay_with_config(config: relay::Config) -> Swarm<Relay> {
         local_peer_id,
         Config::with_tokio_executor(),
     )
+}
+
+fn build_recording_relay(record: Arc<Mutex<Recording>>) -> Swarm<RecordingRelay> {
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = local_key.public().to_peer_id();
+
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
+
+    Swarm::new(
+        transport,
+        RecordingRelay {
+            inner: Relay {
+                ping: ping::Behaviour::new(ping::Config::new()),
+                relay: relay::Behaviour::new(
+                    local_peer_id,
+                    relay::Config {
+                        reservation_duration: Duration::from_secs(2),
+                        ..Default::default()
+                    },
+                ),
+            },
+            record,
+        },
+        local_peer_id,
+        Config::with_tokio_executor(),
+    )
+}
+
+/// Delegates to [`Relay`] and records the connection handlers it notifies.
+struct RecordingRelay {
+    inner: Relay,
+    record: Arc<Mutex<Recording>>,
+}
+
+#[derive(Default)]
+struct Recording {
+    /// Maps each peer to the [`ConnectionId`] we have with it.
+    connections: HashMap<PeerId, ConnectionId>,
+    /// All peers and connections that were notified via `NotifyHandler::One`.
+    notified: Vec<(PeerId, ConnectionId)>,
+}
+
+impl NetworkBehaviour for RecordingRelay {
+    type ConnectionHandler = THandler<Relay>;
+    type ToSwarm = RelayEvent;
+
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
+        self.inner
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.inner
+            .handle_established_inbound_connection(connection_id, peer, local_addr, remote_addr)
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        self.inner.handle_pending_outbound_connection(
+            connection_id,
+            maybe_peer,
+            addresses,
+            effective_role,
+        )
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        port_use: PortUse,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm) {
+        if let FromSwarm::ConnectionEstablished(connection) = &event {
+            self.record
+                .lock()
+                .unwrap()
+                .connections
+                .insert(connection.peer_id, connection.connection_id);
+        }
+
+        self.inner.on_swarm_event(event);
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
+        self.inner
+            .on_connection_handler_event(peer_id, connection_id, event)
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        let poll = self.inner.poll(cx);
+
+        if let Poll::Ready(ToSwarm::NotifyHandler {
+            peer_id,
+            handler: NotifyHandler::One(connection_id),
+            ..
+        }) = &poll
+        {
+            self.record
+                .lock()
+                .unwrap()
+                .notified
+                .push((*peer_id, *connection_id));
+        }
+
+        poll
+    }
 }
 
 fn build_client() -> Swarm<Client> {

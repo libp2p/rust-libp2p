@@ -1,5 +1,9 @@
 ## 0.23.0
 
+- Notify the destination connection handler with the destination's peer id when
+  accepting a circuit request, instead of the source's.
+  See [PR 6763](https://github.com/libp2p/rust-libp2p/pull/6763).
+
 - Deny circuit requests from a peer that already has `max_circuits_per_peer` circuits, instead of allowing one more.
   See [PR 6739](https://github.com/libp2p/rust-libp2p/pull/6739).
 
