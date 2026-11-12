@@ -1,7 +1,9 @@
 //! A libp2p connection backed by an [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection).
 
 use std::{
+    cell::Cell,
     pin::Pin,
+    rc::Rc,
     task::{Context, Poll, Waker, ready},
 };
 
@@ -38,8 +40,12 @@ pub struct Connection {
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     drop_listeners: FuturesUnordered<DropListener>,
     no_drop_listeners_waker: Option<Waker>,
+    /// A wrapped waker that we trigger when the browser gives up on a connection without notifying
+    /// us.
+    interrupted_waker: SendWrapper<Rc<InterruptedWaker>>,
 
     _ondatachannel_closure: SendWrapper<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    _onconnectionstatechange_closure: SendWrapper<Closure<dyn FnMut()>>,
 }
 
 impl Connection {
@@ -48,6 +54,10 @@ impl Connection {
         // An ondatachannel Future enables us to poll for incoming data channel events in
         // poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
+        let interrupted_waker = Rc::new(InterruptedWaker {
+            interrupted: Cell::new(false),
+            waker: Cell::new(None),
+        });
 
         let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
             tracing::trace!("New data channel");
@@ -63,9 +73,28 @@ impl Connection {
                 }
             }
         });
+        let onconnectionstatechange_closure = Closure::<dyn FnMut()>::new({
+            let interrupted_waker = Rc::clone(&interrupted_waker);
+            let connection = peer_connection.inner.clone();
+            move || {
+                use web_sys::RtcPeerConnectionState::{Closed, Failed};
+                let state = connection.connection_state();
+                tracing::debug!(?state, "Peer connection state changed");
+                if matches!(state, Failed | Closed) {
+                    interrupted_waker.interrupted.set(true);
+                    if let Some(waker) = interrupted_waker.waker.take() {
+                        waker.wake();
+                    }
+                }
+            }
+        });
+
         peer_connection
             .inner
             .set_ondatachannel(Some(ondatachannel_closure.as_ref().unchecked_ref()));
+        peer_connection.inner.set_onconnectionstatechange(Some(
+            onconnectionstatechange_closure.as_ref().unchecked_ref(),
+        ));
 
         Self {
             inner: SendWrapper::new(peer_connection),
@@ -73,7 +102,9 @@ impl Connection {
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
             inbound_data_channels: SendWrapper::new(rx_ondatachannel),
+            interrupted_waker: SendWrapper::new(interrupted_waker),
             _ondatachannel_closure: SendWrapper::new(ondatachannel_closure),
+            _onconnectionstatechange_closure: SendWrapper::new(onconnectionstatechange_closure),
         }
     }
 
@@ -158,12 +189,17 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        if self.interrupted_waker.interrupted.get() {
+            let msg = "the browser interrupted the peer connection".to_string();
+            return Poll::Ready(Err(Error::Connection(msg)));
+        }
+        self.interrupted_waker
+            .waker
+            .replace(Some(cx.waker().clone()));
         loop {
             match ready!(self.drop_listeners.poll_next_unpin(cx)) {
                 Some(Ok(())) => {}
-                Some(Err(e)) => {
-                    tracing::debug!("a DropListener failed: {e}")
-                }
+                Some(Err(error)) => tracing::debug!(%error, "a DropListener failed"),
                 None => {
                     self.no_drop_listeners_waker = Some(cx.waker().clone());
                     return Poll::Pending;
@@ -171,6 +207,12 @@ impl StreamMuxer for Connection {
             }
         }
     }
+}
+
+/// A wrapped waker + mutable boolean flag for indicating that a stream was interrupted.
+struct InterruptedWaker {
+    interrupted: Cell<bool>,
+    waker: Cell<Option<Waker>>,
 }
 
 pub(crate) struct RtcPeerConnection {
