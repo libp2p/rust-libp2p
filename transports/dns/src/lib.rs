@@ -525,15 +525,14 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                                 _ => None,
                             })
                         {
-                            if let Some(chars) = txt.txt_data.first() {
-                                match parse_dnsaddr_txt(chars) {
-                                    Err(e) => {
-                                        // Skip over seemingly invalid entries.
-                                        tracing::debug!("Invalid TXT record: {:?}", e);
-                                    }
-                                    Ok(a) => {
-                                        addrs.push(a);
-                                    }
+                            let chars = txt.txt_data.concat();
+                            match parse_dnsaddr_txt(&chars) {
+                                Err(e) => {
+                                    // Skip over seemingly invalid entries.
+                                    tracing::debug!("Invalid TXT record: {:?}", e);
+                                }
+                                Ok(a) => {
+                                    addrs.push(a);
                                 }
                             }
                         }
@@ -547,7 +546,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
     }
 }
 
-/// Parses a `<character-string>` of a `dnsaddr` TXT record.
+/// Parses the concatenated `<character-string>`s of a `dnsaddr` TXT record.
 fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
     let s = str::from_utf8(txt).map_err(invalid_data)?;
     match s.strip_prefix("dnsaddr=") {
@@ -608,7 +607,10 @@ where
 #[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
-    use hickory_resolver::config::QUAD9;
+    use hickory_resolver::{
+        config::QUAD9,
+        proto::rr::{Name, Record, RecordType, rdata::TXT},
+    };
     use libp2p_core::{
         Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
@@ -866,6 +868,98 @@ mod tests {
         }
 
         test_tokio(AlwaysFailTransport, run_test);
+    }
+
+    #[test]
+    fn dnsaddr_txt_concatenates_character_strings() {
+        let txt = b"dnsaddr=/ip4/127.0.0.1/tcp/4001";
+        for split in 0..=txt.len() {
+            let record = TXT::from_bytes(vec![&txt[..split], &txt[split..]]);
+            assert_eq!(
+                resolve_txt_records(vec![record]),
+                vec!["/ip4/127.0.0.1/tcp/4001".parse::<Multiaddr>().unwrap()],
+                "split at byte {split}"
+            );
+        }
+
+        assert_eq!(
+            resolve_txt_records(vec![TXT::from_bytes(vec![
+                b"dns",
+                b"",
+                b"addr=/ip4/127.0.0.1/",
+                b"tcp/4001",
+            ])]),
+            vec!["/ip4/127.0.0.1/tcp/4001".parse::<Multiaddr>().unwrap()]
+        );
+    }
+
+    #[test]
+    fn dnsaddr_txt_keeps_records_separate() {
+        let records = vec![
+            TXT::from_bytes(vec![b"dnsaddr=/ip4/127.0.0.1/tcp/4001"]),
+            TXT::from_bytes(vec![b"dnsaddr=/ip6/::1/", b"tcp/4002"]),
+        ];
+        assert_eq!(
+            resolve_txt_records(records),
+            vec![
+                "/ip4/127.0.0.1/tcp/4001".parse::<Multiaddr>().unwrap(),
+                "/ip6/::1/tcp/4002".parse::<Multiaddr>().unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn dnsaddr_txt_skips_invalid_records() {
+        let records = vec![
+            TXT::from_bytes(vec![]),
+            TXT::from_bytes(vec![b"unrelated=value"]),
+            TXT::from_bytes(vec![b"dnsaddr=/ip4/127.0.0.1/tcp/4001", b"\xff"]),
+            TXT::from_bytes(vec![b"dnsaddr=/ip4/127.0.0.1/tcp/4001", b"/invalid"]),
+            TXT::from_bytes(vec![b"dnsaddr=/ip4/127.0.0.1/tcp/4002"]),
+        ];
+        assert_eq!(
+            resolve_txt_records(records),
+            vec!["/ip4/127.0.0.1/tcp/4002".parse::<Multiaddr>().unwrap()]
+        );
+    }
+
+    fn resolve_txt_records(records: Vec<TXT>) -> Vec<Multiaddr> {
+        struct TxtResolver(Vec<TXT>);
+
+        impl Resolver for TxtResolver {
+            async fn lookup_ip(&self, _: String) -> Result<LookupIp, ResolveError> {
+                unreachable!("only TXT lookups are expected")
+            }
+
+            async fn ipv4_lookup(&self, _: String) -> Result<Lookup, ResolveError> {
+                unreachable!("only TXT lookups are expected")
+            }
+
+            async fn ipv6_lookup(&self, _: String) -> Result<Lookup, ResolveError> {
+                unreachable!("only TXT lookups are expected")
+            }
+
+            async fn txt_lookup(&self, name: String) -> Result<Lookup, ResolveError> {
+                assert_eq!(name, "_dnsaddr.example.com");
+                let name = Name::from_ascii(name).unwrap();
+                let records = self
+                    .0
+                    .iter()
+                    .map(|txt| Record::from_rdata(name.clone(), 60, RData::TXT(txt.clone())));
+                Ok(Lookup::new_with_max_ttl(
+                    Query::query(name.clone(), RecordType::TXT),
+                    records,
+                ))
+            }
+        }
+
+        let resolver = TxtResolver(records);
+        let protocol = Protocol::Dnsaddr("example.com".into());
+        let result = futures::executor::block_on(resolve::<io::Error, _>(&protocol, &resolver));
+        let Resolved::Addrs(addrs) = result.unwrap() else {
+            panic!("expected resolved dnsaddr addresses");
+        };
+        addrs
     }
 
     #[test]

@@ -1,5 +1,6 @@
 ## 0.45.1
 
+- Concatenate all character strings within each `dnsaddr` TXT record before parsing the multiaddr.
 - Return `ResolveError` instead of panicking when a lookup succeeds without a usable record.
 
 ## 0.45.0
