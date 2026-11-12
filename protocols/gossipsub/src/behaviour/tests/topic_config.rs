@@ -642,6 +642,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                large_message_fragments: vec![],
                 #[cfg(feature = "partial-messages")]
                 partial_message: None,
             },
@@ -691,6 +692,7 @@ fn test_validation_error_message_size_too_large_topic_specific() {
         subscriptions: vec![],
         control: None,
         partial: None,
+        large_message_fragments: vec![],
     };
     codec.encode(rpc, &mut buf).unwrap();
 
@@ -751,6 +753,7 @@ fn test_validation_message_size_within_topic_specific() {
                 messages: vec![raw_message],
                 subscriptions: vec![],
                 control_msgs: vec![],
+                large_message_fragments: vec![],
                 #[cfg(feature = "partial-messages")]
                 partial_message: None,
             },
@@ -800,6 +803,7 @@ fn test_validation_message_size_within_topic_specific() {
         subscriptions: vec![],
         control: None,
         partial: None,
+        large_message_fragments: vec![],
     };
     codec.encode(rpc, &mut buf).unwrap();
 
