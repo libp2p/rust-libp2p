@@ -411,7 +411,7 @@ where
                 }
             }
 
-            if let Some(requested_substream) = requested_substreams.iter_mut().next() {
+            if let Some(requested_substream) = next_substream_request(requested_substreams) {
                 match muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
@@ -741,6 +741,18 @@ impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
     }
 }
 
+/// Returns the next [`SubstreamRequested`] that has not been extracted yet.
+///
+/// An extracted request stays in the [`FuturesUnordered`] as [`SubstreamRequested::Done`]
+/// until its [`Future`] is polled again and extracting it a second time panics.
+fn next_substream_request<UserData, Upgrade>(
+    requested_substreams: &mut FuturesUnordered<SubstreamRequested<UserData, Upgrade>>,
+) -> Option<&mut SubstreamRequested<UserData, Upgrade>> {
+    requested_substreams
+        .iter_mut()
+        .find(|r| matches!(r, SubstreamRequested::Waiting { .. }))
+}
+
 /// The options for a planned connection & handler shutdown.
 ///
 /// A shutdown is planned anew based on the return value of
@@ -849,6 +861,37 @@ mod tests {
             connection.handler.error.unwrap(),
             StreamUpgradeError::Timeout
         ))
+    }
+
+    #[test]
+    fn skips_substream_request_that_was_already_extracted() {
+        let mut requests = FuturesUnordered::new();
+
+        requests.push(SubstreamRequested::new(
+            (),
+            Duration::from_secs(60),
+            DeniedUpgrade,
+        ));
+        requests.push(SubstreamRequested::new(
+            (),
+            Duration::from_secs(60),
+            DeniedUpgrade,
+        ));
+
+        // Pair one request with an outbound stream, like `Connection::poll` does. Its
+        // entry stays in the set as `Done` until `FuturesUnordered::poll_next` removes
+        // it on the next poll.
+        requests
+            .iter_mut()
+            .next()
+            .expect("first request exists")
+            .extract();
+
+        // Selecting the `Done` entry a second time would panic with "cannot extract twice".
+        next_substream_request(&mut requests)
+            .expect("remaining request to be waiting")
+            .extract();
+        assert!(next_substream_request(&mut requests).is_none());
     }
 
     #[test]
