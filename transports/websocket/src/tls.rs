@@ -65,6 +65,19 @@ impl Certificate {
     }
 }
 
+/// A shared server certificate resolver.
+#[derive(Clone, Debug)]
+pub struct CertificateResolver(Arc<dyn rustls::server::ResolvesServerCert>);
+
+impl<R> From<R> for CertificateResolver
+where
+    R: rustls::server::ResolvesServerCert + 'static,
+{
+    fn from(resolver: R) -> Self {
+        Self(Arc::new(resolver))
+    }
+}
+
 impl Config {
     /// Create a new TLS configuration with the given server key and certificate chain.
     pub fn new<I>(key: PrivateKey, certs: I) -> Result<Self, Error>
@@ -74,6 +87,13 @@ impl Config {
         let mut builder = Config::builder();
         builder.server(key, certs)?;
         Ok(builder.finish())
+    }
+
+    /// Create a new TLS configuration that resolves the server certificate dynamically.
+    pub fn new_with_server_cert_resolver(resolver: impl Into<CertificateResolver>) -> Self {
+        let mut builder = Config::builder();
+        builder.server_with_resolver(resolver);
+        builder.finish()
     }
 
     /// Create a client-only configuration.
@@ -128,6 +148,22 @@ impl Builder {
             .map_err(|e| Error::Tls(Box::new(e)))?;
         self.server = Some(server);
         Ok(self)
+    }
+
+    /// Set a dynamic server certificate resolver.
+    ///
+    /// The resolver is queried for every inbound connection, so the served certificate can change
+    /// at runtime without rebuilding the transport.
+    pub fn server_with_resolver(&mut self, resolver: impl Into<CertificateResolver>) -> &mut Self {
+        let CertificateResolver(resolver) = resolver.into();
+        let provider = rustls::crypto::ring::default_provider();
+        let server = rustls::ServerConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_cert_resolver(resolver);
+        self.server = Some(server);
+        self
     }
 
     /// Add an additional trust anchor.

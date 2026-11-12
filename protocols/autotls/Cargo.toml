@@ -1,0 +1,47 @@
+[package]
+name = "libp2p-autotls"
+edition.workspace = true
+rust-version.workspace = true
+description = "Automatic TLS certificate provisioning for libp2p"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+arc-swap = "1.7"
+base64 = "0.22"
+futures = { workspace = true }
+futures-timer = { workspace = true }
+hickory-resolver = { workspace = true, features = ["tokio"] }
+instant-acme = { version = "0.8.5", default-features = false, features = ["ring", "hyper-rustls"] }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
+libp2p-swarm = { workspace = true }
+multibase = "0.9"
+rand = { workspace = true }
+rcgen = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "macros", "rt", "time"], optional = true }
+tracing = { workspace = true }
+unsigned-varint = { workspace = true }
+x509-parser = "0.18"
+
+[dev-dependencies]
+hex-literal = { workspace = true }
+libp2p-identity = { workspace = true, features = ["ed25519"] }
+#tempfile = "3"
+
+[features]
+tokio = ["dep:tokio"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
