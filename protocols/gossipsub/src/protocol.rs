@@ -85,6 +85,8 @@ pub struct ProtocolConfig {
     /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
     /// subscription in a single RPC. Messages exceeding this size will be rejected.
     pub(crate) max_control_message_size: usize,
+    /// The max number of control messages per type to accept in a single RPC.
+    pub(crate) max_control_messages: usize,
 }
 
 impl Default for ProtocolConfig {
@@ -101,6 +103,7 @@ impl Default for ProtocolConfig {
             max_transmit_sizes: HashMap::new(),
             max_publish_messages: 5000,
             max_control_message_size: 16384, // 16KB
+            max_control_messages: 500,
         }
     }
 }
@@ -157,6 +160,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_message_size,
+                    self.max_control_messages,
                 ),
             ),
             protocol_id.kind,
@@ -182,6 +186,7 @@ where
                     self.max_transmit_sizes,
                     self.max_publish_messages,
                     self.max_control_message_size,
+                    self.max_control_messages,
                 ),
             ),
             protocol_id.kind,
@@ -205,6 +210,8 @@ pub struct GossipsubCodec {
     /// The max byte size of each control message (IHAVE/IWANT/IDONTWANT/GRAFT/PRUNE) and
     /// subscription in a single RPC. Messages exceeding this size will be rejected.
     max_control_message_size: usize,
+    /// The max number of control messages per type to accept in a single RPC.
+    max_control_messages: usize,
 }
 
 impl GossipsubCodec {
@@ -214,6 +221,7 @@ impl GossipsubCodec {
         max_transmit_sizes: HashMap<TopicHash, usize>,
         max_publish_messages: usize,
         max_control_message_size: usize,
+        max_control_messages: usize,
     ) -> GossipsubCodec {
         let codec = prost_codec::Codec::new(global_max_transmit_size);
         GossipsubCodec {
@@ -223,6 +231,7 @@ impl GossipsubCodec {
             max_transmit_sizes,
             max_publish_messages,
             max_control_message_size,
+            max_control_messages,
         }
     }
 
@@ -572,8 +581,16 @@ impl Decoder for GossipsubCodec {
         let mut control_msgs = Vec::new();
 
         // Collect the gossipsub control messages
-        let ihave_msgs: Vec<ControlAction> = control
-            .ihave
+        let mut ihave = control.ihave;
+        if ihave.len() > self.max_control_messages {
+            tracing::debug!(
+                received = ihave.len(),
+                kept = self.max_control_messages,
+                "received too many IHAVE messages; truncating"
+            );
+            ihave.truncate(self.max_control_messages);
+        }
+        let ihave_msgs: Vec<ControlAction> = ihave
             .into_iter()
             .map(|ihave| {
                 ControlAction::IHave(IHave {
@@ -588,8 +605,16 @@ impl Decoder for GossipsubCodec {
             .collect();
         control_msgs.extend(ihave_msgs);
 
-        let iwant_msgs: Vec<ControlAction> = control
-            .iwant
+        let mut iwant = control.iwant;
+        if iwant.len() > self.max_control_messages {
+            tracing::debug!(
+                received = iwant.len(),
+                kept = self.max_control_messages,
+                "received too many IWANT messages; truncating"
+            );
+            iwant.truncate(self.max_control_messages);
+        }
+        let iwant_msgs: Vec<ControlAction> = iwant
             .into_iter()
             .map(|iwant| {
                 ControlAction::IWant(IWant {
@@ -603,8 +628,16 @@ impl Decoder for GossipsubCodec {
             .collect();
         control_msgs.extend(iwant_msgs);
 
-        let graft_msgs: Vec<ControlAction> = control
-            .graft
+        let mut graft = control.graft;
+        if graft.len() > self.max_control_messages {
+            tracing::debug!(
+                received = graft.len(),
+                kept = self.max_control_messages,
+                "received too many GRAFT messages; truncating"
+            );
+            graft.truncate(self.max_control_messages);
+        }
+        let graft_msgs: Vec<ControlAction> = graft
             .into_iter()
             .map(|graft| {
                 ControlAction::Graft(Graft {
@@ -614,8 +647,17 @@ impl Decoder for GossipsubCodec {
             .collect();
         control_msgs.extend(graft_msgs);
 
+        let mut prunes = control.prune;
+        if prunes.len() > self.max_control_messages {
+            tracing::debug!(
+                received = prunes.len(),
+                kept = self.max_control_messages,
+                "received too many PRUNE messages; truncating"
+            );
+            prunes.truncate(self.max_control_messages);
+        }
         let mut prune_messages = Vec::new();
-        for prune in control.prune {
+        for prune in prunes {
             // filter out invalid peers
             let peers = prune
                 .peers
@@ -640,8 +682,17 @@ impl Decoder for GossipsubCodec {
         }
         control_msgs.extend(prune_messages);
 
+        let mut idontwants = control.idontwant;
+        if idontwants.len() > self.max_control_messages {
+            tracing::debug!(
+                received = idontwants.len(),
+                kept = self.max_control_messages,
+                "received too many IDONTWANT messages; truncating"
+            );
+            idontwants.truncate(self.max_control_messages);
+        }
         let mut idontwant_messages = Vec::new();
-        for idontwant in control.idontwant {
+        for idontwant in idontwants {
             idontwant_messages.push(ControlAction::IDontWant(IDontWant {
                 message_ids: idontwant
                     .message_ids
@@ -790,6 +841,7 @@ mod tests {
                 HashMap::new(),
                 5000,
                 5000,
+                500,
             );
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
@@ -829,6 +881,7 @@ mod tests {
             HashMap::new(),
             500,
             5000,
+            500,
         );
 
         // Create RPC with 501 publish messages (one over limit)
@@ -854,6 +907,7 @@ mod tests {
             HashMap::new(),
             500,
             100, // max_control_message_size: 100 bytes
+            500,
         );
         // Create RPC with multiple IHAVE messages whose cumulative size exceeds 100 bytes
         // Each IHAVE has a topic_id and 10 message IDs (roughly 30-40 bytes each)
@@ -877,6 +931,45 @@ mod tests {
     }
 
     #[test]
+    fn max_control_messages_per_type() {
+        let mut codec = GossipsubCodec::new(
+            u32::MAX as usize,
+            ValidationMode::Strict,
+            HashMap::new(),
+            500,
+            u32::MAX as usize, // no byte limit, to exercise only the count limit
+            500,
+        );
+
+        // Create RPC with 501 IDONTWANT messages (one over the per-type limit)
+        let rpc = proto::Rpc {
+            control: Some(proto::ControlMessage {
+                idontwant: (0..501).map(|_| proto::ControlIDontWant {
+                    message_ids: vec![vec![0u8]],
+                }).collect(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut buf = BytesMut::new();
+        codec.encode(rpc, &mut buf).unwrap();
+        let decoded = codec.decode(&mut buf).unwrap().expect("RPC decodes");
+
+        match decoded {
+            HandlerEvent::Message { rpc, .. } => {
+                let idontwants = rpc
+                    .control_msgs
+                    .iter()
+                    .filter(|msg| matches!(msg, ControlAction::IDontWant(_)))
+                    .count();
+                assert_eq!(idontwants, 500, "excess entries are truncated");
+            }
+            _ => panic!("expected message event"),
+        }
+    }
+
+    #[test]
     fn rpc_valid_limits() {
         let mut codec = GossipsubCodec::new(
             u32::MAX as usize,
@@ -884,6 +977,7 @@ mod tests {
             HashMap::new(),
             500,
             5120, // 5KB max_control_message_size
+            500,
         );
 
         // Create RPC with exactly 500 publish messages (at the limit)
@@ -926,6 +1020,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
 
         let rpc = proto::Rpc {
@@ -949,6 +1044,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
 
         let mut buf = BytesMut::new();
@@ -989,6 +1085,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
         let rpc = proto::Rpc {
             publish: vec![proto::Message {
@@ -1008,6 +1105,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
         let decoded = decoder
             .decode(&mut frame)
@@ -1027,6 +1125,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
         let rpc = proto::Rpc {
             publish: vec![proto::Message {
@@ -1045,7 +1144,7 @@ mod tests {
         buf.extend_from_slice(&frame[..prefix_len + 1]);
 
         let mut decoder =
-            GossipsubCodec::new(1000, ValidationMode::Anonymous, HashMap::new(), 5000, 5000);
+            GossipsubCodec::new(1000, ValidationMode::Anonymous, HashMap::new(), 5000, 5000, 500);
         let err = decoder
             .decode(&mut buf)
             .unwrap_err()
@@ -1066,6 +1165,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
         let rpc = proto::Rpc {
             publish: vec![proto::Message {
@@ -1089,6 +1189,7 @@ mod tests {
             HashMap::new(),
             5000,
             5000,
+            500,
         );
         assert!(decoder.decode(&mut buf).unwrap().is_none());
         assert_eq!(buf.len(), frame.len() - 5, "buffer must stay untouched");

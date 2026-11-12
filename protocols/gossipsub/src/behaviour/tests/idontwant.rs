@@ -240,93 +240,182 @@ fn clear_stale_idontwant() {
     assert!(peer.dont_send.is_empty());
 }
 
-/// Queues a message with the given id for `peer`.
-fn queue_message(gs: &mut super::Behaviour, peer: &PeerId, id: &MessageId) {
-    let topic = gs.connected_peers[peer]
-        .topics
-        .iter()
-        .next()
-        .unwrap()
-        .clone();
-    let message = RawMessage {
-        source: None,
-        data: vec![1],
-        sequence_number: None,
-        topic,
-        signature: None,
-        key: None,
-        validated: true,
-    };
-    gs.connected_peers
-        .get_mut(peer)
-        .unwrap()
-        .messages
-        .try_push(RpcOut::Publish {
-            message_id: id.clone(),
-            message,
-            timeout: futures_timer::Delay::new(std::time::Duration::from_secs(60)),
+/// End-to-end: an IDONTWANT received on the wire is acted on by the receiving node's connection
+/// handler — which drains the send queue before the event reaches the behaviour.
+#[cfg(feature = "metrics")]
+#[tokio::test]
+async fn idontwant_received_removes_queued_messages() {
+    use std::{task::Poll, time::Duration};
+
+    use futures::{StreamExt, future::poll_fn};
+    use libp2p_swarm::Swarm;
+    use libp2p_swarm_test::SwarmExt as _;
+    use prometheus_client::registry::Registry;
+
+    use crate::{IdentTopic, MessageAcceptance, MessageAuthenticity, ValidationMode};
+
+    const PUBLISHES: usize = 200;
+    const PAYLOAD: usize = 20 * 1024;
+    /// B's inbound validation queue holds 32 entries; publish in smaller batches.
+    const VALIDATION_BATCH: usize = 24;
+    /// Forwards that must have been parked in B's queue toward A while A was not polled.
+    const MIN_PARKED: usize = 60;
+    /// Forwards that must be gone after A's IDONTWANTs have been handled (0 without the fix).
+    const MIN_REMOVED: u64 = 70;
+
+    /// Drains a swarm until it has no more events to deliver.
+    async fn drain(swarm: &mut Swarm<crate::Behaviour>) {
+        poll_fn(|cx| {
+            loop {
+                match swarm.poll_next_unpin(cx) {
+                    Poll::Ready(_) => {}
+                    Poll::Pending => return Poll::Ready(()),
+                }
+            }
         })
-        .unwrap();
-}
+        .await;
+    }
 
-/// Delivers an RPC from `peer` with one IDONTWANT per entry of `idontwants`.
-fn receive_idontwant(gs: &mut super::Behaviour, peer: &PeerId, idontwants: Vec<Vec<MessageId>>) {
-    let rpc = RpcIn {
-        messages: vec![],
-        subscriptions: vec![],
-        #[cfg(feature = "partial-messages")]
-        partial_message: None,
-        control_msgs: idontwants
-            .into_iter()
-            .map(|message_ids| ControlAction::IDontWant(IDontWant { message_ids }))
-            .collect(),
+    /// Shared with the handler: incremented when it drains the queue on a received IDONTWANT.
+    fn removed_counter(swarm: &Swarm<crate::Behaviour>) -> u64 {
+        swarm
+            .behaviour()
+            .metrics
+            .as_ref()
+            .expect("metrics configured")
+            .removed_queued_messages
+            .get()
+    }
+
+    let build = |validate: bool| {
+        Swarm::new_ephemeral_tokio(|identity| {
+            let peer_id = identity.public().to_peer_id();
+            let mut builder = crate::ConfigBuilder::default();
+            builder
+                .heartbeat_initial_delay(Duration::from_millis(50))
+                .heartbeat_interval(Duration::from_millis(100))
+                .history_length(10)
+                .history_gossip(10)
+                .validation_mode(ValidationMode::Permissive);
+            if validate {
+                builder.validate_messages();
+            }
+            let mut behaviour = crate::Behaviour::new(
+                MessageAuthenticity::Author(peer_id),
+                builder.build().unwrap(),
+            )
+            .unwrap();
+            if validate {
+                behaviour = behaviour.with_metrics(&mut Registry::default(), Default::default());
+            }
+            behaviour
+        })
     };
-    gs.on_connection_handler_event(
-        *peer,
-        ConnectionId::new_unchecked(0),
-        HandlerEvent::Message {
-            rpc,
-            invalid_messages: vec![],
-        },
-    );
-}
 
-/// Pops everything from `queue` and returns the ids of the queued messages.
-fn queued_message_ids(queue: &mut crate::queue::Queue) -> Vec<MessageId> {
-    let mut ids = vec![];
-    while let Some(rpc) = queue.try_pop() {
-        if let RpcOut::Publish { message_id, .. } = rpc {
-            ids.push(message_id);
+    let mut a = build(false);
+    let mut b = build(true); // gated validation: controls exactly when B forwards
+    let mut c = build(false);
+    for swarm in [&mut a, &mut b, &mut c] {
+        swarm.listen().with_memory_addr_external().await;
+    }
+    b.connect(&mut a).await;
+    c.connect(&mut b).await;
+    c.connect(&mut a).await;
+    let a_id = *a.local_peer_id();
+    let b_id = *b.local_peer_id();
+    let c_id = *c.local_peer_id();
+
+    let topic = IdentTopic::new("idontwant-e2e");
+    for swarm in [&mut a, &mut b, &mut c] {
+        swarm.behaviour_mut().subscribe(&topic).unwrap();
+    }
+
+    // Wait for the meshes: C publishes to {A, B}, B forwards to {A}, A forwards to {B}.
+    let meshed = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            for swarm in [&mut a, &mut b, &mut c] {
+                drain(swarm).await;
+            }
+            let mesh_has = |s: &Swarm<crate::Behaviour>, peers: &[PeerId]| {
+                s.behaviour()
+                    .mesh
+                    .get(&topic.hash())
+                    .is_some_and(|mesh| peers.iter().all(|p| mesh.contains(p)))
+            };
+            if mesh_has(&a, &[b_id]) && mesh_has(&b, &[a_id, c_id]) && mesh_has(&c, &[a_id, b_id]) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    assert!(meshed.is_ok(), "meshes did not form in time");
+
+    // A's swarm is deliberately not polled from here: its connection task's event channel
+    // fills after 7 events, the task blocks in send, it stops reading,
+    // and B's forwards park in B's send queue toward A. C publishes in batches; B only
+    // forwards a batch once we accept it below, keeping B's validation queue from overflowing.
+    let payload = vec![7u8; PAYLOAD];
+    let mut ids = Vec::with_capacity(PUBLISHES);
+    for start in (0..PUBLISHES).step_by(VALIDATION_BATCH) {
+        let end = (start + VALIDATION_BATCH).min(PUBLISHES);
+        for _ in start..end {
+            ids.push(
+                c.behaviour_mut()
+                    .publish(topic.clone(), payload.clone())
+                    .expect("publish"),
+            );
+        }
+        for id in &ids[start..end] {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                drain(&mut b).await;
+                if b.behaviour_mut().report_message_validation_result(
+                    id,
+                    &c_id,
+                    MessageAcceptance::Accept,
+                ) {
+                    break;
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "B never received the published message"
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
         }
     }
-    ids
-}
 
-/// Test that the ids of all IDONTWANT messages in an RPC are removed from the send queue.
-#[test]
-fn idontwant_removes_queued_messages() {
-    let (mut gs, peers, mut queues, _topic_hashes) = DefaultBehaviourTestBuilder::default()
-        .peer_no(1)
-        .topics(vec![String::from("topic1")])
-        .to_subscribe(true)
-        .gs_config(Config::default())
-        .peer_kind(PeerKind::Gossipsubv1_2)
-        .create_network();
-
-    let ids: Vec<_> = (0..3u8).map(|i| MessageId::new(&[i])).collect();
-    for id in &ids {
-        queue_message(&mut gs, &peers[0], id);
-    }
-
-    receive_idontwant(
-        &mut gs,
-        &peers[0],
-        vec![vec![ids[0].clone()], vec![ids[1].clone()]],
+    let parked = b.behaviour().connected_peers[&a_id]
+        .messages
+        .non_priority_len();
+    assert!(
+        parked >= MIN_PARKED,
+        "expected parked forwards, queue holds {parked}"
+    );
+    assert_eq!(
+        removed_counter(&b),
+        0,
+        "nothing should have been removed yet"
     );
 
-    let mut queue = queues.remove(&peers[0]).unwrap();
-    assert_eq!(queued_message_ids(&mut queue), vec![ids[2].clone()]);
-    let peer = &gs.connected_peers[&peers[0]];
-    assert!(peer.dont_send.contains_key(&ids[0]));
-    assert!(peer.dont_send.contains_key(&ids[1]));
+    // A now processes everything. It saw each message from C first (C's copies were queued in
+    // its channels before B could forward), so its forward excludes C and IDONTWANTs go to B,
+    // whose handler drains the parked queue.
+    let outcome = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            drain(&mut a).await;
+            drain(&mut b).await;
+            if removed_counter(&b) >= MIN_REMOVED {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert!(
+        outcome.is_ok(),
+        "the handler never removed the queued messages, counter = {}",
+        removed_counter(&b)
+    );
 }
