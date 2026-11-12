@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod connecting;
+mod incoming;
 mod stream;
 
 use std::{
@@ -28,6 +29,7 @@ use std::{
 
 pub use connecting::Connecting;
 use futures::{FutureExt, future::BoxFuture};
+pub use incoming::Incoming;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 pub use stream::Stream;
 

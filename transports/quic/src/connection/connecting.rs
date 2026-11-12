@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Future that drives a QUIC connection until is has performed its TLS handshake.
+//! Future that drives an outbound QUIC connection until it has performed its TLS handshake.
 
 use std::{
     pin::Pin,
@@ -51,31 +51,30 @@ impl Connecting {
     }
 }
 
-impl Connecting {
-    fn remote_peer_id(connection: &quinn::Connection) -> Result<PeerId, Error> {
-        fn transport_err(reason: &str) -> Error {
-            Error::Connection(ConnectionError(quinn::ConnectionError::TransportError(
-                TransportError {
-                    code: quinn::TransportErrorCode::PROTOCOL_VIOLATION,
-                    frame: None,
-                    reason: reason.to_string(),
-                },
-            )))
-        }
-
-        let identity = connection
-            .peer_identity()
-            .ok_or_else(|| transport_err("No crypto identity in quinn's Connection"))?;
-        let certificates: Box<Vec<CertificateDer>> = identity
-            .downcast()
-            .map_err(|_| transport_err("Could not downcast identity"))?;
-        let end_entity = certificates
-            .first()
-            .ok_or_else(|| transport_err("No certificate found"))?;
-        let p2p_cert = libp2p_tls::certificate::parse(end_entity)
-            .map_err(|_| transport_err("Could not parse certificate"))?;
-        Ok(p2p_cert.peer_id())
+/// Extracts the peer id from the TLS identity of an established connection.
+pub(super) fn remote_peer_id(connection: &quinn::Connection) -> Result<PeerId, Error> {
+    fn transport_err(reason: &str) -> Error {
+        Error::Connection(ConnectionError(quinn::ConnectionError::TransportError(
+            TransportError {
+                code: quinn::TransportErrorCode::PROTOCOL_VIOLATION,
+                frame: None,
+                reason: reason.to_string(),
+            },
+        )))
     }
+
+    let identity = connection
+        .peer_identity()
+        .ok_or_else(|| transport_err("No crypto identity in quinn's Connection"))?;
+    let certificates: Box<Vec<CertificateDer>> = identity
+        .downcast()
+        .map_err(|_| transport_err("Could not downcast identity"))?;
+    let end_entity = certificates
+        .first()
+        .ok_or_else(|| transport_err("No certificate found"))?;
+    let p2p_cert = libp2p_tls::certificate::parse(end_entity)
+        .map_err(|_| transport_err("Could not parse certificate"))?;
+    Ok(p2p_cert.peer_id())
 }
 
 impl Future for Connecting {
@@ -87,7 +86,7 @@ impl Future for Connecting {
             Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
         };
 
-        let peer_id = Self::remote_peer_id(&connection)?;
+        let peer_id = remote_peer_id(&connection)?;
         let muxer = Connection::new(connection);
         Poll::Ready(Ok((peer_id, muxer)))
     }
