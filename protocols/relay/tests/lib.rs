@@ -839,6 +839,68 @@ async fn deny_circuit_once_max_circuits_per_peer_is_reached() {
     }
 }
 
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn concurrent_reservation_requests_on_same_connection() {
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    // Allow a single reservation per peer, thus the second request is denied.
+    let mut relay = build_relay_with_config(
+        relay::Config {
+            reservation_rate_limiters: vec![],
+            ..relay::Config::default()
+        }
+        .reservation_rate_per_peer(
+            std::num::NonZeroU32::new(1).unwrap(),
+            Duration::from_secs(3600),
+        ),
+    );
+    let relay_peer_id = *relay.local_peer_id();
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+
+    let mut client = build_client();
+    client
+        .dial(relay_addr.clone().with(Protocol::P2p(relay_peer_id)))
+        .unwrap();
+    loop {
+        tokio::select! {
+            e = client.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } = e
+                    && peer_id == relay_peer_id
+                {
+                    break;
+                }
+            }
+            _ = relay.select_next_some() => {}
+        }
+    }
+
+    // Two reservation requests on the same connection.
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    client.listen_on(client_addr.clone()).unwrap();
+    client.listen_on(client_addr).unwrap();
+
+    let mut accepted = 0;
+    let mut denied = 0;
+    let mut deadline = futures_timer::Delay::new(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            e = relay.select_next_some() => match e {
+                SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::ReservationReqAccepted { .. })) => accepted += 1,
+                SwarmEvent::Behaviour(RelayEvent::Relay(relay::Event::ReservationReqDenied { .. })) => denied += 1,
+                _ => {}
+            },
+            _ = client.select_next_some() => {}
+            _ = &mut deadline => break,
+        }
+    }
+
+    assert_eq!(denied, 1);
+    assert_eq!(accepted, 1, "accepted reservation request was dropped");
+}
+
 fn build_relay() -> Swarm<Relay> {
     build_relay_with_config(relay::Config {
         reservation_duration: Duration::from_secs(2),

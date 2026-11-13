@@ -46,6 +46,10 @@ pub enum Error {
     UnexpectedTypeStatus,
     #[error("Unexpected message type '{0}'")]
     UnexpectedType(String),
+    #[error("Too many pending reservation requests on this connection")]
+    TooManyPendingReservations,
+    #[error("Timed out responding to reservation request")]
+    ReservationTimeout,
 }
 
 pub struct ReservationReq {

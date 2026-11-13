@@ -1,5 +1,10 @@
 ## 0.23.0
 
+- Drive all pending accept/deny futures of reservation requests on a connection instead of dropping
+  the previous one when a new request arrives.
+  Pending responses time out after 60 seconds and are capped at 10 per connection; requests over the cap fail with `ReservationReqAcceptFailed`/`ReservationReqDenyFailed`.
+  See [PR 6655](https://github.com/libp2p/rust-libp2p/pull/6655).
+
 - Deny circuit requests from a peer that already has `max_circuits_per_peer` circuits, instead of allowing one more.
   See [PR 6739](https://github.com/libp2p/rust-libp2p/pull/6739).
 
