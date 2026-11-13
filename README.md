@@ -109,3 +109,4 @@ used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.
 - [Fungi](https://github.com/enbop/fungi) - A platform built for seamless multi-device integration.
 - [Kinetic](https://github.com/saifmukhtar/kinetic) - Stateless, Sybil-resistant naming system with permanent identities using VDFs and drand.
+- [Kursal](https://github.com/KursalChat/Kursal) - Decentralized, post-quantum end-to-end encrypted messenger.
