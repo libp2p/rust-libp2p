@@ -37,14 +37,10 @@ use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn reservation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -86,11 +82,8 @@ async fn reservation() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn new_reservation_to_same_relay_replaces_old() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -185,11 +178,8 @@ async fn new_reservation_to_same_relay_replaces_old() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn closing_relay_listener_expires_external_address() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -256,11 +246,8 @@ async fn closing_relay_listener_expires_external_address() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn connect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -345,11 +332,8 @@ async fn connection_established_to(
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn handle_dial_failure() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let relay_peer_id = PeerId::random();
 
@@ -365,11 +349,8 @@ async fn handle_dial_failure() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn propagate_reservation_error_to_listener() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay_with_config(relay::Config {
         max_reservations: 0, // Will make us fail to make the reservation
@@ -417,11 +398,8 @@ async fn propagate_reservation_error_to_listener() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn propagate_connect_error_to_unknown_peer_to_dialer() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -476,11 +454,8 @@ async fn propagate_connect_error_to_unknown_peer_to_dialer() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn deny_circuit_to_connected_peer_without_reservation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -557,11 +532,8 @@ async fn deny_circuit_to_connected_peer_without_reservation() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn reuse_connection() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -595,11 +567,8 @@ async fn reuse_connection() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn relay_auto_enables_on_external_address() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
 
@@ -621,11 +590,8 @@ async fn relay_auto_enables_on_external_address() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn relay_auto_disables_on_external_address_removal() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
 
@@ -659,11 +625,8 @@ async fn relay_auto_disables_on_external_address_removal() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn relay_manual_status_overrides_auto() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
 
@@ -692,11 +655,8 @@ async fn relay_manual_status_overrides_auto() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn disabled_relay_rejects_reservation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -736,11 +696,8 @@ async fn disabled_relay_rejects_reservation() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn reservation_after_listener_close_emits_fresh_acceptance() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();
@@ -800,11 +757,8 @@ async fn reservation_after_listener_close_emits_fresh_acceptance() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn deny_circuit_once_max_circuits_per_peer_is_reached() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay_with_config(relay::Config {
         max_circuits_per_peer: 1,
@@ -1080,11 +1034,8 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn deny_circuit_when_outbound_stop_capacity_is_exhausted() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay_with_config(relay::Config {
         max_circuits: 100,
@@ -1173,11 +1124,8 @@ async fn deny_circuit_when_outbound_stop_capacity_is_exhausted() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn closing_listener_before_reservation_is_accepted_does_not_panic() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
     let relay_peer_id = *relay.local_peer_id();

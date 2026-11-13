@@ -87,9 +87,10 @@ impl PreSharedKey {
 fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
     if s.len() == KEY_SIZE * 2 {
         let mut r = [0u8; KEY_SIZE];
-        for i in 0..KEY_SIZE {
-            r[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-                .map_err(KeyParseError::InvalidKeyChar)?;
+        for (i, byte) in r.iter_mut().enumerate() {
+            // A pair that cuts through a multi-byte character is not a hex digit either.
+            let pair = s.get(i * 2..i * 2 + 2).unwrap_or("\u{FFFD}");
+            *byte = u8::from_str_radix(pair, 16).map_err(KeyParseError::InvalidKeyChar)?;
         }
         Ok(r)
     } else {
@@ -361,6 +362,17 @@ mod tests {
                 .unwrap_err(),
             InvalidKeyLength
         );
+    }
+
+    #[test]
+    fn psk_parse_non_ascii_key_does_not_panic() {
+        // 64 bytes long, but the first pair of bytes ends inside a multi-byte character.
+        let key = format!("/key/swarm/psk/1.0.0/\n/base16/\na{}a", "\u{e9}".repeat(31));
+        assert_eq!(key.lines().nth(2).unwrap().len(), KEY_SIZE * 2);
+        assert!(matches!(
+            key.parse::<PreSharedKey>().unwrap_err(),
+            KeyParseError::InvalidKeyChar(_)
+        ));
     }
 
     #[test]
