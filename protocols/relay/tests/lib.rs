@@ -886,11 +886,8 @@ async fn deny_circuit_once_max_circuits_per_peer_is_reached() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn concurrent_reservation_requests_on_same_connection() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     // Allow a single reservation per peer, thus the second request is denied.
     let mut relay = build_relay_with_config(
