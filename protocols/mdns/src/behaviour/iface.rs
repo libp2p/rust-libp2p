@@ -50,6 +50,25 @@ use crate::{
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
 
+/// Resolve the IPv6 interface index (scope id) for a local address by matching
+/// it against the host's network interfaces. Used to pin IPv6 multicast group
+/// membership and the outbound multicast interface to the correct adapter.
+///
+/// Returns `0` (OS-default interface) if the address cannot be matched or
+/// interface enumeration fails, preserving the previous behaviour.
+fn interface_index_for_addr(addr: &Ipv6Addr) -> u32 {
+    use std::net::IpAddr;
+    if_addrs::get_if_addrs()
+        .ok()
+        .and_then(|ifaces| {
+            ifaces.into_iter().find_map(|iface| match iface.ip() {
+                IpAddr::V6(ip) if ip == *addr => iface.index,
+                _ => None,
+            })
+        })
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone)]
 enum ProbeState {
     Probing(Duration),
@@ -123,6 +142,17 @@ where
         query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
     ) -> io::Result<Self> {
         tracing::info!(address=%addr, "creating instance on iface address");
+        // For IPv6 we need the interface index of the adapter that owns `addr`
+        // so we can pin both the multicast group join and the outbound
+        // multicast interface to the correct adapter. On hosts with multiple
+        // virtual adapters (e.g. Windows with Hyper-V / WSL / VPN) the
+        // OS-default interface index (0) causes mDNS packets to leave on the
+        // wrong interface and never reach the LAN. The IPv4 path is unaffected
+        // because it passes the real interface address to join_multicast_v4.
+        let ipv6_iface_index = match addr {
+            IpAddr::V6(ip) => interface_index_for_addr(&ip),
+            IpAddr::V4(_) => 0,
+        };
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
                 let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -142,22 +172,25 @@ where
                 socket.set_reuse_port(true)?;
                 socket.bind(&SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 5353).into())?;
                 socket.set_multicast_loop_v6(true)?;
-                // TODO: find interface matching addr.
-                socket.join_multicast_v6(&crate::IPV6_MDNS_MULTICAST_ADDRESS, 0)?;
+                socket.join_multicast_v6(&crate::IPV6_MDNS_MULTICAST_ADDRESS, ipv6_iface_index)?;
                 U::from_std(UdpSocket::from(socket))?
             }
         };
-        let bind_addr = match addr {
-            IpAddr::V4(_) => SocketAddr::new(addr, 0),
-            IpAddr::V6(_addr) => {
-                // TODO: if-watch should return the scope_id of an address
-                // as a workaround we bind to unspecified, which means that
-                // this probably won't work when using multiple interfaces.
-                // SocketAddr::V6(SocketAddrV6::new(addr, 0, 0, scope_id))
-                SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
+        let send_socket = match addr {
+            IpAddr::V4(_) => U::from_std(UdpSocket::bind(SocketAddr::new(addr, 0))?)?,
+            IpAddr::V6(_) => {
+                // Build the send socket via socket2 so we can set
+                // IPV6_MULTICAST_IF, ensuring outbound mDNS queries and
+                // responses leave on the same interface we joined on.
+                let socket =
+                    Socket::new(Domain::IPV6, Type::DGRAM, Some(socket2::Protocol::UDP))?;
+                socket.bind(&SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0).into())?;
+                if ipv6_iface_index != 0 {
+                    socket.set_multicast_if_v6(ipv6_iface_index)?;
+                }
+                U::from_std(UdpSocket::from(socket))?
             }
         };
-        let send_socket = U::from_std(UdpSocket::bind(bind_addr)?)?;
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
