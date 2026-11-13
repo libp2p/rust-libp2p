@@ -55,6 +55,8 @@ use crate::{
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
+/// Maximum number of reservation accept/deny responses in flight per connection.
+const MAX_PENDING_RESERVATIONS_PER_CONNECTION: usize = 10;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -366,7 +368,7 @@ pub struct Handler {
     idle_at: Option<Instant>,
 
     /// Futures accepting or denying inbound reservation requests.
-    reservation_request_futures: Futures<ReservationRequestResult>,
+    reservation_request_futures: futures_bounded::FuturesSet<ReservationRequestResult>,
     /// Timeout for the currently active reservation.
     active_reservation: Option<Delay>,
 
@@ -414,7 +416,10 @@ impl Handler {
             config,
             queued_events: Default::default(),
             idle_at: None,
-            reservation_request_futures: Default::default(),
+            reservation_request_futures: futures_bounded::FuturesSet::new(
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
+                MAX_PENDING_RESERVATIONS_PER_CONNECTION,
+            ),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             circuits: Default::default(),
@@ -517,6 +522,7 @@ impl Handler {
 enum ReservationRequestResult {
     Accepted(Result<(), inbound_hop::Error>),
     Denied(proto::Status, Result<(), inbound_hop::Error>),
+    TimedOut,
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
@@ -544,23 +550,45 @@ impl ConnectionHandler for Handler {
                 inbound_reservation_req,
                 addrs,
             } => {
-                self.reservation_request_futures.push(
-                    inbound_reservation_req
-                        .accept(addrs)
-                        .map(ReservationRequestResult::Accepted)
-                        .boxed(),
-                );
+                if self
+                    .reservation_request_futures
+                    .try_push(
+                        inbound_reservation_req
+                            .accept(addrs)
+                            .map(ReservationRequestResult::Accepted),
+                    )
+                    .is_err()
+                {
+                    tracing::warn!("Too many pending reservation requests, failing accept");
+                    self.queued_events
+                        .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::ReservationReqAcceptFailed {
+                                error: inbound_hop::Error::TooManyPendingReservations,
+                            },
+                        ));
+                }
             }
             In::DenyReservationReq {
                 inbound_reservation_req,
                 status,
             } => {
-                self.reservation_request_futures.push(
-                    inbound_reservation_req
-                        .deny(status)
-                        .map(move |result| ReservationRequestResult::Denied(status, result))
-                        .boxed(),
-                );
+                if self
+                    .reservation_request_futures
+                    .try_push(
+                        inbound_reservation_req
+                            .deny(status)
+                            .map(move |result| ReservationRequestResult::Denied(status, result)),
+                    )
+                    .is_err()
+                {
+                    tracing::warn!("Too many pending reservation requests, failing deny");
+                    self.queued_events
+                        .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::ReservationReqDenyFailed {
+                                error: inbound_hop::Error::TooManyPendingReservations,
+                            },
+                        ));
+                }
             }
             In::NegotiateOutboundConnect {
                 circuit_id,
@@ -852,8 +880,8 @@ impl ConnectionHandler for Handler {
         }
 
         // Progress reservation requests.
-        if let Poll::Ready(Some(result)) = self.reservation_request_futures.poll_next_unpin(cx) {
-            let event = match result {
+        if let Poll::Ready(result) = self.reservation_request_futures.poll_unpin(cx) {
+            let event = match result.unwrap_or(ReservationRequestResult::TimedOut) {
                 ReservationRequestResult::Accepted(Ok(())) => {
                     let renewed = self
                         .active_reservation
@@ -870,6 +898,9 @@ impl ConnectionHandler for Handler {
                 ReservationRequestResult::Denied(_, Err(error)) => {
                     Event::ReservationReqDenyFailed { error }
                 }
+                ReservationRequestResult::TimedOut => Event::ReservationReqAcceptFailed {
+                    error: inbound_hop::Error::ReservationTimeout,
+                },
             };
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
