@@ -3,7 +3,7 @@
   `publish` no longer returns `PublishError::Duplicate` for a message id older than
   `duplicate_cache_time`. IHAVE and IDONTWANT handling now treat such ids as unseen too, matching
   the receive path.
-  See [PR 6761](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6761](https://github.com/libp2p/rust-libp2p/pull/6761).
 
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
