@@ -234,7 +234,7 @@ where
                         let evicted = Some(self.nodes.remove(0));
                         self.first_connected_pos = self
                             .first_connected_pos
-                            .map_or_else(|| Some(self.nodes.len()), |p| p.checked_sub(1));
+                            .map_or(Some(self.nodes.len()), |p| p.checked_sub(1));
                         self.nodes.push(pending.node);
                         return Some(AppliedPending { inserted, evicted });
                     }

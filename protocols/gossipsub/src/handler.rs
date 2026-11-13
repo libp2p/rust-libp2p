@@ -511,7 +511,7 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
-                        Either::Right(v) => libp2p_core::util::unreachable(v),
+                        Either::Right(v) => match v {},
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
@@ -525,7 +525,7 @@ impl ConnectionHandler for Handler {
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
                         ..
-                    }) => libp2p_core::util::unreachable(e),
+                    }) => match e {},
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::NegotiationFailed,
                         ..

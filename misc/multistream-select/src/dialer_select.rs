@@ -21,9 +21,9 @@
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
 use std::{
-    convert::TryFrom as _,
     iter, mem,
     pin::Pin,
+    str::FromStr,
     task::{Context, Poll},
 };
 
@@ -131,7 +131,7 @@ where
                         }
                     }
 
-                    let p = Protocol::try_from(protocol.as_ref())?;
+                    let p = Protocol::from_str(protocol.as_ref())?;
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }

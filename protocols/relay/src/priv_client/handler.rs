@@ -450,7 +450,7 @@ impl ConnectionHandler for Handler {
                     let _ = next.send(Ok(ev.protocol));
                 }
             }
-            ConnectionEvent::ListenUpgradeError(ev) => libp2p_core::util::unreachable(ev.error),
+            ConnectionEvent::ListenUpgradeError(ev) => match ev.error {},
             ConnectionEvent::DialUpgradeError(ev) => {
                 if let Some(next) = self.pending_streams.pop_front() {
                     let _ = next.send(Err(ev.error));
@@ -587,7 +587,7 @@ fn into_reserve_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::Reserv
         StreamUpgradeError::Timeout => {
             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into())
         }
-        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
+        StreamUpgradeError::Apply(never) => match never {},
         StreamUpgradeError::NegotiationFailed => outbound_hop::ReserveError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ReserveError::Io(e),
     }
@@ -598,7 +598,7 @@ fn into_connect_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::Connec
         StreamUpgradeError::Timeout => {
             outbound_hop::ConnectError::Io(io::ErrorKind::TimedOut.into())
         }
-        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
+        StreamUpgradeError::Apply(never) => match never {},
         StreamUpgradeError::NegotiationFailed => outbound_hop::ConnectError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ConnectError::Io(e),
     }

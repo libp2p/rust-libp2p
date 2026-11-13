@@ -177,7 +177,7 @@ pub mod codec {
 
     fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
         match err {
-            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => io::Error::other(e),
+            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => match e {},
             cbor4ii::serde::DecodeError::Core(e @ DecodeError::Unsupported { .. }) => {
                 io::Error::new(io::ErrorKind::Unsupported, e)
             }

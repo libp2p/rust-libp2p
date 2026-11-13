@@ -579,7 +579,7 @@ fn custom_out_event_no_type_parameters() {
             _connection: ConnectionId,
             message: THandlerOutEvent<Self>,
         ) {
-            libp2p_core::util::unreachable(message);
+            match message {};
         }
 
         fn poll(

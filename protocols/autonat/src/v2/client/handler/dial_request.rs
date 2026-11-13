@@ -214,7 +214,7 @@ async fn start_stream_handle(
         .map_err(|e| match e {
             StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
-            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
+            StreamUpgradeError::Apply(v) => match v {},
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
 

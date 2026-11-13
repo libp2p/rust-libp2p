@@ -110,7 +110,7 @@ pub(crate) async fn new_for_pending_outgoing_connection<D: Future<Output = DialR
                 })
                 .await;
         }
-        Either::Left((Ok(v), _)) => libp2p_core::util::unreachable(v),
+        Either::Left((Ok(v), _)) => match v {},
         Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
@@ -148,7 +148,7 @@ pub(crate) async fn new_for_pending_incoming_connection<TFut>(
                 })
                 .await;
         }
-        Either::Left((Ok(v), _)) => libp2p_core::util::unreachable(v),
+        Either::Left((Ok(v), _)) => match v {},
         Either::Right((Ok(output), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
