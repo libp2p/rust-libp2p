@@ -236,13 +236,6 @@ impl EnabledHandler {
             return 0;
         };
 
-        if !rpc
-            .control_msgs
-            .iter()
-            .any(|msg| matches!(msg, ControlAction::IDontWant(_)))
-        {
-            return 0;
-        }
 
         let ids = rpc.control_msgs.iter().filter_map(|msg| match msg {
             ControlAction::IDontWant(IDontWant { message_ids }) => Some(message_ids.iter()),
