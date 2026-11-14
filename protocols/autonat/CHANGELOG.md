@@ -7,6 +7,10 @@
   Global unicast addresses such as `2001:4860::1` were treated as non-global before.
   See [PR 6646](https://github.com/libp2p/rust-libp2p/pull/6646).
 
+- Remove addresses from the AutoNAT v2 client's candidates on `FromSwarm::ExternalAddrExpired`,
+  so that expired addresses are no longer probed.
+  See [PR 6207](https://github.com/libp2p/rust-libp2p/pull/6207).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.16.0

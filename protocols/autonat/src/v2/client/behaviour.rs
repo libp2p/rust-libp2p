@@ -11,8 +11,8 @@ use futures_timer::Delay;
 use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm,
-    NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, ExternalAddrExpired,
+    FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
     behaviour::ConnectionEstablished,
 };
 use rand::prelude::*;
@@ -110,6 +110,9 @@ where
                     .entry(addr.clone())
                     .or_default()
                     .score += 1;
+            }
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
+                self.address_candidates.remove(addr);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -438,4 +441,100 @@ enum TestStatus {
     Pending(Nonce),
     Failed,
     Received(Nonce),
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{SeedableRng, rngs::StdRng};
+
+    use super::*;
+
+    fn test_addr() -> Multiaddr {
+        "/ip4/1.2.3.4/tcp/1234".parse().unwrap()
+    }
+
+    fn test_behaviour() -> Behaviour<StdRng> {
+        Behaviour::new(StdRng::seed_from_u64(0), Config::default())
+    }
+
+    fn report(behaviour: &mut Behaviour<StdRng>, addr: &Multiaddr) {
+        behaviour.on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr },
+        ));
+    }
+
+    fn expire(behaviour: &mut Behaviour<StdRng>, addr: &Multiaddr) {
+        behaviour.on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
+    }
+
+    #[test]
+    fn expired_address_is_removed_in_every_status() {
+        let addr = test_addr();
+
+        for status in [
+            TestStatus::Untested,
+            TestStatus::Pending(1),
+            TestStatus::Failed,
+            TestStatus::Received(1),
+        ] {
+            let mut behaviour = test_behaviour();
+            report(&mut behaviour, &addr);
+            behaviour.address_candidates.get_mut(&addr).unwrap().status = status;
+
+            expire(&mut behaviour, &addr);
+
+            assert!(!behaviour.address_candidates.contains_key(&addr));
+            assert_eq!(behaviour.untested_candidates().count(), 0);
+        }
+    }
+
+    #[test]
+    fn expiring_unknown_address_keeps_other_candidates() {
+        let mut behaviour = test_behaviour();
+        let known: Multiaddr = "/ip4/5.6.7.8/tcp/5678".parse().unwrap();
+        report(&mut behaviour, &known);
+
+        expire(&mut behaviour, &test_addr());
+
+        assert_eq!(behaviour.address_candidates.len(), 1);
+        assert!(behaviour.address_candidates.contains_key(&known));
+    }
+
+    #[test]
+    fn address_reported_after_expiry_starts_fresh() {
+        let mut behaviour = test_behaviour();
+        let addr = test_addr();
+        for _ in 0..5 {
+            report(&mut behaviour, &addr);
+        }
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Failed;
+
+        expire(&mut behaviour, &addr);
+        report(&mut behaviour, &addr);
+
+        let info = behaviour.address_candidates[&addr];
+        assert_eq!(info.score, 1);
+        assert!(info.status == TestStatus::Untested);
+    }
+
+    #[test]
+    fn in_flight_probe_does_not_confirm_expired_address() {
+        let mut behaviour = test_behaviour();
+        let addr = test_addr();
+        let nonce = 1;
+        report(&mut behaviour, &addr);
+        behaviour.address_candidates.get_mut(&addr).unwrap().status = TestStatus::Received(nonce);
+
+        expire(&mut behaviour, &addr);
+        behaviour.on_connection_handler_event(
+            PeerId::random(),
+            ConnectionId::new_unchecked(0),
+            Either::Left(dial_request::ToBehaviour::TestOutcome {
+                nonce,
+                outcome: Ok((addr, 0)),
+            }),
+        );
+
+        assert!(behaviour.pending_events.is_empty());
+    }
 }
