@@ -106,8 +106,9 @@ struct PeerStats {
     status: ConnectionStatus,
     /// Stats per topic.
     topics: HashMap<TopicHash, TopicStats>,
-    /// IP tracking for individual peers.
-    known_ips: HashSet<IpAddr>,
+    /// IP tracking for individual peers. Maps each IP to the number of the peer's open
+    /// connections from that IP, so the IP is only dropped once its last connection closes.
+    known_ips: HashMap<IpAddr, usize>,
     /// Behaviour penalty that is applied to the peer, assigned by the behaviour.
     behaviour_penalty: f64,
     /// Application specific score. Can be manipulated by calling PeerScore::set_application_score
@@ -141,7 +142,7 @@ impl Default for PeerStats {
         PeerStats {
             status: ConnectionStatus::Connected,
             topics: HashMap::new(),
-            known_ips: HashSet::new(),
+            known_ips: HashMap::new(),
             behaviour_penalty: 0f64,
             application_score: 0f64,
             slow_peer_penalty: 0f64,
@@ -373,7 +374,7 @@ impl PeerScore {
         report.score += p5 * self.params.app_specific_weight;
 
         // P6: IP collocation factor
-        for ip in peer_stats.known_ips.iter() {
+        for ip in peer_stats.known_ips.keys() {
             if self.params.ip_colocation_factor_whitelist.contains(ip) {
                 continue;
             }
@@ -432,7 +433,7 @@ impl PeerScore {
         peer_ips: &mut HashMap<IpAddr, HashSet<PeerId>>,
         peer_id: &PeerId,
     ) {
-        for ip in peer_stats.known_ips.iter() {
+        for ip in peer_stats.known_ips.keys() {
             if let Entry::Occupied(mut entry) = peer_ips.entry(*ip) {
                 entry.get_mut().remove(peer_id);
                 if entry.get().is_empty() {
@@ -534,8 +535,9 @@ impl PeerScore {
         // rely on the default).
         peer_stats.status = ConnectionStatus::Connected;
 
-        // Insert the ip
-        peer_stats.known_ips.insert(ip);
+        // Record this connection from the ip. The peer counts toward the ip while at least one
+        // of its connections from that ip is open.
+        *peer_stats.known_ips.entry(ip).or_default() += 1;
         self.peer_ips.entry(ip).or_default().insert(*peer_id);
     }
 
@@ -564,28 +566,49 @@ impl PeerScore {
         }
     }
 
-    /// Removes an ip from a peer
+    /// Removes a connection from an ip for a peer, dropping the ip once its last connection closes.
     pub(crate) fn remove_ip(&mut self, peer_id: &PeerId, ip: &IpAddr) {
-        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            peer_stats.known_ips.remove(ip);
-            if let Entry::Occupied(mut entry) = self.peer_ips.entry(*ip) {
-                tracing::trace!(peer=%peer_id, %ip, "Remove ip for peer");
-                entry.get_mut().remove(peer_id);
-                if entry.get().is_empty() {
-                    entry.remove();
-                }
-            } else {
+        let Some(peer_stats) = self.peer_stats.get_mut(peer_id) else {
+            tracing::trace!(
+                peer=%peer_id,
+                %ip,
+                "No peer_stats for peer which should remove the ip"
+            );
+            return;
+        };
+
+        // Keep the peer counted at the ip while any of its other connections from that ip are
+        // still open. Removing it on every closed connection would let a peer dodge the IP
+        // colocation penalty (P6) by opening a second connection from the same ip and closing it.
+        match peer_stats.known_ips.entry(*ip) {
+            Entry::Occupied(mut entry) if *entry.get() > 1 => {
+                *entry.get_mut() -= 1;
+                return;
+            }
+            Entry::Occupied(entry) => {
+                entry.remove();
+            }
+            Entry::Vacant(_) => {
                 tracing::trace!(
                     peer=%peer_id,
                     %ip,
-                    "No entry in peer_ips for ip which should get removed for peer"
+                    "No known connection from ip which should get removed for peer"
                 );
+                return;
+            }
+        }
+
+        if let Entry::Occupied(mut entry) = self.peer_ips.entry(*ip) {
+            tracing::trace!(peer=%peer_id, %ip, "Remove ip for peer");
+            entry.get_mut().remove(peer_id);
+            if entry.get().is_empty() {
+                entry.remove();
             }
         } else {
             tracing::trace!(
                 peer=%peer_id,
                 %ip,
-                "No peer_stats for peer which should remove the ip"
+                "No entry in peer_ips for ip which should get removed for peer"
             );
         }
     }
