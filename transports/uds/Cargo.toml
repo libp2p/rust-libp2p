@@ -10,11 +10,15 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[features]
+tokio = ["dep:libp2p-core", "dep:tokio", "dep:futures", "dep:tracing"]
+
+
 [dependencies]
-libp2p-core = { workspace = true }
-futures = { workspace = true }
+libp2p-core = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
-tracing = { workspace = true }
+tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3.27"
