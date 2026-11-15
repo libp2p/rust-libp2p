@@ -1,7 +1,11 @@
 ## 0.51.0
-- Keep existing fanout peers when topping up the fanout on publish. Previously the fanout was
-  replaced by the newly selected peers, which emptied it when no new peers were available.
-  See [PR 6730](https://github.com/libp2p/rust-libp2p/pull/6730).
+- Cap the number of control messages per type per RPC at `max_control_messages`
+  (default 500), truncating the excess after decoding.
+  See [PR 6765](https://github.com/libp2p/rust-libp2p/pull/6765).
+
+- Act on received IDONTWANT control messages in the `ConnectionHandler`, on the connection's own
+  task, instead of in the behaviour.
+  See [PR 6760](https://github.com/libp2p/rust-libp2p/pull/6760).
 
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
