@@ -6,15 +6,11 @@ use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use serde::{Deserialize, Serialize};
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 #[cfg(feature = "cbor")]
+#[tracing_test::traced_test]
 async fn dial_succeeds_after_adding_peers_address() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let config = request_response::Config::default();
 

@@ -11,13 +11,10 @@ use libp2p_swarm::{
 use libp2p_swarm_test::SwarmExt;
 use rand::rngs::StdRng;
 use tokio::sync::oneshot;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn confirm_successful() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (mut alice, mut bob) = start_and_connect().await;
 
     let cor_server_peer = *alice.local_peer_id();
@@ -127,10 +124,8 @@ async fn confirm_successful() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn dial_back_to_unsupported_protocol() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (mut alice, mut bob) = bootstrap().await;
 
     let alice_peer_id = *alice.local_peer_id();
@@ -225,10 +220,8 @@ async fn dial_back_to_unsupported_protocol() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn dial_back_to_non_libp2p() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 
@@ -313,11 +306,8 @@ async fn dial_back_to_non_libp2p() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn dial_back_to_not_supporting() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 

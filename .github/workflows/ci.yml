@@ -64,7 +64,8 @@ jobs:
           echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
 
       - name: Enforce version in `workspace.dependencies` matches the latest version
-        if: env.CRATE != 'libp2p'
+        # libp2p-server and libp2p-perf are not inherited by any member and are therefore absent from [workspace.dependencies].
+        if: env.CRATE != 'libp2p-server' && env.CRATE != 'libp2p-perf'
         run: |
           SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" -r --file ./Cargo.toml)
 

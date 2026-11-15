@@ -258,7 +258,7 @@ where
         _: ConnectionId,
         ev: THandlerOutEvent<Self>,
     ) {
-        libp2p_core::util::unreachable(ev)
+        match ev {}
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
