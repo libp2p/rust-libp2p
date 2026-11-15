@@ -944,9 +944,11 @@ mod tests {
         // Create RPC with 501 IDONTWANT messages (one over the per-type limit)
         let rpc = proto::Rpc {
             control: Some(proto::ControlMessage {
-                idontwant: (0..501).map(|_| proto::ControlIDontWant {
-                    message_ids: vec![vec![0u8]],
-                }).collect(),
+                idontwant: (0..501)
+                    .map(|_| proto::ControlIDontWant {
+                        message_ids: vec![vec![0u8]],
+                    })
+                    .collect(),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1143,8 +1145,14 @@ mod tests {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&frame[..prefix_len + 1]);
 
-        let mut decoder =
-            GossipsubCodec::new(1000, ValidationMode::Anonymous, HashMap::new(), 5000, 5000, 500);
+        let mut decoder = GossipsubCodec::new(
+            1000,
+            ValidationMode::Anonymous,
+            HashMap::new(),
+            5000,
+            5000,
+            500,
+        );
         let err = decoder
             .decode(&mut buf)
             .unwrap_err()
