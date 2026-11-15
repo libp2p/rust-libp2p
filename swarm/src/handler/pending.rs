@@ -56,7 +56,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        libp2p_core::util::unreachable(v)
+        match v {}
     }
 
     fn poll(
@@ -73,15 +73,15 @@ impl ConnectionHandler for PendingConnectionHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => libp2p_core::util::unreachable(protocol),
+            }) => match protocol {},
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
             }) => {
-                libp2p_core::util::unreachable(protocol);
+                match protocol {};
                 #[allow(unreachable_code, clippy::used_underscore_binding)]
                 {
-                    libp2p_core::util::unreachable(_info);
+                    match _info {};
                 }
             }
             ConnectionEvent::AddressChange(_)

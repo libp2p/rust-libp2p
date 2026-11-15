@@ -187,7 +187,10 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
+    // The `Result` is only fallible for `rsa`, which may be compiled out. The
+    // signature has to stay stable across feature combinations.
     #[allow(unused_variables)]
+    #[allow(clippy::unnecessary_wraps)]
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
@@ -230,6 +233,9 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
+    // The `Result` is only fallible for `rsa`, which may be compiled out. The
+    // signature has to stay stable across feature combinations.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
@@ -238,6 +244,7 @@ impl Keypair {
             feature = "rsa"
         ))]
         {
+            #[allow(unused)]
             let pk: proto::PrivateKey = match self.keypair {
                 #[cfg(feature = "ed25519")]
                 KeyPairInner::Ed25519(ref data) => proto::PrivateKey {
@@ -261,6 +268,7 @@ impl Keypair {
                 },
             };
 
+            #[allow(unused)]
             Ok(pk.encode_to_vec())
         }
 
@@ -406,7 +414,10 @@ impl Keypair {
     }
 
     /// Return the secret key of the [`Keypair`].
+    // The `Option` is only `None` for `rsa`, which may be compiled out. The
+    // signature has to stay stable across feature combinations.
     #[allow(dead_code)]
+    #[allow(clippy::unnecessary_wraps)]
     pub(crate) fn secret(&self) -> Option<[u8; 32]> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
@@ -704,8 +715,10 @@ impl TryFrom<proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
-        let key_type = proto::KeyType::try_from(pubkey.r#type)
-            .map_err(|_| DecodingError::unknown_key_type(pubkey.r#type))?;
+        let key_type = proto::KeyType::try_from(pubkey.r#type).map_err(|_| {
+            tracing::debug!("unknown key type {}", pubkey.r#type);
+            DecodingError::unknown_key_type(pubkey.r#type)
+        })?;
 
         match key_type {
             #[cfg(feature = "ed25519")]
