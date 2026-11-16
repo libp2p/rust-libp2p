@@ -25,7 +25,7 @@ use libp2p_autonat::{
 };
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{DialError, Swarm, SwarmEvent};
+use libp2p_swarm::{DialError, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt as _;
 
 #[tokio::test]
@@ -123,6 +123,34 @@ async fn test_dial_back() {
             assert_eq!(probe_id, request_probe_id);
             assert_eq!(peer, client_id);
             assert_eq!(address, expect_addr);
+        }
+        other => panic!("Unexpected behaviour event: {other:?}."),
+    }
+}
+
+#[tokio::test]
+async fn test_unrelated_dial_failure_does_not_fail_dial_back() {
+    let (mut server, server_id, server_addr) = new_server_swarm(None).await;
+    let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
+    client.listen().await;
+    tokio::spawn(client.loop_on_next());
+
+    let request_probe_id = loop {
+        if let Event::InboundProbe(InboundProbeEvent::Request { peer, probe_id, .. }) =
+            server.next_behaviour_event().await
+        {
+            assert_eq!(peer, client_id);
+            break probe_id;
+        }
+    };
+
+    // Some other dial to the client fails while the dial-back is still ongoing.
+    assert!(server.dial(DialOpts::peer_id(client_id).build()).is_err());
+
+    match server.next_behaviour_event().await {
+        Event::InboundProbe(InboundProbeEvent::Response { probe_id, peer, .. }) => {
+            assert_eq!(probe_id, request_probe_id);
+            assert_eq!(peer, client_id);
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }

@@ -30,7 +30,7 @@ tokio = ["dep:tokio", "if-watch/tokio"]
 libp2p-swarm = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 [[test]]
 name = "use-tokio"
