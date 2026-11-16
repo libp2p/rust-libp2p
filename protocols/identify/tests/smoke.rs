@@ -9,14 +9,10 @@ use libp2p_identify as identify;
 use libp2p_identity::Keypair;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn periodic_identify() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
@@ -83,11 +79,8 @@ async fn periodic_identify() {
     }
 }
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn only_emits_address_candidate_once_per_connection() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
@@ -155,11 +148,8 @@ async fn only_emits_address_candidate_once_per_connection() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn emits_unique_listen_addresses() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
@@ -227,11 +217,8 @@ async fn emits_unique_listen_addresses() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn hides_listen_addresses() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
@@ -298,11 +285,8 @@ async fn hides_listen_addresses() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn identify_push() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
@@ -350,11 +334,8 @@ async fn identify_push() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn discover_peer_after_disconnect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
@@ -403,11 +384,8 @@ async fn discover_peer_after_disconnect() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn configured_interval_starts_after_first_identify() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let identify_interval = Duration::from_secs(5);
 
     let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
@@ -443,11 +421,8 @@ async fn configured_interval_starts_after_first_identify() {
 }
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn reject_mismatched_public_key() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut honest_swarm = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
