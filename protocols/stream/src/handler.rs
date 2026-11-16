@@ -88,7 +88,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        libp2p_core::util::unreachable(event)
+        match event {}
     }
 
     fn on_connection_event(
@@ -130,7 +130,7 @@ impl ConnectionHandler for Handler {
                     swarm::StreamUpgradeError::Timeout => {
                         OpenStreamError::Io(io::Error::from(io::ErrorKind::TimedOut))
                     }
-                    swarm::StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
+                    swarm::StreamUpgradeError::Apply(v) => match v {},
                     swarm::StreamUpgradeError::NegotiationFailed => {
                         OpenStreamError::UnsupportedProtocol(p)
                     }
