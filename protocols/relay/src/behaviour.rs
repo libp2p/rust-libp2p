@@ -716,18 +716,20 @@ impl NetworkBehaviour for Behaviour {
                     .get(&inbound_circuit_req.dst())
                     .and_then(|cs| cs.iter().find(|(_, status)| status.is_active()))
                 {
+                    let dst_peer_id = inbound_circuit_req.dst();
+
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
                         src_peer_id: event_source,
                         src_connection_id: connection,
-                        dst_peer_id: inbound_circuit_req.dst(),
+                        dst_peer_id,
                         dst_connection_id: *dst_conn,
                     });
 
                     ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(*dst_conn),
-                        peer_id: event_source,
+                        peer_id: dst_peer_id,
                         event: Either::Left(handler::In::NegotiateOutboundConnect {
                             circuit_id,
                             inbound_circuit_req,
