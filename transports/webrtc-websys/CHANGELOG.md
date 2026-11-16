@@ -1,3 +1,8 @@
+## 0.5.1
+
+- Unset `RtcDataChannel`'s event handlers when the last handle to a stream's
+  data channel is dropped.
+
 ## 0.5.0
 
 - Require `getrandom/js` feature only under `wasm` target.
