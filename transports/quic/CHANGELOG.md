@@ -1,3 +1,8 @@
+## 0.14.1
+
+- Rate-limit Retry for unvalidated inbound addresses.
+  See [PR 6756](https://github.com/libp2p/rust-libp2p/pull/6756).
+
 ## 0.14.0
 
 - Prefer and advertise the X25519MLKEM768 key exchange group for QUIC.

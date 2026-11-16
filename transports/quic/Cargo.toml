@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.14.0"
+version = "0.14.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition.workspace = true
 rust-version = { workspace = true }
@@ -11,6 +11,7 @@ license = "MIT"
 [dependencies]
 futures = { workspace = true }
 futures-timer = { workspace = true }
+hashlink = { workspace = true }
 if-watch = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }

@@ -68,7 +68,7 @@ mod transport;
 
 use std::net::SocketAddr;
 
-pub use config::Config;
+pub use config::{Config, InboundAddressValidation};
 pub use connection::{Connecting, Connection, Stream};
 pub use provider::Provider;
 #[cfg(feature = "tokio")]

@@ -27,9 +27,10 @@ use std::{
     hash::{Hash, Hasher},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    num::NonZeroU32,
     pin::Pin,
     task::{Context, Poll, Waker},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures::{
@@ -39,6 +40,7 @@ use futures::{
     ready,
     stream::{SelectAll, StreamExt},
 };
+use hashlink::LruCache;
 use if_watch::IfEvent;
 use libp2p_core::{
     Endpoint, Transport,
@@ -49,7 +51,7 @@ use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
 
 use crate::{
-    ConnectError, Connecting, Connection, Error,
+    ConnectError, Connecting, Connection, Error, InboundAddressValidation,
     config::{Config, QuinnConfig},
     hole_punching::hole_puncher,
     provider::Provider,
@@ -72,6 +74,9 @@ pub struct GenTransport<P: Provider> {
     quinn_config: QuinnConfig,
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
+    /// When to send a Retry packet to inbound connections
+    /// with an unvalidated source address.
+    inbound_address_validation: InboundAddressValidation,
     /// Whether draft-29 is supported for dialing and listening.
     support_draft_29: bool,
     /// Streams of active [`Listener`]s.
@@ -89,12 +94,14 @@ impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
         let handshake_timeout = config.handshake_timeout;
+        let inbound_address_validation = config.inbound_address_validation;
         let support_draft_29 = config.support_draft_29;
         let quinn_config = config.into();
         Self {
             listeners: SelectAll::new(),
             quinn_config,
             handshake_timeout,
+            inbound_address_validation,
             dialer: HashMap::new(),
             waker: None,
             support_draft_29,
@@ -234,6 +241,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             socket_c,
             endpoint,
             self.handshake_timeout,
+            self.inbound_address_validation,
             version,
         )?;
         self.listeners.push(listener);
@@ -415,6 +423,281 @@ impl From<Error> for TransportError<Error> {
     }
 }
 
+/// Decides whether an inbound connection attempt with an unvalidated source
+/// address must pass a QUIC Retry round trip before the handshake is started.
+#[derive(Debug)]
+struct InboundRetryLimiter {
+    /// When to validate unvalidated addresses at all.
+    validation: InboundAddressValidation,
+    /// Budgets of the source addresses seen so far, see [`Self::bucket_key`].
+    buckets: LruCache<IpAddr, TokenBucket>,
+}
+
+/// Maximum number of remembered source addresses, 4096 ≈ 400 KB.
+const MAX_BUCKETS: usize = 4096;
+
+/// Budget of unvalidated connection attempts of a single source address.
+#[derive(Debug, Clone, Copy)]
+struct TokenBucket {
+    capacity: f64,
+    refill_per_second: f64,
+    tokens: f64,
+    last_refill: Instant,
+}
+
+impl TokenBucket {
+    fn new(capacity: NonZeroU32, refill_per_second: f64) -> Self {
+        let capacity = f64::from(capacity.get());
+        Self {
+            capacity,
+            refill_per_second,
+            tokens: capacity,
+            last_refill: Instant::now(),
+        }
+    }
+    fn refill(&mut self) {
+        let now = Instant::now();
+        let elapsed = now
+            .saturating_duration_since(self.last_refill)
+            .as_secs_f64();
+        self.last_refill = now;
+        // Add the tokens accrued while idle, but never hold more than the burst capacity.
+        self.tokens = (self.tokens + elapsed * self.refill_per_second).min(self.capacity);
+    }
+}
+
+impl InboundRetryLimiter {
+    fn new(validation: InboundAddressValidation) -> Self {
+        Self {
+            validation,
+            buckets: LruCache::new(MAX_BUCKETS),
+        }
+    }
+
+    /// Whether an inbound connection attempt from `remote` with an unvalidated
+    /// address may proceed without a Retry packet, consuming a token if so.
+    ///
+    /// Attempts with an already validated address never consult the limiter.
+    fn allow_without_retry(&mut self, remote: IpAddr) -> bool {
+        // Unwrap IPv4-mapped IPv6 addresses, as received on dual-stack
+        // listeners, so they key and check as plain IPv4 addresses.
+        let remote = remote.to_canonical();
+
+        let InboundAddressValidation::RateLimited {
+            burst,
+            refill_per_second,
+        } = self.validation
+        else {
+            return matches!(self.validation, InboundAddressValidation::Disabled);
+        };
+
+        // Local connections are always allowed.
+        if remote.is_loopback() {
+            return true;
+        }
+
+        let key = Self::bucket_key(remote);
+
+        let bucket = self
+            .buckets
+            .entry(key)
+            .or_insert(TokenBucket::new(burst, refill_per_second));
+
+        bucket.refill();
+        if bucket.tokens < 1.0 {
+            return false;
+        }
+        bucket.tokens -= 1.0;
+
+        true
+    }
+
+    /// IPv4 addresses are keyed exactly, IPv6 addresses by their /58 prefix,
+    /// so rotating within a prefix does not yield a fresh budget.
+    fn bucket_key(ip: IpAddr) -> IpAddr {
+        let IpAddr::V6(v6) = ip else {
+            return ip;
+        };
+        let mut octets = v6.octets();
+        let mut prefix = [0u8; 8];
+        prefix.copy_from_slice(&octets[..8]);
+        // Keep the first 58 bits, i.e. mask off the remaining 6 bits of the /64.
+        let prefix = u64::from_be_bytes(prefix) & !0x3f;
+        octets[..8].copy_from_slice(&prefix.to_be_bytes());
+        IpAddr::V6(Ipv6Addr::from(octets))
+    }
+}
+
+#[cfg(test)]
+mod retry_limiter_tests {
+    use std::num::NonZeroU32;
+
+    use super::*;
+
+    const PEER: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4));
+    const OTHER_PEER: IpAddr = IpAddr::V4(Ipv4Addr::new(5, 6, 7, 8));
+
+    fn rate_limited(burst: u32, refill_per_second: f64) -> InboundAddressValidation {
+        InboundAddressValidation::RateLimited {
+            burst: NonZeroU32::new(burst).expect("burst must be non-zero"),
+            refill_per_second,
+        }
+    }
+
+    #[test]
+    fn disabled_never_validates() {
+        let mut limiter = InboundRetryLimiter::new(InboundAddressValidation::Disabled);
+
+        for _ in 0..1000 {
+            assert!(limiter.allow_without_retry(PEER));
+        }
+    }
+
+    #[test]
+    fn always_validates() {
+        let mut limiter = InboundRetryLimiter::new(InboundAddressValidation::Always);
+
+        for _ in 0..1000 {
+            assert!(!limiter.allow_without_retry(PEER));
+        }
+    }
+
+    #[test]
+    fn rate_limited_is_per_source_address() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(PEER));
+        }
+
+        // Drained: this source must pass address validation ...
+        assert!(!limiter.allow_without_retry(PEER));
+        assert!(!limiter.allow_without_retry(PEER));
+
+        // ... while other sources keep their own budget.
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(OTHER_PEER));
+        }
+        assert!(!limiter.allow_without_retry(OTHER_PEER));
+    }
+
+    /// Pretends the budget of `ip` was drained `elapsed` ago, so that the next
+    /// call to [`InboundRetryLimiter::allow_without_retry`] refills it as if that
+    /// much time had passed.
+    fn backdate(limiter: &mut InboundRetryLimiter, ip: IpAddr, elapsed: Duration) {
+        let key = InboundRetryLimiter::bucket_key(ip.to_canonical());
+        let bucket = limiter
+            .buckets
+            .get_mut(&key)
+            .expect("budget must exist for this source");
+        bucket.tokens = 0.0;
+        bucket.last_refill = Instant::now()
+            .checked_sub(elapsed)
+            .expect("monotonic clock must have started before the simulated idle period");
+    }
+
+    #[test]
+    fn rate_limited_refills_over_time_without_exceeding_burst() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(PEER));
+        }
+        assert!(!limiter.allow_without_retry(PEER));
+
+        // 0.1 tokens per second, i.e. one token every 10 seconds.
+        backdate(&mut limiter, PEER, Duration::from_secs(11));
+        assert!(limiter.allow_without_retry(PEER));
+
+        // No matter how long the source idles, never more than the burst of 4
+        // accumulates: 60 seconds of idling would accrue 6 tokens.
+        backdate(&mut limiter, PEER, Duration::from_secs(60));
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(PEER));
+        }
+        assert!(!limiter.allow_without_retry(PEER));
+    }
+
+    #[test]
+    fn loopback_is_exempt() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+
+        for _ in 0..1000 {
+            assert!(limiter.allow_without_retry(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+            assert!(limiter.allow_without_retry(IpAddr::V6(Ipv6Addr::LOCALHOST)));
+        }
+
+        // Exempt addresses never consume or occupy a budget.
+        assert!(limiter.buckets.is_empty());
+    }
+
+    #[test]
+    fn ipv4_mapped_addresses_share_the_ipv4_budget() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+        let mapped: IpAddr = "::ffff:1.2.3.4".parse().expect("valid address");
+        let mapped_loopback: IpAddr = "::ffff:127.0.0.1".parse().expect("valid address");
+
+        // As received on a dual-stack listener, the mapped form must share the
+        // budget of the plain IPv4 address instead of keying a /58 of its own.
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(PEER));
+        }
+        assert!(!limiter.allow_without_retry(mapped));
+
+        // The loopback exemption applies to the mapped form as well.
+        assert!(limiter.allow_without_retry(mapped_loopback));
+    }
+
+    #[test]
+    fn ipv6_is_bucketed_per_58_prefix() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+        let a: IpAddr = "2001:db8::1".parse().expect("valid address");
+        let b: IpAddr = "2001:db8:0:3f::1".parse().expect("valid address");
+        let c: IpAddr = "2001:db8:0:40::1".parse().expect("valid address");
+
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(a));
+        }
+
+        // Rotation within the /58 must not grant a fresh budget.
+        assert!(!limiter.allow_without_retry(b));
+
+        // A different /58 has its own budget.
+        for _ in 0..4 {
+            assert!(limiter.allow_without_retry(c));
+        }
+        assert!(!limiter.allow_without_retry(c));
+    }
+
+    #[test]
+    fn lru_evicts_least_recently_used() {
+        let mut limiter = InboundRetryLimiter::new(rate_limited(4, 0.1));
+        let first = IpAddr::V4(Ipv4Addr::from(0x0100_0000u32));
+        let last = IpAddr::V4(Ipv4Addr::from(0x0100_0000u32 + (MAX_BUCKETS as u32 - 1)));
+
+        // Fill the cache to capacity and drain every budget on the way.
+        for i in 0..MAX_BUCKETS {
+            let addr = IpAddr::V4(Ipv4Addr::from(0x0100_0000u32 + i as u32));
+            for _ in 0..4 {
+                let _ = limiter.allow_without_retry(addr);
+            }
+        }
+        assert_eq!(limiter.buckets.len(), MAX_BUCKETS);
+
+        // A new source is remembered, evicting the least recently used budget
+        // instead of being forced through a Retry round trip.
+        let newcomer = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
+        assert!(limiter.allow_without_retry(newcomer));
+        // hashlink's `LruCache::entry` allows capacity + 1:
+        // it evicts on the next access, not on insert.
+        assert_eq!(limiter.buckets.len(), MAX_BUCKETS + 1);
+
+        // The evicted source starts over with a fresh budget ...
+        assert!(limiter.allow_without_retry(first));
+        // ... while a recently used one keeps its drained budget.
+        assert!(!limiter.allow_without_retry(last));
+    }
+}
+
 /// Listener for incoming connections.
 struct Listener<P: Provider> {
     /// Id of the listener.
@@ -433,6 +716,10 @@ struct Listener<P: Provider> {
     accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
+
+    /// Decides whether an inbound connection attempt with an unvalidated source
+    /// address must pass a Retry round trip before the handshake starts.
+    retry_limiter: InboundRetryLimiter,
 
     /// Watcher for network interface changes.
     ///
@@ -457,6 +744,7 @@ impl<P: Provider> Listener<P> {
         socket: UdpSocket,
         endpoint: quinn::Endpoint,
         handshake_timeout: Duration,
+        inbound_address_validation: InboundAddressValidation,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
         let if_watcher;
@@ -486,6 +774,7 @@ impl<P: Provider> Listener<P> {
             listener_id,
             version,
             handshake_timeout,
+            retry_limiter: InboundRetryLimiter::new(inbound_address_validation),
             if_watcher,
             is_closed: false,
             pending_event,
@@ -588,9 +877,36 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(incoming)) => {
+                Poll::Ready(Some(mut incoming)) => {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
+
+                    // Validate the source address before starting the handshake if
+                    // the rate of unvalidated connection attempts from that source
+                    // requires it. The Retry packet is stateless: no connection state
+                    // is kept and no handshake cryptography is performed until the
+                    // remote echoes the address-bound token back in a second Initial.
+                    if !incoming.remote_address_validated() {
+                        let remote = incoming.remote_address();
+                        if !self.retry_limiter.allow_without_retry(remote.ip()) {
+                            match incoming.retry() {
+                                Ok(()) => {
+                                    tracing::trace!(
+                                        %remote,
+                                        "Sent Retry to validate inbound address"
+                                    );
+                                    continue;
+                                }
+                                // `quinn::Incoming::may_retry` guarantees that an unvalidated
+                                // address is always retryable, so
+                                // `retry()` cannot fail here. Fall back to accepting
+                                // the connection defensively rather than dropping it.
+                                Err(retry_error) => {
+                                    incoming = retry_error.into_incoming();
+                                }
+                            }
+                        }
+                    }
 
                     let connecting = match incoming.accept() {
                         Ok(connecting) => connecting,
@@ -633,6 +949,7 @@ impl<P: Provider> fmt::Debug for Listener<P> {
         f.debug_struct("Listener")
             .field("listener_id", &self.listener_id)
             .field("handshake_timeout", &self.handshake_timeout)
+            .field("retry_limiter", &self.retry_limiter)
             .field("is_closed", &self.is_closed)
             .field("pending_event", &self.pending_event)
             .finish()
