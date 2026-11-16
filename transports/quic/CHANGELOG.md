@@ -1,3 +1,9 @@
+## 0.15.0
+
+- Defer `Incoming::accept()` to the connection pool's per-connection task so the
+  inbound handshake's first step no longer runs on the swarm task.
+  See [PR 6759](https://github.com/libp2p/rust-libp2p/pull/6759).
+
 ## 0.14.0
 
 - Prefer and advertise the X25519MLKEM768 key exchange group for QUIC.
