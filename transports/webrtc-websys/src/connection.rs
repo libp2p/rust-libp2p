@@ -137,7 +137,7 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         tracing::trace!("Creating outbound data channel");
 
-        let data_channel = self.inner.new_regular_data_channel();
+        let data_channel = self.inner.new_regular_data_channel()?;
         let stream = self.new_stream_from_data_channel(data_channel);
 
         Poll::Ready(Ok(stream))
@@ -204,32 +204,27 @@ impl RtcPeerConnection {
     /// Creates the stream for the initial noise handshake.
     ///
     /// The underlying data channel MUST have `negotiated` set to `true` and carry the ID 0.
-    pub(crate) fn new_handshake_stream(&self) -> (Stream, DropListener) {
-        Stream::new(self.new_data_channel(true))
+    pub(crate) fn new_handshake_stream(&self) -> Result<(Stream, DropListener), Error> {
+        Ok(Stream::new(self.new_data_channel(true)?))
     }
 
     /// Creates a regular data channel for when the connection is already established.
-    pub(crate) fn new_regular_data_channel(&self) -> RtcDataChannel {
+    pub(crate) fn new_regular_data_channel(&self) -> Result<RtcDataChannel, Error> {
         self.new_data_channel(false)
     }
 
-    fn new_data_channel(&self, negotiated: bool) -> RtcDataChannel {
+    fn new_data_channel(&self, negotiated: bool) -> Result<RtcDataChannel, Error> {
         const LABEL: &str = "";
 
-        let dc = match negotiated {
-            true => {
-                let options = RtcDataChannelInit::new();
-                options.set_negotiated(true);
-                options.set_id(0); // id is only ever set to zero when negotiated is true
-
-                self.inner
-                    .create_data_channel_with_data_channel_dict(LABEL, &options)
-            }
-            false => self.inner.create_data_channel(LABEL),
-        };
+        let options = RtcDataChannelInit::new();
+        if negotiated {
+            options.set_negotiated(true);
+            options.set_id(0); // id is only ever set to zero when negotiated is true
+        }
+        let dc = try_create_data_channel(&self.inner, LABEL, &options)?;
         dc.set_binary_type(RtcDataChannelType::Arraybuffer); // Hardcoded here, it's the only type we use
 
-        dc
+        Ok(dc)
     }
 
     pub(crate) async fn create_offer(&self) -> Result<String, Error> {
@@ -275,6 +270,20 @@ impl RtcPeerConnection {
 
         Ok(())
     }
+}
+
+fn try_create_data_channel(
+    connection: &web_sys::RtcPeerConnection,
+    label: &str,
+    init: &RtcDataChannelInit,
+) -> Result<RtcDataChannel, Error> {
+    let create: js_sys::Function = Reflect::get(connection, &"createDataChannel".into())?
+        .dyn_into()
+        .map_err(|_| Error::JsCastFailed)?;
+    create
+        .call2(connection, &label.into(), init)?
+        .dyn_into()
+        .map_err(|_| Error::JsCastFailed)
 }
 
 /// Parse Fingerprint from a SDP.
