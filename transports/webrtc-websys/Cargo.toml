@@ -8,7 +8,7 @@ license = "MIT"
 name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.5.0"
+version = "0.5.1"
 publish = true
 
 [dependencies]
@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { workspace = true}
-web-sys = { version = "0.3", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+web-sys = { version = "0.3", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcPeerConnectionState", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
 
 [target.'cfg(target_family="wasm")'.dependencies]
 getrandom = { workspace = true}
