@@ -70,6 +70,7 @@ pub mod util {
     use std::convert::Infallible;
 
     /// A safe version of [`std::intrinsics::unreachable`].
+    #[deprecated(since = "0.44.1", note = "Use `match x {}` instead")]
     #[inline(always)]
     pub fn unreachable(x: Infallible) -> ! {
         match x {}
