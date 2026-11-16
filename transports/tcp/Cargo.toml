@@ -25,7 +25,7 @@ tokio = ["dep:tokio", "if-watch/tokio"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

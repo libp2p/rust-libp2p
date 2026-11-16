@@ -1,3 +1,7 @@
+## 0.45.1
+
+- Return `ResolveError` instead of panicking when a lookup succeeds without a usable record.
+
 ## 0.45.0
 
 - Update `hickory` dependencies to `v0.26`.

@@ -273,7 +273,7 @@ where
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        libp2p_core::util::unreachable(event)
+        match event {}
     }
 
     fn poll(
