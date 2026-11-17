@@ -85,13 +85,15 @@ impl Queue {
 
     /// Remove pending low priority Publish and Forward messages.
     /// Returns the number of messages removed.
-    pub(crate) fn remove_data_messages(&mut self, message_ids: &[MessageId]) -> usize {
+    pub(crate) fn remove_data_messages<'a>(
+        &mut self,
+        message_ids: impl IntoIterator<Item = &'a MessageId>,
+    ) -> usize {
+        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
+        let message_ids: HashSet<&MessageId> = message_ids.into_iter().collect();
         if message_ids.is_empty() {
             return 0;
         }
-
-        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
-        let message_ids: HashSet<&MessageId> = message_ids.iter().collect();
 
         let mut count = 0;
         self.non_priority.retain(|message| match message {
