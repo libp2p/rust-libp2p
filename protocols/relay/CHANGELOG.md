@@ -1,5 +1,8 @@
 ## 0.23.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 - Deny circuit requests from a peer that already has `max_circuits_per_peer` circuits, instead of allowing one more.
   See [PR 6739](https://github.com/libp2p/rust-libp2p/pull/6739).
 
