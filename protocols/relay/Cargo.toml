@@ -36,7 +36,7 @@ libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 

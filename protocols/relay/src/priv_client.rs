@@ -292,7 +292,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            Either::Right(v) => libp2p_core::util::unreachable(v),
+            Either::Right(v) => match v {},
         };
 
         let event = match handler_event {

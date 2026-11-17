@@ -21,9 +21,9 @@
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
 use std::{
-    convert::TryFrom as _,
     iter, mem,
     pin::Pin,
+    str::FromStr,
     task::{Context, Poll},
 };
 
@@ -131,7 +131,7 @@ where
                         }
                     }
 
-                    let p = Protocol::try_from(protocol.as_ref())?;
+                    let p = Protocol::from_str(protocol.as_ref())?;
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
@@ -218,8 +218,6 @@ mod tests {
         time::timeout,
     };
     use tokio_util::compat::TokioAsyncReadCompatExt;
-    use tracing::metadata::LevelFilter;
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::listener_select_proto;
@@ -274,6 +272,7 @@ mod tests {
 
     /// Tests the expected behaviour of failed negotiations.
     #[test]
+    #[tracing_test::traced_test]
     fn negotiation_failed() {
         fn prop(
             version: Version,
@@ -281,14 +280,6 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            let _ = tracing_subscriber::fmt()
-                .with_env_filter(
-                    EnvFilter::builder()
-                        .with_default_directive(LevelFilter::DEBUG.into())
-                        .from_env_lossy(),
-                )
-                .try_init();
-
             let rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();

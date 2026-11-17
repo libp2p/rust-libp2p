@@ -32,7 +32,7 @@ redis = { version = "1.4", default-features = false, features = [
 ] }
 rust-embed = "8.11"
 serde_json = "1"
-thirtyfour = "0.37"
+thirtyfour = "0.38"
 tokio = { workspace = true, features = ["full"] }
 tower-http = { version = "0.7", features = ["cors", "fs", "trace"] }
 tracing = { workspace = true }
