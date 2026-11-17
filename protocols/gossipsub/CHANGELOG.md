@@ -1,7 +1,7 @@
 ## 0.51.0
-- Keep existing fanout peers when topping up the fanout on publish. Previously the fanout was
-  replaced by the newly selected peers, which emptied it when no new peers were available.
-  See [PR 6730](https://github.com/libp2p/rust-libp2p/pull/6730).
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 
 - Cap the number of control messages per type per RPC at `max_control_messages`
   (default 500), truncating the excess after decoding.
