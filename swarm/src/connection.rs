@@ -779,6 +779,50 @@ impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
     }
 }
 
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+        port_use: PortUse,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer {
+                role_override,
+                port_use,
+                ..
+            } => PendingPoint::Dialer {
+                role_override,
+                port_use,
+            },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -793,17 +837,13 @@ mod tests {
         upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     };
     use quickcheck::*;
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::dummy;
 
     #[test]
+    #[tracing_test::traced_test]
     fn max_negotiating_inbound_streams() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
@@ -969,10 +1009,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn checked_add_fraction_can_add_u64_max() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -981,11 +1019,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn compute_new_shutdown_does_not_panic() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);
 
@@ -1204,11 +1239,11 @@ mod tests {
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
-                }) => libp2p_core::util::unreachable(protocol),
+                }) => match protocol {},
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
-                }) => libp2p_core::util::unreachable(protocol),
+                }) => match protocol {},
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
@@ -1220,7 +1255,7 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            libp2p_core::util::unreachable(event)
+            match event {}
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1282,7 +1317,7 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            libp2p_core::util::unreachable(event)
+            match event {}
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1331,50 +1366,6 @@ mod tests {
 
         fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
             future::ready(Ok(stream))
-        }
-    }
-}
-
-/// The endpoint roles associated with a pending peer-to-peer connection.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum PendingPoint {
-    /// The socket comes from a dialer.
-    ///
-    /// There is no single address associated with the Dialer of a pending
-    /// connection. Addresses are dialed in parallel. Only once the first dial
-    /// is successful is the address of the connection known.
-    Dialer {
-        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
-        role_override: Endpoint,
-        port_use: PortUse,
-    },
-    /// The socket comes from a listener.
-    Listener {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Address used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for PendingPoint {
-    fn from(endpoint: ConnectedPoint) -> Self {
-        match endpoint {
-            ConnectedPoint::Dialer {
-                role_override,
-                port_use,
-                ..
-            } => PendingPoint::Dialer {
-                role_override,
-                port_use,
-            },
-            ConnectedPoint::Listener {
-                local_addr,
-                send_back_addr,
-            } => PendingPoint::Listener {
-                local_addr,
-                send_back_addr,
-            },
         }
     }
 }
