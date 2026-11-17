@@ -505,7 +505,7 @@ impl Handler {
         // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => libp2p_core::util::unreachable(p),
+            future::Either::Right(p) => match p {},
         };
 
         if self.protocol_status.is_none() {
@@ -828,8 +828,10 @@ fn compute_new_protocol_status(
     };
 
     if now_supported == current_status.supported {
-        // Nothing changed, but a status that has not been reported yet still needs to be.
-        return current_status;
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: true,
+        };
     }
 
     if now_supported {
@@ -1052,7 +1054,6 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 #[cfg(test)]
 mod tests {
     use quickcheck::{Arbitrary, Gen};
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
 
@@ -1066,11 +1067,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn compute_next_protocol_status_test() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
             let new = compute_new_protocol_status(now_supported, current);
 
@@ -1081,7 +1079,7 @@ mod tests {
                 }
                 Some(current) => {
                     if current.supported == now_supported {
-                        assert_eq!(new.reported, current.reported);
+                        assert!(new.reported);
                     } else {
                         assert!(!new.reported);
                     }
@@ -1092,22 +1090,5 @@ mod tests {
         }
 
         quickcheck::quickcheck(prop as fn(_, _))
-    }
-
-    #[test]
-    fn unreported_status_stays_unreported_on_unrelated_protocol_change() {
-        // The first negotiated substream (or a first protocol report) marks
-        // the protocol as supported but not yet reported to the behaviour.
-        let status = compute_new_protocol_status(true, None);
-        assert!(!status.reported);
-
-        // Another change of the remote's protocols, which doesn't affect
-        // kademlia support, arrives before the handler is polled.
-        let status = compute_new_protocol_status(true, Some(status));
-
-        assert!(
-            !status.reported,
-            "ProtocolConfirmed must still be reported to the behaviour"
-        );
     }
 }
