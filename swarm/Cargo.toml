@@ -51,7 +51,7 @@ quickcheck = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 trybuild = "1.0"
 tokio = { workspace = true, features = ["time", "rt", "macros", "rt-multi-thread"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 [[test]]
 name = "swarm_derive"

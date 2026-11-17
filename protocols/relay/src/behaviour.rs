@@ -539,7 +539,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let event = match event {
             Either::Left(e) => e,
-            Either::Right(v) => libp2p_core::util::unreachable(v),
+            Either::Right(v) => match v {},
         };
 
         match event {
@@ -692,7 +692,7 @@ impl NetworkBehaviour for Behaviour {
                 );
 
                 let action = if self.circuits.num_circuits_of_peer(event_source)
-                    > self.config.max_circuits_per_peer
+                    >= self.config.max_circuits_per_peer
                     || self.circuits.len() >= self.config.max_circuits
                     || !self
                         .config

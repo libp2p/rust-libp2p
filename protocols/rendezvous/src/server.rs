@@ -418,26 +418,21 @@ impl Registrations {
         }
 
         let peer = new_registration.record.peer_id();
+        let namespace = new_registration.namespace;
+        let key = (peer, namespace.clone());
 
-        if self
+        // Renewing an existing registration replaces it, so it doesn't count against the limits.
+        if let Some(existing_id) = self.registrations_for_peer.get_by_left(&key).copied() {
+            self.remove_registration(&existing_id);
+        } else if self
             .registrations_for_peer
             .left_values()
             .filter(|(p, _)| p == &peer)
             .count()
             >= self.config.max_registrations_per_peer
-            || self.registrations_for_peer.len() > self.config.max_registrations_total
+            || self.registrations_for_peer.len() >= self.config.max_registrations_total
         {
             return Err(ErrorCode::Unavailable);
-        }
-
-        let namespace = new_registration.namespace;
-
-        if let Some(existing_id) = self
-            .registrations_for_peer
-            .get_by_left(&(peer, namespace.clone()))
-            .copied()
-        {
-            self.remove_registration(&existing_id);
         }
 
         let registration_id = RegistrationId::new();
@@ -802,6 +797,48 @@ mod tests {
 
         let (discover2, _) = registrations.get(None, Some(cookie), None).unwrap();
         assert_eq!(discover2.count(), 1);
+    }
+
+    #[test]
+    fn peer_at_registration_limit_can_renew_existing_registration() {
+        let alice = identity::Keypair::generate_ed25519();
+        let mut registrations = Registrations::with_config(
+            Config::default()
+                .with_max_registration_per_peer(2)
+                .with_max_registration_total(10),
+        );
+        registrations
+            .add(new_registration("foo", alice.clone(), None))
+            .unwrap();
+        registrations
+            .add(new_registration("bar", alice.clone(), None))
+            .unwrap();
+
+        registrations
+            .add(new_registration("foo", alice.clone(), None))
+            .expect("renewing an existing registration must not hit the limit");
+
+        assert_eq!(
+            registrations
+                .add(new_registration("baz", alice, None))
+                .unwrap_err(),
+            ErrorCode::Unavailable
+        );
+    }
+
+    #[test]
+    fn total_registration_limit_is_not_exceeded() {
+        let mut registrations =
+            Registrations::with_config(Config::default().with_max_registration_total(2));
+        registrations.add(new_dummy_registration("foo")).unwrap();
+        registrations.add(new_dummy_registration("foo")).unwrap();
+
+        assert_eq!(
+            registrations
+                .add(new_dummy_registration("foo"))
+                .unwrap_err(),
+            ErrorCode::Unavailable
+        );
     }
 
     fn new_dummy_registration(namespace: &'static str) -> NewRegistration {

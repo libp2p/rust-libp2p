@@ -111,7 +111,7 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => libp2p_core::util::unreachable(protocol),
+            }) => match protocol {},
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (),
@@ -142,7 +142,7 @@ impl ConnectionHandler for Handler {
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                libp2p_core::util::unreachable(error)
+                match error {}
             }
             _ => {}
         }

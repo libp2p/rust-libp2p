@@ -164,7 +164,7 @@ fn bootstrap() {
         // considered. Given that no other node is aware of them, they would be
         // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
-        let num_group = rand::random_range(1..(num_total % K_VALUE.get()) + 2);
+        let num_group = rand::random_range(1..(num_total % K_VALUE) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
@@ -326,10 +326,8 @@ fn query_iter() {
 }
 
 #[test]
+#[tracing_test::traced_test]
 fn unresponsive_not_returned_direct() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 

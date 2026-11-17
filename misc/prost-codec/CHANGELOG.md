@@ -1,3 +1,11 @@
+## 0.5.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Bound one length-prefixed message in `consume_message_prefix` via its new `max_message_length` limit.
+  See [PR 6695](https://github.com/libp2p/rust-libp2p/pull/6695).
+
 ## 0.4.0
 
 - Raise MSRV to 1.88.0.

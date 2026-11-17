@@ -1,3 +1,10 @@
+## 0.45.1
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Return `ResolveError` instead of panicking when a lookup succeeds without a usable record.
+
 ## 0.45.0
 
 - Update `hickory` dependencies to `v0.26`.
