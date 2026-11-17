@@ -1,5 +1,8 @@
 ## 0.2.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 - Remove the full peer record and emit address removal events when a dial fails with
   `DialError::LocalPeerId`.
 

@@ -1,5 +1,8 @@
 ## 0.58.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 <!-- Update to libp2p-swarm v0.49.0 -->
 
 - Add `stream` feature, re-exporting `libp2p-stream` as `libp2p::stream`.

@@ -124,7 +124,7 @@ impl Handler {
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully
             // negotiated.
-            future::Either::Right(output) => libp2p_core::util::unreachable(output),
+            future::Either::Right(output) => match output {},
         }
     }
 
@@ -166,7 +166,7 @@ impl Handler {
         >,
     ) {
         let error = match error {
-            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
+            StreamUpgradeError::Apply(v) => match v {},
             StreamUpgradeError::NegotiationFailed => outbound::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound::Error::Io(e),
             StreamUpgradeError::Timeout => outbound::Error::Io(io::ErrorKind::TimedOut.into()),
@@ -216,11 +216,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        if self.attempts < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-            return true;
-        }
-
-        false
+        self.attempts < MAX_NUMBER_OF_UPGRADE_ATTEMPTS
     }
 
     #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
