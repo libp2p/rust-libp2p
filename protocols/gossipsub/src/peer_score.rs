@@ -21,7 +21,10 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
 use std::{
-    collections::{HashMap, HashSet, hash_map},
+    collections::{
+        HashMap, HashSet,
+        hash_map::{self, Entry},
+    },
     net::IpAddr,
     time::Duration,
 };
@@ -111,6 +114,16 @@ struct PeerStats {
     application_score: f64,
     /// Scoring based on how whether this peer consumes messages fast enough or not.
     slow_peer_penalty: f64,
+}
+
+impl PeerStats {
+    /// Whether the peer has no topic stats and no penalties, so retaining it keeps nothing.
+    fn is_blank(&self) -> bool {
+        self.topics.is_empty()
+            && self.behaviour_penalty == 0.0
+            && self.application_score == 0.0
+            && self.slow_peer_penalty == 0.0
+    }
 }
 
 enum ConnectionStatus {
@@ -420,8 +433,11 @@ impl PeerScore {
         peer_id: &PeerId,
     ) {
         for ip in peer_stats.known_ips.iter() {
-            if let Some(peer_set) = peer_ips.get_mut(ip) {
-                peer_set.remove(peer_id);
+            if let Entry::Occupied(mut entry) = peer_ips.entry(*ip) {
+                entry.get_mut().remove(peer_id);
+                if entry.get().is_empty() {
+                    entry.remove();
+                }
             }
         }
     }
@@ -552,9 +568,12 @@ impl PeerScore {
     pub(crate) fn remove_ip(&mut self, peer_id: &PeerId, ip: &IpAddr) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.known_ips.remove(ip);
-            if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
+            if let Entry::Occupied(mut entry) = self.peer_ips.entry(*ip) {
                 tracing::trace!(peer=%peer_id, %ip, "Remove ip for peer");
-                peer_ids.remove(peer_id);
+                entry.get_mut().remove(peer_id);
+                if entry.get().is_empty() {
+                    entry.remove();
+                }
             } else {
                 tracing::trace!(
                     peer=%peer_id,
@@ -574,9 +593,13 @@ impl PeerScore {
     /// Removes a peer from the score table. This retains peer statistics if their score is
     /// non-positive.
     pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
-        // we only retain non-positive scores of peers
-        if self.score_report(peer_id).score > 0f64 {
-            if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
+        // we only retain non-positive scores of peers that have recorded state
+        let blank = self
+            .peer_stats
+            .get(peer_id)
+            .is_some_and(|peer_stats| peer_stats.is_blank());
+        if blank || self.score_report(peer_id).score > 0f64 {
+            if let Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
                 Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
                 entry.remove();
             }

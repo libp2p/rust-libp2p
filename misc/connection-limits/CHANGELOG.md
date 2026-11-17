@@ -1,5 +1,12 @@
 ## 0.8.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Remove the entry of a peer from the established connections per peer once its last connection
+  closes, and do not create one for a connection that was never established.
+  See [PR 6709](https://github.com/libp2p/rust-libp2p/pull/6709).
+
 - Replace `ConnectionLimits::with_max_pending_incoming` with `with_max_pending_incoming_per_source`,
   which limits pending incoming connections per remote source instead of globally.
   See [PR 6657](https://github.com/libp2p/rust-libp2p/pull/6657).
