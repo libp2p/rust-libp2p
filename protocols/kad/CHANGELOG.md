@@ -1,7 +1,7 @@
 ## 0.50.0
 
-- Report the same `num_remaining` in `BootstrapError::Timeout` as in `BootstrapOk`, instead of one less.
-  See [PR 6741](https://github.com/libp2p/rust-libp2p/pull/6741).
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 
 <!-- Update to libp2p-swarm v0.49.0 -->
 

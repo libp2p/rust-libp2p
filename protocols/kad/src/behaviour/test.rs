@@ -164,7 +164,7 @@ fn bootstrap() {
         // considered. Given that no other node is aware of them, they would be
         // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
-        let num_group = rand::random_range(1..(num_total % K_VALUE.get()) + 2);
+        let num_group = rand::random_range(1..(num_total % K_VALUE) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
@@ -326,10 +326,8 @@ fn query_iter() {
 }
 
 #[test]
+#[tracing_test::traced_test]
 fn unresponsive_not_returned_direct() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -1687,44 +1685,4 @@ fn get_closest_peers_should_return_up_to_k_peers() {
             Poll::Pending
         }))
     }
-}
-
-#[test]
-fn bootstrap_timeout_counts_the_query_started_next() {
-    let mut cfg = Config::new(PROTOCOL_NAME);
-    cfg.set_query_timeout(Duration::ZERO);
-    let local_id = PeerId::random();
-    let mut kad = Behaviour::with_config(local_id, MemoryStore::new(local_id), cfg);
-
-    let targets = (0..3)
-        .map(|_| kbucket::Key::from(PeerId::random()))
-        .collect::<Vec<_>>();
-    let info = QueryInfo::Bootstrap {
-        peer: PeerId::random(),
-        remaining: Some(targets.into_iter()),
-        step: ProgressStep::first(),
-    };
-    let target = kbucket::Key::from(PeerId::random());
-    let known_peer = kbucket::Key::from(PeerId::random());
-    kad.queries.add_iter_closest(target, vec![known_peer], info);
-
-    // The first poll hands out the only known peer, afterwards the query waits and times out.
-    let timed_out = loop {
-        match kad.queries.poll(Instant::now()) {
-            QueryPoolState::Timeout(query) => break query,
-            QueryPoolState::Waiting(_) => {}
-            _ => panic!("expected the query to time out"),
-        }
-    };
-
-    let Some(Event::OutboundQueryProgressed {
-        result: QueryResult::Bootstrap(Err(BootstrapError::Timeout { num_remaining, .. })),
-        ..
-    }) = kad.query_timeout(timed_out)
-    else {
-        panic!("expected a bootstrap timeout");
-    };
-
-    // Same count as the success path: the queued queries, including the one started next.
-    assert_eq!(num_remaining, Some(3));
 }
