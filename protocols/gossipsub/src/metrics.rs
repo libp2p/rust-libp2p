@@ -203,7 +203,7 @@ pub(crate) struct Metrics {
 
     /// The number of messages we have removed from a queue that we would otherwise send. A rough
     /// guide to measure of bandwidth saved.
-    removed_queued_messages: Counter,
+    pub(crate) removed_queued_messages: Counter,
 }
 
 impl Metrics {
@@ -748,12 +748,6 @@ impl Metrics {
                 message_type: MessageType::NonPriority,
             })
             .observe(messages as f64);
-    }
-
-    /// Register the number of removed messages from the `Handler` queue
-    /// When receiving IDONTWANT messages
-    pub(crate) fn register_removed_messages(&mut self, removed_messages: usize) {
-        self.removed_queued_messages.inc_by(removed_messages as u64);
     }
 }
 

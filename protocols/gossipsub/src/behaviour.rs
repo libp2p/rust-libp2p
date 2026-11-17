@@ -3443,7 +3443,15 @@ where
             );
         }
 
-        Ok(Handler::new(peer_id, self.config.protocol_config(), queue))
+        Ok(Handler::new(
+            peer_id,
+            self.config.protocol_config(),
+            queue,
+            #[cfg(feature = "metrics")]
+            self.metrics
+                .as_ref()
+                .map(|m| m.removed_queued_messages.clone()),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -3482,7 +3490,15 @@ where
             );
         }
 
-        Ok(Handler::new(peer_id, self.config.protocol_config(), queue))
+        Ok(Handler::new(
+            peer_id,
+            self.config.protocol_config(),
+            queue,
+            #[cfg(feature = "metrics")]
+            self.metrics
+                .as_ref()
+                .map(|m| m.removed_queued_messages.clone()),
+        ))
     }
 
     fn on_connection_handler_event(
@@ -3616,14 +3632,9 @@ where
                                 continue;
                             };
 
-                            // Remove messages from the queue.
-                            #[allow(unused)]
-                            let removed = peer.messages.remove_data_messages(&message_ids);
-
                             #[cfg(feature = "metrics")]
                             if let Some(metrics) = self.metrics.as_mut() {
                                 metrics.register_idontwant(message_ids.len());
-                                metrics.register_removed_messages(removed);
                             }
 
                             for message_id in message_ids {
