@@ -3,7 +3,7 @@ name = "libp2p-connection-limits"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Connection limits for libp2p."
-version = "0.7.0"
+version = "0.8.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

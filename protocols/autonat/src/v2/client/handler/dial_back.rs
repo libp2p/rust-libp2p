@@ -22,7 +22,10 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: StreamSet::new(|| futures_bounded::Delay::tokio(Duration::from_secs(5)), 2),
+            inbound: StreamSet::new(
+                || futures_bounded::Delay::futures_timer(Duration::from_secs(5)),
+                2,
+            ),
         }
     }
 }
@@ -79,7 +82,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                libp2p_core::util::unreachable(error);
+                match error {};
             }
             _ => {}
         }

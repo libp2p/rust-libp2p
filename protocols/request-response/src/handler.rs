@@ -111,7 +111,7 @@ where
             pending_events: VecDeque::new(),
             inbound_request_id,
             worker_streams: futures_bounded::FuturesMap::new(
-                move || futures_bounded::Delay::tokio(substream_timeout),
+                move || futures_bounded::Delay::futures_timer(substream_timeout),
                 max_concurrent_streams,
             ),
         }
@@ -236,7 +236,7 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(message.request_id));
             }
-            StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
+            StreamUpgradeError::Apply(e) => match e {},
             StreamUpgradeError::Io(e) => {
                 self.pending_events.push_back(Event::OutboundStreamFailed {
                     request_id: message.request_id,
@@ -252,7 +252,7 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        libp2p_core::util::unreachable(error)
+        match error {}
     }
 }
 

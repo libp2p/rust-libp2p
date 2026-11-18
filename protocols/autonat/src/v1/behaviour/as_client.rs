@@ -17,7 +17,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
@@ -30,7 +29,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
 use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::IndexedRandom;
 use web_time::Instant;
 
 use super::{
@@ -265,7 +264,7 @@ impl AsClient<'_> {
 
         servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));
 
-        servers.choose(&mut thread_rng()).map(|&&p| p)
+        servers.choose(&mut rand::rng()).map(|&&p| p)
     }
 
     // Send a dial-request to a randomly selected server.

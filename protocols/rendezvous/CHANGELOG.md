@@ -1,4 +1,27 @@
+## 0.19.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Fix `Behaviour::unregister` forgetting registrations in other namespaces and at other rendezvous nodes.
+  See [PR #6745](https://github.com/libp2p/rust-libp2p/pull/6745).
+
+- Let a peer at its registration limit renew an existing registration, and stop the total registration limit from admitting one extra registration.
+  See [PR 6738](https://github.com/libp2p/rust-libp2p/pull/6738).
+
+- Cancel superseded registration timers.
+  See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)
+
+- Cap TTL from discovery responses.
+  See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
+
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.18.0
+
+- Expose `PROTOCOL_NAME` constant for the protocol ID.
+  See [PR 6469](https://github.com/libp2p/rust-libp2p/pull/6469).
 
 - Port [8fde2dc](https://github.com/libp2p/rust-libp2p/commit/8fde2dc0fae8b433f97c6cdf9ee24f59d51a359c) and make unrequired pub functions private
   See [PR 6364](https://github.com/libp2p/rust-libp2p/pull/6364).
@@ -8,6 +31,9 @@
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
 ## 0.17.1
 

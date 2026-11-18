@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.45.0"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,9 +14,9 @@ categories = ["network-programming", "asynchronous"]
 futures = { workspace = true }
 futures-timer = { workspace = true }
 if-watch = { workspace = true }
-libc = "0.2.186"
+libc = "0.2"
 libp2p-core = { workspace = true }
-socket2 = { version = "0.6.3", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 
@@ -25,7 +25,7 @@ tokio = ["dep:tokio", "if-watch/tokio"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

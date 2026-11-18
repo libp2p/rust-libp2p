@@ -18,5 +18,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[cfg(feature = "partial_messages")]
+#[cfg(feature = "partial-messages")]
 pub mod partial_messages;

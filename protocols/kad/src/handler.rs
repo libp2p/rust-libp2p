@@ -463,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                move || futures_bounded::Delay::tokio(substreams_timeout),
+                move || futures_bounded::Delay::futures_timer(substreams_timeout),
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
@@ -505,7 +505,7 @@ impl Handler {
         // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => libp2p_core::util::unreachable(p),
+            future::Either::Right(p) => match p {},
         };
 
         if self.protocol_status.is_none() {
@@ -1054,7 +1054,6 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 #[cfg(test)]
 mod tests {
     use quickcheck::{Arbitrary, Gen};
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
 
@@ -1068,11 +1067,8 @@ mod tests {
     }
 
     #[test]
+    #[tracing_test::traced_test]
     fn compute_next_protocol_status_test() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
             let new = compute_new_protocol_status(now_supported, current);
 

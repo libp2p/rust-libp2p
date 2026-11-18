@@ -30,7 +30,7 @@ use rustls::{
     CertificateError, DigitallySignedStruct, DistinguishedName, OtherError, SignatureScheme,
     SupportedCipherSuite, SupportedProtocolVersion,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    crypto::ring::cipher_suite::{
+    crypto::aws_lc_rs::cipher_suite::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     },
     pki_types::CertificateDer,

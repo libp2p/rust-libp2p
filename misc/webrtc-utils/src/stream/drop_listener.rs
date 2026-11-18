@@ -96,7 +96,7 @@ where
                 State::SendingReset { mut stream } => match stream.poll_ready_unpin(cx)? {
                     Poll::Ready(()) => {
                         stream.start_send_unpin(Message {
-                            flag: Some(Flag::RESET),
+                            flag: Some(Flag::Reset as i32),
                             message: None,
                         })?;
                         *state = State::Flushing { stream };

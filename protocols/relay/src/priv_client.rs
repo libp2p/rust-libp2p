@@ -194,6 +194,20 @@ impl Behaviour {
             self.queued_actions
                 .push_back(ToSwarm::ExternalAddrExpired(addr));
         }
+
+        if let Some(peer_id) = self.peer_for_connection(connection_id) {
+            self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(connection_id),
+                event: Either::Left(handler::In::ResetReservation),
+            });
+        }
+    }
+
+    fn peer_for_connection(&self, connection_id: ConnectionId) -> Option<PeerId> {
+        self.directly_connected_peers
+            .iter()
+            .find_map(|(peer, connections)| connections.contains(&connection_id).then_some(*peer))
     }
 }
 
@@ -278,17 +292,16 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            Either::Right(v) => libp2p_core::util::unreachable(v),
+            Either::Right(v) => match v {},
         };
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                let (addr, status) = self
-                    .reservation_addresses
-                    .get_mut(&connection)
-                    .expect("Relay connection exist");
-
-                if !renewal && *status == ReservationStatus::Pending {
+                // The entry is gone if the listener was closed while the request was in flight.
+                if let Some((addr, status)) = self.reservation_addresses.get_mut(&connection)
+                    && !renewal
+                    && *status == ReservationStatus::Pending
+                {
                     *status = ReservationStatus::Confirmed;
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));

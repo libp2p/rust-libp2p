@@ -28,16 +28,12 @@ use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 #[cfg(feature = "cbor")]
+#[tracing_test::traced_test]
 async fn is_response_outbound() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
@@ -138,7 +134,7 @@ async fn ping_protocol() {
         }
     };
 
-    let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+    let num_pings: u8 = rand::random_range(1..100);
 
     let peer2 = async {
         let mut count = 0;
@@ -478,7 +474,7 @@ async fn concurrent_ping_protocol() {
 
     let peer2 = async {
         let mut count = 0;
-        let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+        let num_pings: u8 = rand::random_range(1..100);
         let mut expected_pongs = HashMap::new();
         for i in 0..num_pings {
             let ping_bytes = vec![i];

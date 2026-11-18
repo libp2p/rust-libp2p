@@ -24,7 +24,7 @@ use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use rand::{Rng, distributions::Alphanumeric, thread_rng};
+use rand::{RngExt, distr::Alphanumeric};
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 
@@ -104,17 +104,17 @@ pub(crate) fn build_query() -> MdnsPacket {
 /// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
-pub(crate) fn build_query_response<'a>(
+pub(crate) fn build_query_response(
     id: u16,
     peer_id: PeerId,
-    addresses: impl ExactSizeIterator<Item = &'a Multiaddr>,
+    mut addresses: Vec<&Multiaddr>,
     ttl: Duration,
 ) -> Vec<MdnsPacket> {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
 
     // Add a limit to 2^16-1 addresses, as the protocol limits to this number.
-    let addresses = addresses.take(65535);
+    addresses.truncate(65535);
 
     let peer_name_bytes = generate_peer_name();
     debug_assert!(peer_name_bytes.len() <= 0xffff);
@@ -267,7 +267,7 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 
 /// Generates and returns a random alphanumeric string of `length` size.
 fn random_string(length: usize) -> String {
-    thread_rng()
+    rand::rng()
         .sample_iter(&Alphanumeric)
         .take(length)
         .map(char::from)
@@ -278,7 +278,7 @@ fn random_string(length: usize) -> String {
 fn generate_peer_name() -> Vec<u8> {
     // Use a variable-length random string for mDNS peer name.
     // See https://github.com/libp2p/rust-libp2p/pull/2311/
-    let peer_name = random_string(32 + thread_rng().gen_range(0..32));
+    let peer_name = random_string(32 + rand::random_range(0..32));
 
     // allocate with a little extra padding for QNAME encoding
     let mut peer_name_bytes = Vec::with_capacity(peer_name.len() + 32);
@@ -413,7 +413,7 @@ mod tests {
         let packets = build_query_response(
             0xf8f8,
             my_peer_id,
-            vec![&addr1, &addr2].into_iter(),
+            vec![&addr1, &addr2],
             Duration::from_secs(60),
         );
         for packet in packets {
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_random_string() {
-        let varsize = thread_rng().gen_range(0..32);
+        let varsize = rand::random_range(0..32);
         let size = 32 + varsize;
         let name = random_string(size);
         assert_eq!(name.len(), size);

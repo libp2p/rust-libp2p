@@ -132,7 +132,7 @@ impl Config {
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_responder()?;
 
         let state = State::new(
@@ -152,7 +152,7 @@ impl Config {
             &self.prologue,
             self.dh_keys.keypair.secret(),
             None,
-        )
+        )?
         .build_initiator()?;
 
         let state = State::new(
@@ -253,7 +253,7 @@ pub enum Error {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(prost::DecodeError);
 
 fn certhashes_to_string(certhashes: &HashSet<Multihash<64>>) -> String {
     let mut s = String::new();

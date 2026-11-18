@@ -41,15 +41,10 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
-use rand::{RngCore, thread_rng};
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn smoke() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
 
@@ -64,11 +59,8 @@ async fn smoke() {
 
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
+#[tracing_test::traced_test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
     quickcheck::QuickCheck::new()
@@ -86,7 +78,7 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 
     let transport = webrtc::tokio::Transport::new(
         keypair,
-        webrtc::tokio::Certificate::generate(&mut thread_rng()).unwrap(),
+        webrtc::tokio::Certificate::generate(&mut rand::rng()).unwrap(),
     )
     .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
     .boxed();
@@ -245,7 +237,7 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
                 }
 
                 let mut data = vec![0; BUFFER_SIZE];
-                rand::thread_rng().fill_bytes(&mut data);
+                rand::fill(&mut data);
 
                 let mut received = Vec::new();
 

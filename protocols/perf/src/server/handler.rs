@@ -49,7 +49,7 @@ impl Handler {
     pub fn new() -> Self {
         Self {
             inbound: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(crate::RUN_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(crate::RUN_TIMEOUT),
                 crate::MAX_PARALLEL_RUNS_PER_CONNECTION,
             ),
         }
@@ -75,7 +75,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        libp2p_core::util::unreachable(v)
+        match v {}
     }
 
     fn on_connection_event(
@@ -97,17 +97,15 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
-                libp2p_core::util::unreachable(info)
+                match info {}
             }
 
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
-                libp2p_core::util::unreachable(info)
-            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => match info {},
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                libp2p_core::util::unreachable(error)
+                match error {}
             }
             _ => {}
         }

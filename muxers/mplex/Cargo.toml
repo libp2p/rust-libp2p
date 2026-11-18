@@ -19,7 +19,7 @@ libp2p-identity = { workspace = true }
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = { workspace = true }
-smallvec = "1.15.1"
+smallvec = "1.15"
 tracing = { workspace = true }
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 
@@ -32,6 +32,7 @@ libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 quickcheck = { workspace = true }
+tracing-test = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     pin::Pin,
     sync::{Arc, Mutex, atomic::AtomicUsize},
     task::{Context, Poll, Waker},
@@ -75,27 +75,29 @@ impl Queue {
                 self.control.try_push(message)
             }
             RpcOut::Publish { .. }
-            | RpcOut::Forward { .. }
             | RpcOut::IHave(_)
             | RpcOut::TestExtension
             | RpcOut::IWant(_) => self.non_priority.try_push(message),
-            #[cfg(feature = "partial_messages")]
+            #[cfg(feature = "partial-messages")]
             RpcOut::PartialMessage(_) => self.non_priority.try_push(message),
         }
     }
 
     /// Remove pending low priority Publish and Forward messages.
     /// Returns the number of messages removed.
-    pub(crate) fn remove_data_messages(&mut self, message_ids: &[MessageId]) -> usize {
+    pub(crate) fn remove_data_messages<'a>(
+        &mut self,
+        message_ids: impl IntoIterator<Item = &'a MessageId>,
+    ) -> usize {
+        // Look the ids up in a set, so a pass costs O(queue + ids) instead of O(queue * ids).
+        let message_ids: HashSet<&MessageId> = message_ids.into_iter().collect();
         if message_ids.is_empty() {
             return 0;
         }
 
         let mut count = 0;
         self.non_priority.retain(|message| match message {
-            RpcOut::Publish { message_id, .. } | RpcOut::Forward { message_id, .. }
-                if message_ids.contains(message_id) =>
-            {
+            RpcOut::Publish { message_id, .. } if message_ids.contains(message_id) => {
                 count += 1;
                 false
             }

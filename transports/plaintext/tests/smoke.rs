@@ -23,14 +23,11 @@ use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
 use libp2p_plaintext as plaintext;
 use quickcheck::QuickCheck;
-use tracing_subscriber::EnvFilter;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 
 #[test]
+#[tracing_test::traced_test]
 fn variable_msg_length() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();
         let msg_to_receive = msg;
@@ -38,7 +35,8 @@ fn variable_msg_length() {
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
-        let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
+        let (server, client) = tokio::io::duplex(100);
+        let (server, client) = (server.compat(), client.compat());
 
         futures::executor::block_on(async {
             let (

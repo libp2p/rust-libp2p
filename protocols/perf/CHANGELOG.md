@@ -1,5 +1,12 @@
 ## 0.4.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Use `futures-timer` instead of tokio's timer for stream timeouts so the bounded `Delay` works on
+  `wasm32`; tokio's timer has no driver in the browser and panics at runtime.
+  See [PR 6488](https://github.com/libp2p/rust-libp2p/pull/6488).
+
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - Add ConnectionError to FromSwarm::ConnectionClosed.
@@ -8,8 +15,9 @@
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
-<!-- Update to libp2p-core v0.43.0 -->
-<!-- Update to libp2p-swarm v0.47.0 -->
+<!-- Update to libp2p-core v0.44.0 -->
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.3.1
 - Use `web-time` instead of `instant`.

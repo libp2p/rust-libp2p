@@ -33,6 +33,8 @@ use libp2p_swarm::{
         FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
     },
 };
+#[cfg(feature = "metrics")]
+use prometheus_client::metrics::counter::Counter;
 use web_time::Instant;
 
 use crate::{
@@ -40,7 +42,7 @@ use crate::{
     protocol::{GossipsubCodec, ProtocolConfig},
     queue::Queue,
     rpc_proto::proto,
-    types::{PeerKind, RawMessage, RpcIn, RpcOut},
+    types::{ControlAction, IDontWant, PeerKind, RawMessage, RpcIn, RpcOut},
 };
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
@@ -126,6 +128,9 @@ pub struct EnabledHandler {
     /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
     /// decisions about the keep alive state for this connection.
     in_mesh: bool,
+
+    #[cfg(feature = "metrics")]
+    removed_queued_messages: Option<Counter>,
 }
 
 pub enum DisabledHandler {
@@ -156,7 +161,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::RPC>),
+    PendingSend(Framed<Stream, GossipsubCodec>, Box<proto::Rpc>),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
@@ -169,6 +174,7 @@ impl Handler {
         peer_id: PeerId,
         protocol_config: ProtocolConfig,
         message_queue: Queue,
+        #[cfg(feature = "metrics")] removed_queued_messages: Option<Counter>,
     ) -> Self {
         Handler::Enabled(EnabledHandler {
             peer_id,
@@ -183,6 +189,8 @@ impl Handler {
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
             in_mesh: false,
+            #[cfg(feature = "metrics")]
+            removed_queued_messages,
         })
     }
 }
@@ -220,6 +228,25 @@ impl EnabledHandler {
             "Established an outbound substream with one already available"
         );
         self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
+    }
+
+    /// Drain the ids of any received IDONTWANT control messages from the send queue.
+    fn purge_received_idontwants(&mut self, event: &HandlerEvent) -> usize {
+        let HandlerEvent::Message { rpc, .. } = event else {
+            return 0;
+        };
+
+        let ids = rpc.control_msgs.iter().filter_map(|msg| match msg {
+            ControlAction::IDontWant(IDontWant { message_ids }) => Some(message_ids.iter()),
+            _ => None,
+        });
+
+        let removed = self.message_queue.remove_data_messages(ids.flatten());
+        #[cfg(feature = "metrics")]
+        if let Some(counter) = self.removed_queued_messages.as_ref() {
+            counter.inc_by(removed as u64);
+        }
+        removed
     }
 
     fn poll(
@@ -263,28 +290,17 @@ impl EnabledHandler {
                     if let Poll::Ready(mut message) = Pin::new(&mut self.message_queue).poll_pop(cx)
                     {
                         tracing::debug!(peer=%self.peer_id, ?message, "Sending gossipsub message");
-                        match message {
-                            RpcOut::Publish {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            }
-                            | RpcOut::Forward {
-                                message: _,
-                                ref mut timeout,
-                                ..
-                            } => {
-                                #[allow(clippy::collapsible_match)]
-                                if Pin::new(timeout).poll(cx).is_ready() {
-                                    // Inform the behaviour and end the poll.
-                                    self.outbound_substream =
-                                        Some(OutboundSubstreamState::WaitingOutput(substream));
-                                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                                        HandlerEvent::MessageDropped(message),
-                                    ));
-                                }
-                            }
-                            _ => {} // All other messages are not time-bound.
+                        if let RpcOut::Publish {
+                            ref mut timeout, ..
+                        } = message
+                            && Pin::new(timeout).poll(cx).is_ready()
+                        {
+                            // Inform the behaviour and end the poll.
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::WaitingOutput(substream));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                HandlerEvent::MessageDropped(message),
+                            ));
                         }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
@@ -368,6 +384,7 @@ impl EnabledHandler {
                             self.last_io_activity = Instant::now();
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
+                            self.purge_received_idontwants(&message);
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
@@ -522,7 +539,7 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
-                        Either::Right(v) => libp2p_core::util::unreachable(v),
+                        Either::Right(v) => match v {},
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
@@ -536,7 +553,7 @@ impl ConnectionHandler for Handler {
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
                         ..
-                    }) => libp2p_core::util::unreachable(e),
+                    }) => match e {},
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::NegotiationFailed,
                         ..

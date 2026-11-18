@@ -70,7 +70,7 @@ pub enum ReserveError {
 #[derive(Debug, Error)]
 pub enum ProtocolViolation {
     #[error(transparent)]
-    Codec(#[from] quick_protobuf_codec::Error),
+    Codec(#[from] prost_codec::Error),
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
@@ -85,18 +85,27 @@ pub enum ProtocolViolation {
     UnexpectedTypeConnect,
     #[error("Unexpected message type 'reserve'")]
     UnexpectedTypeReserve,
-    #[error("Unexpected message status '{0:?}'")]
-    UnexpectedStatus(proto::Status),
+    #[error("Unexpected message type '{0}'")]
+    UnexpectedType(String),
+    #[error("Unexpected message status '{0}'")]
+    UnexpectedStatus(String),
 }
 
-impl From<quick_protobuf_codec::Error> for ConnectError {
-    fn from(e: quick_protobuf_codec::Error) -> Self {
+fn format_proto_status(code: i32) -> String {
+    match proto::Status::try_from(code) {
+        Ok(status) => status.as_str_name().to_string(),
+        Err(_) => code.to_string(),
+    }
+}
+
+impl From<prost_codec::Error> for ConnectError {
+    fn from(e: prost_codec::Error) -> Self {
         ConnectError::Protocol(ProtocolViolation::Codec(e))
     }
 }
 
-impl From<quick_protobuf_codec::Error> for ReserveError {
-    fn from(e: quick_protobuf_codec::Error) -> Self {
+impl From<prost_codec::Error> for ReserveError {
+    fn from(e: prost_codec::Error) -> Self {
         ReserveError::Protocol(ProtocolViolation::Codec(e))
     }
 }
@@ -115,20 +124,20 @@ pub(crate) struct Circuit {
 
 pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, ReserveError> {
     let msg = proto::HopMessage {
-        type_pb: proto::HopMessageType::RESERVE,
+        r#type: proto::HopMessageType::Reserve as i32,
         peer: None,
         reservation: None,
         limit: None,
         status: None,
     };
-    let mut substream = Framed::new(stream, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(stream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     substream.send(msg).await?;
 
     substream.close().await?;
 
     let proto::HopMessage {
-        type_pb,
+        r#type,
         peer: _,
         reservation,
         limit,
@@ -138,33 +147,37 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
         .await
         .ok_or(ReserveError::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
-    match type_pb {
-        proto::HopMessageType::CONNECT => {
+    let msg_type = proto::HopMessageType::try_from(r#type)
+        .map_err(|_| ProtocolViolation::UnexpectedType(r#type.to_string()))?;
+
+    match msg_type {
+        proto::HopMessageType::Connect => {
             return Err(ReserveError::Protocol(
                 ProtocolViolation::UnexpectedTypeConnect,
             ));
         }
-        proto::HopMessageType::RESERVE => {
+        proto::HopMessageType::Reserve => {
             return Err(ReserveError::Protocol(
                 ProtocolViolation::UnexpectedTypeReserve,
             ));
         }
-        proto::HopMessageType::STATUS => {}
+        proto::HopMessageType::Status => {}
     }
 
     let limit = limit.map(Into::into);
 
-    match status.ok_or(ProtocolViolation::MissingStatusField)? {
-        proto::Status::OK => {}
-        proto::Status::RESERVATION_REFUSED => {
+    let status_code = status.ok_or(ProtocolViolation::MissingStatusField)?;
+    match proto::Status::try_from(status_code) {
+        Ok(proto::Status::Ok) => {}
+        Ok(proto::Status::ReservationRefused) => {
             return Err(ReserveError::Refused);
         }
-        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
+        Ok(proto::Status::ResourceLimitExceeded) => {
             return Err(ReserveError::ResourceLimitExceeded);
         }
-        s => {
+        _ => {
             return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedStatus(
-                s,
+                format_proto_status(status_code),
             )));
         }
     }
@@ -214,7 +227,7 @@ pub(crate) async fn open_circuit(
     dst_peer_id: PeerId,
 ) -> Result<Circuit, ConnectError> {
     let msg = proto::HopMessage {
-        type_pb: proto::HopMessageType::CONNECT,
+        r#type: proto::HopMessageType::Connect as i32,
         peer: Some(proto::Peer {
             id: dst_peer_id.to_bytes(),
             addrs: vec![],
@@ -224,12 +237,12 @@ pub(crate) async fn open_circuit(
         status: None,
     };
 
-    let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(protocol, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     substream.send(msg).await?;
 
     let proto::HopMessage {
-        type_pb,
+        r#type,
         peer: _,
         reservation: _,
         limit,
@@ -239,39 +252,44 @@ pub(crate) async fn open_circuit(
         .await
         .ok_or(ConnectError::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
-    match type_pb {
-        proto::HopMessageType::CONNECT => {
+    let msg_type = proto::HopMessageType::try_from(r#type)
+        .map_err(|_| ProtocolViolation::UnexpectedType(r#type.to_string()))?;
+
+    match msg_type {
+        proto::HopMessageType::Connect => {
             return Err(ConnectError::Protocol(
                 ProtocolViolation::UnexpectedTypeConnect,
             ));
         }
-        proto::HopMessageType::RESERVE => {
+        proto::HopMessageType::Reserve => {
             return Err(ConnectError::Protocol(
                 ProtocolViolation::UnexpectedTypeReserve,
             ));
         }
-        proto::HopMessageType::STATUS => {}
+        proto::HopMessageType::Status => {}
     }
 
     match status {
-        Some(proto::Status::OK) => {}
-        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
-            return Err(ConnectError::ResourceLimitExceeded);
-        }
-        Some(proto::Status::CONNECTION_FAILED) => {
-            return Err(ConnectError::ConnectionFailed);
-        }
-        Some(proto::Status::NO_RESERVATION) => {
-            return Err(ConnectError::NoReservation);
-        }
-        Some(proto::Status::PERMISSION_DENIED) => {
-            return Err(ConnectError::PermissionDenied);
-        }
-        Some(s) => {
-            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedStatus(
-                s,
-            )));
-        }
+        Some(s) => match proto::Status::try_from(s) {
+            Ok(proto::Status::Ok) => {}
+            Ok(proto::Status::ResourceLimitExceeded) => {
+                return Err(ConnectError::ResourceLimitExceeded);
+            }
+            Ok(proto::Status::ConnectionFailed) => {
+                return Err(ConnectError::ConnectionFailed);
+            }
+            Ok(proto::Status::NoReservation) => {
+                return Err(ConnectError::NoReservation);
+            }
+            Ok(proto::Status::PermissionDenied) => {
+                return Err(ConnectError::PermissionDenied);
+            }
+            _ => {
+                return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedStatus(
+                    format_proto_status(s),
+                )));
+            }
+        },
         None => {
             return Err(ConnectError::Protocol(
                 ProtocolViolation::MissingStatusField,

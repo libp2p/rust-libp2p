@@ -1,4 +1,13 @@
+## 0.49.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 ## 0.48.0
+
+- Remove yamux v0.12 support and its already deprecated methods.
+  Update yamux dependency to v0.14, removing the `rand` runtime dependency.
+  See [PR #6493](https://github.com/libp2p/rust-yamux/pull/6493).
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).

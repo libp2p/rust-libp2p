@@ -34,19 +34,19 @@ pub(crate) async fn handshake(
 ) -> Result<Vec<Multiaddr>, Error> {
     let mut stream = Framed::new(
         stream,
-        quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
+        prost_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
     );
 
-    let proto::HolePunch { type_pb, ObsAddrs } = stream
+    let proto::HolePunch { r#type, obs_addrs } = stream
         .next()
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    if ObsAddrs.is_empty() {
+    if obs_addrs.is_empty() {
         return Err(Error::Protocol(ProtocolViolation::NoAddresses));
     };
 
-    let obs_addrs = ObsAddrs
+    let obs_addrs = obs_addrs
         .into_iter()
         .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
             Ok(a) => Some(a),
@@ -66,22 +66,22 @@ pub(crate) async fn handshake(
         })
         .collect();
 
-    if !matches!(type_pb, proto::Type::CONNECT) {
+    if r#type != proto::Type::Connect as i32 {
         return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync));
     }
 
     let msg = proto::HolePunch {
-        type_pb: proto::Type::CONNECT,
-        ObsAddrs: candidates.into_iter().map(|a| a.to_vec()).collect(),
+        r#type: proto::Type::Connect as i32,
+        obs_addrs: candidates.into_iter().map(|a| a.to_vec()).collect(),
     };
 
     stream.send(msg).await?;
-    let proto::HolePunch { type_pb, .. } = stream
+    let proto::HolePunch { r#type, .. } = stream
         .next()
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    if !matches!(type_pb, proto::Type::SYNC) {
+    if r#type != proto::Type::Sync as i32 {
         return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect));
     }
 
@@ -96,8 +96,8 @@ pub enum Error {
     Protocol(#[from] ProtocolViolation),
 }
 
-impl From<quick_protobuf_codec::Error> for Error {
-    fn from(e: quick_protobuf_codec::Error) -> Self {
+impl From<prost_codec::Error> for Error {
+    fn from(e: prost_codec::Error) -> Self {
         Error::Protocol(ProtocolViolation::Codec(e))
     }
 }
@@ -105,7 +105,7 @@ impl From<quick_protobuf_codec::Error> for Error {
 #[derive(Debug, Error)]
 pub enum ProtocolViolation {
     #[error(transparent)]
-    Codec(#[from] quick_protobuf_codec::Error),
+    Codec(#[from] prost_codec::Error),
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
     #[error("Failed to parse response type field.")]

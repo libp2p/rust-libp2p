@@ -29,7 +29,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
-use tracing_subscriber::EnvFilter;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -43,16 +43,15 @@ fn core_upgrade_compat() {
 }
 
 #[test]
+#[tracing_test::traced_test]
 fn xx() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
-        let (client, server) = futures_ringbuf::Endpoint::pair(100, 100);
+        let (client, server) = tokio::io::duplex(100);
+        let (client, server) = (client.compat(), server.compat());
 
         futures::executor::block_on(async move {
             let (

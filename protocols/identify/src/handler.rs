@@ -139,7 +139,7 @@ impl Handler {
             remote_peer_id,
             events: SmallVec::new(),
             active_streams: futures_bounded::FuturesSet::new(
-                move || futures_bounded::Delay::tokio(STREAM_TIMEOUT),
+                move || futures_bounded::Delay::futures_timer(STREAM_TIMEOUT),
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             trigger_next_identify: Delay::new(Duration::ZERO),
@@ -431,7 +431,7 @@ impl ConnectionHandler for Handler {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
                         #[allow(unused)]
-                        error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
+                        error.map_upgrade_err(|e| match e.into_inner() {}),
                     ),
                 ));
                 self.trigger_next_identify.reset(self.interval);

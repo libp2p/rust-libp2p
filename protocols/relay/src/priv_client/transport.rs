@@ -136,7 +136,6 @@ impl libp2p_core::Transport for Transport {
         let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
             RelayedMultiaddr {
                 relay_peer_id: None,
-                relay_addr: _,
                 ..
             } => return Err(Error::MissingDstPeerId.into()),
             RelayedMultiaddr {

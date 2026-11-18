@@ -21,9 +21,9 @@
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
 use std::{
-    convert::TryFrom as _,
     iter, mem,
     pin::Pin,
+    str::FromStr,
     task::{Context, Poll},
 };
 
@@ -131,7 +131,7 @@ where
                         }
                     }
 
-                    let p = Protocol::try_from(protocol.as_ref())?;
+                    let p = Protocol::from_str(protocol.as_ref())?;
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
@@ -218,8 +218,6 @@ mod tests {
         time::timeout,
     };
     use tokio_util::compat::TokioAsyncReadCompatExt;
-    use tracing::metadata::LevelFilter;
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::listener_select_proto;
@@ -227,7 +225,9 @@ mod tests {
     #[test]
     fn select_proto_basic() {
         async fn run(version: Version) {
-            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+            let (client_connection, server_connection) = tokio::io::duplex(100);
+            let (client_connection, server_connection) =
+                (client_connection.compat(), server_connection.compat());
 
             let server = tokio::task::spawn(async move {
                 let protos = vec!["/proto1", "/proto2"];
@@ -272,6 +272,7 @@ mod tests {
 
     /// Tests the expected behaviour of failed negotiations.
     #[test]
+    #[tracing_test::traced_test]
     fn negotiation_failed() {
         fn prop(
             version: Version,
@@ -279,14 +280,6 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            let _ = tracing_subscriber::fmt()
-                .with_env_filter(
-                    EnvFilter::builder()
-                        .with_default_directive(LevelFilter::DEBUG.into())
-                        .from_env_lossy(),
-                )
-                .try_init();
-
             let rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -355,8 +348,8 @@ mod tests {
 
     #[tokio::test]
     async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
-        let (client_connection, _server_connection) =
-            futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
+        let (client_connection, _server_connection) = tokio::io::duplex(1024 * 1024);
+        let client_connection = client_connection.compat();
 
         let client = tokio::task::spawn(async move {
             // Single protocol to allow for lazy (or optimistic) protocol negotiation.

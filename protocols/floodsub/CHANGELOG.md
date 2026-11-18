@@ -1,7 +1,20 @@
+## 0.49.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+<!-- Update to libp2p-swarm v0.49.0 -->
+
 ## 0.48.0
+
+- Replace the duplicate-message cuckoo filter with a bounded cache, removing the `rand` 0.7.3 dependency.
+  See [issue 6419](https://github.com/libp2p/rust-libp2p/issues/6419).
 
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
+
+- Revert migration to `quick-protobuf`, migrate back to `prost`.
+  See [PR 6363](https://github.com/libp2p/rust-libp2p/pull/6363).
 
 ## 0.47.0
 

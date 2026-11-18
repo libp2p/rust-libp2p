@@ -22,7 +22,7 @@ use std::{io, time::Duration};
 
 use futures::prelude::*;
 use libp2p_swarm::StreamProtocol;
-use rand::{distributions, prelude::*};
+use rand::{distr, prelude::*};
 use web_time::Instant;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
@@ -52,7 +52,7 @@ pub(crate) async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let payload: [u8; PING_SIZE] = thread_rng().sample(distributions::Standard);
+    let payload: [u8; PING_SIZE] = rand::rng().sample(distr::StandardUniform);
     stream.write_all(&payload).await?;
     stream.flush().await?;
     let started = Instant::now();
@@ -93,7 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn ping_pong() {
-        let mem_addr = multiaddr![Memory(thread_rng().r#gen::<u64>())];
+        let mem_addr = multiaddr![Memory(rand::random::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
         transport.listen_on(ListenerId::next(), mem_addr).unwrap();
 

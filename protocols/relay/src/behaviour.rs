@@ -539,7 +539,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let event = match event {
             Either::Left(e) => e,
-            Either::Right(v) => libp2p_core::util::unreachable(v),
+            Either::Right(v) => match v {},
         };
 
         match event {
@@ -586,7 +586,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                            status: proto::Status::ResourceLimitExceeded,
                         }),
                     }
                 } else {
@@ -692,7 +692,7 @@ impl NetworkBehaviour for Behaviour {
                 );
 
                 let action = if self.circuits.num_circuits_of_peer(event_source)
-                    > self.config.max_circuits_per_peer
+                    >= self.config.max_circuits_per_peer
                     || self.circuits.len() >= self.config.max_circuits
                     || !self
                         .config
@@ -708,16 +708,14 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                            status: proto::Status::ResourceLimitExceeded,
                         }),
                     }
-                } else if let Some((dst_conn, status)) = self
+                } else if let Some((dst_conn, _)) = self
                     .connections
                     .get(&inbound_circuit_req.dst())
-                    .and_then(|cs| cs.iter().next())
+                    .and_then(|cs| cs.iter().find(|(_, status)| status.is_active()))
                 {
-                    assert_eq!(*status, Reservation::Active);
-
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
                         status: CircuitStatus::Accepting,
@@ -745,7 +743,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: proto::Status::NO_RESERVATION,
+                            status: proto::Status::NoReservation,
                         }),
                     }
                 };
@@ -995,14 +993,14 @@ pub enum StatusCode {
 impl From<proto::Status> for StatusCode {
     fn from(other: proto::Status) -> Self {
         match other {
-            proto::Status::OK => Self::OK,
-            proto::Status::RESERVATION_REFUSED => Self::ReservationRefused,
-            proto::Status::RESOURCE_LIMIT_EXCEEDED => Self::ResourceLimitExceeded,
-            proto::Status::PERMISSION_DENIED => Self::PermissionDenied,
-            proto::Status::CONNECTION_FAILED => Self::ConnectionFailed,
-            proto::Status::NO_RESERVATION => Self::NoReservation,
-            proto::Status::MALFORMED_MESSAGE => Self::MalformedMessage,
-            proto::Status::UNEXPECTED_MESSAGE => Self::UnexpectedMessage,
+            proto::Status::Ok => Self::OK,
+            proto::Status::ReservationRefused => Self::ReservationRefused,
+            proto::Status::ResourceLimitExceeded => Self::ResourceLimitExceeded,
+            proto::Status::PermissionDenied => Self::PermissionDenied,
+            proto::Status::ConnectionFailed => Self::ConnectionFailed,
+            proto::Status::NoReservation => Self::NoReservation,
+            proto::Status::MalformedMessage => Self::MalformedMessage,
+            proto::Status::UnexpectedMessage => Self::UnexpectedMessage,
         }
     }
 }

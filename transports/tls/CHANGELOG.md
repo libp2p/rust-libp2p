@@ -1,4 +1,12 @@
+## 0.8.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 ## 0.7.0
+
+- Use the AWS-LC crypto provider and prefer the X25519MLKEM768 key exchange group for TLS configurations.
+  See [PR 6568](https://github.com/libp2p/rust-libp2p/pull/6568).
 
 - Replace deprecated `webpki::Error` variants with their new context-based equivalents.
   See [PR 6355](https://github.com/libp2p/rust-libp2p/pull/6355).

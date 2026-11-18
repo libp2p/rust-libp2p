@@ -99,10 +99,10 @@ impl TryFrom<&[u8]> for Protocol {
     }
 }
 
-impl TryFrom<&str> for Protocol {
-    type Error = ProtocolError;
+impl core::str::FromStr for Protocol {
+    type Err = ProtocolError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         if !value.starts_with('/') {
             return Err(ProtocolError::InvalidProtocol);
         }
@@ -204,7 +204,7 @@ impl Message {
         let mut remaining: &[u8] = &msg;
         loop {
             // A well-formed message must be terminated with a newline.
-            if remaining == [b'\n'] {
+            if remaining == *b"\n" {
                 break;
             } else if protocols.len() == MAX_PROTOCOLS {
                 return Err(ProtocolError::TooManyProtocols);
