@@ -1,10 +1,5 @@
 ## 0.7.0
 
-- Require `wasm-bindgen-futures` 0.4.80 or later instead of exactly 0.4.58. The exact pin held all
-  dependents at `wasm-bindgen` 0.2.108; they now need `wasm-bindgen` 0.2.130 or later, and a
-  matching `wasm-bindgen-cli`.
-  See [PR 6747](https://github.com/libp2p/rust-libp2p/pull/6747).
-
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 

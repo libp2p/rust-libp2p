@@ -126,7 +126,6 @@ env_logger = "0.11"
 futures = "0.3"
 futures-bounded = { version = "0.3", features = ["futures-timer"] }
 futures-rustls = { version = "0.26", default-features = false }
-# 3.0.4 moves the wasm timer to gloo-timers 0.4; 0.4.1 has the `panic = "unwind"` fix (ranile/gloo#562).
 futures-timer = "3.0.4"
 hex-literal = "1.1"
 getrandom = { version = "0.4", features = ["wasm_js"] }
