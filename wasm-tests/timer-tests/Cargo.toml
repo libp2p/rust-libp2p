@@ -1,0 +1,19 @@
+[package]
+name = "timer-tests"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+publish = false
+
+[package.metadata.release]
+release = false
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures = { workspace = true }
+# `libp2p` enables the `wasm-bindgen` feature of `futures-timer`, which is what these tests check.
+futures-timer = { workspace = true }
+libp2p = { workspace = true, features = ["ed25519", "plaintext", "yamux"] }
+wasm-bindgen-test = "0.3"
+
+[lints]
+workspace = true

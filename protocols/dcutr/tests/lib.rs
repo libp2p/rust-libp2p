@@ -32,14 +32,10 @@ use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
+#[tracing_test::traced_test]
 async fn connect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
     let mut relay = build_relay();
     let mut dst = build_client();
     let mut src = build_client();

@@ -1,3 +1,12 @@
+## 0.7.0
+
+- Fix compilation with `panic = "unwind"` (e.g. `wasm32-unknown-emscripten`) and `wasm-bindgen`
+  0.2.109 or later.
+  See [PR 6747](https://github.com/libp2p/rust-libp2p/pull/6747).
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 ## 0.6.0
 
 - Raise MSRV to 1.88.0.

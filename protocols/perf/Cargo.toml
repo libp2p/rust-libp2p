@@ -32,6 +32,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [dev-dependencies]
+tracing-test = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
