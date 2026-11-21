@@ -398,7 +398,16 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
             quote! {
                 match #trait_to_impl::poll(&mut self.#field, cx) {
-                    std::task::Poll::Ready(e) => return std::task::Poll::Ready(e.map_out(#map_out_event).map_in(#map_in_event)),
+                    std::task::Poll::Ready(e) => {
+                        // For a field whose `ToSwarm` is uninhabited (e.g. `Infallible`, as with
+                        // `connection_limits::Behaviour`), no `e` can ever reach this arm, so the
+                        // call below is unreachable in practice. Recent nightly lints that as
+                        // `unreachable_code` under `-D warnings`; the arm itself must still be
+                        // generated so this compiles for every other field whose `ToSwarm` is
+                        // inhabited.
+                        #[allow(unreachable_code)]
+                        return std::task::Poll::Ready(e.map_out(#map_out_event).map_in(#map_in_event));
+                    }
                     std::task::Poll::Pending => {},
                 }
             }
