@@ -184,6 +184,7 @@ where
                 self.events_out.push(Ok(out.into()));
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+                self.dial_negotiated -= 1;
                 self.events_out.push(Err(error));
             }
             ConnectionEvent::AddressChange(_)
@@ -237,5 +238,50 @@ mod tests {
         }));
 
         assert!(!handler.connection_keep_alive());
+    }
+
+    #[test]
+    fn failed_outbound_upgrade_frees_dial_slot() {
+        let mut handler: OneShotHandler<_, DeniedUpgrade, Infallible> = OneShotHandler::new(
+            SubstreamProtocol::new(DeniedUpgrade {}, ()),
+            OneShotHandlerConfig {
+                max_dial_negotiated: 1,
+                ..Default::default()
+            },
+        );
+
+        handler.send_request(DeniedUpgrade);
+        handler.send_request(DeniedUpgrade);
+
+        block_on(poll_fn(|cx| {
+            // First request is dispatched.
+            assert!(matches!(
+                handler.poll(cx),
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { .. })
+            ));
+
+            // The outbound upgrade fails.
+            handler.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                info: (),
+                error: StreamUpgradeError::Timeout,
+            }));
+
+            // The error is reported to the behaviour.
+            assert!(matches!(
+                handler.poll(cx),
+                Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
+                    StreamUpgradeError::Timeout
+                )))
+            ));
+
+            // The failed attempt must not occupy a slot anymore.
+            assert_eq!(handler.pending_requests(), 1);
+            assert!(matches!(
+                handler.poll(cx),
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { .. })
+            ));
+
+            Poll::Ready(())
+        }));
     }
 }
