@@ -356,7 +356,6 @@ impl ConnectionHandler for Handler {
                     {
                         tracing::debug!("Unable to send error to dialer")
                     }
-                    self.reservation.failed();
                     continue;
                 }
                 Poll::Pending => {}
