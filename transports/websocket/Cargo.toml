@@ -16,7 +16,7 @@ either = "1.16"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12"
+parking_lot = "0.13"
 pin-project-lite = "0.2"
 rw-stream-sink = { workspace = true }
 soketto = "0.8"
