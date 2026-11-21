@@ -10,6 +10,9 @@ pub struct Rpc {
     /// Canonical Extensions should register their messages here.
     #[prost(message, optional, tag = "10")]
     pub partial: ::core::option::Option<PartialMessagesExtension>,
+    /// gossipsub v1.4: Large message fragments.
+    #[prost(message, repeated, tag = "12")]
+    pub large_message_fragments: ::prost::alloc::vec::Vec<LargeMessageFragment>,
 }
 /// Nested message and enum types in `RPC`.
 pub mod rpc {
@@ -61,6 +64,13 @@ pub struct ControlMessage {
     pub idontwant: ::prost::alloc::vec::Vec<ControlIDontWant>,
     #[prost(message, optional, tag = "6")]
     pub extensions: ::core::option::Option<ControlExtensions>,
+    /// gossipsub v1.4: Large Message Handling control messages.
+    /// PREAMBLE announces a large message before transmission begins.
+    #[prost(message, repeated, tag = "7")]
+    pub preamble: ::prost::alloc::vec::Vec<ControlPreamble>,
+    /// IMRECEIVING signals that a large message is currently being received.
+    #[prost(message, repeated, tag = "8")]
+    pub imreceiving: ::prost::alloc::vec::Vec<ControlImReceiving>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ControlIHave {
@@ -99,6 +109,9 @@ pub struct ControlIDontWant {
 pub struct ControlExtensions {
     #[prost(bool, optional, tag = "10")]
     pub partial_messages: ::core::option::Option<bool>,
+    /// gossipsub v1.4: Large Message Handling extension.
+    #[prost(bool, optional, tag = "11")]
+    pub large_message_handling: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PeerInfo {
@@ -238,4 +251,46 @@ pub struct PartialMessagesExtension {
     /// An encoded representation of the parts a peer has and wants.
     #[prost(bytes = "vec", optional, tag = "4")]
     pub parts_metadata: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// PREAMBLE is sent before transmitting a large message to announce its
+/// messageID and size, allowing receivers to prepare and coordinate.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ControlPreamble {
+    /// ID of the message about to be transmitted
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub message_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Total size in bytes of the full message
+    #[prost(uint64, optional, tag = "2")]
+    pub message_size: ::core::option::Option<u64>,
+    /// Topic the message belongs to
+    #[prost(string, optional, tag = "3")]
+    pub topic_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// IMRECEIVING signals that the sender is currently in the process of receiving
+/// a large message, allowing neighbors to suppress redundant sends.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ControlImReceiving {
+    /// ID of the message currently being received
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub message_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// LargeMessageFragment carries a single fragment of a large message that has
+/// been split for pipeline-parallel relay across the mesh.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LargeMessageFragment {
+    /// Full message ID this fragment belongs to
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub message_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// 0-based index of this fragment
+    #[prost(uint32, optional, tag = "2")]
+    pub fragment_index: ::core::option::Option<u32>,
+    /// Total number of fragments
+    #[prost(uint32, optional, tag = "3")]
+    pub total_fragments: ::core::option::Option<u32>,
+    /// The fragment payload
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub fragment_data: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Topic the original message belongs to
+    #[prost(string, optional, tag = "5")]
+    pub topic_id: ::core::option::Option<::prost::alloc::string::String>,
 }
