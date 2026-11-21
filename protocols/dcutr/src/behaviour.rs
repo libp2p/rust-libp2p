@@ -319,7 +319,7 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(never) => libp2p_core::util::unreachable(never),
+            Either::Right(never) => match never {},
         };
     }
 
