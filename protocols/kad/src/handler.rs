@@ -505,7 +505,7 @@ impl Handler {
         // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => libp2p_core::util::unreachable(p),
+            future::Either::Right(p) => match p {},
         };
 
         if self.protocol_status.is_none() {

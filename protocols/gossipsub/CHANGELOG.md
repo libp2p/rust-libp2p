@@ -4,6 +4,18 @@
   bypass where a peer could shed the penalty by opening a second connection from the same IP and
   closing it.
   See [PR 6767](https://github.com/libp2p/rust-libp2p/pull/6767).
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Cap the number of control messages per type per RPC at `max_control_messages`
+  (default 500), truncating the excess after decoding.
+  See [PR 6765](https://github.com/libp2p/rust-libp2p/pull/6765).
+
+- Act on received IDONTWANT control messages in the `ConnectionHandler`, on the connection's own
+  task, instead of in the behaviour.
+  See [PR 6760](https://github.com/libp2p/rust-libp2p/pull/6760).
+
 - Remove the partial message state of a disconnected peer that never subscribed to a topic, and
   remove the state of a topic once no peer has any.
 - Do not cache or score messages for topics the node is not subscribed to.

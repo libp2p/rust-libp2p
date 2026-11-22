@@ -431,7 +431,7 @@ impl ConnectionHandler for Handler {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
                         #[allow(unused)]
-                        error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
+                        error.map_upgrade_err(|e| match e.into_inner() {}),
                     ),
                 ));
                 self.trigger_next_identify.reset(self.interval);

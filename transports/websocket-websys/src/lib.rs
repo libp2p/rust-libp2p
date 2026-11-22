@@ -26,6 +26,7 @@ mod web_context;
 
 use std::{
     cmp::min,
+    panic::AssertUnwindSafe,
     pin::Pin,
     rc::Rc,
     sync::{
@@ -105,9 +106,8 @@ impl libp2p_core::Transport for Transport {
             extract_websocket_url(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         Ok(async move {
-            let socket = match WebSocket::new(&url) {
-                Ok(ws) => ws,
-                Err(_) => return Err(Error::invalid_websocket_url(&url)),
+            let Ok(socket) = WebSocket::new(&url) else {
+                return Err(Error::invalid_websocket_url(&url));
             };
 
             Ok(Connection::new(socket))
@@ -247,9 +247,13 @@ impl Connection {
     fn new(socket: WebSocket) -> Self {
         socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
+        // Under `panic = "unwind"`, wasm-bindgen catches panics in callbacks and requires them to
+        // be `UnwindSafe`. `Rc<AtomicWaker>` is not, because `AtomicWaker` is not `RefUnwindSafe`.
+        // The callbacks use the wakers only for `AtomicWaker::wake`, which takes the waker out
+        // before calling it, so a panic cannot leave the `AtomicWaker` in an inconsistent state.
         let open_waker = Rc::new(AtomicWaker::new());
         let onopen_closure = Closure::<dyn FnMut(_)>::new({
-            let open_waker = open_waker.clone();
+            let open_waker = AssertUnwindSafe(open_waker.clone());
             move |_| {
                 open_waker.wake();
             }
@@ -258,7 +262,7 @@ impl Connection {
 
         let close_waker = Rc::new(AtomicWaker::new());
         let onclose_closure = Closure::<dyn FnMut(_)>::new({
-            let close_waker = close_waker.clone();
+            let close_waker = AssertUnwindSafe(close_waker.clone());
             move |_| {
                 close_waker.wake();
             }
@@ -278,7 +282,7 @@ impl Connection {
         let new_data_waker = Rc::new(AtomicWaker::new());
         let onmessage_closure = Closure::<dyn FnMut(_)>::new({
             let read_buffer = read_buffer.clone();
-            let new_data_waker = new_data_waker.clone();
+            let new_data_waker = AssertUnwindSafe(new_data_waker.clone());
             let errored = errored.clone();
             move |e: MessageEvent| {
                 let data = js_sys::Uint8Array::new(&e.data());
@@ -300,7 +304,7 @@ impl Connection {
 
         let write_waker = Rc::new(AtomicWaker::new());
         let on_buffered_amount_low_closure = Closure::<dyn FnMut(_)>::new({
-            let write_waker = write_waker.clone();
+            let write_waker = AssertUnwindSafe(write_waker.clone());
             let socket = socket.clone();
             move |_| {
                 if socket.buffered_amount() == 0 {

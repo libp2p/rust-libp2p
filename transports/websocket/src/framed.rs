@@ -97,6 +97,9 @@ where
     }
 
     /// Set the max. frame data size we support.
+    ///
+    /// The limit applies to the payload of a single frame as well as to a complete
+    /// message, on both dialed (outbound) and accepted (inbound) connections.
     pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
         self.max_data_size = size;
         self
@@ -272,10 +275,18 @@ where
         let transport = self.transport.clone();
         let tls_config = self.tls_config.clone();
         let max_redirects = self.max_redirects;
+        let max_data_size = self.max_data_size;
 
         let future = async move {
             loop {
-                match Self::dial_once(transport.clone(), addr, tls_config.clone(), dial_opts).await
+                match Self::dial_once(
+                    transport.clone(),
+                    addr,
+                    tls_config.clone(),
+                    dial_opts,
+                    max_data_size,
+                )
+                .await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
@@ -300,6 +311,7 @@ where
         addr: WsAddress,
         tls_config: tls::Config,
         dial_opts: DialOpts,
+        max_data_size: usize,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         tracing::trace!(address=?addr, "Dialing websocket address");
 
@@ -359,7 +371,10 @@ where
             }
             handshake::ServerResponse::Accepted { .. } => {
                 tracing::trace!(port=%addr.host_port, "websocket handshake successful");
-                Ok(Either::Right(Connection::new(client.into_builder())))
+                let mut builder = client.into_builder();
+                builder.set_max_message_size(max_data_size);
+                builder.set_max_frame_size(max_data_size);
+                Ok(Either::Right(Connection::new(builder)))
             }
         }
     }
