@@ -1,10 +1,22 @@
-## 0.18.1
+## 0.19.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
+- Fix `Behaviour::unregister` forgetting registrations in other namespaces and at other rendezvous nodes.
+  See [PR #6745](https://github.com/libp2p/rust-libp2p/pull/6745).
+
+- Let a peer at its registration limit renew an existing registration, and stop the total registration limit from admitting one extra registration.
+  See [PR 6738](https://github.com/libp2p/rust-libp2p/pull/6738).
 
 - Cancel superseded registration timers.
   See [PR #6620](https://github.com/libp2p/rust-libp2p/pull/6620)
 
 - Cap TTL from discovery responses.
   See [PR #6619](https://github.com/libp2p/rust-libp2p/pull/6619)
+
+
+<!-- Update to libp2p-swarm v0.49.0 -->
 
 ## 0.18.0
 

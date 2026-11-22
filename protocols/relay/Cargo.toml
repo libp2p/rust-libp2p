@@ -3,7 +3,7 @@ name = "libp2p-relay"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
-version = "0.22.0"
+version = "0.23.0"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -36,7 +36,7 @@ libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 

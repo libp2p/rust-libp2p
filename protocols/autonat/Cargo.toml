@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.16.0"
+version = "0.17.0"
 authors = [
     "David Craven <david@craven.ch>",
     "Elena Frank <elena.frank@protonmail.com>",
@@ -36,7 +36,7 @@ thiserror = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-test = { workspace = true }
 libp2p-identify = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
 

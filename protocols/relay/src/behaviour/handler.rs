@@ -459,7 +459,22 @@ impl Handler {
             )
             .is_err()
         {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound stream because we are at capacity");
+            // Report the failure so the circuit request is denied and its slot released.
+            self.queued_events
+                .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectNegotiationFailed {
+                        circuit_id: connect.circuit_id,
+                        src_peer_id: connect.src_peer_id,
+                        src_connection_id: connect.src_connection_id,
+                        inbound_circuit_req: connect.inbound_circuit_req,
+                        status: proto::Status::ResourceLimitExceeded,
+                        error: outbound_stop::Error::Io(io::Error::other(
+                            "too many concurrent outbound streams",
+                        )),
+                    },
+                ));
+            return;
         }
 
         self.active_connect_requests
@@ -477,7 +492,7 @@ impl Handler {
             StreamUpgradeError::Timeout => outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
             StreamUpgradeError::NegotiationFailed => outbound_stop::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound_stop::Error::Io(e),
-            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
+            StreamUpgradeError::Apply(v) => match v {},
         };
 
         let stop_command = self

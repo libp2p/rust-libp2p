@@ -3,7 +3,7 @@ name = "libp2p-dcutr"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Direct connection upgrade through relay"
-version = "0.15.0"
+version = "0.16.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -34,7 +34,7 @@ libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-test = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

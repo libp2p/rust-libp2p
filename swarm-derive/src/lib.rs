@@ -414,6 +414,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let final_quote = quote! {
         #out_event_definition
 
+        // `unreachable_code` fires when a sub-behaviour's `ConnectionHandler`
+        // event type is `Infallible` (i.e. `!` since Rust 1.100): the generated
+        // `on_connection_handler_event` forwarding and `poll`'s `map_in` wrapping
+        // then pass an uninhabited value, which the lint flags as an
+        // "unreachable call". This is intentional (such an event can never
+        // occur), and a type-blind macro cannot restructure around it.
+        #[allow(unreachable_code)]
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
