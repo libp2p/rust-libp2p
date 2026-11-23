@@ -253,16 +253,12 @@ fn duration_to_secs(duration: Duration) -> u32 {
 
 /// Appends a big-endian u32 to `out`.
 fn append_u32(out: &mut Vec<u8>, value: u32) {
-    out.push(((value >> 24) & 0xff) as u8);
-    out.push(((value >> 16) & 0xff) as u8);
-    out.push(((value >> 8) & 0xff) as u8);
-    out.push((value & 0xff) as u8);
+    out.extend(value.to_be_bytes());
 }
 
 /// Appends a big-endian u16 to `out`.
 fn append_u16(out: &mut Vec<u8>, value: u16) {
-    out.push(((value >> 8) & 0xff) as u8);
-    out.push((value & 0xff) as u8);
+    out.extend(value.to_be_bytes());
 }
 
 /// Generates and returns a random alphanumeric string of `length` size.
