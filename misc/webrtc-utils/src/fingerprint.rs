@@ -69,6 +69,19 @@ impl Fingerprint {
         self.0.map(|byte| format!("{byte:02X}")).join(":")
     }
 
+    /// Parses a fingerprint from the format described in
+    /// <https://www.rfc-editor.org/rfc/rfc4572#section-5>: 32 hex-encoded bytes, optionally
+    /// separated by colons (`:`). Case-insensitive.
+    ///
+    /// This is the inverse of [`Fingerprint::to_sdp_format`]. Returns `None` if the input is
+    /// not a well-formed SHA-256 fingerprint.
+    pub fn from_sdp_format(sdp: &str) -> Option<Self> {
+        let mut digest = [0u8; 32];
+        hex::decode_to_slice(sdp.replace(':', ""), &mut digest).ok()?;
+
+        Some(Self(digest))
+    }
+
     /// Returns the algorithm used (e.g. "sha-256").
     /// See <https://datatracker.ietf.org/doc/html/rfc8122#section-5>
     pub fn algorithm(&self) -> String {
@@ -101,10 +114,51 @@ mod tests {
 
     #[test]
     fn from_sdp() {
-        let mut bytes = [0; 32];
-        bytes.copy_from_slice(&hex::decode(SDP_FORMAT.replace(':', "")).unwrap());
+        let fp = Fingerprint::from_sdp_format(SDP_FORMAT).unwrap();
 
-        let fp = Fingerprint::raw(bytes);
         assert_eq!(fp, Fingerprint::raw(REGULAR_FORMAT));
+    }
+
+    #[test]
+    fn sdp_format_round_trips() {
+        let fp = Fingerprint::raw(REGULAR_FORMAT);
+
+        assert_eq!(Fingerprint::from_sdp_format(&fp.to_sdp_format()), Some(fp));
+    }
+
+    /// Colons are separators, and hex is case-insensitive; neither carries meaning.
+    #[test]
+    fn from_sdp_accepts_lowercase_and_missing_colons() {
+        let expected = Fingerprint::raw(REGULAR_FORMAT);
+
+        for accepted in [
+            SDP_FORMAT.to_lowercase(),
+            SDP_FORMAT.replace(':', ""),
+            SDP_FORMAT.replace(':', "").to_lowercase(),
+        ] {
+            assert_eq!(Fingerprint::from_sdp_format(&accepted), Some(expected));
+        }
+    }
+
+    /// A truncated or malformed fingerprint must not yield a partial one: a wrong fingerprint
+    /// silently fails the DTLS handshake much later, which is far harder to diagnose.
+    #[test]
+    fn from_sdp_rejects_malformed_input() {
+        for rejected in [
+            "",
+            "not hex at all",
+            // One byte short.
+            &SDP_FORMAT[..SDP_FORMAT.len() - 3],
+            // One byte too many.
+            &format!("{SDP_FORMAT}:AB"),
+            // Odd number of nibbles.
+            &SDP_FORMAT[..SDP_FORMAT.len() - 1],
+        ] {
+            assert_eq!(
+                Fingerprint::from_sdp_format(rejected),
+                None,
+                "should have rejected {rejected:?}"
+            );
+        }
     }
 }
