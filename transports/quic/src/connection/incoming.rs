@@ -77,9 +77,9 @@ impl Future for Incoming {
 
                 Self::Handshaking { connecting } => {
                     let connection = match futures::ready!(connecting.poll_unpin(cx)) {
-                        Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
-                        Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
-                    };
+                        Either::Right(_) => Err(Error::HandshakeTimedOut),
+                        Either::Left((connection, _)) => connection.map_err(ConnectionError),
+                    }?;
                     let peer_id = remote_peer_id(&connection)?;
                     let muxer = Connection::new(connection);
                     return Poll::Ready(Ok((peer_id, muxer)));
