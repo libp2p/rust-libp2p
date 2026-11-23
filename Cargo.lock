@@ -4150,9 +4150,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.3"
+version = "0.31.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+checksum = "2bc81ce8148d3b4f3274da811f11cdd824ae661ee4ef732cdb229825cf5be7f7"
 dependencies = [
  "bitflags 2.13.1",
  "cfg-if",
@@ -7792,7 +7792,7 @@ dependencies = [
  "getrandom 0.4.3",
  "indexmap",
  "memchr",
- "nix 0.31.3",
+ "nix 0.31.4",
  "typed-path",
  "windows-sys 0.61.2",
  "zopfli",
