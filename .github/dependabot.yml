@@ -4,7 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    versioning-strategy: "increase" # combination of increase with ignoring patch releases
     ignore:
       - dependency-name: "*"
         update-types:
