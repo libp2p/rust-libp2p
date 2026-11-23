@@ -4,7 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    versioning-strategy: "increase" # combination of increase with ignoring patch releases
+    allow:
+      - dependency-name: "*"
+        dependency-type: "all"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     ignore:
       - dependency-name: "*"
         update-types:
