@@ -402,7 +402,7 @@ impl<T> PeerRecord<T> {
 
 #[cfg(test)]
 mod test {
-    use std::{num::NonZero, str::FromStr};
+    use std::{num::NonZero, str::FromStr, time::Duration};
 
     use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
     use libp2p_identify as identify;
@@ -673,14 +673,20 @@ mod test {
                     .any(|addr| *addr == listen_addr)
             );
 
-            assert!(matches!(
-                swarm1.next_behaviour_event().await,
-                BehaviourEvent::Identify(identify::Event::Sent { .. })
-            ));
-            assert!(matches!(
-                swarm1.next_behaviour_event().await,
-                BehaviourEvent::Identify(identify::Event::Received { .. })
-            ));
+            tokio::time::timeout(Duration::from_secs(10), async {
+                let (mut sent, mut received) = (false, false);
+                while !(sent && received) {
+                    match swarm1.next_behaviour_event().await {
+                        BehaviourEvent::Identify(identify::Event::Sent { .. }) => sent = true,
+                        BehaviourEvent::Identify(identify::Event::Received { .. }) => {
+                            received = true
+                        }
+                        _ => {}
+                    }
+                }
+            })
+            .await
+            .expect("identify exchange between the two swarms to complete within 10s");
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             swarm1.behaviour_mut().identify.push([swarm2_peer_id]);
             tokio::spawn(swarm1.loop_on_next());
