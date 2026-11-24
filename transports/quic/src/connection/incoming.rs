@@ -36,7 +36,7 @@ use crate::{ConnectionError, Error};
 
 /// Future that drives an inbound QUIC connection until its handshake completes.
 ///
-/// The [`Accepting`] state exists solely to move the crypto-heavy first step of
+/// The `Accepting` state exists solely to move the crypto-heavy first step of
 /// the handshake ClientHello processing, certificate and signature generation
 /// off the swarm task: rather than running it in `Listener::poll_next` while the
 /// listener produces the `TransportEvent::Incoming` (inside `Swarm::poll`), it
