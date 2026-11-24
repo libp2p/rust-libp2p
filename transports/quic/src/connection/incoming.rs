@@ -35,6 +35,13 @@ use super::{Connection, connecting::remote_peer_id};
 use crate::{ConnectionError, Error};
 
 /// Future that drives an inbound QUIC connection until its handshake completes.
+///
+/// The [`Accepting`] state exists solely to move the crypto-heavy first step of
+/// the handshake ClientHello processing, certificate and signature generation
+/// off the swarm task: rather than running it in `Listener::poll_next` while the
+/// listener produces the `TransportEvent::Incoming` (inside `Swarm::poll`), it
+/// runs on this future's first poll, which the connection pool drives on its own
+/// per-connection task.
 pub enum Incoming {
     /// The connection has not been accepted yet, quinn has no connection object
     /// until [`quinn::Incoming::accept`] runs.
