@@ -1,6 +1,7 @@
 //! A libp2p connection backed by an [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection).
 
 use std::{
+    panic::AssertUnwindSafe,
     pin::Pin,
     task::{Context, Poll, Waker, ready},
 };
@@ -47,7 +48,11 @@ impl Connection {
     pub(crate) fn new(peer_connection: RtcPeerConnection) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in
         // poll_incoming
-        let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
+        let (tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
+        // Under `panic = "unwind"`, wasm-bindgen catches panics in callbacks and requires them to
+        // be `UnwindSafe`, which `mpsc::Sender` is not. The callback's only channel operation is
+        // `try_send`, which finishes updating the channel before it wakes the receiver.
+        let mut tx_ondatachannel = AssertUnwindSafe(tx_ondatachannel);
 
         let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
             tracing::trace!("New data channel");

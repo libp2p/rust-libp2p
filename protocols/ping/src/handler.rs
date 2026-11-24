@@ -211,7 +211,7 @@ impl Handler {
                     "ping protocol negotiation timed out",
                 )),
             },
-            StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
+            StreamUpgradeError::Apply(e) => match e {},
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
 

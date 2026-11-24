@@ -1,5 +1,8 @@
 ## 0.27.1
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 - Return `KeyParseError::InvalidKeyChar` instead of panicking when a key file holds non-ASCII characters.
   See [PR 6742](https://github.com/libp2p/rust-libp2p/pull/6742).
 
