@@ -49,7 +49,7 @@ use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
 
 use crate::{
-    ConnectError, Connecting, Connection, Error,
+    ConnectError, Connecting, Connection, Error, Incoming,
     config::{Config, QuinnConfig},
     hole_punching::hole_puncher,
     provider::Provider,
@@ -81,7 +81,7 @@ pub struct GenTransport<P: Provider> {
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
     /// Holepunching attempts
-    hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
+    hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Incoming>>,
 }
 
 #[expect(deprecated)]
@@ -214,7 +214,7 @@ impl<P: Provider> GenTransport<P> {
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Connection);
     type Error = Error;
-    type ListenerUpgrade = Connecting;
+    type ListenerUpgrade = Incoming;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -592,22 +592,18 @@ impl<P: Provider> Stream for Listener<P> {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
 
-                    let connecting = match incoming.accept() {
-                        Ok(connecting) => connecting,
-                        Err(error) => {
-                            return Poll::Ready(Some(TransportEvent::ListenerError {
-                                listener_id: self.listener_id,
-                                error: Error::Connection(crate::ConnectionError(error)),
-                            }));
-                        }
-                    };
-
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
-                    let remote_addr = connecting.remote_address();
+                    let remote_addr = incoming.remote_address();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
 
+                    // Deliberately do not call quinn's '`incoming.accept()` here,
+                    // it performs the first step of the handshake, ClientHello processing,
+                    // and certificate and signature generation, which is the
+                    // crypto-heavy part of an inbound connection. run it on the
+                    // first poll of the upgrade future instead, on the
+                    // connection pool's per-connection task, not on the swarm task.
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::new(connecting, self.handshake_timeout),
+                        upgrade: Incoming::new(incoming, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
