@@ -1,5 +1,9 @@
 ## 0.15.0
 
+- Defer `Incoming::accept()` to the connection pool's per-connection task so the
+  inbound handshake's first step no longer runs on the swarm task.
+  See [PR 6759](https://github.com/libp2p/rust-libp2p/pull/6759).
+
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 

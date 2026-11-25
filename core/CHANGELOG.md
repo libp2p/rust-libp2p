@@ -1,5 +1,9 @@
 ## 0.45.0
 
+- Deprecate `libp2p::core::util::unreachable` in favor of `match x {}`.
+  Since Rust 1.100, passing an `Infallible` value to it triggers the `unreachable_code` lint.
+  See [PR 6769](https://github.com/libp2p/rust-libp2p/pull/6769).
+  
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 

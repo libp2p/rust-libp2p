@@ -15,7 +15,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, optional = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 libp2p-identity = { workspace = true, features = ["rand", "serde"] }
 libp2p-identify = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
