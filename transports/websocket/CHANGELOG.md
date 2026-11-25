@@ -1,3 +1,11 @@
+## 0.47.0
+
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+- Apply `max_data_size` to dialed connections as well. Previously it was only applied to
+  accepted connections, and dialed connections used soketto's 256 MiB default.
+  See [PR 6779](https://github.com/libp2p/rust-libp2p/pull/6779).
+
 ## 0.46.0
 
 - Raise MSRV to 1.88.0.

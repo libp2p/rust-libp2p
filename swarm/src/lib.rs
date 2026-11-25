@@ -51,7 +51,7 @@
 //! remote should behave: how to handle incoming substreams, which protocols
 //! are supported, when to open a new outbound substream, etc.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod connection;
 mod executor;
@@ -2324,11 +2324,8 @@ mod tests {
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn aborting_pending_connection_surfaces_error() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
-
         let mut dialer = new_test_swarm(Config::with_tokio_executor());
         let mut listener = new_test_swarm(Config::with_tokio_executor());
 
