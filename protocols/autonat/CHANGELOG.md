@@ -1,5 +1,8 @@
 ## 0.17.0
 
+- Raise MSRV to 1.89.0.
+  See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
+
 - v1: Only fail an inbound probe when the dial-back itself fails, not on any failed dial to the peer.
   See [PR 6727](https://github.com/libp2p/rust-libp2p/pull/6727).
 

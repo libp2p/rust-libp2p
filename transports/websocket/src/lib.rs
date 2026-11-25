@@ -20,7 +20,7 @@
 
 //! Implementation of the libp2p `Transport` trait for Websockets.
 
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod error;
 pub mod framed;
@@ -184,6 +184,9 @@ where
     }
 
     /// Set the max. frame data size we support.
+    ///
+    /// The limit applies to the payload of a single frame as well as to a complete
+    /// message, on both dialed (outbound) and accepted (inbound) connections.
     pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
         self.transport.inner_mut().set_max_data_size(size);
         self
@@ -302,6 +305,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use futures::prelude::*;
     use libp2p_core::{
         Endpoint, Multiaddr, Transport,
@@ -310,6 +315,7 @@ mod tests {
     };
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
+    use soketto::handshake;
 
     use super::Config;
 
@@ -367,5 +373,85 @@ mod tests {
 
         let (a, b) = futures::join!(inbound, outbound);
         a.and(b).unwrap();
+    }
+
+    const LIMIT: usize = 1024 * 1024;
+
+    #[tokio::test]
+    async fn dialer_applies_max_data_size() {
+        let mut buf = [0u8; 1];
+
+        // A frame header announcing more than the limit is rejected right away,
+        // without waiting for (or allocating) the announced payload.
+        let mut conn = dial_fake_server(LIMIT + 1).await;
+        let err = tokio::time::timeout(Duration::from_secs(10), conn.read(&mut buf))
+            .await
+            .expect("oversized frame header must be rejected without waiting for its payload")
+            .expect_err("oversized frame header must be rejected");
+        let inner = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<soketto::connection::Error>());
+        assert!(
+            matches!(
+                inner,
+                Some(soketto::connection::Error::Codec(
+                    soketto::base::Error::PayloadTooLarge { .. }
+                ))
+            ),
+            "unexpected error: {err:?}"
+        );
+
+        // Control: a frame header within the limit waits for its payload.
+        let mut conn = dial_fake_server(LIMIT).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), conn.read(&mut buf))
+                .await
+                .is_err(),
+            "frame within the limit must wait for its payload"
+        );
+    }
+
+    /// Dials a fake WebSocket server with `max_data_size` set to [`LIMIT`]. The server completes
+    /// the handshake and then only sends the header of a binary frame announcing
+    /// `announced_len` payload bytes.
+    async fn dial_fake_server(announced_len: usize) -> impl AsyncRead + Unpin {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut server = handshake::Server::new(tcp::tokio::TcpStream(stream));
+            let key = server.receive_request().await.unwrap().key();
+            server
+                .send_response(&handshake::server::Response::Accept {
+                    key,
+                    protocol: None,
+                })
+                .await
+                .unwrap();
+
+            let mut stream = server.into_inner();
+            // FIN + binary opcode, unmasked, 64-bit extended payload length, no payload.
+            let mut header = vec![0x82, 0x7f];
+            header.extend_from_slice(&(announced_len as u64).to_be_bytes());
+            stream.write_all(&header).await.unwrap();
+
+            // Keep the connection open so the dialer never sees EOF.
+            future::pending::<()>().await;
+        });
+
+        let mut config = new_ws_config();
+        config.set_max_data_size(LIMIT);
+        config
+            .dial(
+                format!("/ip4/127.0.0.1/tcp/{port}/ws").parse().unwrap(),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap()
     }
 }
