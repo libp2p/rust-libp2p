@@ -31,10 +31,11 @@ impl PeerAddresses {
                 error: DialError::Transport(errors),
                 ..
             }) => {
+                let mut changed = false;
                 for (addr, _error) in errors {
-                    self.remove(peer_id, addr);
+                    changed |= self.remove(peer_id, addr);
                 }
-                true
+                changed
             }
             _ => false,
         }
@@ -181,7 +182,8 @@ mod tests {
         cache.add(peer_id, addr2.clone());
         cache.add(peer_id, addr3.clone());
 
-        let error = DialError::Transport(prepare_errors(vec![addr, addr3]));
+        let error =
+            DialError::Transport(prepare_errors(vec![addr, addr3, MEMORY_ADDR_1000.clone()]));
 
         let event = FromSwarm::DialFailure(DialFailure {
             peer_id: Some(peer_id),
@@ -197,6 +199,26 @@ mod tests {
         let expected = prepare_expected_addrs(peer_id, [addr2].into_iter());
 
         assert_eq!(cached, expected);
+        assert!(!cache.on_swarm_event(&event));
+    }
+
+    #[test]
+    fn dial_failure_reports_no_change_when_no_address_is_removed() {
+        for errors in [vec![], prepare_errors(vec![MEMORY_ADDR_1000.clone()])] {
+            let mut cache = PeerAddresses::default();
+            let peer_id = PeerId::random();
+            let error = DialError::Transport(errors);
+            let event = FromSwarm::DialFailure(DialFailure {
+                peer_id: Some(peer_id),
+                error: &error,
+                connection_id: ConnectionId::new_unchecked(8),
+            });
+
+            assert!(!cache.on_swarm_event(&event));
+
+            cache.add(peer_id, MEMORY_ADDR_2000.clone());
+            assert!(!cache.on_swarm_event(&event));
+        }
     }
 
     #[test]
