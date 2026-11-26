@@ -1,5 +1,8 @@
 ## 0.49.0
 
+- Return `true` from `PeerAddresses::on_swarm_event` on a transport dial failure only if a cached
+  address was removed.
+
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
 
