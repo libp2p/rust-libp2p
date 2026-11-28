@@ -31,6 +31,7 @@
 //! - Event helpers: [`count_control_msgs`], [`flush_events`]
 
 mod explicit_peers;
+mod extensions;
 mod floodsub;
 mod gossip;
 mod graft_prune;
@@ -543,6 +544,7 @@ pub(super) fn proto_to_message(rpc: &proto::Rpc) -> RpcIn {
             })
             .collect(),
         control_msgs,
+        large_message_fragments: vec![],
         #[cfg(feature = "partial-messages")]
         partial_message: None,
     }
