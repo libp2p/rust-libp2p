@@ -1,4 +1,9 @@
 ## 0.51.0
+- Treat expired duplicate-cache entries as absent even when nothing has been inserted since, so
+  `publish` no longer returns `PublishError::Duplicate` for a message id older than
+  `duplicate_cache_time`. IHAVE and IDONTWANT handling now treat such ids as unseen too, matching
+  the receive path.
+  See [PR 6761](https://github.com/libp2p/rust-libp2p/pull/6761).
 
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
