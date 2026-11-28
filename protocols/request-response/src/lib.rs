@@ -88,9 +88,9 @@ pub use handler::ProtocolSupport;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, NetworkBehaviour, NotifyHandler,
-    PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
+    ConnectionDenied, ConnectionId, DialError, NetworkBehaviour, NotifyHandler, PeerAddresses,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
 };
 use smallvec::SmallVec;
@@ -734,27 +734,35 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are
-    /// waiting to be sent to the newly connected peer.
-    fn preload_new_handler(
-        &mut self,
-        handler: &mut Handler<TCodec>,
-        peer: PeerId,
-        connection_id: ConnectionId,
-        remote_address: Option<Multiaddr>,
-    ) {
+    /// Records the connection and flushes its queued requests. Runs on `ConnectionEstablished`.
+    fn on_connection_established(&mut self, established: ConnectionEstablished) {
+        let ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            ..
+        } = established;
+
+        let remote_address = match endpoint {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
         let mut connection = Connection::new(connection_id, remote_address);
 
-        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer_id) {
             for request in pending_requests {
                 connection
                     .pending_outbound_responses
                     .insert(request.request_id);
-                handler.on_behaviour_event(request);
+                self.pending_events.push_back(ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(connection_id),
+                    event: request,
+                });
             }
         }
 
-        self.connected.entry(peer).or_default().push(connection);
+        self.connected.entry(peer_id).or_default().push(connection);
     }
 }
 
@@ -767,20 +775,18 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        connection_id: ConnectionId,
-        peer: PeerId,
+        _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let mut handler = Handler::new(
+        let handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
             self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
         );
-
-        self.preload_new_handler(&mut handler, peer, connection_id, None);
 
         Ok(handler)
     }
@@ -809,25 +815,18 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
-        connection_id: ConnectionId,
-        peer: PeerId,
-        remote_address: &Multiaddr,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let mut handler = Handler::new(
+        let handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
             self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
-        );
-
-        self.preload_new_handler(
-            &mut handler,
-            peer,
-            connection_id,
-            Some(remote_address.clone()),
         );
 
         Ok(handler)
@@ -836,7 +835,9 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm) {
         self.addresses.on_swarm_event(&event);
         match event {
-            FromSwarm::ConnectionEstablished(_) => {}
+            FromSwarm::ConnectionEstablished(established) => {
+                self.on_connection_established(established)
+            }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
