@@ -1,4 +1,9 @@
 ## 0.51.0
+- Keep a peer counted toward the IP colocation score (P6) while any of its connections from an IP
+  are open, rather than dropping the IP when the first of those connections closes. This closes a
+  bypass where a peer could shed the penalty by opening a second connection from the same IP and
+  closing it.
+  See [PR 6767](https://github.com/libp2p/rust-libp2p/pull/6767).
 
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).

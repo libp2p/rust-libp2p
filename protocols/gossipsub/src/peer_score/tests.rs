@@ -862,6 +862,76 @@ fn test_score_ip_colocation() {
 }
 
 #[test]
+fn test_score_ip_colocation_retained_until_last_connection_closes() {
+    // Regression test for https://github.com/libp2p/rust-libp2p/issues/6757.
+    //
+    // A peer with two connections from the same IP must keep counting toward the IP colocation
+    // factor (P6) when one of those connections closes. Otherwise a peer can escape the penalty
+    // by opening a second connection from the same IP and immediately closing it.
+    let ip_colocation_factor_weight = -1.0;
+    let ip_colocation_factor_threshold = 1.0;
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams {
+        ip_colocation_factor_weight,
+        ip_colocation_factor_threshold,
+        ..Default::default()
+    };
+
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        first_message_deliveries_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        invalid_message_deliveries_weight: 0.0,
+        ..Default::default()
+    };
+
+    params.topics.insert(topic_hash, topic_params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
+
+    let peer_id_a = PeerId::random();
+    let peer_id_b = PeerId::random();
+    let peer_id_c = PeerId::random();
+
+    let shared_ip = "2.3.4.5".parse().unwrap();
+
+    for peer_id in [&peer_id_a, &peer_id_b, &peer_id_c] {
+        peer_score.add_peer(*peer_id);
+        peer_score.graft(peer_id, topic.clone());
+    }
+
+    // All three peers are connected from the same IP, so each shares it with two others.
+    peer_score.add_ip(&peer_id_a, shared_ip);
+    peer_score.add_ip(&peer_id_b, shared_ip);
+    peer_score.add_ip(&peer_id_c, shared_ip);
+
+    // Peer A opens a second connection from the same IP and then closes it again. Its first
+    // connection is still open, so A must keep being counted at the shared IP.
+    peer_score.add_ip(&peer_id_a, shared_ip);
+    peer_score.remove_ip(&peer_id_a, &shared_ip);
+
+    peer_score.refresh_scores();
+    let score_a = peer_score.score_report(&peer_id_a).score;
+    let score_b = peer_score.score_report(&peer_id_b).score;
+    let score_c = peer_score.score_report(&peer_id_c).score;
+
+    let n_shared = 3.0;
+    let ip_surplus = n_shared - ip_colocation_factor_threshold;
+    let penalty = ip_surplus * ip_surplus;
+    let expected = ip_colocation_factor_weight * penalty;
+
+    assert_eq!(
+        score_a, expected,
+        "Peer A still has an open connection from the shared IP and must keep the penalty"
+    );
+    assert_eq!(score_b, expected, "Peer B should still share the IP with three peers");
+    assert_eq!(score_c, expected, "Peer C should still share the IP with three peers");
+}
+
+#[test]
 fn test_score_behaviour_penalty() {
     // Create parameters with reasonable default values
     let behaviour_penalty_weight = -1.0;
