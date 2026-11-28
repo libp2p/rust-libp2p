@@ -1,0 +1,19 @@
+[package]
+name = "autotls-example"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+license = "MIT"
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+futures = { workspace = true }
+libp2p = { path = "../../libp2p", features = ["dns", "identify", "macros", "noise", "tls", "tcp", "tokio", "websocket", "yamux"] }
+libp2p-autotls = { path = "../../protocols/autotls", features = ["tokio"] }
+tokio = { version = "1.52.3", features = ["full"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

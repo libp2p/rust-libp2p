@@ -1,4 +1,6 @@
 ## 0.47.0
+- Add `tls::Config::new_with_server_cert_resolver` to resolve server certificates dynamically.
+  See [PR 6470](https://github.com/libp2p/rust-libp2p/pull/6470).
 
 - Raise MSRV to 1.89.0.
   See [PR 6777](https://github.com/libp2p/rust-libp2p/pull/6777).
@@ -7,7 +9,6 @@
   See [PR 6779](https://github.com/libp2p/rust-libp2p/pull/6779).
 
 ## 0.46.0
-
 - Raise MSRV to 1.88.0.
   See [PR 6273](https://github.com/libp2p/rust-libp2p/pull/6273).
 - feat(websocket): support `/tls/sni/<hostname>/ws` multiaddrs in the WebSocket transport
